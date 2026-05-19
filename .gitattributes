@@ -1,0 +1,56 @@
+# 默认：文本自动规范化，检出时按平台换行
+* text=auto
+
+# 源码与配置：仓库内统一 LF，减少跨平台 diff 噪音
+*.py          text eol=lf
+*.pyi         text eol=lf
+*.toml        text eol=lf
+*.json        text eol=lf
+*.yaml        text eol=lf
+*.yml         text eol=lf
+*.md          text eol=lf
+*.txt         text eol=lf
+*.ini         text eol=lf
+*.cfg         text eol=lf
+.gitignore    text eol=lf
+.gitattributes text eol=lf
+.env.example  text eol=lf
+Dockerfile    text eol=lf
+Makefile      text eol=lf
+
+# Shell / Web 前端
+*.sh          text eol=lf
+*.bash        text eol=lf
+*.js          text eol=lf
+*.jsx         text eol=lf
+*.ts          text eol=lf
+*.tsx         text eol=lf
+*.css         text eol=lf
+*.html        text eol=lf
+*.vue         text eol=lf
+
+# Windows 脚本保留 CRLF
+*.bat         text eol=crlf
+*.cmd         text eol=crlf
+*.ps1         text eol=crlf
+
+# 二进制：禁止换行转换
+*.pdf         binary
+*.png         binary
+*.jpg         binary
+*.jpeg        binary
+*.gif         binary
+*.webp        binary
+*.ico         binary
+*.woff        binary
+*.woff2       binary
+*.ttf         binary
+*.eot         binary
+*.db          binary
+*.sqlite3     binary
+*.zip         binary
+*.gz          binary
+*.7z          binary
+
+# 合并策略（可按需扩展）
+CHANGELOG.md  merge=union

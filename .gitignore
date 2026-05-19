@@ -1,37 +1,65 @@
-# 密钥与环境
+# ── 密钥与环境（勿提交）────────────────────────────────
 .env
-.env.*
-!.env.example
+.env.local
+.env.*.local
 API KEY.txt
 *.pem
+*.key
+secrets/
 
-# Python / uv
+# 保留模板
+!.env.example
+
+# ── Python / uv ─────────────────────────────────────────
 .venv/
+venv/
 __pycache__/
 *.py[cod]
 *$py.class
+.Python
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
 htmlcov/
 .coverage
+.coverage.*
 dist/
 build/
 *.egg-info/
+.eggs/
+pip-wheel-metadata/
 
-# 数据与日志
+# ── 运行时数据与产物（保留空目录占位）──────────────────
+data/*
+!data/.gitkeep
+uploads/*
+!uploads/.gitkeep
 *.db
 *.sqlite3
 logs/
 *.log
+.cache/
+chroma/
+.qdrant/
 
-# 前端（若后续引入）
+# ── 前端（若后续引入）──────────────────────────────────
 frontend/node_modules/
 frontend/dist/
+frontend/.vite/
 
-# 编辑器与系统
+# ── 编辑器与系统 ───────────────────────────────────────
 .idea/
 .vscode/
+!.vscode/extensions.json
 *.swp
+*~
 .DS_Store
 Thumbs.db
+desktop.ini
+
+# ── 临时与本地实验 ─────────────────────────────────────
+*.tmp
+*.bak
+scratch/
+backend/test/
+frontend/test/
