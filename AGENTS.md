@@ -147,7 +147,12 @@ docs(README.md): 完善 README.md
 
 ScholarGraph 是面向科研阅读的 **AI Agent** 项目：编排（如 LangGraph）、大模型 API 调用、结构化抽取（Pydantic）、图谱与 GraphRAG 等。**不包含深度学习训练、微调或 GPU 算力栈**（无 PyTorch / TensorFlow / CUDA 等依赖预期），因此以 **[uv](https://docs.astral.sh/uv/)** 管理 Python 与依赖即可，无需 conda 或多环境 CUDA 工具链。
 
-仓库采用 **Python 单体 + 可选演示界面** 布局：核心逻辑在根目录 `pyproject.toml` 定义的包（如 `backend/`）中；若后续增加独立 Web 前端，放在 `frontend/` 并由 **npm** 管理，**不使用 uv** 管理前端依赖。
+仓库采用 **前后端分离** 布局：
+
+* **后端**：根目录 `pyproject.toml` + **`backend/`**（**FastAPI**、LangGraph、Pydantic），由 **uv** 管理依赖。
+* **前端**：**`frontend/`**（**Vue 3 + Vite + Pinia**），由 **npm** 管理，**不使用 uv**。图谱渲染首选 **AntV G6 v5**；UI 组件库 **Ant Design Vue** 或 **Element Plus**。
+
+技术选型与 REST / SSE / 任务进度等协作约定见 [docs/v1/tech-stack.md](docs/v1/tech-stack.md)。
 
 ### Python 与 Agent 运行时（uv）
 
@@ -158,8 +163,21 @@ ScholarGraph 是面向科研阅读的 **AI Agent** 项目：编排（如 LangGra
 5. **变更依赖后**：修改 `pyproject.toml` 后执行 `uv lock`（或 `uv lock --upgrade`），再 `uv sync`；提交时**同时**带上 `pyproject.toml` 与 `uv.lock`。
 6. **自动化测试**：根目录 `tests/` 为正式 **pytest** 用例。开发依赖：`uv sync --group dev`，运行：`uv run pytest`。临时实验脚本可放在已 gitignore 的 `backend/test/` 等目录。
 
-### 演示界面（按需）
+### 前端（Vue 3）
 
-MVP 可优先用 Gradio / Streamlit（Python 依赖，随 uv 安装）。若引入 `frontend/`（Vite 等），在 `frontend/` 下执行 `npm install` 与 `npm run dev` / `npm run build`，API 基地址见 `README.md` 与 `frontend/vite.config.ts`。
+1. **安装依赖**：在 `frontend/` 下执行 `npm install`（勿在仓库根目录用 npm 管理后端）。
+2. **本地开发**：`npm run dev`（默认 `http://localhost:5173`），后端 `uv run uvicorn backend.main:app --reload`（默认 `http://localhost:8000`）。
+3. **环境变量**：`frontend/.env.development` 中配置 `VITE_API_BASE_URL=http://localhost:8000`（或走 Vite 代理 `/api`）。
+4. **对接方式**：常规 CRUD 用 REST；**多尺度问答**用 **SSE** 流式输出；**PDF 解构建图**用 `POST /papers` + **长轮询** `GET /papers/{id}/status`（详见 tech-stack 文档）。
+5. **契约**：后端图谱 JSON 字段与 `UnifiedPaperGraph` / OpenAPI 一致；前端先用 Mock，禁止在浏览器内持有 LLM API Key。
+
+### 后端 HTTP 基座（负责人维护）
+
+* 必须配置 **CORS**（允许 Vite 开发源）。
+* 提供 **`/docs`** Swagger；对外 JSON 由 Pydantic 约束，与前端 G6 节点/边字段命名一致。
+
+### 演示界面（备用）
+
+仅当前端排期严重不足时，可用 Gradio / Streamlit（uv 安装）做答辩备份；**产品主路径仍为 Vue 3 工作台**。
 
 在执行 **Python 脚本**、**安装或更新依赖**、**启动 Agent / API 服务** 前，请确认已在仓库根目录完成 `uv sync`（及按需 `--group dev` / `--extra mysql`），避免误用全局 Python 或未安装依赖的环境。
