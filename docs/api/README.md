@@ -1,11 +1,16 @@
 # API 契约
 
-V1 接口以 FastAPI 自动文档为准：
+V1 对外接口已冻结，以本目录与协作文档为准。
 
-- 本地：`http://localhost:8000/docs`
-- 字段命名与 `backend/schemas/` 中 Pydantic 模型一致，前端 AntV G6 直接消费 `GET /papers/{id}/graph` 的 `nodes` / `edges`。
+| 资源 | 说明 |
+|------|------|
+| [openapi.yaml](./openapi.yaml) | OpenAPI 3.1，供 `openapi-typescript` / Swagger |
+| [fixtures/](./fixtures/) | 标准 Mock JSON，FE 可拷至 `frontend/src/mocks/` |
+| 运行时文档 | 实现后 `http://localhost:8000/docs`（须与 `openapi.yaml` 同步） |
 
-交互模式（REST / SSE / 任务进度）见 [../v1/tech-stack.md](../v1/tech-stack.md)。
+人文档：
 
-- 纲要：[openapi-v1-stub.yaml](./openapi-v1-stub.yaml)（BE-L 在 P0 后补全为完整 `openapi.yaml`）
-- 字段与错误码以 [collaboration.md](../v1/collaboration.md) 为准
+- [协作规范 §3](../v1/collaboration.md#3-对外-http-apiv10已冻结)
+- [API 契约详表](../v1/api-contract.md)
+
+**标签**：契约冻结请打 `api-v1.0`；破坏性变更 `api-v1.1` + 会签。

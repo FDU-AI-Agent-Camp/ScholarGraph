@@ -63,7 +63,7 @@
 | 健康检查 | GET | `/health` |
 | 文献列表 | GET | `/papers` |
 | 上传 PDF | POST | `/papers`（`multipart/form-data`） |
-| 论文元数据 / 范式 | GET | `/papers/{id}`、`/papers/{id}/classification` |
+| 论文元数据 / 范式 | GET | `/papers/{paper_id}`（含内嵌 `classification`） |
 | 图谱数据 | GET | `/papers/{id}/graph` |
 | 触发巡检 | POST | `/patrol` |
 
@@ -71,10 +71,10 @@
 
 ### 2. SSE — Server-Sent Events（多尺度问答）
 
-- **用途**：`POST /papers/{id}/qa` 或 `GET .../qa/stream?question=...` 流式返回模型回答。
+- **用途**：**`POST /api/v1/papers/{paper_id}/qa/stream`** + JSON `{"question"}` 流式返回（V1 已冻结，不用 GET）。
 - **体验**：前端逐字/逐段渲染，避免 30s 白屏。
-- **约定**：事件类型建议 `message`（文本增量）、`citation`（图谱引用）、`done`、`error`。
-- **FE 实现**：`EventSource` 或 `@microsoft/fetch-event-source`（POST SSE 时）。
+- **约定**：`message` / `citation` / `done` / `error` 四类 SSE 事件。
+- **FE 实现**：`@microsoft/fetch-event-source`（见 [api-contract.md](./api-contract.md)）。
 
 ### 3. 任务进度 — 长轮询（V1 默认）/ WebSocket（可选）
 
@@ -103,7 +103,7 @@ sequenceDiagram
   WF-->>API: 完成
   FE->>API: GET /papers/{id}/graph
   API-->>FE: nodes, edges (G6)
-  FE->>API: SSE /papers/{id}/qa
+  FE->>API: POST .../qa/stream (SSE)
   API-->>FE: 流式 answer + citations
 ```
 
@@ -173,4 +173,5 @@ ScholarGraph/
 
 - [任务分工](./work-assignment.md)
 - [协作规范](./collaboration.md)
+- [API 契约详表](./api-contract.md)
 - [开发规范](../../AGENTS.md)

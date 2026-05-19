@@ -58,11 +58,23 @@ sequenceDiagram
 
 ---
 
-## 3. 对外 HTTP API（V1.0）
+## 3. 对外 HTTP API（V1.0，已冻结）
 
 - **前缀**：`/api/v1`（BE-L 在 `main.py` 挂载）
 - **开发**：Vite `http://localhost:5173` ↔ FastAPI `http://localhost:8000`；BE-L 配置 **CORS**
-- **纲要**：[`docs/api/openapi-v1-stub.yaml`](../api/openapi-v1-stub.yaml)
+- **详表与示例**：[api-contract.md](./api-contract.md)（**开工前必读**）
+- **OpenAPI**：[`docs/api/openapi.yaml`](../api/openapi.yaml)（`openapi-typescript`）
+- **Mock 样例**：[`docs/api/fixtures/`](../api/fixtures/)
+
+### V1 五项冻结约定（摘要）
+
+| # | 约定 |
+|---|------|
+| 1 | **SSE**：仅 `POST /api/v1/papers/{paper_id}/qa/stream` + body `{"question"}`；FE 用 `fetch-event-source`，不用 GET `EventSource` |
+| 2 | **分类结果**：`ParadigmClassification` 内嵌于 `GET /papers/{id}` 的 `classification`；**无** `/classification` 路由 |
+| 3 | **`status` vs `stage`**：`status`=业务态（`pending/processing/ready/failed`）；`stage`=流水线步骤（仅 `GET .../status`） |
+| 4 | **范式 JSON**：`paradigm` + `confidence` + `reason`，与 [README](../../README.md) 一致，见 [api-contract §1](./api-contract.md#1-范式分类-jsonparadigmclassification) |
+| 5 | **分页**：`GET /papers` 支持 `offset`/`limit`（默认 20）；各端点完整 JSON 见 [api-contract](./api-contract.md) |
 
 ### 3.1 通用响应
 
@@ -87,60 +99,28 @@ sequenceDiagram
 | `LLM_JSON_INVALID` | 502 | 模型 JSON 非法 |
 | `LLM_TIMEOUT` | 504 | 超时 |
 
-### 3.2 REST 端点
+### 3.2 REST 端点索引
 
-| 方法 | 路径 | 主责 Service | 说明 |
-|------|------|--------------|------|
+| 方法 | 路径 | 主责 | 说明 |
+|------|------|------|------|
 | GET | `/health` | BE-L | 健康检查 |
-| GET | `/papers` | BE-L | 列表 `?paradigm=&status=` |
-| POST | `/papers` | BE-L → workflow | `multipart` 字段 `file`；返回 `paper_id` |
-| GET | `/papers/{id}` | BE-L | 元数据 + classification |
-| GET | `/papers/{id}/status` | BE-L | **长轮询**进度 |
-| GET | `/papers/{id}/graph` | BE-3 | G6 `nodes` / `edges` |
-| POST | `/patrol` | BE-4 | `paper_ids` + `mode` |
+| GET | `/papers` | BE-L | 列表；`?paradigm=&status=&offset=&limit=` |
+| POST | `/papers` | BE-L | 上传 PDF；201 / 400 `INGEST_FAILED` → [§4](./api-contract.md#4-post-apiv1papers) |
+| GET | `/papers/{paper_id}` | BE-L | 元数据 + **内嵌** `classification` → [§6](./api-contract.md#6-get-apiv1paperspaper_id) |
+| GET | `/papers/{paper_id}/status` | BE-L | 长轮询；含 `status`+`stage` → [§7](./api-contract.md#7-get-apiv1paperspaper_idstatus) |
+| GET | `/papers/{paper_id}/graph` | BE-3 | G6；409 若未 ready |
+| POST | `/patrol` | BE-4 | 双文巡检 → [§9](./api-contract.md#9-post-apiv1patrol) |
 
-**`GET /papers/{id}/status` 的 `stage`**（workflow 写入，禁止私增）：
+### 3.3 SSE — 多尺度问答（已冻结）
 
-| stage | percent | 模块 |
-|-------|---------|------|
-| `ingesting` | 10–20 | BE-1 |
-| `classifying` | 30–50 | BE-2 |
-| `extracting` | 60–80 | BE-2 |
-| `storing` | 85–95 | BE-3 |
-| `ready` | 100 | — |
-| `failed` | — | — |
+| 项 | 约定 |
+|----|------|
+| 路径 | **`POST /api/v1/papers/{paper_id}/qa/stream`** |
+| Body | `{"question": string}` |
+| FE | `@microsoft/fetch-event-source` + `AbortController` |
+| 实现 | BE-L 路由壳；BE-3 `qa_stream()` |
 
-**`GET /papers/{id}/graph`**（BE-3 `to_g6()`）：
-
-```json
-{
-  "data": {
-    "paper_id": "hss-001",
-    "paradigm": "HSS",
-    "nodes": [{ "id": "n1", "label": "核心论点", "type": "Thesis", "data": {} }],
-    "edges": [{ "id": "e1", "source": "n2", "target": "n1", "label": "SUB_ARGUMENT_OF", "type": "SUB_ARGUMENT_OF" }]
-  }
-}
-```
-
-字段与 `UnifiedPaperGraph` 一致；**禁止 FE 二次映射** `id`/`label`。
-
-**`POST /patrol`**：body `{ "paper_ids": [], "mode": "lens_clash" | "contradiction" }`；响应含 `insights[]`（含 `node_refs`）。
-
-### 3.3 SSE — 多尺度问答
-
-由 **BE-L** 暴露路由，**BE-3** 实现 `qa_stream()`。
-
-- 路径（BE-L 实现后冻结其一）：  
-  `GET /papers/{id}/qa/stream?question=` 或 `POST` + body `{ "question" }`
-- `Content-Type: text/event-stream`
-
-| event | data | 说明 |
-|-------|------|------|
-| `message` | `{"delta":"…"}` | 文本增量 |
-| `citation` | `{"node_id","label"}` | 图谱引用 → FE 高亮 G6 |
-| `done` | `{"answer_id"}` | 结束 |
-| `error` | `{"code","message"}` | 失败 |
+事件：`message` / `citation` / `done` / `error` → [api-contract §8](./api-contract.md#8-post-apiv1paperspaper_idqastream)
 
 ---
 
@@ -248,8 +228,9 @@ Issue 标题：`[Schema RFC] 简述` — 含动机、字段 diff、对 G6/OpenAP
 | 认证 | V1 无；禁止浏览器持有 LLM Key |
 | 上传 | `FormData`，字段 `file` |
 | 轮询 | 2s 间隔，最长 10min，`ready`/`failed` 停止 |
-| SSE | `useQaStream` + `AbortController` |
-| 类型 | 优先 `openapi-typescript` |
+| SSE | **`POST .../qa/stream`** + `fetch-event-source`（见 §3.3） |
+| 类型 | `openapi-typescript` 生成自 [`openapi.yaml`](../api/openapi.yaml) |
+| Mock | 复制 [`fixtures/`](../api/fixtures/) 到 `frontend/src/mocks/` |
 
 **联调 PR 检查清单**：
 
@@ -293,6 +274,10 @@ Issue 标题：`[Schema RFC] 简述` — 含动机、字段 diff、对 G6/OpenAP
 ## 10. 相关文档
 
 - [任务分工](./work-assignment.md)
+- [上手指南](./onboarding.md)
+- [PR 检查清单](./pr-checklist.md)
+- [模块交付 BE-L](./handoff-to-platform.md)
 - [技术栈](./tech-stack.md)
+- [API 契约详表](./api-contract.md)
 - [API 目录](../api/README.md)
 - [V1 范围](./README.md)

@@ -42,3 +42,5 @@ V1 是首个**可演示、可评测**的纵向切片版本：从 PDF/文本输�
 - **交互**：REST + **SSE**（问答）+ **长轮询**（解构建图进度）
 
 详见 [tech-stack.md](./tech-stack.md)、[任务分工](./work-assignment.md)、[协作规范](./collaboration.md)。
+
+新人请先读 [onboarding.md](./onboarding.md)；提 PR 用 [pr-checklist.md](./pr-checklist.md)；后端模块交付见 [handoff-to-platform.md](./handoff-to-platform.md)。

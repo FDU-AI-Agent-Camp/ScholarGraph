@@ -356,7 +356,11 @@ docs/、test/ 同上
 
 ## 9. 相关文档
 
+- [上手指南](./onboarding.md) — 环境与本分支规范
+- [PR 检查清单](./pr-checklist.md) — 提 PR 必用
+- [模块交付 BE-L](./handoff-to-platform.md) — 后端组员交接口
 - [协作规范](./collaboration.md) — 接口、Service、目录权限、联调
+- [API 契约详表](./api-contract.md)
 - [技术栈](./tech-stack.md)
 - [V1 范围](./README.md)
 - [语料](./corpus.md)

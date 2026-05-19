@@ -1,0 +1,7 @@
+{
+  "error": {
+    "code": "INGEST_FAILED",
+    "message": "无法解析 PDF 或文件已损坏",
+    "details": { "filename": "broken.pdf" }
+  }
+}

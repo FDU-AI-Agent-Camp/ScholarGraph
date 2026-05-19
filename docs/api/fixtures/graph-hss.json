@@ -1,0 +1,21 @@
+{
+  "data": {
+    "paper_id": "hss-001",
+    "paradigm": "HSS",
+    "nodes": [
+      { "id": "n1", "label": "核心论点", "type": "Thesis", "data": {} },
+      { "id": "n2", "label": "分论点：制度路径依赖", "type": "SubArgument", "data": {} },
+      { "id": "n_lens", "label": "历史制度主义", "type": "AnalyticalLens", "data": {} }
+    ],
+    "edges": [
+      {
+        "id": "e1",
+        "source": "n2",
+        "target": "n1",
+        "label": "SUB_ARGUMENT_OF",
+        "type": "SUB_ARGUMENT_OF"
+      }
+    ]
+  },
+  "meta": { "request_id": "mock-graph-001" }
+}
