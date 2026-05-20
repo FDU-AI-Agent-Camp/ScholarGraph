@@ -43,8 +43,8 @@ feature/backend/{工作类型}/{简述}
 # 安装 uv 后
 uv --version
 
-# 同步依赖（P0 合并后可用；若 pyproject 尚未合入，先跳过，等 BE-L 通知）
-uv sync --group dev
+# 同步依赖（含开发组 pytest / ruff）
+uv sync
 
 # 环境变量
 cp .env.example .env
@@ -77,6 +77,8 @@ uv run pytest -m integration
 ---
 
 ## 4. 前端（FE）
+
+`frontend/` 骨架已包含 Vue 3 + Vite + Pinia + Element Plus + G6；详见 [frontend/README.md](../../frontend/README.md)。
 
 ```bash
 cd frontend

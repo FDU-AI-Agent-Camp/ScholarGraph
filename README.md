@@ -228,9 +228,24 @@ flowchart LR
 | Agent 编排 | LangGraph | 分流状态机、多步工具调用、检查点与可观测日志 |
 | 结构化抽取 | Pydantic + 范式分 Schema | STEM / HSS 分支禁止越界节点类型 |
 | 抽取与生成 | GPT-4o、Llama 3 等 + JSON Schema | 分类器、抽取器、问答均需强约束输出 |
-| 前端与演示 | Gradio / Streamlit | 上传、范式标签、问答与图谱可视化 |
+| 前端与演示 | **Vue 3 + Vite**（主路径）；Gradio / Streamlit 仅作答辩备用 | 见 [docs/v1/tech-stack.md](docs/v1/tech-stack.md) |
 
-具体版本与依赖以项目 `pyproject.toml` / `requirements.txt` 为准（随实现补充）。
+具体版本与依赖以仓库根目录 **`pyproject.toml`** 与 **`uv.lock`** 为准（由 [uv](https://docs.astral.sh/uv/) 管理）。
+
+### 本地运行（后端）
+
+在仓库根目录：
+
+```bash
+uv sync
+cp .env.example .env   # 编辑 SCHOLARGRAPH_API_KEY 等
+uv run pytest
+uv run uvicorn backend.main:app --reload --host 127.0.0.1 --port 8000
+```
+
+- 健康检查：`GET http://127.0.0.1:8000/api/v1/health`
+- Swagger：`http://127.0.0.1:8000/docs`
+- 新成员详见 [docs/v1/onboarding.md](docs/v1/onboarding.md)
 
 ---
 
