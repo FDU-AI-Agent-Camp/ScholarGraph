@@ -1,0 +1,107 @@
+"""Shared pytest fixtures for cross-package tests."""
+
+from __future__ import annotations
+
+import importlib.util
+from collections.abc import Iterator
+from contextlib import contextmanager
+from pathlib import Path
+from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
+
+REPO_ROOT = Path(__file__).resolve().parents[1]
+RUN_PIPELINE_SCRIPT = REPO_ROOT / "scripts" / "run_pipeline.py"
+
+
+@pytest.fixture
+def run_pipeline_module():
+    """Load scripts/run_pipeline.py as a module (not installed as package)."""
+    spec = importlib.util.spec_from_file_location("run_pipeline", RUN_PIPELINE_SCRIPT)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+@pytest.fixture
+def minimal_pdf(tmp_path: Path) -> Path:
+    path = tmp_path / "minimal.pdf"
+    path.write_bytes(b"%PDF-1.4\n% minimal test pdf")
+    return path
+
+
+@contextmanager
+def mock_pipeline_node_services(
+    paper_id: str,
+) -> Iterator[dict[str, MagicMock]]:
+    """Patch workflow node services with successful mocks for a given paper_id."""
+    from backend.schemas.graph import GraphEdge, GraphNode, UnifiedPaperGraph
+    from backend.schemas.paradigm import Paradigm, ParadigmClassification
+    from backend.services.graph_persistence_service import GraphPersistenceService
+    from backend.services.pipeline_completion_service import PipelineCompletionService
+
+    classification = ParadigmClassification(
+        paradigm=Paradigm.HSS,
+        confidence=0.9,
+        reason="mock",
+    )
+    graph = UnifiedPaperGraph(
+        paper_id=paper_id,
+        paradigm=Paradigm.HSS,
+        nodes=[GraphNode(id="n1", label="N", type="Thesis")],
+        edges=[
+            GraphEdge(
+                id="e1",
+                source="n1",
+                target="n1",
+                label="REF",
+                type="REF",
+            ),
+        ],
+    )
+
+    ingest_svc = MagicMock()
+    ingest_svc.ingest = AsyncMock(
+        return_value={
+            "paper_id": paper_id,
+            "full_text": "full-text",
+            "classifier_input": "classifier-input",
+        },
+    )
+
+    agent_svc = MagicMock()
+    agent_svc.classify_paradigm = AsyncMock(return_value=classification)
+    agent_svc.extract_graph = AsyncMock(return_value=graph)
+
+    with patch("backend.services.graph_persistence_service.GraphStore") as store_cls:
+        store_cls.return_value.save = MagicMock()
+        persistence = GraphPersistenceService(store=store_cls.return_value)
+        completion_svc = PipelineCompletionService(graph_persistence=persistence)
+
+        with (
+            patch("backend.graph.nodes.get_ingest_service", return_value=ingest_svc),
+            patch("backend.graph.nodes.get_agent_service", return_value=agent_svc),
+            patch(
+                "backend.graph.nodes.get_pipeline_completion_service",
+                return_value=completion_svc,
+            ),
+        ):
+            yield {
+                "ingest": ingest_svc,
+                "agent": agent_svc,
+                "completion": completion_svc,
+                "store_save": store_cls.return_value.save,
+            }
+
+
+@pytest.fixture
+def mock_pipeline_services():
+    """Pytest fixture wrapper: use as `with mock_pipeline_services("paper-id"):` via request."""
+
+    @contextmanager
+    def _apply(paper_id: str) -> Iterator[dict[str, MagicMock]]:
+        with mock_pipeline_node_services(paper_id) as mocks:
+            yield mocks
+
+    return _apply
