@@ -17,7 +17,7 @@ from backend.schemas.paper import (
     PaperSummary,
     PipelineStage,
 )
-from backend.schemas.paradigm import Paradigm
+from backend.schemas.paradigm import Paradigm, ParadigmClassification
 
 FIXTURES_DIR = Path(__file__).resolve().parents[2] / "docs" / "api" / "fixtures"
 MAX_UPLOAD_BYTES = 32 * 1024 * 1024
@@ -79,6 +79,77 @@ class PaperService:
         if paper is None:
             raise ApiError("PAPER_NOT_FOUND", f"论文不存在: {paper_id}", status_code=404)
         return paper
+
+    def ensure_paper_exists(self, paper_id: str) -> None:
+        if paper_id not in self._papers:
+            raise ApiError("PAPER_NOT_FOUND", f"论文不存在: {paper_id}", status_code=404)
+
+    def update_pipeline_status(
+        self,
+        paper_id: str,
+        *,
+        status: PaperStatus,
+        stage: PipelineStage | None,
+        percent: int,
+        message: str,
+    ) -> None:
+        self.ensure_paper_exists(paper_id)
+        now = datetime.now(UTC)
+        self._status[paper_id] = PaperStatusData(
+            paper_id=paper_id,
+            status=status,
+            percent=percent,
+            stage=stage,
+            message=message,
+            updated_at=now,
+        )
+        paper = self._papers[paper_id]
+        self._papers[paper_id] = paper.model_copy(update={"status": status, "updated_at": now})
+
+    def complete_pipeline(
+        self,
+        paper_id: str,
+        *,
+        classification: ParadigmClassification,
+        graph: UnifiedPaperGraph,
+    ) -> None:
+        self.ensure_paper_exists(paper_id)
+        now = datetime.now(UTC)
+        paper = self._papers[paper_id]
+        self._papers[paper_id] = paper.model_copy(
+            update={
+                "status": PaperStatus.READY,
+                "paradigm": classification.paradigm,
+                "classification": classification,
+                "updated_at": now,
+            },
+        )
+        self._graphs[paper_id] = graph
+        self._status[paper_id] = PaperStatusData(
+            paper_id=paper_id,
+            status=PaperStatus.READY,
+            percent=100,
+            stage=PipelineStage.READY,
+            message="建图完成",
+            updated_at=now,
+        )
+
+    def fail_pipeline(self, paper_id: str, *, message: str, error_code: str = "PIPELINE_FAILED") -> None:
+        self.ensure_paper_exists(paper_id)
+        now = datetime.now(UTC)
+        paper = self._papers[paper_id]
+        self._papers[paper_id] = paper.model_copy(
+            update={"status": PaperStatus.FAILED, "updated_at": now},
+        )
+        self._status[paper_id] = PaperStatusData(
+            paper_id=paper_id,
+            status=PaperStatus.FAILED,
+            percent=0,
+            stage=PipelineStage.FAILED,
+            message=message,
+            updated_at=now,
+        )
+        _ = error_code  # reserved for future error envelope on detail API
 
     async def get_status(self, paper_id: str) -> PaperStatusData:
         if paper_id in self._status:
