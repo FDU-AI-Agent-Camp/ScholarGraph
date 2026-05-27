@@ -16,7 +16,11 @@ uv run uvicorn backend.main:app --reload
 ```text
 backend/
 ├── api/routes/      # HTTP 路由（BE-L 注册；组员勿私自加 Router）
-├── services/        # 平台层编排，调用各 BE 模块
+├── services/        # Service 门面（workflow / API 只调此层）
+│   ├── ingest_service.py      → BE-1
+│   ├── agent_service.py       → BE-2
+│   ├── graph_persistence_service.py → BE-3
+│   └── pipeline_completion_service.py
 ├── schemas/         # Pydantic（与 OpenAPI 一致）
 ├── agents/          # BE-2 分类 / 抽取
 ├── ingest/          # BE-1 PDF 摄入

@@ -3,7 +3,7 @@
 from collections.abc import Iterator
 from datetime import UTC, datetime
 from pathlib import Path
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -13,6 +13,8 @@ from backend.schemas.graph import GraphEdge, GraphNode, UnifiedPaperGraph
 from backend.schemas.paper import PaperDetail, PaperStatus, PipelineStage
 from backend.schemas.paradigm import Paradigm, ParadigmClassification
 from backend.services.paper_service import get_paper_service
+from backend.services.graph_persistence_service import GraphPersistenceService
+from backend.services.pipeline_completion_service import PipelineCompletionService
 
 
 @pytest.fixture(autouse=True)
@@ -114,37 +116,45 @@ def post_extract_state(post_classify_state: WorkflowState) -> WorkflowState:
 
 
 @pytest.fixture
-def mock_pipeline_dependencies() -> Iterator[dict[str, AsyncMock]]:
+def mock_pipeline_dependencies() -> Iterator[dict[str, MagicMock]]:
     classification = ParadigmClassification(
         paradigm=Paradigm.HSS,
         confidence=0.9,
         reason="mock",
     )
+    graph = UnifiedPaperGraph(
+        paper_id="wf-test-paper",
+        paradigm=Paradigm.HSS,
+        nodes=[GraphNode(id="n1", label="N", type="Thesis")],
+        edges=[],
+    )
 
-    with (
-        patch("backend.graph.nodes.ingest_pdf", new_callable=AsyncMock) as ingest,
-        patch("backend.graph.nodes.classify", new_callable=AsyncMock) as classify,
-        patch("backend.graph.nodes.extract", new_callable=AsyncMock) as extract,
-        patch("backend.graph.nodes.GraphStore") as store_cls,
-    ):
-        ingest.side_effect = lambda path, paper_id=None: {
-            "paper_id": paper_id or path.stem,
+    ingest_svc = MagicMock()
+    ingest_svc.ingest = AsyncMock(
+        return_value={
+            "paper_id": "wf-test-paper",
             "full_text": "full-text",
             "classifier_input": "classifier-input",
-        }
-        classify.return_value = classification
-        extract.side_effect = lambda _text, paradigm: UnifiedPaperGraph(
-            paper_id="wf-test-paper",
-            paradigm=paradigm,
-            nodes=[GraphNode(id="n1", label="N", type="Thesis")],
-            edges=[],
-        )
-        store_instance = store_cls.return_value
-        store_instance.save = lambda _graph: None
-        yield {
-            "ingest": ingest,
-            "classify": classify,
-            "extract": extract,
-            "store_cls": store_cls,
-            "store_save": store_instance.save,
-        }
+        },
+    )
+
+    agent_svc = MagicMock()
+    agent_svc.classify_paradigm = AsyncMock(return_value=classification)
+    agent_svc.extract_graph = AsyncMock(return_value=graph)
+
+    with patch("backend.services.graph_persistence_service.GraphStore") as store_cls:
+        store_cls.return_value.save = MagicMock()
+        persistence = GraphPersistenceService(store=store_cls.return_value)
+        completion_svc = PipelineCompletionService(graph_persistence=persistence)
+
+        with (
+            patch("backend.graph.nodes.get_ingest_service", return_value=ingest_svc),
+            patch("backend.graph.nodes.get_agent_service", return_value=agent_svc),
+            patch("backend.graph.nodes.get_pipeline_completion_service", return_value=completion_svc),
+        ):
+            yield {
+                "ingest": ingest_svc,
+                "agent": agent_svc,
+                "completion": completion_svc,
+                "store_save": store_cls.return_value.save,
+            }

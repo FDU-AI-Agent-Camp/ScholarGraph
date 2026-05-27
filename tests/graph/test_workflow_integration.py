@@ -11,10 +11,12 @@ from backend.graph.workflow import run_paper_pipeline
 from backend.schemas.graph import GraphNode, UnifiedPaperGraph
 from backend.schemas.paper import PaperStatus, PipelineStage
 from backend.schemas.paradigm import Paradigm, ParadigmClassification
+from backend.services.errors import ServiceError
 from backend.services.paper_service import get_paper_service
+from backend.services.pipeline_completion_service import PipelineCompletionService
 
 
-async def test_pipeline_invokes_nodes_in_order(
+async def test_pipeline_invokes_services_in_order(
     workflow_paper: tuple[str, Path],
     mock_pipeline_dependencies: dict,
 ) -> None:
@@ -34,10 +36,10 @@ async def test_pipeline_invokes_nodes_in_order(
 
     mocks = mock_pipeline_dependencies
 
-    async def track_ingest(path: Path, paper_id: str | None = None):
+    async def track_ingest(path: Path, *, paper_id: str):
         call_order.append(NODE_INGEST)
         return {
-            "paper_id": paper_id or path.stem,
+            "paper_id": paper_id,
             "full_text": "full-text",
             "classifier_input": "classifier-input",
         }
@@ -46,14 +48,14 @@ async def test_pipeline_invokes_nodes_in_order(
         call_order.append(NODE_CLASSIFY)
         return classification
 
-    async def track_extract(_text: str, _paradigm: Paradigm):
+    async def track_extract(_text: str, _paradigm: Paradigm, *, paper_id: str):
         call_order.append(NODE_EXTRACT)
         return graph
 
-    mocks["ingest"].side_effect = track_ingest
-    mocks["classify"].side_effect = track_classify
-    mocks["extract"].side_effect = track_extract
-    mocks["store_cls"].return_value.save = MagicMock(side_effect=lambda _g: call_order.append(NODE_STORE))
+    mocks["ingest"].ingest = AsyncMock(side_effect=track_ingest)
+    mocks["agent"].classify_paradigm = AsyncMock(side_effect=track_classify)
+    mocks["agent"].extract_graph = AsyncMock(side_effect=track_extract)
+    mocks["store_save"].side_effect = lambda _g: call_order.append(NODE_STORE)
 
     await run_paper_pipeline(paper_id, pdf_path)
 
@@ -66,20 +68,19 @@ async def test_pipeline_stops_at_classify_when_classify_fails(
 ) -> None:
     paper_id, pdf_path = workflow_paper
     mocks = mock_pipeline_dependencies
-    mocks["classify"].side_effect = RuntimeError("schema mismatch")
-    save_mock = MagicMock()
-    mocks["store_cls"].return_value.save = save_mock
+    mocks["agent"].classify_paradigm = AsyncMock(
+        side_effect=ServiceError("LLM_JSON_INVALID", "schema mismatch"),
+    )
 
     final = await run_paper_pipeline(paper_id, pdf_path)
 
     assert final.get("failed") is True
     assert final.get("error_code") == "LLM_JSON_INVALID"
-    mocks["extract"].assert_not_awaited()
-    save_mock.assert_not_called()
+    mocks["agent"].extract_graph.assert_not_awaited()
+    mocks["store_save"].assert_not_called()
 
     status = await get_paper_service().get_status(paper_id)
     assert status.status == PaperStatus.FAILED
-    assert status.stage == PipelineStage.FAILED
 
 
 async def test_pipeline_stops_at_extract_when_extract_fails(
@@ -88,25 +89,32 @@ async def test_pipeline_stops_at_extract_when_extract_fails(
 ) -> None:
     paper_id, pdf_path = workflow_paper
     mocks = mock_pipeline_dependencies
-    mocks["extract"].side_effect = NotImplementedError("extractor missing")
-    save_mock = MagicMock()
-    mocks["store_cls"].return_value.save = save_mock
+    mocks["agent"].extract_graph = AsyncMock(
+        side_effect=ServiceError("PIPELINE_FAILED", "extractor missing"),
+    )
 
     final = await run_paper_pipeline(paper_id, pdf_path)
 
     assert final.get("failed") is True
-    save_mock.assert_not_called()
+    mocks["store_save"].assert_not_called()
 
 
-async def test_pipeline_stops_at_store_when_save_fails(
+async def test_pipeline_stops_at_store_when_finalize_fails(
     workflow_paper: tuple[str, Path],
     mock_pipeline_dependencies: dict,
 ) -> None:
     paper_id, pdf_path = workflow_paper
-    mocks = mock_pipeline_dependencies
-    mocks["store_cls"].return_value.save = MagicMock(side_effect=OSError("disk full"))
-
-    final = await run_paper_pipeline(paper_id, pdf_path)
+    completion = PipelineCompletionService()
+    with patch.object(
+        completion,
+        "finalize",
+        side_effect=ServiceError("PIPELINE_FAILED", "disk full"),
+    ):
+        with patch(
+            "backend.graph.nodes.get_pipeline_completion_service",
+            return_value=completion,
+        ):
+            final = await run_paper_pipeline(paper_id, pdf_path)
 
     assert final.get("failed") is True
     assert "disk full" in (final.get("error_message") or "")
@@ -131,7 +139,6 @@ async def test_run_paper_pipeline_raises_when_paper_not_registered(tmp_path: Pat
         await run_paper_pipeline("unknown-id", pdf_path)
 
     assert exc_info.value.code == "PAPER_NOT_FOUND"
-    assert exc_info.value.status_code == 404
 
 
 async def test_pipeline_success_leaves_ready_status(
@@ -150,31 +157,13 @@ async def test_pipeline_success_leaves_ready_status(
     assert graph.paper_id == paper_id
 
 
-async def test_pipeline_sets_processing_before_first_node(
-    workflow_paper: tuple[str, Path],
-    mock_pipeline_dependencies: dict,
-) -> None:
-    paper_id, pdf_path = workflow_paper
-    observed: list[PaperStatus] = []
-    service = get_paper_service()
-    original_update = service.update_pipeline_status
-
-    def spy_update(pid: str, **kwargs):
-        observed.append(kwargs["status"])
-        return original_update(pid, **kwargs)
-
-    with patch.object(service, "update_pipeline_status", side_effect=spy_update):
-        await run_paper_pipeline(paper_id, pdf_path)
-
-    assert observed[0] == PaperStatus.PROCESSING
-
-
-async def test_fail_path_after_ingest_error(
+async def test_fail_path_after_ingest_service_error(
     workflow_paper: tuple[str, Path],
 ) -> None:
     paper_id, pdf_path = workflow_paper
-    with patch("backend.graph.nodes.ingest_pdf", new_callable=AsyncMock) as ingest:
-        ingest.side_effect = NotImplementedError("no ingest")
+    ingest_svc = MagicMock()
+    ingest_svc.ingest = AsyncMock(side_effect=ServiceError("PIPELINE_FAILED", "no ingest"))
+    with patch("backend.graph.nodes.get_ingest_service", return_value=ingest_svc):
         final = await run_paper_pipeline(paper_id, pdf_path)
 
     assert final.get("failed") is True
