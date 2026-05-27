@@ -50,3 +50,11 @@ class PaperStatusData(BaseModel):
     stage: PipelineStage | None = None
     message: str
     updated_at: datetime
+    error_code: str | None = Field(
+        default=None,
+        description="流水线失败时的稳定错误码（仅 status=failed）",
+    )
+    failed_during: PipelineStage | None = Field(
+        default=None,
+        description="失败时所在流水线步骤（ingesting 等；仅 status=failed）",
+    )

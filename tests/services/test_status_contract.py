@@ -5,7 +5,10 @@ import pytest
 from backend.graph.state import STAGE_PERCENT
 from backend.schemas.paper import PaperStatus, PipelineStage
 from backend.services.paper_service import get_paper_service
-from backend.services.pipeline_status_service import validate_status_contract
+from backend.services.pipeline_status_service import (
+    validate_failed_error_fields,
+    validate_status_contract,
+)
 
 
 # ── validate_status_contract (pure) ─────────────────────────────────────────
@@ -139,6 +142,51 @@ def test_set_status_snapshot_rejects_invalid_contract(registered_paper: str) -> 
             percent=50,
             message="非法 ready 快照",
         )
+
+
+def test_failed_requires_error_code() -> None:
+    with pytest.raises(ValueError, match="error_code"):
+        validate_failed_error_fields(
+            status=PaperStatus.FAILED,
+            error_code=None,
+            failed_during=None,
+        )
+
+
+def test_failed_rejects_invalid_failed_during() -> None:
+    with pytest.raises(ValueError, match="failed_during"):
+        validate_failed_error_fields(
+            status=PaperStatus.FAILED,
+            error_code="PIPELINE_FAILED",
+            failed_during=PipelineStage.FAILED,
+        )
+
+
+def test_non_failed_rejects_error_fields() -> None:
+    with pytest.raises(ValueError, match="非 failed"):
+        validate_failed_error_fields(
+            status=PaperStatus.READY,
+            error_code="PIPELINE_FAILED",
+            failed_during=None,
+        )
+
+
+def test_mark_failed_persists_error_code_and_failed_during(registered_paper: str) -> None:
+    from backend.services.pipeline_status_service import PipelineStatusService
+
+    snapshot = PipelineStatusService().mark_failed(
+        registered_paper,
+        message="范式分类失败",
+        error_code="LLM_JSON_INVALID",
+        failed_during=PipelineStage.CLASSIFYING,
+    )
+    assert snapshot.error_code == "LLM_JSON_INVALID"
+    assert snapshot.failed_during == PipelineStage.CLASSIFYING
+    validate_failed_error_fields(
+        status=snapshot.status,
+        error_code=snapshot.error_code,
+        failed_during=snapshot.failed_during,
+    )
 
 
 def test_update_pipeline_status_accepts_valid_processing_triple(registered_paper: str) -> None:

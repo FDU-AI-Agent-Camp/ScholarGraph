@@ -65,7 +65,7 @@ def test_mark_ready_and_failed_snapshots_match_contract(registered_paper: str) -
     ready = svc.mark_ready(registered_paper)
     assert_snapshot_matches_contract(ready)
 
-    svc.mark_failed(registered_paper, message="重试失败")
+    svc.mark_failed(registered_paper, message="重试失败", error_code="PIPELINE_FAILED")
     failed = get_paper_service()._status[registered_paper]
     assert_snapshot_matches_contract(failed)
 

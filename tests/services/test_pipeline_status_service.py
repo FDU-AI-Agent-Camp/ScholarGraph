@@ -79,6 +79,7 @@ async def test_mark_failed_visible_via_get_status(registered_paper: str) -> None
     PipelineStatusService().mark_failed(
         registered_paper,
         message="测试失败",
+        error_code="INGEST_FAILED",
         failed_during=PipelineStage.CLASSIFYING,
     )
     status = await get_paper_service().get_status(registered_paper)

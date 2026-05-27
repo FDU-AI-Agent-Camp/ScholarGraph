@@ -93,6 +93,7 @@ async def test_fail_node_persists_error_to_paper_service(
     assert status.status == PaperStatus.FAILED
     assert status.stage == PipelineStage.FAILED
     assert status.message == "无法解析"
+    assert status.error_code == "INGEST_FAILED"
 
 
 @pytest.mark.parametrize(

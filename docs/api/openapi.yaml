@@ -370,6 +370,15 @@ components:
         updated_at:
           type: string
           format: date-time
+        error_code:
+          type: string
+          nullable: true
+          description: 流水线失败时的稳定错误码（仅 status=failed）
+        failed_during:
+          allOf:
+            - $ref: "#/components/schemas/PipelineStage"
+          nullable: true
+          description: 失败时所在步骤（ingesting 等；仅 status=failed）
 
     PaperStatusResponse:
       type: object

@@ -15,6 +15,7 @@ from backend.services.pipeline_completion_service import (
 from backend.services.pipeline_status_service import (
     PipelineStatusService,
     get_pipeline_status_service,
+    validate_failed_error_fields,
     validate_status_contract,
 )
 
@@ -33,4 +34,5 @@ __all__ = [
     "PipelineStatusService",
     "get_pipeline_status_service",
     "validate_status_contract",
+    "validate_failed_error_fields",
 ]

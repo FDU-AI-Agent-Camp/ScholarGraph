@@ -124,11 +124,21 @@ class PaperService:
         stage: PipelineStage | None,
         percent: int,
         message: str,
+        error_code: str | None = None,
+        failed_during: PipelineStage | None = None,
     ) -> PaperStatusData:
         """Persist validated pipeline status (called by PipelineStatusService)."""
-        from backend.services.pipeline_status_service import validate_status_contract
+        from backend.services.pipeline_status_service import (
+            validate_failed_error_fields,
+            validate_status_contract,
+        )
 
         validate_status_contract(status=status, stage=stage, percent=percent)
+        validate_failed_error_fields(
+            status=status,
+            error_code=error_code,
+            failed_during=failed_during,
+        )
         self.ensure_paper_exists(paper_id)
         now = datetime.now(UTC)
         snapshot = PaperStatusData(
@@ -138,6 +148,8 @@ class PaperService:
             stage=stage,
             message=message,
             updated_at=now,
+            error_code=error_code,
+            failed_during=failed_during,
         )
         self._status[paper_id] = snapshot
         paper = self._papers[paper_id]
@@ -202,6 +214,7 @@ class PaperService:
         get_pipeline_status_service().mark_failed(
             paper_id,
             message=message,
+            error_code=error_code,
             failed_during=failed_during,
         )
 

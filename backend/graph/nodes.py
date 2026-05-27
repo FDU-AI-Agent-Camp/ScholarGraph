@@ -6,7 +6,7 @@ from backend.graph.state import STAGE_PERCENT, WorkflowState
 from backend.schemas.paper import PaperStatus, PaperStatusData, PipelineStage
 from backend.schemas.paradigm import Paradigm
 from backend.services.agent_service import get_agent_service
-from backend.services.errors import ServiceError
+from backend.services.errors import PIPELINE_FAILED_CODE, ServiceError
 from backend.services.ingest_service import get_ingest_service
 from backend.services.pipeline_completion_service import get_pipeline_completion_service
 from backend.services.pipeline_status_service import get_pipeline_status_service
@@ -131,9 +131,11 @@ async def fail_node(state: WorkflowState) -> WorkflowState:
     message = state.get("error_message") or state.get("message") or "流水线失败"
     failed_during = state.get("stage")
     failed_stage = failed_during if isinstance(failed_during, PipelineStage) else None
+    error_code = state.get("error_code", PIPELINE_FAILED_CODE)
     get_pipeline_status_service().mark_failed(
         paper_id,
         message=message,
+        error_code=error_code,
         failed_during=failed_stage,
     )
     return WorkflowState(
@@ -141,5 +143,7 @@ async def fail_node(state: WorkflowState) -> WorkflowState:
         stage=PipelineStage.FAILED,
         percent=STAGE_PERCENT[PipelineStage.FAILED],
         message=message,
+        error_code=error_code,
+        failed_during=failed_stage,
         failed=True,
     )

@@ -64,6 +64,25 @@ def validate_status_contract(
     raise ValueError(f"未知 status: {status}")
 
 
+def validate_failed_error_fields(
+    *,
+    status: PaperStatus,
+    error_code: str | None,
+    failed_during: PipelineStage | None,
+) -> None:
+    """failed 态必须带 error_code；failed_during 仅允许处理中阶段。"""
+    if status == PaperStatus.FAILED:
+        if not error_code or not error_code.strip():
+            raise ValueError("status=failed 时 error_code 必填")
+        if failed_during is not None and failed_during not in PROCESSING_STAGES:
+            msg = f"failed_during 必须为 {sorted(s.value for s in PROCESSING_STAGES)} 之一"
+            raise ValueError(msg)
+        return
+
+    if error_code is not None or failed_during is not None:
+        raise ValueError("非 failed 状态不得包含 error_code / failed_during")
+
+
 class PipelineStatusService:
     """Single entry for workflow progress writes consumed by GET .../status."""
 
@@ -108,15 +127,17 @@ class PipelineStatusService:
         paper_id: str,
         *,
         message: str,
+        error_code: str,
         failed_during: PipelineStage | None = None,
     ) -> PaperStatusData:
-        _ = failed_during  # 保留：未来 detail API 可记录失败所在步骤
         return self._apply(
             paper_id,
             status=PaperStatus.FAILED,
             stage=PipelineStage.FAILED,
             percent=STAGE_PERCENT[PipelineStage.FAILED],
             message=message,
+            error_code=error_code,
+            failed_during=failed_during,
         )
 
     def _apply(
@@ -127,14 +148,23 @@ class PipelineStatusService:
         stage: PipelineStage | None,
         percent: int,
         message: str,
+        error_code: str | None = None,
+        failed_during: PipelineStage | None = None,
     ) -> PaperStatusData:
         validate_status_contract(status=status, stage=stage, percent=percent)
+        validate_failed_error_fields(
+            status=status,
+            error_code=error_code,
+            failed_during=failed_during,
+        )
         return get_paper_service().set_status_snapshot(
             paper_id,
             status=status,
             stage=stage,
             percent=percent,
             message=message,
+            error_code=error_code,
+            failed_during=failed_during,
         )
 
 

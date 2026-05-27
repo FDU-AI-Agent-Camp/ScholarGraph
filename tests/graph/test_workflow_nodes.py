@@ -183,6 +183,7 @@ async def test_fail_node_updates_paper_status_to_failed(
     paper_id, _ = workflow_paper
     state = WorkflowState(
         paper_id=paper_id,
+        stage=PipelineStage.INGESTING,
         error_code="INGEST_FAILED",
         error_message="无法解析 PDF",
         message="无法解析 PDF",
@@ -193,3 +194,5 @@ async def test_fail_node_updates_paper_status_to_failed(
     assert out["status"] == PaperStatus.FAILED
     status = await get_paper_service().get_status(paper_id)
     assert status.status == PaperStatus.FAILED
+    assert status.error_code == "INGEST_FAILED"
+    assert status.failed_during == PipelineStage.INGESTING

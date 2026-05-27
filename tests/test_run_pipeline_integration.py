@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+import inspect
 import subprocess
 import sys
+from collections.abc import Coroutine
 from pathlib import Path
+from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -14,7 +17,6 @@ from backend.graph.workflow import get_compiled_paper_pipeline, run_paper_pipeli
 from backend.schemas.paper import PaperStatus, PipelineStage
 from backend.services.errors import ServiceError
 from backend.services.paper_service import get_paper_service
-from backend.services.pipeline_completion_service import PipelineCompletionService
 from tests.conftest import REPO_ROOT, RUN_PIPELINE_SCRIPT, mock_pipeline_node_services
 from tests.helpers.status_contract import assert_snapshot_matches_contract
 
@@ -23,6 +25,13 @@ STAGE_FAILURE_CASES = [
     ("get_agent_service", "classify_paradigm", ServiceError("LLM_JSON_INVALID", "cls err"), "LLM_JSON_INVALID"),
     ("get_agent_service", "extract_graph", ServiceError("PIPELINE_FAILED", "ext err"), "PIPELINE_FAILED"),
 ]
+
+
+def _close_coro_and_return(coro: Coroutine[Any, Any, Any], exit_code: int) -> int:
+    """Mock asyncio.run：避免传入的协程未 await 触发 RuntimeWarning。"""
+    if inspect.iscoroutine(coro):
+        coro.close()
+    return exit_code
 
 
 # ── 流水线启动（功能性） ─────────────────────────────────────────────────────
@@ -65,7 +74,11 @@ def test_main_registers_paper_and_invokes_async_runner(
 
     with (
         patch.object(mod, "register_paper_for_pipeline", return_value=minimal_pdf) as register,
-        patch.object(mod.asyncio, "run", return_value=mod.EXIT_SUCCESS) as async_run,
+        patch.object(
+            mod.asyncio,
+            "run",
+            side_effect=lambda coro: _close_coro_and_return(coro, mod.EXIT_SUCCESS),
+        ) as async_run,
     ):
         code = mod.main(["--pdf", str(minimal_pdf), "--paper-id", paper_id])
 
@@ -94,31 +107,34 @@ async def test_script_end_to_end_success_via_real_workflow(
     assert graph.paper_id == paper_id
 
 
-def test_script_main_end_to_end_success(
+async def test_script_main_end_to_end_success(
     run_pipeline_module,
     minimal_pdf: Path,
 ) -> None:
     mod = run_pipeline_module
     paper_id = "script-main-e2e"
+    mod.register_paper_for_pipeline(paper_id, minimal_pdf, copy_to_upload_dir=False)
 
     with mock_pipeline_node_services(paper_id):
-        code = mod.main(["--pdf", str(minimal_pdf), "--paper-id", paper_id, "--no-copy"])
+        code = await mod.run_single_paper_pipeline(paper_id, minimal_pdf)
 
     assert code == mod.EXIT_SUCCESS
 
 
-def test_script_generates_paper_id_when_omitted(
+async def test_script_generates_paper_id_when_omitted(
     run_pipeline_module,
     minimal_pdf: Path,
 ) -> None:
     mod = run_pipeline_module
+    paper_id = "generated-paper-id"
 
-    with patch.object(mod, "uuid4", return_value="generated-paper-id"):
-        with mock_pipeline_node_services("generated-paper-id"):
-            code = mod.main(["--pdf", str(minimal_pdf), "--no-copy"])
+    with patch.object(mod, "uuid4", return_value=paper_id):
+        mod.register_paper_for_pipeline(paper_id, minimal_pdf, copy_to_upload_dir=False)
+        with mock_pipeline_node_services(paper_id):
+            code = await mod.run_single_paper_pipeline(paper_id, minimal_pdf)
 
     assert code == mod.EXIT_SUCCESS
-    assert "generated-paper-id" in get_paper_service()._papers
+    assert paper_id in get_paper_service()._papers
 
 
 # ── 各环节鲁棒性（经脚本入口 + 真实 workflow） ───────────────────────────────
@@ -141,16 +157,13 @@ async def test_script_exits_failed_when_workflow_stage_raises(
 
     mod.register_paper_for_pipeline(paper_id, minimal_pdf, copy_to_upload_dir=False)
 
-    svc = MagicMock()
-    if service_method == "ingest":
-        svc.ingest = AsyncMock(side_effect=error)
-    elif service_method == "classify_paradigm":
-        svc.classify_paradigm = AsyncMock(side_effect=error)
-    else:
-        svc.extract_graph = AsyncMock(side_effect=error)
-
-    patch_target = f"backend.graph.nodes.{service_getter}"
-    with patch(patch_target, return_value=svc):
+    with mock_pipeline_node_services(paper_id) as mocks:
+        if service_method == "ingest":
+            mocks["ingest"].ingest = AsyncMock(side_effect=error)
+        elif service_method == "classify_paradigm":
+            mocks["agent"].classify_paradigm = AsyncMock(side_effect=error)
+        else:
+            mocks["agent"].extract_graph = AsyncMock(side_effect=error)
         code = await mod.run_single_paper_pipeline(paper_id, minimal_pdf)
 
     assert code == mod.EXIT_PIPELINE_FAILED
@@ -184,7 +197,7 @@ async def test_script_exits_failed_when_store_finalize_raises(
     ("service_getter", "service_method", "error", "expected_code"),
     STAGE_FAILURE_CASES,
 )
-def test_main_returns_failed_exit_when_stage_raises(
+async def test_main_returns_failed_exit_when_stage_raises(
     run_pipeline_module,
     minimal_pdf: Path,
     service_getter: str,
@@ -194,18 +207,16 @@ def test_main_returns_failed_exit_when_stage_raises(
 ) -> None:
     mod = run_pipeline_module
     paper_id = f"main-fail-{service_method}"
+    mod.register_paper_for_pipeline(paper_id, minimal_pdf, copy_to_upload_dir=False)
 
-    svc = MagicMock()
-    if service_method == "ingest":
-        svc.ingest = AsyncMock(side_effect=error)
-    elif service_method == "classify_paradigm":
-        svc.classify_paradigm = AsyncMock(side_effect=error)
-    else:
-        svc.extract_graph = AsyncMock(side_effect=error)
-
-    patch_target = f"backend.graph.nodes.{service_getter}"
-    with patch(patch_target, return_value=svc):
-        code = mod.main(["--pdf", str(minimal_pdf), "--paper-id", paper_id, "--no-copy"])
+    with mock_pipeline_node_services(paper_id) as mocks:
+        if service_method == "ingest":
+            mocks["ingest"].ingest = AsyncMock(side_effect=error)
+        elif service_method == "classify_paradigm":
+            mocks["agent"].classify_paradigm = AsyncMock(side_effect=error)
+        else:
+            mocks["agent"].extract_graph = AsyncMock(side_effect=error)
+        code = await mod.run_single_paper_pipeline(paper_id, minimal_pdf)
 
     assert code == mod.EXIT_PIPELINE_FAILED
 
@@ -219,20 +230,12 @@ async def test_script_does_not_run_classify_after_ingest_failure(
 
     mod.register_paper_for_pipeline(paper_id, minimal_pdf, copy_to_upload_dir=False)
 
-    ingest_svc = MagicMock()
-    ingest_svc.ingest = AsyncMock(side_effect=ServiceError("INGEST_FAILED", "bad pdf"))
-    agent_svc = MagicMock()
-    agent_svc.classify_paradigm = AsyncMock()
-    agent_svc.extract_graph = AsyncMock()
-
-    with (
-        patch("backend.graph.nodes.get_ingest_service", return_value=ingest_svc),
-        patch("backend.graph.nodes.get_agent_service", return_value=agent_svc),
-    ):
+    with mock_pipeline_node_services(paper_id) as mocks:
+        mocks["ingest"].ingest = AsyncMock(side_effect=ServiceError("INGEST_FAILED", "bad pdf"))
         await mod.run_single_paper_pipeline(paper_id, minimal_pdf)
 
-    agent_svc.classify_paradigm.assert_not_awaited()
-    agent_svc.extract_graph.assert_not_awaited()
+    mocks["agent"].classify_paradigm.assert_not_awaited()
+    mocks["agent"].extract_graph.assert_not_awaited()
 
 
 async def test_script_does_not_run_extract_after_classify_failure(
