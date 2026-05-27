@@ -60,7 +60,7 @@ def initial_workflow_state(*, paper_id: str, pdf_path: str) -> WorkflowState:
         pdf_path=pdf_path,
         status=PaperStatus.PROCESSING,
         stage=PipelineStage.INGESTING,
-        percent=0,
-        message="流水线已启动",
+        percent=STAGE_PERCENT[PipelineStage.INGESTING],
+        message="流水线已启动，正在解析 PDF",
         failed=False,
     )

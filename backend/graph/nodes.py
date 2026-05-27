@@ -3,13 +3,13 @@
 from pathlib import Path
 
 from backend.graph.state import STAGE_PERCENT, WorkflowState
-from backend.schemas.paper import PaperStatus, PipelineStage
+from backend.schemas.paper import PaperStatus, PaperStatusData, PipelineStage
 from backend.schemas.paradigm import Paradigm
 from backend.services.agent_service import get_agent_service
-from backend.services.errors import PIPELINE_FAILED_CODE, ServiceError
+from backend.services.errors import ServiceError
 from backend.services.ingest_service import get_ingest_service
-from backend.services.paper_service import get_paper_service
 from backend.services.pipeline_completion_service import get_pipeline_completion_service
+from backend.services.pipeline_status_service import get_pipeline_status_service
 
 
 def _mark_progress(
@@ -17,12 +17,10 @@ def _mark_progress(
     *,
     stage: PipelineStage,
     message: str,
-) -> None:
-    get_paper_service().update_pipeline_status(
+) -> PaperStatusData:
+    return get_pipeline_status_service().advance_stage(
         state["paper_id"],
-        status=PaperStatus.PROCESSING,
-        stage=stage,
-        percent=STAGE_PERCENT[stage],
+        stage,
         message=message,
     )
 
@@ -32,7 +30,9 @@ def _failure_patch(exc: ServiceError, *, stage: PipelineStage) -> WorkflowState:
         failed=True,
         error_code=exc.code,
         error_message=exc.message,
+        status=PaperStatus.PROCESSING,
         stage=stage,
+        percent=STAGE_PERCENT[stage],
         message=exc.message,
     )
 
@@ -44,6 +44,7 @@ def _success_patch(
     **fields: object,
 ) -> WorkflowState:
     patch: WorkflowState = {
+        "status": PaperStatus.PROCESSING,
         "stage": stage,
         "percent": STAGE_PERCENT[stage],
         "message": message,
@@ -128,12 +129,17 @@ async def store_node(state: WorkflowState) -> WorkflowState:
 async def fail_node(state: WorkflowState) -> WorkflowState:
     paper_id = state["paper_id"]
     message = state.get("error_message") or state.get("message") or "流水线失败"
-    code = state.get("error_code", PIPELINE_FAILED_CODE)
-    get_paper_service().fail_pipeline(paper_id, message=message, error_code=code)
+    failed_during = state.get("stage")
+    failed_stage = failed_during if isinstance(failed_during, PipelineStage) else None
+    get_pipeline_status_service().mark_failed(
+        paper_id,
+        message=message,
+        failed_during=failed_stage,
+    )
     return WorkflowState(
         status=PaperStatus.FAILED,
         stage=PipelineStage.FAILED,
-        percent=0,
+        percent=STAGE_PERCENT[PipelineStage.FAILED],
         message=message,
         failed=True,
     )

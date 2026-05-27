@@ -12,6 +12,11 @@ from backend.services.pipeline_completion_service import (
     PipelineCompletionService,
     get_pipeline_completion_service,
 )
+from backend.services.pipeline_status_service import (
+    PipelineStatusService,
+    get_pipeline_status_service,
+    validate_status_contract,
+)
 
 __all__ = [
     "AgentService",
@@ -25,4 +30,7 @@ __all__ = [
     "get_ingest_service",
     "get_paper_service",
     "get_pipeline_completion_service",
+    "PipelineStatusService",
+    "get_pipeline_status_service",
+    "validate_status_contract",
 ]

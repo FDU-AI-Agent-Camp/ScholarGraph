@@ -60,6 +60,7 @@ def test_service_facade_files_exist() -> None:
         "backend/services/agent_service.py",
         "backend/services/graph_persistence_service.py",
         "backend/services/pipeline_completion_service.py",
+        "backend/services/pipeline_status_service.py",
         "backend/services/errors.py",
     ]
     for relative in expected:

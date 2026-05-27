@@ -19,6 +19,7 @@ from backend.graph.state import (
 )
 from backend.schemas.paper import PaperStatus, PipelineStage
 from backend.services.paper_service import get_paper_service
+from backend.services.pipeline_status_service import get_pipeline_status_service
 
 RouteKey = Literal["continue", "fail"]
 
@@ -86,15 +87,8 @@ async def run_paper_pipeline(paper_id: str, pdf_path: Path) -> WorkflowState:
     if not pdf_path.is_file():
         raise FileNotFoundError(f"PDF not found: {pdf_path}")
 
-    service = get_paper_service()
-    service.ensure_paper_exists(paper_id)
-    service.update_pipeline_status(
-        paper_id,
-        status=PaperStatus.PROCESSING,
-        stage=PipelineStage.INGESTING,
-        percent=0,
-        message="流水线已启动",
-    )
+    get_paper_service().ensure_paper_exists(paper_id)
+    get_pipeline_status_service().start_processing(paper_id)
 
     initial = initial_workflow_state(paper_id=paper_id, pdf_path=str(pdf_path))
     final_state: WorkflowState = await get_compiled_paper_pipeline().ainvoke(initial)
