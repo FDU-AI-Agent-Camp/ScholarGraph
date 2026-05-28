@@ -68,3 +68,6 @@ desktop.ini
 scratch/
 backend/test/
 frontend/test/
+
+# ── 个人进度（勿提交）──────────────────────────────────
+progress.md

@@ -30,6 +30,8 @@ frontend/src/
 | `npm run dev` | 本地开发 |
 | `npm run build` | 生产构建 |
 | `npm run typecheck` | TypeScript 检查 |
+| `npm run test` | Vitest 单元/组件测试（`src/**/*.test.ts`） |
+| `npm run test:watch` | 监听模式 |
 
 ## 对接
 

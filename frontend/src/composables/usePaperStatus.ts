@@ -2,8 +2,7 @@ import { onUnmounted, ref } from 'vue'
 
 import * as papersApi from '@/api/papers'
 import type { PaperStatusData } from '@/api/types'
-
-const TERMINAL = new Set(['ready', 'failed'])
+import { isTerminalStatus } from '@/utils/paperStatus'
 
 export function usePaperStatus(paperId: string, intervalMs = 2000) {
   const status = ref<PaperStatusData | null>(null)
@@ -13,7 +12,7 @@ export function usePaperStatus(paperId: string, intervalMs = 2000) {
   async function pollOnce() {
     const res = await papersApi.getPaperStatus(paperId)
     status.value = res.data
-    if (TERMINAL.has(res.data.status)) {
+    if (isTerminalStatus(res.data.status)) {
       stop()
     }
   }

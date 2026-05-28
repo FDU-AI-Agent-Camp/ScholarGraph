@@ -55,6 +55,9 @@ export interface PaperDetail extends PaperSummary {
   classification?: ParadigmClassification | null
 }
 
+/** Stage active when `status=failed` (see api-contract §2). */
+export type FailedDuringStage = Exclude<PipelineStage, 'ready' | 'failed'>
+
 export interface PaperStatusData {
   paper_id: string
   status: PaperStatus
@@ -62,6 +65,10 @@ export interface PaperStatusData {
   stage: PipelineStage | null
   message: string
   updated_at: string
+  /** Present when `status=failed` (platform pipeline). */
+  error_code?: string
+  /** Pipeline step that was running when failure occurred. */
+  failed_during?: FailedDuringStage | null
 }
 
 export interface GraphNode {
