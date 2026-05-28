@@ -1,9 +1,10 @@
 <script setup lang="ts">
-import { onMounted } from 'vue'
+import { defineAsyncComponent, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 
-import PaperGraph from '@/components/graph/PaperGraph.vue'
 import { usePaperStore } from '@/stores/paper'
+
+const PaperGraph = defineAsyncComponent(() => import('@/components/graph/PaperGraph.vue'))
 
 const props = defineProps<{ paperId: string }>()
 const router = useRouter()

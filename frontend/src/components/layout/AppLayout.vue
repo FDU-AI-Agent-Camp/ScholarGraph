@@ -4,6 +4,7 @@ import { useRoute } from 'vue-router'
 
 const route = useRoute()
 const active = computed(() => route.path)
+const pageTitle = computed(() => route.meta.title ?? 'ScholarGraph')
 </script>
 
 <template>
@@ -21,7 +22,7 @@ const active = computed(() => route.path)
     </el-aside>
     <el-container>
       <el-header class="header">
-        <span>学术论文逻辑解构 · 开发骨架</span>
+        <span>{{ pageTitle }} · 学术论文逻辑解构</span>
         <el-link href="http://127.0.0.1:8000/docs" target="_blank" type="primary">API 文档</el-link>
       </el-header>
       <el-main class="main">

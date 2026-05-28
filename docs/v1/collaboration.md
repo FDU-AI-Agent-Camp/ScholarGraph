@@ -34,8 +34,8 @@ Infra（BE-L）        llm / config / workflow
 |------|--------|------|
 | 1 | BE-L | Pydantic 模型 `backend/schemas/` |
 | 2 | BE-L | `/docs`、`docs/api/openapi.yaml` |
-| 3 | FE | `frontend/src/types/`（openapi-typescript 可选） |
-| 4 | FE | `frontend/src/mocks/` 与 OpenAPI 一致 |
+| 3 | FE | `npm run generate:api-types` → `frontend/src/api/generated/schema.d.ts`；薄封装见 `frontend/src/api/types.ts` |
+| 4 | FE | 测试/fixtures 与 OpenAPI 一致（[`docs/api/fixtures/`](../api/fixtures/)） |
 | 5 | BE-1～4 | Service 实现 + `tests/` |
 | 6 | BE-L | 路由注册 + `workflow.py` |
 | 7 | FE + BE-L | 联调（检查清单 §7） |
@@ -230,7 +230,7 @@ Issue 标题：`[Schema RFC] 简述` — 含动机、字段 diff、对 G6/OpenAP
 | 轮询 | 2s 间隔，最长 10min，`ready`/`failed` 停止 |
 | SSE | **`POST .../qa/stream`** + `fetch-event-source`（见 §3.3） |
 | 类型 | `openapi-typescript` 生成自 [`openapi.yaml`](../api/openapi.yaml) |
-| Mock | 复制 [`fixtures/`](../api/fixtures/) 到 `frontend/src/mocks/` |
+| Mock | 权威 [`fixtures/`](../api/fixtures/)；可选 `import '@/mocks'`（[`frontend/src/mocks/`](../../frontend/src/mocks/) 再导出，勿维护第二份 JSON） |
 
 **联调 PR 检查清单**：
 

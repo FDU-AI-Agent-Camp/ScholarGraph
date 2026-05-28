@@ -2,7 +2,9 @@
 import { onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 
+import type { PaperSummary } from '@/api/types'
 import PaperUpload from '@/components/papers/PaperUpload.vue'
+import { RouteName } from '@/router/meta'
 import { usePaperStore } from '@/stores/paper'
 
 const router = useRouter()
@@ -13,7 +15,15 @@ onMounted(() => {
 })
 
 function onUploaded(paperId: string) {
-  void router.push({ name: 'paper-detail', params: { paperId } })
+  void router.push({ name: RouteName.PaperDetail, params: { paperId } })
+}
+
+function openDetail(row: PaperSummary) {
+  void router.push({ name: RouteName.PaperDetail, params: { paperId: row.paper_id } })
+}
+
+function openGraph(row: PaperSummary) {
+  void router.push({ name: RouteName.PaperGraph, params: { paperId: row.paper_id } })
 }
 </script>
 
@@ -27,16 +37,9 @@ function onUploaded(paperId: string) {
       <el-table-column prop="paradigm" label="范式" width="90" />
       <el-table-column prop="status" label="状态" width="110" />
       <el-table-column label="操作" width="160">
-        <template #default="{ row }">
-          <el-button link type="primary" @click="router.push(`/papers/${row.paper_id}`)">详情</el-button>
-          <el-button
-            v-if="row.status === 'ready'"
-            link
-            type="primary"
-            @click="router.push(`/papers/${row.paper_id}/graph`)"
-          >
-            图谱
-          </el-button>
+        <template #default="{ row }: { row: PaperSummary }">
+          <el-button link type="primary" @click="openDetail(row)">详情</el-button>
+          <el-button v-if="row.status === 'ready'" link type="primary" @click="openGraph(row)"> 图谱 </el-button>
         </template>
       </el-table-column>
     </el-table>

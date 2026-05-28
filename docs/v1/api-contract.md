@@ -167,7 +167,26 @@
 ```
 
 **200（完成）**：`status=ready`，`stage=ready`，`percent=100`。  
-**200（失败）**：`status=failed`，`stage=failed`。
+
+**200（失败）**：`status=failed`，`stage=failed`；并返回 `error_code` 与 `failed_during`（失败时所在流水线步骤，不含 `ready`/`failed`）：
+
+```json
+{
+  "data": {
+    "paper_id": "hss-failed-001",
+    "status": "failed",
+    "percent": 40,
+    "stage": "failed",
+    "message": "分类阶段 LLM 返回无效 JSON",
+    "updated_at": "2026-05-19T10:15:00Z",
+    "error_code": "LLM_JSON_INVALID",
+    "failed_during": "classifying"
+  },
+  "meta": { "request_id": "…" }
+}
+```
+
+本地 Mock 论文 ID：`hss-failed-001`（fixture 见 `docs/api/fixtures/paper-status-hss-failed-001.json`）。
 
 ---
 

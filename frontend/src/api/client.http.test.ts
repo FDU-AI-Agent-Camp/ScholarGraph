@@ -1,0 +1,106 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+
+import type { DataResponse } from '@/api/types'
+
+const mockGet = vi.hoisted(() => vi.fn())
+const mockPost = vi.hoisted(() => vi.fn())
+const interceptorErrorHandler = vi.hoisted(() => vi.fn())
+
+vi.mock('axios', () => ({
+  default: {
+    create: vi.fn(() => ({
+      get: mockGet,
+      post: mockPost,
+      interceptors: {
+        response: {
+          use: vi.fn((_ok: unknown, onRejected: (err: unknown) => unknown) => {
+            interceptorErrorHandler.mockImplementation(onRejected)
+          }),
+        },
+      },
+    })),
+  },
+}))
+
+vi.mock('element-plus', () => ({
+  ElMessage: { error: vi.fn() },
+}))
+
+describe('client HTTP helpers', () => {
+  beforeEach(async () => {
+    vi.resetModules()
+    mockGet.mockReset()
+    mockPost.mockReset()
+    interceptorErrorHandler.mockReset()
+    vi.unstubAllEnvs()
+  })
+
+  afterEach(() => {
+    vi.unstubAllEnvs()
+  })
+
+  it('getData unwraps axios response data envelope', async () => {
+    const envelope: DataResponse<{ ok: boolean }> = {
+      data: { ok: true },
+      meta: { request_id: 'req-1' },
+    }
+    mockGet.mockResolvedValue({ data: envelope })
+
+    const { getData } = await import('./client')
+    const result = await getData<{ ok: boolean }>('/health')
+
+    expect(mockGet).toHaveBeenCalledWith('/health', undefined)
+    expect(result).toEqual(envelope)
+  })
+
+  it('postData forwards body and config', async () => {
+    const envelope: DataResponse<{ id: string }> = {
+      data: { id: 'x' },
+      meta: { request_id: 'req-2' },
+    }
+    mockPost.mockResolvedValue({ data: envelope })
+
+    const { postData } = await import('./client')
+    const body = { paper_ids: ['a'] }
+    const result = await postData<{ id: string }>('/patrol', body, { headers: { 'X-Test': '1' } })
+
+    expect(mockPost).toHaveBeenCalledWith('/patrol', body, { headers: { 'X-Test': '1' } })
+    expect(result.data.id).toBe('x')
+  })
+
+  it('response interceptor rejects ApiClientError', async () => {
+    mockGet.mockImplementation(async () => {
+      const axiosError = {
+        response: {
+          status: 404,
+          data: { error: { code: 'PAPER_NOT_FOUND', message: '论文不存在' } },
+        },
+        message: 'Not Found',
+      }
+      return interceptorErrorHandler(axiosError)
+    })
+
+    const { getData, ApiClientError, isApiClientError } = await import('./client')
+
+    await expect(getData('/papers/missing')).rejects.toBeInstanceOf(ApiClientError)
+    await expect(getData('/papers/missing')).rejects.toMatchObject({
+      code: 'PAPER_NOT_FOUND',
+      statusCode: 404,
+    })
+
+    try {
+      await getData('/papers/missing')
+    } catch (error) {
+      expect(isApiClientError(error)).toBe(true)
+    }
+  })
+
+  it('getApiV1Root respects VITE_API_BASE_URL', async () => {
+    const { getApiV1Root } = await import('./client')
+    vi.stubEnv('VITE_API_BASE_URL', '')
+    expect(getApiV1Root()).toBe('/api/v1')
+
+    vi.stubEnv('VITE_API_BASE_URL', 'http://127.0.0.1:8000/')
+    expect(getApiV1Root()).toBe('http://127.0.0.1:8000/api/v1')
+  })
+})

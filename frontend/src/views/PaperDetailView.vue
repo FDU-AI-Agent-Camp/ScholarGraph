@@ -28,11 +28,11 @@ async function ask() {
       props.paperId,
       question.value.trim(),
       {
-        onMessage: (delta) => {
-          answer.value += delta
+        onMessage: (data) => {
+          answer.value += data.delta
         },
-        onDone: (payload) => {
-          if (payload.answer) answer.value = String(payload.answer)
+        onDone: (data) => {
+          if (data.answer) answer.value = data.answer
         },
         onError: (msg) => {
           answer.value = `错误: ${msg}`
