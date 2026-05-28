@@ -57,5 +57,11 @@ class PaperStatusData(BaseModel):
     stage: PipelineStage | None = None
     message: str
     updated_at: datetime
-    error_code: str | None = None
-    failed_during: FailedDuringStage | None = None
+    error_code: str | None = Field(
+        default=None,
+        description="Machine-readable code when status=failed.",
+    )
+    failed_during: FailedDuringStage | None = Field(
+        default=None,
+        description="Pipeline step that was running when failure occurred (ingesting–storing only).",
+    )

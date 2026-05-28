@@ -379,13 +379,14 @@ components:
           format: date-time
         error_code:
           type: string
+          nullable: true
           description: Machine-readable code when status=failed.
           example: LLM_JSON_INVALID
         failed_during:
           allOf:
             - $ref: "#/components/schemas/FailedDuringStage"
           nullable: true
-          description: Pipeline step that was running when failure occurred.
+          description: Pipeline step that was running when failure occurred (ingesting–storing only).
 
     PaperStatusResponse:
       type: object

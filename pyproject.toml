@@ -52,6 +52,11 @@ pythonpath = ["."]
 filterwarnings = [
     "ignore::DeprecationWarning",
 ]
+markers = [
+    "red: 红灯用例，依赖尚未交付的 BE 模块；默认排除，使用 pytest -m red",
+    "integration: 跨节点 / 编译后工作流集成测试",
+]
+addopts = "-m 'not red'"
 
 [tool.ruff]
 line-length = 120

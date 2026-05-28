@@ -10,6 +10,7 @@ from backend.api.exceptions import ApiError
 from backend.config import Settings, get_settings
 from backend.schemas.graph import UnifiedPaperGraph
 from backend.schemas.paper import (
+    FailedDuringStage,
     PaperCreateResult,
     PaperDetail,
     PaperStatus,
@@ -17,10 +18,16 @@ from backend.schemas.paper import (
     PaperSummary,
     PipelineStage,
 )
-from backend.schemas.paradigm import Paradigm
+from backend.schemas.paradigm import Paradigm, ParadigmClassification
 
 FIXTURES_DIR = Path(__file__).resolve().parents[2] / "docs" / "api" / "fixtures"
 MAX_UPLOAD_BYTES = 32 * 1024 * 1024
+
+
+def _to_failed_during(stage: PipelineStage | None) -> FailedDuringStage | None:
+    if stage is None:
+        return None
+    return FailedDuringStage(stage.value)
 
 
 class PaperService:
@@ -59,14 +66,44 @@ class PaperService:
                 graph_payload = json.loads(graph_path.read_text(encoding="utf-8"))
                 graph = UnifiedPaperGraph.model_validate(graph_payload["data"])
                 self._graphs[detail.paper_id] = graph.model_copy(update={"paper_id": detail.paper_id})
-            self._load_status_fixture(detail.paper_id)
+            self._seed_status_for_detail(detail)
 
-    def _load_status_fixture(self, paper_id: str) -> None:
-        status_path = FIXTURES_DIR / f"paper-status-{paper_id}.json"
-        if not status_path.is_file():
+    def _seed_status_for_detail(self, detail: PaperDetail) -> None:
+        """Prefer per-paper status fixtures; otherwise synthesize api-contract snapshots."""
+        status_path = FIXTURES_DIR / f"paper-status-{detail.paper_id}.json"
+        if status_path.is_file():
+            status_payload = json.loads(status_path.read_text(encoding="utf-8"))
+            self._status[detail.paper_id] = PaperStatusData.model_validate(status_payload["data"])
             return
-        status_payload = json.loads(status_path.read_text(encoding="utf-8"))
-        self._status[paper_id] = PaperStatusData.model_validate(status_payload["data"])
+
+        updated_at = detail.updated_at or detail.created_at
+        if detail.status == PaperStatus.READY:
+            self._status[detail.paper_id] = PaperStatusData(
+                paper_id=detail.paper_id,
+                status=PaperStatus.READY,
+                percent=100,
+                stage=PipelineStage.READY,
+                message="建图完成",
+                updated_at=updated_at,
+            )
+        elif detail.status == PaperStatus.PROCESSING:
+            self._status[detail.paper_id] = PaperStatusData(
+                paper_id=detail.paper_id,
+                status=PaperStatus.PROCESSING,
+                percent=50,
+                stage=PipelineStage.CLASSIFYING,
+                message="正在识别范式与理论视角…",
+                updated_at=updated_at,
+            )
+        elif detail.status == PaperStatus.PENDING:
+            self._status[detail.paper_id] = PaperStatusData(
+                paper_id=detail.paper_id,
+                status=PaperStatus.PENDING,
+                percent=0,
+                stage=None,
+                message="任务已创建，请轮询 status 接口",
+                updated_at=updated_at,
+            )
 
     async def list_papers(
         self,
@@ -91,46 +128,129 @@ class PaperService:
             raise ApiError("PAPER_NOT_FOUND", f"论文不存在: {paper_id}", status_code=404)
         return paper
 
+    def ensure_paper_exists(self, paper_id: str) -> None:
+        if paper_id not in self._papers:
+            raise ApiError("PAPER_NOT_FOUND", f"论文不存在: {paper_id}", status_code=404)
+
+    def set_status_snapshot(
+        self,
+        paper_id: str,
+        *,
+        status: PaperStatus,
+        stage: PipelineStage | None,
+        percent: int,
+        message: str,
+        error_code: str | None = None,
+        failed_during: PipelineStage | None = None,
+    ) -> PaperStatusData:
+        """Persist validated pipeline status (called by PipelineStatusService)."""
+        from backend.services.pipeline_status_service import (
+            validate_failed_error_fields,
+            validate_status_contract,
+        )
+
+        validate_status_contract(status=status, stage=stage, percent=percent)
+        validate_failed_error_fields(
+            status=status,
+            error_code=error_code,
+            failed_during=failed_during,
+        )
+        self.ensure_paper_exists(paper_id)
+        now = datetime.now(UTC)
+        snapshot = PaperStatusData(
+            paper_id=paper_id,
+            status=status,
+            percent=percent,
+            stage=stage,
+            message=message,
+            updated_at=now,
+            error_code=error_code,
+            failed_during=_to_failed_during(failed_during),
+        )
+        self._status[paper_id] = snapshot
+        paper = self._papers[paper_id]
+        self._papers[paper_id] = paper.model_copy(update={"status": status, "updated_at": now})
+        return snapshot
+
+    def update_pipeline_status(
+        self,
+        paper_id: str,
+        *,
+        status: PaperStatus,
+        stage: PipelineStage | None,
+        percent: int,
+        message: str,
+    ) -> PaperStatusData:
+        """Legacy alias — validates contract then writes snapshot."""
+        from backend.services.pipeline_status_service import validate_status_contract
+
+        validate_status_contract(status=status, stage=stage, percent=percent)
+        return self.set_status_snapshot(
+            paper_id,
+            status=status,
+            stage=stage,
+            percent=percent,
+            message=message,
+        )
+
+    def complete_pipeline(
+        self,
+        paper_id: str,
+        *,
+        classification: ParadigmClassification,
+        graph: UnifiedPaperGraph,
+    ) -> None:
+        self.ensure_paper_exists(paper_id)
+        now = datetime.now(UTC)
+        paper = self._papers[paper_id]
+        self._papers[paper_id] = paper.model_copy(
+            update={
+                "status": PaperStatus.READY,
+                "paradigm": classification.paradigm,
+                "classification": classification,
+                "updated_at": now,
+            },
+        )
+        self._graphs[paper_id] = graph
+        from backend.services.pipeline_status_service import get_pipeline_status_service
+
+        get_pipeline_status_service().mark_ready(paper_id)
+
+    def fail_pipeline(
+        self,
+        paper_id: str,
+        *,
+        message: str,
+        error_code: str = "PIPELINE_FAILED",
+        failed_during: PipelineStage | None = None,
+    ) -> None:
+        from backend.services.pipeline_status_service import get_pipeline_status_service
+
+        _ = error_code
+        get_pipeline_status_service().mark_failed(
+            paper_id,
+            message=message,
+            error_code=error_code,
+            failed_during=failed_during,
+        )
+
     async def get_status(self, paper_id: str) -> PaperStatusData:
+        paper = await self.get_paper(paper_id)
         if paper_id in self._status:
             return self._status[paper_id]
-        paper = await self.get_paper(paper_id)
-        if paper.status == PaperStatus.READY:
+        if paper.status == PaperStatus.PENDING:
             return PaperStatusData(
                 paper_id=paper_id,
-                status=PaperStatus.READY,
-                percent=100,
-                stage=PipelineStage.READY,
-                message="建图完成",
+                status=PaperStatus.PENDING,
+                percent=0,
+                stage=None,
+                message="任务已创建，请轮询 status 接口",
                 updated_at=paper.updated_at or paper.created_at,
             )
-        if paper.status == PaperStatus.PROCESSING:
-            processing_path = FIXTURES_DIR / "paper-status-processing.json"
-            if processing_path.is_file():
-                payload = json.loads(processing_path.read_text(encoding="utf-8"))
-                sample = PaperStatusData.model_validate(payload["data"])
-                return sample.model_copy(update={"paper_id": paper_id})
-            return PaperStatusData(
-                paper_id=paper_id,
-                status=PaperStatus.PROCESSING,
-                percent=50,
-                stage=PipelineStage.CLASSIFYING,
-                message="正在范式分类（骨架占位）",
-                updated_at=paper.updated_at or paper.created_at,
-            )
-        if paper.status == PaperStatus.FAILED:
-            failed_path = FIXTURES_DIR / f"paper-status-{paper_id}.json"
-            if failed_path.is_file():
-                payload = json.loads(failed_path.read_text(encoding="utf-8"))
-                sample = PaperStatusData.model_validate(payload["data"])
-                return sample.model_copy(update={"paper_id": paper_id})
-        return PaperStatusData(
-            paper_id=paper_id,
-            status=paper.status,
-            percent=0,
-            stage=None,
-            message="任务已创建，等待流水线（骨架占位）",
-            updated_at=paper.updated_at or paper.created_at,
+        raise ApiError(
+            "PIPELINE_STATUS_UNAVAILABLE",
+            "流水线状态尚未初始化",
+            status_code=409,
         )
 
     async def get_graph(self, paper_id: str) -> UnifiedPaperGraph:

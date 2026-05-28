@@ -1,8 +1,7 @@
 """Paper API smoke tests."""
 
-from httpx import ASGITransport, AsyncClient
-
 from backend.main import app
+from httpx import ASGITransport, AsyncClient
 
 
 async def test_list_papers_returns_fixture_seed() -> None:
