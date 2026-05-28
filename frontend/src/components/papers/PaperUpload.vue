@@ -16,7 +16,6 @@ async function handleUpload(options: UploadRequestOptions) {
   if (!file.name.toLowerCase().endsWith('.pdf')) {
     ElMessage.warning('请上传 PDF 文件')
     return
-    return
   }
   uploading.value = true
   try {

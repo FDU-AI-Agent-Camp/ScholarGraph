@@ -1,7 +1,8 @@
-import { http } from './client'
+import { getData, postData } from './client'
 import type {
   DataResponse,
   PaginatedPapers,
+  PaperCreateResult,
   PaperDetail,
   PaperStatus,
   PaperStatusData,
@@ -14,33 +15,26 @@ export async function listPapers(params?: {
   status?: PaperStatus
   offset?: number
   limit?: number
-}) {
-  const { data } = await http.get<DataResponse<PaginatedPapers>>('/papers', { params })
-  return data
+}): Promise<DataResponse<PaginatedPapers>> {
+  return getData<PaginatedPapers>('/papers', { params })
 }
 
-export async function getPaper(paperId: string) {
-  const { data } = await http.get<DataResponse<PaperDetail>>(`/papers/${paperId}`)
-  return data
+export async function getPaper(paperId: string): Promise<DataResponse<PaperDetail>> {
+  return getData<PaperDetail>(`/papers/${paperId}`)
 }
 
-export async function getPaperStatus(paperId: string) {
-  const { data } = await http.get<DataResponse<PaperStatusData>>(`/papers/${paperId}/status`)
-  return data
+export async function getPaperStatus(paperId: string): Promise<DataResponse<PaperStatusData>> {
+  return getData<PaperStatusData>(`/papers/${paperId}/status`)
 }
 
-export async function getPaperGraph(paperId: string) {
-  const { data } = await http.get<DataResponse<UnifiedPaperGraph>>(`/papers/${paperId}/graph`)
-  return data
+export async function getPaperGraph(paperId: string): Promise<DataResponse<UnifiedPaperGraph>> {
+  return getData<UnifiedPaperGraph>(`/papers/${paperId}/graph`)
 }
 
-export async function uploadPaper(file: File) {
+export async function uploadPaper(file: File): Promise<DataResponse<PaperCreateResult>> {
   const form = new FormData()
   form.append('file', file)
-  const { data } = await http.post<DataResponse<{ paper_id: string; status: string; message: string }>>(
-    '/papers',
-    form,
-    { headers: { 'Content-Type': 'multipart/form-data' } },
-  )
-  return data
+  return postData<PaperCreateResult>('/papers', form, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  })
 }

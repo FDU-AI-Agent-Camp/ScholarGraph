@@ -32,6 +32,8 @@ frontend/src/
 | `npm run typecheck` | TypeScript 检查 |
 | `npm run test` | Vitest 单元/组件测试（`src/**/*.test.ts`） |
 | `npm run test:watch` | 监听模式 |
+| `npm run lint` | ESLint（`src/` 禁止 `axios` 直连，仅 `src/api/` 允许） |
+| `npm run lint:fix` | ESLint 自动修复 |
 
 ## 对接
 

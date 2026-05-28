@@ -54,6 +54,12 @@ export interface PaperSummary {
   updated_at?: string | null
 }
 
+export interface PaperCreateResult {
+  paper_id: string
+  status: PaperStatus
+  message: string
+}
+
 export interface PaperDetail extends PaperSummary {
   classification?: ParadigmClassification | null
 }
@@ -110,3 +116,33 @@ export interface PatrolReport {
   title: string
   insights: PatrolInsight[]
 }
+
+/** SSE `event: message` payload (api-contract §8). */
+export interface QaStreamMessageData {
+  delta: string
+}
+
+/** SSE `event: citation` payload. */
+export interface QaStreamCitationData {
+  paper_id: string
+  node_id: string
+  label: string
+}
+
+/** SSE `event: done` payload. */
+export interface QaStreamDoneData {
+  answer_id: string
+  answer?: string
+}
+
+/** SSE `event: error` payload. */
+export interface QaStreamErrorData {
+  code?: string
+  message: string
+}
+
+export type QaStreamServerEvent =
+  | { type: 'message'; data: QaStreamMessageData }
+  | { type: 'citation'; data: QaStreamCitationData }
+  | { type: 'done'; data: QaStreamDoneData }
+  | { type: 'error'; data: QaStreamErrorData }

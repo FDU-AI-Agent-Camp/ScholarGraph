@@ -1,9 +1,6 @@
-import { http } from './client'
+import { postData } from './client'
 import type { DataResponse, PatrolReport } from './types'
 
-export async function runPatrol(paperIds: string[]) {
-  const { data } = await http.post<DataResponse<PatrolReport>>('/patrol', {
-    paper_ids: paperIds,
-  })
-  return data
+export async function runPatrol(paperIds: string[]): Promise<DataResponse<PatrolReport>> {
+  return postData<PatrolReport>('/patrol', { paper_ids: paperIds })
 }

@@ -1,13 +1,97 @@
 import { fetchEventSource } from '@microsoft/fetch-event-source'
 
-const baseURL = import.meta.env.VITE_API_BASE_URL ?? ''
-const apiRoot = baseURL ? `${baseURL.replace(/\/$/, '')}/api/v1` : '/api/v1'
+import { getApiV1Root } from './client'
+import type {
+  QaStreamCitationData,
+  QaStreamDoneData,
+  QaStreamErrorData,
+  QaStreamMessageData,
+  QaStreamServerEvent,
+} from './types'
+
+export type {
+  QaStreamCitationData,
+  QaStreamDoneData,
+  QaStreamErrorData,
+  QaStreamMessageData,
+  QaStreamServerEvent,
+}
 
 export interface QaStreamHandlers {
-  onMessage?: (delta: string) => void
-  onCitation?: (payload: Record<string, unknown>) => void
-  onDone?: (payload: Record<string, unknown>) => void
+  onMessage?: (data: QaStreamMessageData) => void
+  onCitation?: (data: QaStreamCitationData) => void
+  onDone?: (data: QaStreamDoneData) => void
   onError?: (message: string) => void
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null
+}
+
+/** Parse one SSE frame into a discriminated union (exported for tests). */
+export function parseQaStreamEvent(eventName: string, rawData: string): QaStreamServerEvent | null {
+  let payload: unknown
+  try {
+    payload = JSON.parse(rawData) as unknown
+  } catch {
+    return null
+  }
+  if (!isRecord(payload)) {
+    return null
+  }
+
+  switch (eventName) {
+    case 'message':
+      return { type: 'message', data: { delta: String(payload.delta ?? '') } }
+    case 'citation':
+      return {
+        type: 'citation',
+        data: {
+          paper_id: String(payload.paper_id ?? ''),
+          node_id: String(payload.node_id ?? ''),
+          label: String(payload.label ?? ''),
+        },
+      }
+    case 'done':
+      return {
+        type: 'done',
+        data: {
+          answer_id: String(payload.answer_id ?? ''),
+          answer: payload.answer != null ? String(payload.answer) : undefined,
+        },
+      }
+    case 'error':
+      return {
+        type: 'error',
+        data: {
+          code: payload.code != null ? String(payload.code) : undefined,
+          message: String(payload.message ?? 'SSE error'),
+        },
+      }
+    default:
+      return null
+  }
+}
+
+function dispatchQaStreamEvent(event: QaStreamServerEvent, handlers: QaStreamHandlers): void {
+  switch (event.type) {
+    case 'message':
+      handlers.onMessage?.(event.data)
+      break
+    case 'citation':
+      handlers.onCitation?.(event.data)
+      break
+    case 'done':
+      handlers.onDone?.(event.data)
+      break
+    case 'error':
+      handlers.onError?.(event.data.message)
+      break
+    default: {
+      const _exhaustive: never = event
+      return _exhaustive
+    }
+  }
 }
 
 /** POST SSE for multi-scale QA (frozen contract). */
@@ -17,7 +101,7 @@ export async function streamPaperQa(
   handlers: QaStreamHandlers,
   signal?: AbortSignal,
 ): Promise<void> {
-  await fetchEventSource(`${apiRoot}/papers/${paperId}/qa/stream`, {
+  await fetchEventSource(`${getApiV1Root()}/papers/${paperId}/qa/stream`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -27,22 +111,9 @@ export async function streamPaperQa(
     signal,
     onmessage(ev) {
       if (!ev.data) return
-      const payload = JSON.parse(ev.data) as Record<string, unknown>
-      switch (ev.event) {
-        case 'message':
-          handlers.onMessage?.(String(payload.delta ?? ''))
-          break
-        case 'citation':
-          handlers.onCitation?.(payload)
-          break
-        case 'done':
-          handlers.onDone?.(payload)
-          break
-        case 'error':
-          handlers.onError?.(String(payload.message ?? 'SSE error'))
-          break
-        default:
-          break
+      const parsed = parseQaStreamEvent(ev.event || 'message', ev.data)
+      if (parsed) {
+        dispatchQaStreamEvent(parsed, handlers)
       }
     },
     onerror(err) {
