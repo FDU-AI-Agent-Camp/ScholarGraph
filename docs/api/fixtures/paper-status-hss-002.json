@@ -1,0 +1,11 @@
+{
+  "data": {
+    "paper_id": "hss-002",
+    "status": "processing",
+    "percent": 50,
+    "stage": "classifying",
+    "message": "正在识别范式与理论视角…",
+    "updated_at": "2026-05-19T10:12:00Z"
+  },
+  "meta": { "request_id": "mock-status-002" }
+}

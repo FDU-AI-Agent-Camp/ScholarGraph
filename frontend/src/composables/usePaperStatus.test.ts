@@ -4,12 +4,16 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import * as papersApi from '@/api/papers'
 import { usePaperStatus } from '@/composables/usePaperStatus'
+import type { DataResponse, PaperStatusData } from '@/api/types'
+import failedStatusEnvelope from '../../../docs/api/fixtures/paper-status-hss-failed-001.json'
 import {
   failedStatus,
   processingStatus,
   readyStatus,
   statusResponse,
 } from '@/test/fixtures/paperStatus'
+
+const failedStatusResponse = failedStatusEnvelope as DataResponse<PaperStatusData>
 
 vi.mock('@/api/papers', () => ({
   getPaperStatus: vi.fn(),
@@ -63,6 +67,22 @@ describe('usePaperStatus', () => {
     expect(api.status.value?.status).toBe('failed')
     expect(api.polling.value).toBe(false)
     expect(vi.getTimerCount()).toBe(0)
+    wrapper.unmount()
+  })
+
+  it('preserves error_code and failed_during from docs fixture envelope', async () => {
+    vi.mocked(papersApi.getPaperStatus).mockResolvedValue(failedStatusResponse)
+    const { api, wrapper } = mountComposable('hss-failed-001')
+
+    await api.pollOnce()
+    await flushPromises()
+
+    expect(api.status.value).toMatchObject({
+      paper_id: 'hss-failed-001',
+      status: 'failed',
+      error_code: 'LLM_JSON_INVALID',
+      failed_during: 'classifying',
+    })
     wrapper.unmount()
   })
 

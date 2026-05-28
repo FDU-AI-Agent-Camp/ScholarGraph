@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
+import type { PaperStatusData } from '@/api/types'
+import failedStatusEnvelope from '../../../docs/api/fixtures/paper-status-hss-failed-001.json'
 import {
   failedStatus,
   processingStatus,
@@ -32,5 +34,13 @@ describe('paperStatus helpers', () => {
   it('isReadyStatus narrows ready payloads', () => {
     expect(isReadyStatus(readyStatus)).toBe(true)
     expect(isReadyStatus(failedStatus)).toBe(false)
+  })
+
+  it('isFailedStatus works on canonical docs/api failed fixture', () => {
+    const fixture = failedStatusEnvelope.data as PaperStatusData
+    expect(isFailedStatus(fixture)).toBe(true)
+    if (isFailedStatus(fixture)) {
+      expect(fixture.error_code).toBe('LLM_JSON_INVALID')
+    }
   })
 })

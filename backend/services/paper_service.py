@@ -38,7 +38,10 @@ class PaperService:
         if not list_path.is_file():
             return
         payload = json.loads(list_path.read_text(encoding="utf-8"))
-        detail_aliases = {"hss-001": "paper-detail-ready.json"}
+        detail_aliases = {
+            "hss-001": "paper-detail-ready.json",
+            "hss-failed-001": "paper-detail-failed.json",
+        }
         for item in payload["data"]["items"]:
             paper_id = item["paper_id"]
             alias = detail_aliases.get(paper_id, f"paper-detail-{paper_id}.json")
@@ -56,6 +59,14 @@ class PaperService:
                 graph_payload = json.loads(graph_path.read_text(encoding="utf-8"))
                 graph = UnifiedPaperGraph.model_validate(graph_payload["data"])
                 self._graphs[detail.paper_id] = graph.model_copy(update={"paper_id": detail.paper_id})
+            self._load_status_fixture(detail.paper_id)
+
+    def _load_status_fixture(self, paper_id: str) -> None:
+        status_path = FIXTURES_DIR / f"paper-status-{paper_id}.json"
+        if not status_path.is_file():
+            return
+        status_payload = json.loads(status_path.read_text(encoding="utf-8"))
+        self._status[paper_id] = PaperStatusData.model_validate(status_payload["data"])
 
     async def list_papers(
         self,
@@ -94,6 +105,11 @@ class PaperService:
                 updated_at=paper.updated_at or paper.created_at,
             )
         if paper.status == PaperStatus.PROCESSING:
+            processing_path = FIXTURES_DIR / "paper-status-processing.json"
+            if processing_path.is_file():
+                payload = json.loads(processing_path.read_text(encoding="utf-8"))
+                sample = PaperStatusData.model_validate(payload["data"])
+                return sample.model_copy(update={"paper_id": paper_id})
             return PaperStatusData(
                 paper_id=paper_id,
                 status=PaperStatus.PROCESSING,
@@ -102,6 +118,12 @@ class PaperService:
                 message="正在范式分类（骨架占位）",
                 updated_at=paper.updated_at or paper.created_at,
             )
+        if paper.status == PaperStatus.FAILED:
+            failed_path = FIXTURES_DIR / f"paper-status-{paper_id}.json"
+            if failed_path.is_file():
+                payload = json.loads(failed_path.read_text(encoding="utf-8"))
+                sample = PaperStatusData.model_validate(payload["data"])
+                return sample.model_copy(update={"paper_id": paper_id})
         return PaperStatusData(
             paper_id=paper_id,
             status=paper.status,

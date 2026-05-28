@@ -1,4 +1,7 @@
-/** API types aligned with docs/api/openapi.yaml (hand-maintained until openapi-typescript). */
+/**
+ * Hand-maintained types aligned with docs/api/openapi.yaml.
+ * Key schemas: PaperStatusData, FailedDuringStage, PipelineStage, PaperStatus.
+ */
 
 export type Paradigm = 'STEM' | 'HSS'
 export type PaperStatus = 'pending' | 'processing' | 'ready' | 'failed'
@@ -55,7 +58,7 @@ export interface PaperDetail extends PaperSummary {
   classification?: ParadigmClassification | null
 }
 
-/** Stage active when `status=failed` (see api-contract §2). */
+/** OpenAPI `FailedDuringStage` — pipeline step when `status=failed`. */
 export type FailedDuringStage = Exclude<PipelineStage, 'ready' | 'failed'>
 
 export interface PaperStatusData {
@@ -65,9 +68,9 @@ export interface PaperStatusData {
   stage: PipelineStage | null
   message: string
   updated_at: string
-  /** Present when `status=failed` (platform pipeline). */
+  /** OpenAPI optional; required semantically when `status=failed`. */
   error_code?: string
-  /** Pipeline step that was running when failure occurred. */
+  /** OpenAPI `FailedDuringStage`; pipeline step active at failure. */
   failed_during?: FailedDuringStage | null
 }
 

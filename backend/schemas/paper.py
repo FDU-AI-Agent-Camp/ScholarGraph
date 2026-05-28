@@ -24,6 +24,13 @@ class PipelineStage(StrEnum):
     FAILED = "failed"
 
 
+class FailedDuringStage(StrEnum):
+    INGESTING = "ingesting"
+    CLASSIFYING = "classifying"
+    EXTRACTING = "extracting"
+    STORING = "storing"
+
+
 class PaperSummary(BaseModel):
     paper_id: str
     title: str | None = None
@@ -50,3 +57,5 @@ class PaperStatusData(BaseModel):
     stage: PipelineStage | None = None
     message: str
     updated_at: datetime
+    error_code: str | None = None
+    failed_during: FailedDuringStage | None = None

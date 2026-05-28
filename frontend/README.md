@@ -38,3 +38,11 @@ frontend/src/
 - 契约：`docs/api/openapi.yaml`、`docs/v1/api-contract.md`
 - Mock：`docs/api/fixtures/`（后端骨架亦会加载同名 fixture）
 - **禁止**在浏览器内配置 LLM API Key
+
+### 失败态 status Mock 联调
+
+1. 仓库根目录启动后端：`uv run uvicorn backend.main:app --reload --host 127.0.0.1 --port 8000`
+2. 前端：`npm run dev`，打开论文详情 `/papers/hss-failed-001`
+3. 应看到红色告警：`LLM_JSON_INVALID` + 失败说明，以及 `failed_during: classifying`
+
+也可仅跑测试：`npm run test`（含 `types.contract.test.ts` 与 `PaperStatusPanel.integration.spec.ts`）。
