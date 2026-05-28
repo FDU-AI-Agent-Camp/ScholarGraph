@@ -29,14 +29,39 @@
 
 ## 前端（FE）
 
-- [ ] 仅修改 `frontend/**`（或文档 `docs/design/`）
-- [ ] `npm run build` 通过
+### 范围与契约
+
+- [ ] 仅修改 `frontend/**`（或文档 `docs/design/`、`docs/api/` 中与 Mock/契约相关部分）
 - [ ] 请求路径均为 `/api/v1/...`，与 [api-contract.md](./api-contract.md) 一致
 - [ ] SSE 使用 **`POST .../papers/{id}/qa/stream`**，非 GET `EventSource`
-- [ ] Mock 数据与 [`docs/api/fixtures/`](../api/fixtures/) 或 `openapi.yaml` 字段一致
+- [ ] Mock / 测试数据与 [`docs/api/fixtures/`](../api/fixtures/) 或 [openapi.yaml](../api/openapi.yaml) 字段一致
 - [ ] 未在浏览器或前端 env 中配置 LLM Key
+- [ ] 若改对外 API：已有 **`[API RFC]`** Issue，并已 @BE-L @FE（见下方契约同步）
 
-**自测说明（必填一行）**：例：`npm run dev`，上传页 Mock 轮询 status 正常。
+### CI 门禁（与 [frontend.yml](../../.github/workflows/frontend.yml) 一致）
+
+在 `frontend/` 目录执行（**PR 前必跑**；合并前须 CI 绿）：
+
+```bash
+cd frontend
+npm ci
+npm run typecheck
+npm run lint
+npm run build
+```
+
+- [ ] `npm run typecheck` 通过
+- [ ] `npm run lint` 通过（业务代码经 `src/api/client.ts`，禁止 `src/` 裸 `axios`）
+- [ ] `npm run build` 通过
+- [ ] 建议本地：`npm run test` 通过
+
+### 契约同步（仅当 PR 含 `docs/api/openapi.yaml` 或后端契约字段变更时勾选）
+
+- [ ] 已按 RFC 更新 `docs/api/openapi.yaml` / `api-contract.md`（BE-L 侧或联调分支已合入）
+- [ ] 已执行 `npm run generate:api-types` 并提交 `frontend/src/api/generated/schema.d.ts`
+- [ ] 已检查 `frontend/src/api/types.ts` 薄封装与 SSE 手写类型（`qaStream.ts` 等）
+
+**自测说明（必填一行）**：例：`npm ci && npm run typecheck && npm run lint && npm run build`；`npm run dev` 打开 `/papers/hss-failed-001` 见失败态告警。
 
 ---
 

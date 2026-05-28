@@ -34,8 +34,8 @@ Infra（BE-L）        llm / config / workflow
 |------|--------|------|
 | 1 | BE-L | Pydantic 模型 `backend/schemas/` |
 | 2 | BE-L | `/docs`、`docs/api/openapi.yaml` |
-| 3 | FE | `frontend/src/types/`（openapi-typescript 可选） |
-| 4 | FE | `frontend/src/mocks/` 与 OpenAPI 一致 |
+| 3 | FE | `npm run generate:api-types` → `frontend/src/api/generated/schema.d.ts`；薄封装见 `frontend/src/api/types.ts` |
+| 4 | FE | 测试/fixtures 与 OpenAPI 一致（[`docs/api/fixtures/`](../api/fixtures/)） |
 | 5 | BE-1～4 | Service 实现 + `tests/` |
 | 6 | BE-L | 路由注册 + `workflow.py` |
 | 7 | FE + BE-L | 联调（检查清单 §7） |
