@@ -3,6 +3,7 @@ import { ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import type { UploadRequestOptions } from 'element-plus'
 
+import { isApiClientError } from '@/api/client'
 import * as papersApi from '@/api/papers'
 
 const emit = defineEmits<{
@@ -23,8 +24,9 @@ async function handleUpload(options: UploadRequestOptions) {
     ElMessage.success(res.data.message)
     emit('uploaded', res.data.paper_id)
     options.onSuccess?.(res)
-  } catch {
-    ElMessage.error('上传失败')
+  } catch (error: unknown) {
+    const message = isApiClientError(error) ? error.message : '上传失败'
+    ElMessage.error(message)
   } finally {
     uploading.value = false
   }

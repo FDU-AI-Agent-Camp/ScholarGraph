@@ -3,7 +3,7 @@ import { mount, flushPromises } from '@vue/test-utils'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import * as papersApi from '@/api/papers'
-import { usePaperStatus } from '@/composables/usePaperStatus'
+import { usePaperStatus, type UsePaperStatusReturn } from '@/composables/usePaperStatus'
 import type { DataResponse, PaperStatusData } from '@/api/types'
 import failedStatusEnvelope from '../../../docs/api/fixtures/paper-status-hss-failed-001.json'
 import {
@@ -35,6 +35,15 @@ function mountComposable(paperId: string, intervalMs = 2000) {
 }
 
 describe('usePaperStatus', () => {
+  it('exposes UsePaperStatusReturn from composable', () => {
+    const { api, wrapper } = mountComposable('paper-typed')
+    const typed: UsePaperStatusReturn = api
+    expect(typed.status.value).toBeNull()
+    expect(typed.polling.value).toBe(false)
+    expect(typed.pollOnce).toBeTypeOf('function')
+    wrapper.unmount()
+  })
+
   beforeEach(() => {
     vi.useFakeTimers()
     vi.mocked(papersApi.getPaperStatus).mockReset()

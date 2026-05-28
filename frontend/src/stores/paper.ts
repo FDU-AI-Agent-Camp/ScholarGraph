@@ -1,44 +1,84 @@
 import { defineStore } from 'pinia'
-import { ref } from 'vue'
+import { ref, type Ref } from 'vue'
 
 import * as papersApi from '@/api/papers'
-import type { PaperDetail, PaperSummary, UnifiedPaperGraph } from '@/api/types'
+import type { PaperDetail, PaperStatus, PaperSummary, Paradigm, UnifiedPaperGraph } from '@/api/types'
+import { getUnknownErrorMessage, logUnknownError } from '@/utils/errors'
 
-export const usePaperStore = defineStore('paper', () => {
+export interface PaperListQuery {
+  paradigm?: Paradigm
+  status?: PaperStatus
+  offset?: number
+  limit?: number
+}
+
+export interface PaperStoreState {
+  items: Ref<PaperSummary[]>
+  total: Ref<number>
+  loading: Ref<boolean>
+  lastError: Ref<string | null>
+  currentPaper: Ref<PaperDetail | null>
+  currentGraph: Ref<UnifiedPaperGraph | null>
+}
+
+export const usePaperStore = defineStore('paper', (): PaperStoreState & {
+  fetchList: (params?: PaperListQuery) => Promise<void>
+  fetchDetail: (paperId: string) => Promise<void>
+  fetchGraph: (paperId: string) => Promise<UnifiedPaperGraph>
+  clearCurrent: () => void
+} => {
   const items = ref<PaperSummary[]>([])
   const total = ref(0)
   const loading = ref(false)
+  const lastError = ref<string | null>(null)
   const currentPaper = ref<PaperDetail | null>(null)
   const currentGraph = ref<UnifiedPaperGraph | null>(null)
 
-  async function fetchList(params?: Parameters<typeof papersApi.listPapers>[0]) {
+  async function fetchList(params?: PaperListQuery): Promise<void> {
     loading.value = true
+    lastError.value = null
     try {
       const res = await papersApi.listPapers(params)
       items.value = res.data.items
       total.value = res.data.total
+    } catch (error: unknown) {
+      logUnknownError('paper.fetchList', error)
+      lastError.value = getUnknownErrorMessage(error)
+      throw error
     } finally {
       loading.value = false
     }
   }
 
-  async function fetchDetail(paperId: string) {
+  async function fetchDetail(paperId: string): Promise<void> {
     loading.value = true
+    lastError.value = null
     try {
       const res = await papersApi.getPaper(paperId)
       currentPaper.value = res.data
+    } catch (error: unknown) {
+      logUnknownError('paper.fetchDetail', error)
+      lastError.value = getUnknownErrorMessage(error)
+      throw error
     } finally {
       loading.value = false
     }
   }
 
-  async function fetchGraph(paperId: string) {
-    const res = await papersApi.getPaperGraph(paperId)
-    currentGraph.value = res.data
-    return res.data
+  async function fetchGraph(paperId: string): Promise<UnifiedPaperGraph> {
+    lastError.value = null
+    try {
+      const res = await papersApi.getPaperGraph(paperId)
+      currentGraph.value = res.data
+      return res.data
+    } catch (error: unknown) {
+      logUnknownError('paper.fetchGraph', error)
+      lastError.value = getUnknownErrorMessage(error)
+      throw error
+    }
   }
 
-  function clearCurrent() {
+  function clearCurrent(): void {
     currentPaper.value = null
     currentGraph.value = null
   }
@@ -47,6 +87,7 @@ export const usePaperStore = defineStore('paper', () => {
     items,
     total,
     loading,
+    lastError,
     currentPaper,
     currentGraph,
     fetchList,
