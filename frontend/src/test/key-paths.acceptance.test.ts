@@ -87,7 +87,7 @@ describe('§14.6 key paths (frontend TS hardening)', () => {
   })
 
   it('eslint uses Vue recommended preset and Prettier compatibility', () => {
-    expect(eslintConfigSource).toContain("flat/recommended")
+    expect(eslintConfigSource).toContain('flat/recommended')
     expect(eslintConfigSource).toContain('eslintConfigPrettier')
   })
 })

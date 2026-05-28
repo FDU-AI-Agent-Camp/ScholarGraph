@@ -26,19 +26,19 @@ frontend/src/
 
 ## 脚本
 
-| 命令                         | 说明                                                   |
-| ---------------------------- | ------------------------------------------------------ |
-| `npm run dev`                | 本地开发                                               |
-| `npm run build`              | 生产构建（含 `vue-tsc`）                               |
-| `npm run typecheck`          | 仅 TypeScript 检查（`vue-tsc --noEmit`）               |
-| `npm run test`               | Vitest 单元/组件测试（`src/**/*.test.ts`）             |
-| `npm run test:watch`         | 监听模式                                               |
+| 命令                         | 说明                                                    |
+| ---------------------------- | ------------------------------------------------------- |
+| `npm run dev`                | 本地开发                                                |
+| `npm run build`              | 生产构建（含 `vue-tsc`）                                |
+| `npm run typecheck`          | 仅 TypeScript 检查（`vue-tsc --noEmit`）                |
+| `npm run test`               | Vitest 单元/组件测试（`src/**/*.test.ts`）              |
+| `npm run test:watch`         | 监听模式                                                |
 | `npm run lint`               | ESLint（Vue `recommended` + TS；`src/` 禁止裸 `axios`） |
-| `npm run lint:fix`           | ESLint 自动修复                                        |
-| `npm run format`             | Prettier 格式化全仓                                  |
-| `npm run format:check`       | Prettier 检查（CI 用）                               |
-| `npm run knip`               | 未使用文件/依赖/导出（Knip）                           |
-| `npm run generate:api-types` | 从 OpenAPI 生成 `src/api/generated/schema.d.ts`        |
+| `npm run lint:fix`           | ESLint 自动修复                                         |
+| `npm run format`             | Prettier 格式化全仓                                     |
+| `npm run format:check`       | Prettier 检查（CI 用）                                  |
+| `npm run knip`               | 未使用文件/依赖/导出（Knip）                            |
+| `npm run generate:api-types` | 从 OpenAPI 生成 `src/api/generated/schema.d.ts`         |
 
 ## 提 PR 前门禁（本地与 CI 一致）
 
