@@ -18,9 +18,10 @@ describe('patrol API module', () => {
   it('runPatrol returns DataResponse<PatrolReport> from postData', async () => {
     const envelope: DataResponse<PatrolReport> = {
       data: {
-        report_id: 'rpt-001',
-        title: 'Lens Clash',
+        mode: 'lens_clash',
+        paper_ids: ['hss-001', 'stem-001'],
         insights: [],
+        generated_at: '2026-05-19T11:00:00Z',
       },
       meta: { request_id: 'req-patrol' },
     }
@@ -30,6 +31,6 @@ describe('patrol API module', () => {
 
     expect(mockPostData).toHaveBeenCalledWith('/patrol', { paper_ids: ['hss-001', 'stem-001'] })
     expect(result).toEqual(envelope)
-    expect(result.data.report_id).toBe('rpt-001')
+    expect(result.data.mode).toBe('lens_clash')
   })
 })

@@ -1,36 +1,37 @@
 /**
- * Hand-maintained types aligned with docs/api/openapi.yaml.
- * Key schemas: PaperStatusData, FailedDuringStage, PipelineStage, PaperStatus.
+ * Public API types for the frontend.
+ *
+ * Domain types are thin aliases over `openapi-typescript` output
+ * (`npm run generate:api-types` ← `docs/api/openapi.yaml`).
+ * SSE stream event shapes remain hand-written (api-contract §8).
  */
 
-export type Paradigm = 'STEM' | 'HSS'
-export type PaperStatus = 'pending' | 'processing' | 'ready' | 'failed'
-export type PipelineStage =
-  | 'ingesting'
-  | 'classifying'
-  | 'extracting'
-  | 'storing'
-  | 'ready'
-  | 'failed'
+import type { components } from './generated/schema'
 
-export interface Meta {
+type Schema = components['schemas']
+
+/** OpenAPI components — re-export for advanced use (paths, operations). */
+export type { components, paths, operations } from './generated/schema'
+
+export type Paradigm = Schema['Paradigm']
+export type PaperStatus = Schema['PaperStatus']
+export type PipelineStage = Schema['PipelineStage']
+export type FailedDuringStage = Schema['FailedDuringStage']
+
+export type Meta = {
   request_id: string
-}
-
-export interface ApiErrorBody {
-  code: string
-  message: string
-  details?: Record<string, unknown>
-}
-
-export interface ApiErrorResponse {
-  error: ApiErrorBody
 }
 
 export interface DataResponse<T> {
   data: T
   meta: Meta
 }
+
+export type ApiErrorBody = Schema['ErrorBody']
+export type ApiErrorResponse = Schema['ErrorResponse']
+
+export type ParadigmClassification = Schema['ParadigmClassification']
+export type PaperSummary = Schema['PaperSummary']
 
 export interface PaginatedPapers {
   items: PaperSummary[]
@@ -39,82 +40,39 @@ export interface PaginatedPapers {
   limit: number
 }
 
-export interface ParadigmClassification {
-  paradigm: Paradigm
-  confidence: number
-  reason: string
-}
-
-export interface PaperSummary {
-  paper_id: string
-  title?: string | null
-  paradigm?: Paradigm | null
-  status: PaperStatus
-  created_at: string
-  updated_at?: string | null
-}
-
-export interface PaperCreateResult {
-  paper_id: string
-  status: PaperStatus
-  message: string
-}
-
-export interface PaperDetail extends PaperSummary {
+export type PaperDetail = Schema['PaperDetail'] & {
   classification?: ParadigmClassification | null
 }
 
-/** OpenAPI `FailedDuringStage` — pipeline step when `status=failed`. */
-export type FailedDuringStage = Exclude<PipelineStage, 'ready' | 'failed'>
-
-export interface PaperStatusData {
+export type PaperCreateResult = {
   paper_id: string
   status: PaperStatus
-  percent: number
-  stage: PipelineStage | null
   message: string
-  updated_at: string
-  /** OpenAPI optional; required semantically when `status=failed`. */
-  error_code?: string
-  /** OpenAPI `FailedDuringStage`; pipeline step active at failure. */
-  failed_during?: FailedDuringStage | null
 }
 
-export interface GraphNode {
-  id: string
-  label: string
-  type: string
-  data?: Record<string, unknown>
-}
+export type PaperStatusData = Schema['PaperStatusData']
 
-export interface GraphEdge {
-  id: string
-  source: string
-  target: string
-  label: string
-  type: string
-  data?: Record<string, unknown>
-}
+export type GraphNode = Schema['GraphNode']
+export type GraphEdge = Schema['GraphEdge']
 
-export interface UnifiedPaperGraph {
+export type UnifiedPaperGraph = {
   paper_id: string
   paradigm: Paradigm
   nodes: GraphNode[]
   edges: GraphEdge[]
 }
 
-export interface PatrolInsight {
-  insight_id: string
-  title: string
-  summary: string
-  severity: string
-  paper_ids: string[]
+export type PatrolInsight = Schema['PatrolInsight'] & {
+  /** Optional display field (fixture/UI); not in OpenAPI PatrolInsight yet. */
+  severity?: string
 }
 
-export interface PatrolReport {
-  report_id: string
-  title: string
+/** `POST /patrol` response `data` (OpenAPI `PatrolResponse`). */
+export type PatrolReport = NonNullable<Schema['PatrolResponse']['data']> & {
   insights: PatrolInsight[]
+  /** Legacy UI field when present in fixtures. */
+  title?: string
+  report_id?: string
 }
 
 /** SSE `event: message` payload (api-contract §8). */

@@ -26,7 +26,7 @@ const sampleSummary: PaperSummary = {
 
 const sampleDetail: PaperDetail = {
   ...sampleSummary,
-  classification: null,
+  classification: undefined,
 }
 
 const sampleGraph: UnifiedPaperGraph = {

@@ -42,7 +42,7 @@ function insightKey(insight: PatrolInsight): string {
     <el-alert v-if="lastError" type="error" :title="lastError" show-icon class="error" />
 
     <template v-if="report">
-      <h3>{{ report.title }}</h3>
+      <h3>{{ report.title ?? report.mode ?? '巡检结果' }}</h3>
       <el-collapse>
         <el-collapse-item
           v-for="item in report.insights"

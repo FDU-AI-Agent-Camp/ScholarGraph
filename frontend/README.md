@@ -34,6 +34,31 @@ frontend/src/
 | `npm run test:watch` | 监听模式 |
 | `npm run lint` | ESLint（`src/` 禁止 `axios` 直连，仅 `src/api/` 允许） |
 | `npm run lint:fix` | ESLint 自动修复 |
+| `npm run generate:api-types` | 从 OpenAPI 生成 `src/api/generated/schema.d.ts` |
+
+## OpenAPI 类型生成
+
+契约源文件：**仓库根目录** `docs/api/openapi.yaml`（不是 OpenAI / LLM 接口）。
+
+当后端变更 HTTP 契约时，按顺序执行：
+
+1. 更新 `docs/api/openapi.yaml`（及 `docs/v1/api-contract.md`，走 `[API RFC]` 若破坏性变更）
+2. 在 `frontend/` 目录生成类型：
+
+```bash
+cd frontend
+npm run generate:api-types
+```
+
+3. 检查 `src/api/types.ts` 薄封装是否需调整（SSE 事件等 OpenAPI 未覆盖部分仍手写）
+4. 运行校验：
+
+```bash
+npm run typecheck
+npm run test
+```
+
+生成物路径：`frontend/src/api/generated/schema.d.ts`（已纳入版本库，CI 可直接 `typecheck`；改契约后请重新 generate 并提交该文件）。
 
 ## 对接
 
