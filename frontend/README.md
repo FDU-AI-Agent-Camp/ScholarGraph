@@ -20,6 +20,7 @@ frontend/src/
 ├── composables/   # usePaperStatus 等
 ├── router/        # 路由
 ├── stores/        # Pinia
+├── mocks/         # 可选：再导出 docs/api/fixtures（权威仍在仓库 fixtures）
 └── views/         # 页面级组件
 ```
 
@@ -45,13 +46,8 @@ cd frontend
 npm ci
 npm run typecheck
 npm run lint
-npm run build
-```
-
-建议额外跑测试（CI 当前未跑 Vitest，本地应执行）：
-
-```bash
 npm run test
+npm run build
 ```
 
 PR 描述请粘贴 [docs/v1/pr-checklist.md](../docs/v1/pr-checklist.md) 中 **前端（FE）** 小节并逐项勾选。

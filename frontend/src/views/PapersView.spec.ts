@@ -1,4 +1,4 @@
-import { defineComponent, h, ref, unref } from 'vue'
+import { defineComponent, h, unref } from 'vue'
 import { flushPromises, mount } from '@vue/test-utils'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -31,8 +31,8 @@ vi.mock('vue-router', () => ({
 
 vi.mock('@/stores/paper', () => ({
   usePaperStore: () => ({
-    items: ref([readyRow, processingRow]),
-    loading: ref(false),
+    items: [readyRow, processingRow],
+    loading: false,
     fetchList,
   }),
 }))

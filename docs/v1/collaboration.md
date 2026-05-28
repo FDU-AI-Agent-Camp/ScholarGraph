@@ -230,7 +230,7 @@ Issue 标题：`[Schema RFC] 简述` — 含动机、字段 diff、对 G6/OpenAP
 | 轮询 | 2s 间隔，最长 10min，`ready`/`failed` 停止 |
 | SSE | **`POST .../qa/stream`** + `fetch-event-source`（见 §3.3） |
 | 类型 | `openapi-typescript` 生成自 [`openapi.yaml`](../api/openapi.yaml) |
-| Mock | 复制 [`fixtures/`](../api/fixtures/) 到 `frontend/src/mocks/` |
+| Mock | 权威 [`fixtures/`](../api/fixtures/)；可选 `import '@/mocks'`（[`frontend/src/mocks/`](../../frontend/src/mocks/) 再导出，勿维护第二份 JSON） |
 
 **联调 PR 检查清单**：
 

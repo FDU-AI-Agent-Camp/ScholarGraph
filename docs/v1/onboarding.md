@@ -92,7 +92,7 @@ npm run dev
 
 **Mock 开发**（后端未就绪时）：
 
-1. 复制 [`docs/api/fixtures/`](../api/fixtures/) 到 `frontend/src/mocks/`
+1. 使用 [`docs/api/fixtures/`](../api/fixtures/)（后端 Mock 同源）；可选 `import '@/mocks'` 见 [`frontend/src/mocks/README.md`](../../frontend/src/mocks/README.md)
 2. 或用 MSW 拦截 `/api/v1/*`，响应体与 fixtures 一致
 3. 类型生成（OpenAPI 就绪后）：
 

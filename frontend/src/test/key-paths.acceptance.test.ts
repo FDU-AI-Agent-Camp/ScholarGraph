@@ -71,6 +71,7 @@ describe('§14.6 key paths (frontend TS hardening)', () => {
     expect(frontendWorkflow).toContain('npm ci')
     expect(frontendWorkflow).toContain('npm run typecheck')
     expect(frontendWorkflow).toContain('npm run lint')
+    expect(frontendWorkflow).toContain('npm run test')
     expect(frontendWorkflow).toContain('npm run build')
     expect(frontendWorkflow).toContain('working-directory: frontend')
   })
