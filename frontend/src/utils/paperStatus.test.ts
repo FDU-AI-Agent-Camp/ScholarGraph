@@ -2,16 +2,8 @@ import { describe, expect, it } from 'vitest'
 
 import type { PaperStatusData } from '@/api/types'
 import failedStatusEnvelope from '../../../docs/api/fixtures/paper-status-hss-failed-001.json'
-import {
-  failedStatus,
-  processingStatus,
-  readyStatus,
-} from '@/test/fixtures/paperStatus'
-import {
-  isFailedStatus,
-  isReadyStatus,
-  isTerminalStatus,
-} from '@/utils/paperStatus'
+import { failedStatus, processingStatus, readyStatus } from '@/test/fixtures/paperStatus'
+import { isFailedStatus, isReadyStatus, isTerminalStatus } from '@/utils/paperStatus'
 
 describe('paperStatus helpers', () => {
   it('isTerminalStatus is true for ready and failed only', () => {

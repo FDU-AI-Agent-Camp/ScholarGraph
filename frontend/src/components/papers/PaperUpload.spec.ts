@@ -28,7 +28,6 @@ const ElUploadStub = defineComponent({
       required: true,
     },
   },
-  template: '<button class="do-upload" @click="run">upload</button>',
   setup(props) {
     function run() {
       const file = new File(['%PDF'], 'sample.pdf', { type: 'application/pdf' })
@@ -36,13 +35,12 @@ const ElUploadStub = defineComponent({
     }
     return { run }
   },
+  template: '<button class="do-upload" @click="run">upload</button>',
 })
 
 describe('PaperUpload', () => {
   it('surfaces ApiClientError message on upload failure', async () => {
-    mockUploadPaper.mockRejectedValue(
-      new ApiClientError({ code: 'INGEST_FAILED', message: '无法解析 PDF' }, 400),
-    )
+    mockUploadPaper.mockRejectedValue(new ApiClientError({ code: 'INGEST_FAILED', message: '无法解析 PDF' }, 400))
 
     const wrapper = mount(PaperUpload, {
       global: {

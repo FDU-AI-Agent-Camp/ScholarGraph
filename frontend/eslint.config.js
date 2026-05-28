@@ -1,4 +1,5 @@
 import eslint from '@eslint/js'
+import eslintConfigPrettier from 'eslint-config-prettier'
 import pluginVue from 'eslint-plugin-vue'
 import globals from 'globals'
 import tseslint from 'typescript-eslint'
@@ -15,7 +16,7 @@ export default tseslint.config(
       },
     },
   },
-  ...pluginVue.configs['flat/essential'],
+  ...pluginVue.configs['flat/recommended'],
   {
     files: ['**/*.vue'],
     languageOptions: {
@@ -30,6 +31,7 @@ export default tseslint.config(
     files: ['src/**/*.{ts,vue}'],
     rules: {
       '@typescript-eslint/no-explicit-any': 'error',
+      'vue/multi-word-component-names': ['error', { ignores: ['App'] }],
       'no-restricted-imports': [
         'error',
         {
@@ -49,4 +51,5 @@ export default tseslint.config(
       'no-restricted-imports': 'off',
     },
   },
+  eslintConfigPrettier,
 )

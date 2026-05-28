@@ -3,12 +3,7 @@ import { mount, flushPromises } from '@vue/test-utils'
 import { describe, expect, it, vi } from 'vitest'
 
 import PaperStatusPanel from '@/components/papers/PaperStatusPanel.vue'
-import {
-  failedStatus,
-  failedStatusWithoutCode,
-  processingStatus,
-  readyStatus,
-} from '@/test/fixtures/paperStatus'
+import { failedStatus, failedStatusWithoutCode, processingStatus, readyStatus } from '@/test/fixtures/paperStatus'
 
 const mockStart = vi.fn()
 const mockStop = vi.fn()
@@ -64,9 +59,7 @@ describe('PaperStatusPanel', () => {
     })
 
     expect(wrapper.find('.el-alert-stub').attributes('data-title')).toBe('PIPELINE_FAILED')
-    expect(wrapper.find('.el-alert-stub').attributes('data-description')).toBe(
-      failedStatusWithoutCode.message,
-    )
+    expect(wrapper.find('.el-alert-stub').attributes('data-description')).toBe(failedStatusWithoutCode.message)
   })
 
   it('emits ready when status becomes ready', async () => {

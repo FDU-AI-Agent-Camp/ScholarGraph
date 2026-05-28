@@ -52,9 +52,7 @@ watch(
       class="failure-alert"
     />
     <p v-else>{{ status.message }}</p>
-    <p v-if="failedSnapshot?.failed_during">
-      <strong>failed_during</strong>: {{ failedSnapshot.failed_during }}
-    </p>
+    <p v-if="failedSnapshot?.failed_during"><strong>failed_during</strong>: {{ failedSnapshot.failed_during }}</p>
     <el-button v-if="!polling" size="small" @click="start">重新轮询</el-button>
     <el-button v-else size="small" @click="stop">停止轮询</el-button>
   </el-card>

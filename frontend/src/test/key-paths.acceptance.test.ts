@@ -26,6 +26,8 @@ describe('§14.6 key paths (frontend TS hardening)', () => {
   it('documents stage-acceptance npm scripts in package.json', () => {
     expect(packageJson.scripts.typecheck).toBe('vue-tsc --noEmit')
     expect(packageJson.scripts.lint).toBe('eslint .')
+    expect(packageJson.scripts['format:check']).toBe('prettier --check .')
+    expect(packageJson.scripts.knip).toBe('knip')
     expect(packageJson.scripts.build).toContain('vue-tsc')
     expect(packageJson.scripts.build).toContain('vite build')
     expect(packageJson.scripts.test).toBe('vitest run')
@@ -53,9 +55,9 @@ describe('§14.6 key paths (frontend TS hardening)', () => {
   })
 
   it('papers status API uses getData on /papers/{id}/status', async () => {
-    const getDataSpy = vi.spyOn(client, 'getData').mockResolvedValue(
-      failedStatusFixture as { data: PaperStatusData; meta: { request_id: string } },
-    )
+    const getDataSpy = vi
+      .spyOn(client, 'getData')
+      .mockResolvedValue(failedStatusFixture as { data: PaperStatusData; meta: { request_id: string } })
     const res = await papersApi.getPaperStatus('hss-failed-001')
     expect(getDataSpy).toHaveBeenCalledWith('/papers/hss-failed-001/status')
     expect(res.data.error_code).toBe('LLM_JSON_INVALID')
@@ -70,7 +72,9 @@ describe('§14.6 key paths (frontend TS hardening)', () => {
   it('CI workflow runs npm ci gate steps for frontend', () => {
     expect(frontendWorkflow).toContain('npm ci')
     expect(frontendWorkflow).toContain('npm run typecheck')
+    expect(frontendWorkflow).toContain('npm run format:check')
     expect(frontendWorkflow).toContain('npm run lint')
+    expect(frontendWorkflow).toContain('npm run knip')
     expect(frontendWorkflow).toContain('npm run test')
     expect(frontendWorkflow).toContain('npm run build')
     expect(frontendWorkflow).toContain('working-directory: frontend')
@@ -80,5 +84,10 @@ describe('§14.6 key paths (frontend TS hardening)', () => {
     expect(eslintConfigSource).toContain('no-restricted-imports')
     expect(eslintConfigSource).toContain('axios')
     expect(eslintConfigSource).toContain("files: ['src/api/**/*.ts']")
+  })
+
+  it('eslint uses Vue recommended preset and Prettier compatibility', () => {
+    expect(eslintConfigSource).toContain("flat/recommended")
+    expect(eslintConfigSource).toContain('eslintConfigPrettier')
   })
 })

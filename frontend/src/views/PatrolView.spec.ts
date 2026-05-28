@@ -13,9 +13,7 @@ import PatrolView from '@/views/PatrolView.vue'
 
 describe('PatrolView', () => {
   it('shows narrowed ApiClientError in alert', async () => {
-    mockRunPatrol.mockRejectedValue(
-      new ApiClientError({ code: 'PATROL_FAILED', message: '巡检失败' }, 500),
-    )
+    mockRunPatrol.mockRejectedValue(new ApiClientError({ code: 'PATROL_FAILED', message: '巡检失败' }, 500))
 
     const wrapper = mount(PatrolView, {
       global: {

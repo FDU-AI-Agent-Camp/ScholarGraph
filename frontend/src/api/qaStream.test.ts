@@ -20,10 +20,7 @@ describe('parseQaStreamEvent', () => {
   })
 
   it('parses done events with optional answer', () => {
-    const event = parseQaStreamEvent(
-      'done',
-      JSON.stringify({ answer_id: 'ans-1', answer: '完整回答' }),
-    )
+    const event = parseQaStreamEvent('done', JSON.stringify({ answer_id: 'ans-1', answer: '完整回答' }))
     expect(event).toEqual({
       type: 'done',
       data: { answer_id: 'ans-1', answer: '完整回答' },
@@ -31,10 +28,7 @@ describe('parseQaStreamEvent', () => {
   })
 
   it('parses error events', () => {
-    const event = parseQaStreamEvent(
-      'error',
-      JSON.stringify({ code: 'QA_FAILED', message: '图谱未就绪' }),
-    )
+    const event = parseQaStreamEvent('error', JSON.stringify({ code: 'QA_FAILED', message: '图谱未就绪' }))
     expect(event).toEqual({
       type: 'error',
       data: { code: 'QA_FAILED', message: '图谱未就绪' },

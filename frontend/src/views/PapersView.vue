@@ -39,9 +39,7 @@ function openGraph(row: PaperSummary) {
       <el-table-column label="操作" width="160">
         <template #default="{ row }: { row: PaperSummary }">
           <el-button link type="primary" @click="openDetail(row)">详情</el-button>
-          <el-button v-if="row.status === 'ready'" link type="primary" @click="openGraph(row)">
-            图谱
-          </el-button>
+          <el-button v-if="row.status === 'ready'" link type="primary" @click="openGraph(row)"> 图谱 </el-button>
         </template>
       </el-table-column>
     </el-table>

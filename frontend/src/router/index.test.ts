@@ -1,11 +1,14 @@
 import { describe, expect, it } from 'vitest'
 
 import { routes } from '@/router/index'
-import { RouteName } from '@/router/meta'
+import { RouteName, type AppRouteName } from '@/router/meta'
 import router from '@/router/index'
 
 describe('router', () => {
   it('registers routes with typed meta titles', () => {
+    const homeName: AppRouteName = RouteName.Home
+    expect(homeName).toBe('home')
+
     const papers = router.getRoutes().find((r) => r.name === RouteName.Papers)
     expect(papers?.meta.title).toBe('文献库')
     expect(papers?.meta.nav).toBe(true)

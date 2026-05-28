@@ -26,16 +26,19 @@ frontend/src/
 
 ## 脚本
 
-| 命令 | 说明 |
-|------|------|
-| `npm run dev` | 本地开发 |
-| `npm run build` | 生产构建（含 `vue-tsc`） |
-| `npm run typecheck` | 仅 TypeScript 检查（`vue-tsc --noEmit`） |
-| `npm run test` | Vitest 单元/组件测试（`src/**/*.test.ts`） |
-| `npm run test:watch` | 监听模式 |
-| `npm run lint` | ESLint（`src/` 禁止 `axios` 直连，仅 `src/api/` 允许） |
-| `npm run lint:fix` | ESLint 自动修复 |
-| `npm run generate:api-types` | 从 OpenAPI 生成 `src/api/generated/schema.d.ts` |
+| 命令                         | 说明                                                   |
+| ---------------------------- | ------------------------------------------------------ |
+| `npm run dev`                | 本地开发                                               |
+| `npm run build`              | 生产构建（含 `vue-tsc`）                               |
+| `npm run typecheck`          | 仅 TypeScript 检查（`vue-tsc --noEmit`）               |
+| `npm run test`               | Vitest 单元/组件测试（`src/**/*.test.ts`）             |
+| `npm run test:watch`         | 监听模式                                               |
+| `npm run lint`               | ESLint（Vue `recommended` + TS；`src/` 禁止裸 `axios`） |
+| `npm run lint:fix`           | ESLint 自动修复                                        |
+| `npm run format`             | Prettier 格式化全仓                                  |
+| `npm run format:check`       | Prettier 检查（CI 用）                               |
+| `npm run knip`               | 未使用文件/依赖/导出（Knip）                           |
+| `npm run generate:api-types` | 从 OpenAPI 生成 `src/api/generated/schema.d.ts`        |
 
 ## 提 PR 前门禁（本地与 CI 一致）
 
@@ -45,10 +48,14 @@ frontend/src/
 cd frontend
 npm ci
 npm run typecheck
+npm run format:check
 npm run lint
+npm run knip
 npm run test
 npm run build
 ```
+
+格式化与 ESLint 分工：**Prettier** 管排版（`prettier.config.js`），**ESLint** 管逻辑与 Vue/TS 规则（`eslint.config.js`，末尾 `eslint-config-prettier` 避免冲突）。
 
 PR 描述请粘贴 [docs/v1/pr-checklist.md](../docs/v1/pr-checklist.md) 中 **前端（FE）** 小节并逐项勾选。
 
@@ -65,13 +72,13 @@ PR 描述请粘贴 [docs/v1/pr-checklist.md](../docs/v1/pr-checklist.md) 中 **�
     → PR 勾选 pr-checklist「前端（FE）」+ 说明是否改契约
 ```
 
-| 步骤 | 负责人 | 产出 |
-|------|--------|------|
-| 1 | BE-L（RFC 通过后） | `docs/api/openapi.yaml`、`docs/v1/api-contract.md` |
-| 2 | FE | `npm run generate:api-types` → `src/api/generated/schema.d.ts` |
-| 3 | FE | `src/api/types.ts`、客户端与视图；SSE 等 OpenAPI 未覆盖处仍手写 |
-| 4 | FE | `docs/api/fixtures/` 对齐或契约测试更新 |
-| 5 | 双方 | 联调；BE-L Review 时确认 OpenAPI 与实现 `/docs` 一致 |
+| 步骤 | 负责人             | 产出                                                            |
+| ---- | ------------------ | --------------------------------------------------------------- |
+| 1    | BE-L（RFC 通过后） | `docs/api/openapi.yaml`、`docs/v1/api-contract.md`              |
+| 2    | FE                 | `npm run generate:api-types` → `src/api/generated/schema.d.ts`  |
+| 3    | FE                 | `src/api/types.ts`、客户端与视图；SSE 等 OpenAPI 未覆盖处仍手写 |
+| 4    | FE                 | `docs/api/fixtures/` 对齐或契约测试更新                         |
+| 5    | 双方               | 联调；BE-L Review 时确认 OpenAPI 与实现 `/docs` 一致            |
 
 详细协作分层见 [docs/v1/collaboration.md §2](../docs/v1/collaboration.md#2-契约先行流程)。
 

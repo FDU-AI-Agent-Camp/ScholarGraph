@@ -11,13 +11,7 @@ vi.mock('./client', () => ({
   postData: (...args: unknown[]) => mockPostData(...args),
 }))
 
-import {
-  getPaper,
-  getPaperGraph,
-  getPaperStatus,
-  listPapers,
-  uploadPaper,
-} from '@/api/papers'
+import { getPaper, getPaperGraph, getPaperStatus, listPapers, uploadPaper } from '@/api/papers'
 
 describe('papers API module', () => {
   beforeEach(() => {
@@ -78,11 +72,7 @@ describe('papers API module', () => {
     const result = await uploadPaper(file)
 
     expect(mockPostData).toHaveBeenCalledTimes(1)
-    const [url, body, config] = mockPostData.mock.calls[0] as [
-      string,
-      FormData,
-      { headers: Record<string, string> },
-    ]
+    const [url, body, config] = mockPostData.mock.calls[0] as [string, FormData, { headers: Record<string, string> }]
     expect(url).toBe('/papers')
     expect(body).toBeInstanceOf(FormData)
     expect(config.headers['Content-Type']).toBe('multipart/form-data')

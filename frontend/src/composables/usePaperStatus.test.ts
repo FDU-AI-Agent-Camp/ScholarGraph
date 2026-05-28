@@ -6,12 +6,7 @@ import * as papersApi from '@/api/papers'
 import { usePaperStatus, type UsePaperStatusReturn } from '@/composables/usePaperStatus'
 import type { DataResponse, PaperStatusData } from '@/api/types'
 import failedStatusEnvelope from '../../../docs/api/fixtures/paper-status-hss-failed-001.json'
-import {
-  failedStatus,
-  processingStatus,
-  readyStatus,
-  statusResponse,
-} from '@/test/fixtures/paperStatus'
+import { failedStatus, processingStatus, readyStatus, statusResponse } from '@/test/fixtures/paperStatus'
 
 const failedStatusResponse = failedStatusEnvelope as DataResponse<PaperStatusData>
 

@@ -9,13 +9,7 @@ import type {
   QaStreamServerEvent,
 } from './types'
 
-export type {
-  QaStreamCitationData,
-  QaStreamDoneData,
-  QaStreamErrorData,
-  QaStreamMessageData,
-  QaStreamServerEvent,
-}
+export type { QaStreamCitationData, QaStreamDoneData, QaStreamErrorData, QaStreamMessageData, QaStreamServerEvent }
 
 export interface QaStreamHandlers {
   onMessage?: (data: QaStreamMessageData) => void

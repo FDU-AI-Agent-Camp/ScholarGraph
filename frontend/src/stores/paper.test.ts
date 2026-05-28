@@ -59,9 +59,7 @@ describe('usePaperStore', () => {
   })
 
   it('fetchList records ApiClientError message in lastError', async () => {
-    mockListPapers.mockRejectedValue(
-      new ApiClientError({ code: 'SERVER', message: '服务不可用' }, 500),
-    )
+    mockListPapers.mockRejectedValue(new ApiClientError({ code: 'SERVER', message: '服务不可用' }, 500))
     const store = usePaperStore()
 
     await expect(store.fetchList()).rejects.toBeInstanceOf(ApiClientError)

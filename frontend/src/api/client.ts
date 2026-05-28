@@ -42,10 +42,7 @@ export class ApiClientError extends Error {
     if (body) {
       return new ApiClientError(body, statusCode)
     }
-    return new ApiClientError(
-      { code: 'NETWORK_ERROR', message: error.message || '请求失败' },
-      statusCode,
-    )
+    return new ApiClientError({ code: 'NETWORK_ERROR', message: error.message || '请求失败' }, statusCode)
   }
 }
 
@@ -64,11 +61,7 @@ export async function getData<T>(url: string, config?: AxiosRequestConfig): Prom
   return data
 }
 
-export async function postData<T>(
-  url: string,
-  body?: unknown,
-  config?: AxiosRequestConfig,
-): Promise<DataResponse<T>> {
+export async function postData<T>(url: string, body?: unknown, config?: AxiosRequestConfig): Promise<DataResponse<T>> {
   const { data } = await http.post<DataResponse<T>>(url, body, config)
   return data
 }

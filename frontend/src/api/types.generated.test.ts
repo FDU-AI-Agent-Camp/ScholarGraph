@@ -7,6 +7,7 @@ import type {
   FailedDuringStage,
   PaperCreateResult,
   PaperStatus,
+  PipelineStage,
   PaperStatusData,
   PaperSummary,
   PatrolReport,
@@ -20,8 +21,10 @@ describe('types.ts vs generated OpenAPI schema', () => {
   it('enum aliases match generated schemas', () => {
     const status: PaperStatus = 'failed'
     const during: FailedDuringStage = 'classifying'
+    const stage: PipelineStage = 'extracting'
     expect(status).toBe('failed')
     expect(during).toBe('classifying')
+    expect(stage).toBe('extracting')
 
     const _paper: PaperSummary = {
       paper_id: 'x',
