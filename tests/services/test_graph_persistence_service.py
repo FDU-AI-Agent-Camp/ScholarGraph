@@ -3,7 +3,6 @@
 from unittest.mock import MagicMock
 
 import pytest
-
 from backend.schemas.graph import GraphNode, UnifiedPaperGraph
 from backend.schemas.paradigm import Paradigm
 from backend.services.errors import ServiceError

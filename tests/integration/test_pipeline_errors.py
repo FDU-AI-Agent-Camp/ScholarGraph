@@ -3,16 +3,16 @@
 from __future__ import annotations
 
 from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
-
 from backend.graph import nodes
 from backend.graph.state import WorkflowState
 from backend.graph.workflow import _ensure_failed_status_persisted, run_paper_pipeline
 from backend.schemas.paper import PaperStatus, PipelineStage
 from backend.services.errors import PIPELINE_FAILED_CODE, ServiceError
 from backend.services.paper_service import get_paper_service
+
 from tests.conftest import mock_pipeline_node_services
 from tests.helpers.status_contract import assert_snapshot_matches_contract
 
@@ -147,9 +147,8 @@ async def test_ensure_failed_status_persisted_backfills_missing_error_code(
 async def test_status_api_returns_failed_error_fields(
     integration_paper: tuple[str, Path],
 ) -> None:
-    from httpx import ASGITransport, AsyncClient
-
     from backend.main import app
+    from httpx import ASGITransport, AsyncClient
 
     paper_id, pdf_path = integration_paper
     with mock_pipeline_node_services(paper_id) as mocks:

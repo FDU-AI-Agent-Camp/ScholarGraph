@@ -1,7 +1,6 @@
 """Unit tests: pipeline status progression via PipelineStatusService."""
 
 import pytest
-
 from backend.graph.state import STAGE_PERCENT
 from backend.schemas.paper import PaperStatus, PipelineStage
 from backend.services.paper_service import get_paper_service

@@ -1,6 +1,5 @@
 """Graph persistence (BE-3 implements JSON/SQLite storage)."""
 
-import json
 from pathlib import Path
 
 from backend.config import get_settings

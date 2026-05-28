@@ -1,8 +1,7 @@
 """Smoke tests for API v1 health endpoint."""
 
-from httpx import ASGITransport, AsyncClient
-
 from backend.main import app
+from httpx import ASGITransport, AsyncClient
 
 
 async def test_health_returns_ok_envelope() -> None:

@@ -1,7 +1,6 @@
 """Backend contract validation: validate_status_contract and write guards."""
 
 import pytest
-
 from backend.graph.state import STAGE_PERCENT
 from backend.schemas.paper import PaperStatus, PipelineStage
 from backend.services.paper_service import get_paper_service
@@ -9,7 +8,6 @@ from backend.services.pipeline_status_service import (
     validate_failed_error_fields,
     validate_status_contract,
 )
-
 
 # ── validate_status_contract (pure) ─────────────────────────────────────────
 

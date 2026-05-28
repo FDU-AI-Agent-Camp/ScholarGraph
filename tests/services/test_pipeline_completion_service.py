@@ -3,10 +3,9 @@
 from unittest.mock import MagicMock
 
 import pytest
-
 from backend.schemas.graph import UnifiedPaperGraph
 from backend.schemas.paper import PaperStatus, PipelineStage
-from backend.schemas.paradigm import Paradigm, ParadigmClassification
+from backend.schemas.paradigm import ParadigmClassification
 from backend.services.errors import ServiceError
 from backend.services.graph_persistence_service import GraphPersistenceService
 from backend.services.paper_service import get_paper_service

@@ -3,8 +3,6 @@
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
-import pytest
-
 from backend.graph import nodes
 from backend.graph.state import WorkflowState, initial_workflow_state
 from backend.schemas.graph import GraphNode, UnifiedPaperGraph

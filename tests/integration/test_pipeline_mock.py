@@ -10,7 +10,6 @@ from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-
 from backend.agents.workflow import run_paper_pipeline
 from backend.graph.state import NODE_CLASSIFY, NODE_EXTRACT, NODE_INGEST, NODE_STORE, STAGE_PERCENT
 from backend.graph.workflow import run_paper_pipeline as run_paper_pipeline_from_graph
@@ -19,6 +18,7 @@ from backend.schemas.paper import PaperStatus, PipelineStage
 from backend.schemas.paradigm import Paradigm, ParadigmClassification
 from backend.services.errors import ServiceError
 from backend.services.paper_service import get_paper_service
+
 from tests.conftest import mock_pipeline_node_services
 from tests.helpers.status_contract import assert_snapshot_matches_contract
 

@@ -11,7 +11,6 @@
 from pathlib import Path
 
 import pytest
-
 from backend.agents.classifier import classify
 from backend.agents.extractor import extract
 from backend.graph.workflow import run_paper_pipeline

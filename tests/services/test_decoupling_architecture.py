@@ -3,8 +3,6 @@
 import ast
 from pathlib import Path
 
-import pytest
-
 REPO_ROOT = Path(__file__).resolve().parents[2]
 NODES_PATH = REPO_ROOT / "backend" / "graph" / "nodes.py"
 

@@ -1,12 +1,11 @@
 """HTTP integration: GET /papers/{id}/status returns api-contract-compliant payloads."""
 
 import pytest
-from httpx import ASGITransport, AsyncClient
-
 from backend.graph.state import STAGE_PERCENT
 from backend.main import app
 from backend.schemas.paper import PaperStatus, PipelineStage
 from backend.services.pipeline_status_service import validate_status_contract
+from httpx import ASGITransport, AsyncClient
 
 
 @pytest.fixture

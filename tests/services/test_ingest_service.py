@@ -4,7 +4,6 @@ from pathlib import Path
 from unittest.mock import AsyncMock, patch
 
 import pytest
-
 from backend.services.errors import ServiceError
 from backend.services.ingest_service import IngestService, get_ingest_service
 

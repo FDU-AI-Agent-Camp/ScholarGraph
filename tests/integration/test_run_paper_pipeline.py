@@ -7,7 +7,6 @@ from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-
 from backend.agents.workflow import run_paper_pipeline as run_from_agents
 from backend.api.exceptions import ApiError
 from backend.graph.workflow import get_compiled_paper_pipeline, run_paper_pipeline
@@ -15,6 +14,7 @@ from backend.schemas.paper import PaperStatus, PipelineStage
 from backend.services.errors import ServiceError
 from backend.services.paper_service import get_paper_service
 from backend.services.pipeline_status_service import get_pipeline_status_service
+
 from tests.conftest import mock_pipeline_node_services
 
 pytestmark = pytest.mark.integration

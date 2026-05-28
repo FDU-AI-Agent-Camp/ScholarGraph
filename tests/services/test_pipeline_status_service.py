@@ -1,14 +1,13 @@
 """Facade smoke tests for PipelineStatusService (see test_status_contract / test_pipeline_status_updates)."""
 
 import pytest
-
 from backend.graph.state import STAGE_PERCENT
 from backend.schemas.paper import PaperStatus, PipelineStage
+from backend.services.paper_service import get_paper_service
 from backend.services.pipeline_status_service import (
     PipelineStatusService,
     validate_status_contract,
 )
-from backend.services.paper_service import get_paper_service
 from tests.helpers.status_contract import assert_snapshot_matches_contract
 
 

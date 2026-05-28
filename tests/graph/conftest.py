@@ -6,14 +6,13 @@ from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-
 from backend.graph.state import STAGE_PERCENT, WorkflowState, initial_workflow_state
 from backend.graph.workflow import get_compiled_paper_pipeline
 from backend.schemas.graph import GraphEdge, GraphNode, UnifiedPaperGraph
 from backend.schemas.paper import PaperDetail, PaperStatus, PipelineStage
 from backend.schemas.paradigm import Paradigm, ParadigmClassification
-from backend.services.paper_service import get_paper_service
 from backend.services.graph_persistence_service import GraphPersistenceService
+from backend.services.paper_service import get_paper_service
 from backend.services.pipeline_completion_service import PipelineCompletionService
 
 

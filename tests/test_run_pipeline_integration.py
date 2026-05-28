@@ -11,12 +11,12 @@ from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-
 from backend.graph.state import STAGE_PERCENT
 from backend.graph.workflow import get_compiled_paper_pipeline, run_paper_pipeline
 from backend.schemas.paper import PaperStatus, PipelineStage
 from backend.services.errors import ServiceError
 from backend.services.paper_service import get_paper_service
+
 from tests.conftest import REPO_ROOT, RUN_PIPELINE_SCRIPT, mock_pipeline_node_services
 from tests.helpers.status_contract import assert_snapshot_matches_contract
 

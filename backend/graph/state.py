@@ -1,6 +1,6 @@
 """LangGraph workflow state for the single-paper pipeline."""
 
-from typing import Any, NotRequired, TypedDict
+from typing import Any, TypedDict
 
 from backend.schemas.paper import PaperStatus, PipelineStage
 

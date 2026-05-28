@@ -3,18 +3,15 @@
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
-import pytest
-
 from backend.graph import nodes
-from backend.graph.state import STAGE_PERCENT, WorkflowState
+from backend.graph.state import WorkflowState
 from backend.schemas.graph import GraphNode, UnifiedPaperGraph
 from backend.schemas.paper import PaperStatus, PipelineStage
 from backend.schemas.paradigm import Paradigm, ParadigmClassification
 from backend.services.errors import ServiceError
-from backend.services.paper_service import get_paper_service
 from backend.services.graph_persistence_service import GraphPersistenceService
+from backend.services.paper_service import get_paper_service
 from backend.services.pipeline_completion_service import PipelineCompletionService
-
 
 # ── ingest_node ─────────────────────────────────────────────────────────────
 

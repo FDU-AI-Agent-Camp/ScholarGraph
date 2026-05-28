@@ -7,8 +7,8 @@ from pathlib import Path
 from unittest.mock import AsyncMock, patch
 
 import pytest
-
 from backend.schemas.paper import PaperStatus, PaperStatusData, PipelineStage
+
 from tests.conftest import RUN_PIPELINE_SCRIPT
 
 REPO_ROOT = RUN_PIPELINE_SCRIPT.parents[1]

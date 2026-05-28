@@ -4,9 +4,8 @@ from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-
 from backend.graph import nodes
-from backend.graph.state import WorkflowState, initial_workflow_state
+from backend.graph.state import WorkflowState
 from backend.graph.workflow import run_paper_pipeline
 from backend.schemas.paper import PaperStatus, PipelineStage
 from backend.services.errors import ServiceError
@@ -66,7 +65,11 @@ async def test_node_maps_service_error_to_failed_workflow_state(
 ) -> None:
     state: WorkflowState = request.getfixturevalue(state_fixture)
     svc = MagicMock()
-    setattr(svc, service_method, AsyncMock(side_effect=error) if service_method != "finalize" else MagicMock(side_effect=error))
+    if service_method == "finalize":
+        mock_method = MagicMock(side_effect=error)
+    else:
+        mock_method = AsyncMock(side_effect=error)
+    setattr(svc, service_method, mock_method)
     patch_target = f"backend.graph.nodes.{service_getter}"
     with patch(patch_target, return_value=svc):
         out = await node_fn(state)

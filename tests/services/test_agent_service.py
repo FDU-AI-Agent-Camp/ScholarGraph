@@ -3,11 +3,16 @@
 from unittest.mock import AsyncMock, patch
 
 import pytest
-
 from backend.schemas.graph import GraphNode, UnifiedPaperGraph
 from backend.schemas.paradigm import Paradigm, ParadigmClassification
 from backend.services.agent_service import AgentService
 from backend.services.errors import ServiceError
+
+
+def _agent_be_patch_target(method: str) -> str:
+    if method == "classify_paradigm":
+        return "backend.services.agent_service.classify"
+    return "backend.services.agent_service.extract"
 
 
 async def test_classify_paradigm_success() -> None:
@@ -37,8 +42,7 @@ async def test_agent_not_implemented_maps_pipeline_failed(
     call,
 ) -> None:
     service = AgentService()
-    target = "backend.services.agent_service.classify" if method == "classify_paradigm" else "backend.services.agent_service.extract"
-    with patch(target, new_callable=AsyncMock) as raw:
+    with patch(_agent_be_patch_target(method), new_callable=AsyncMock) as raw:
         raw.side_effect = NotImplementedError(f"BE-2 {method}")
         with pytest.raises(ServiceError) as err:
             await call(service)
@@ -54,8 +58,7 @@ async def test_agent_not_implemented_maps_pipeline_failed(
 )
 async def test_agent_runtime_error_maps_llm_json_invalid(method: str, call) -> None:
     service = AgentService()
-    target = "backend.services.agent_service.classify" if method == "classify_paradigm" else "backend.services.agent_service.extract"
-    with patch(target, new_callable=AsyncMock) as raw:
+    with patch(_agent_be_patch_target(method), new_callable=AsyncMock) as raw:
         raw.side_effect = RuntimeError("bad json")
         with pytest.raises(ServiceError) as err:
             await call(service)

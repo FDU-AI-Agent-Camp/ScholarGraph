@@ -7,7 +7,6 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
-
 from backend.graph.workflow import get_compiled_paper_pipeline
 from backend.schemas.paper import PaperDetail, PaperStatus
 from backend.services.paper_service import get_paper_service

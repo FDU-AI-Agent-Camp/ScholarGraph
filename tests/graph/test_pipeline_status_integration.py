@@ -4,12 +4,12 @@ from pathlib import Path
 from unittest.mock import patch
 
 import pytest
-
 from backend.graph.state import STAGE_PERCENT
 from backend.graph.workflow import run_paper_pipeline
 from backend.schemas.paper import PaperStatus, PaperStatusData, PipelineStage
 from backend.services.paper_service import get_paper_service
 from backend.services.pipeline_status_service import PipelineStatusService
+
 from tests.helpers.status_contract import assert_snapshot_matches_contract
 
 
