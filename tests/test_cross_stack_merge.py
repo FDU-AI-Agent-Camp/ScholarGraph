@@ -138,13 +138,34 @@ async def test_merge_ready_paper_detail_and_graph(api_client: AsyncClient) -> No
 
 
 @pytest.mark.asyncio
-async def test_merge_patrol_post_envelope(api_client: AsyncClient) -> None:
-    response = await api_client.post("/api/v1/patrol", json={"paper_ids": [READY_PAPER_ID]})
+async def test_merge_patrol_post_envelope(api_client: AsyncClient, tmp_path, monkeypatch) -> None:
+    from backend.config import get_settings
+
+    graph_dir = tmp_path / "graphs"
+    monkeypatch.setenv("GRAPH_DATA_DIR", str(graph_dir))
+    get_settings.cache_clear()
+    from tests.helpers.patrol_graphs import seed_patrol_graphs
+
+    seed_patrol_graphs(
+        graph_dir,
+        {
+            "hss-001": ("n_lens_a", "消费社会"),
+            "hss-002": ("n_lens_b", "公共领域"),
+        },
+    )
+    response = await api_client.post(
+        "/api/v1/patrol",
+        json={"paper_ids": ["hss-001", "hss-002"], "mode": "lens_clash"},
+    )
     assert response.status_code == 200
     body = response.json()
     _assert_api_envelope(body)
-    assert body["data"]["insights"]
-    assert body["data"]["insights"][0]["insight_id"]
+    data = body["data"]
+    assert data["mode"] == "lens_clash"
+    assert data["paper_ids"] == ["hss-001", "hss-002"]
+    assert data["insights"]
+    assert data["insights"][0]["insight_id"]
+    assert data["insights"][0]["node_refs"]
 
 
 @pytest.mark.asyncio

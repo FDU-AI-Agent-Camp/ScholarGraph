@@ -11,7 +11,7 @@ from backend.schemas.paper import (
     PipelineStage,
 )
 from backend.schemas.paradigm import Paradigm, ParadigmClassification
-from backend.schemas.patrol import PatrolInsight, PatrolReport
+from backend.schemas.patrol import NodeRef, PatrolInsight, PatrolMode, PatrolReport
 
 __all__ = [
     "DataResponse",
@@ -28,7 +28,9 @@ __all__ = [
     "PaperSummary",
     "Paradigm",
     "ParadigmClassification",
+    "NodeRef",
     "PatrolInsight",
+    "PatrolMode",
     "PatrolReport",
     "PipelineStage",
     "UnifiedPaperGraph",

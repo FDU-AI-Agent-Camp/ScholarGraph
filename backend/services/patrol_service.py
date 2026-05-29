@@ -1,43 +1,29 @@
-"""Community patrol service (BE-4 implements logic)."""
+"""Community patrol service facade (BE-4 implements backend.patrol)."""
 
-import json
 from functools import lru_cache
-from pathlib import Path
-from uuid import uuid4
 
-from backend.schemas.patrol import PatrolInsight, PatrolReport
-
-FIXTURES_DIR = Path(__file__).resolve().parents[2] / "docs" / "api" / "fixtures"
+from backend.api.exceptions import ApiError
+from backend.patrol.errors import PatrolError
+from backend.patrol.service import run_patrol as patrol_run
+from backend.schemas.patrol import PatrolMode, PatrolReport
 
 
 class PatrolService:
-    """Skeleton: returns fixture report until BE-4 wires real patrol."""
+    """Delegates patrol execution to BE-4 run_patrol orchestration."""
 
-    async def run_patrol(self, paper_ids: list[str]) -> PatrolReport:
-        fixture_path = FIXTURES_DIR / "patrol-lens-clash.json"
-        if fixture_path.is_file():
-            payload = json.loads(fixture_path.read_text(encoding="utf-8"))
-            data = payload["data"]
-            insights = [
-                PatrolInsight(
-                    insight_id=item["insight_id"],
-                    title=item["title"],
-                    summary=item["summary"],
-                    severity="warning",
-                    paper_ids=item.get("paper_ids") or paper_ids,
-                )
-                for item in data.get("insights", [])
-            ]
-            return PatrolReport(
-                report_id="mock-patrol",
-                title=str(data.get("mode", "共同体巡检")),
-                insights=insights,
-            )
-        return PatrolReport(
-            report_id=str(uuid4()),
-            title="共同体巡检（骨架占位）",
-            insights=[],
-        )
+    async def run_patrol(
+        self,
+        paper_ids: list[str],
+        mode: PatrolMode = PatrolMode.LENS_CLASH,
+    ) -> PatrolReport:
+        try:
+            return await patrol_run(paper_ids, mode)
+        except PatrolError as exc:
+            raise ApiError(
+                exc.code,
+                exc.message,
+                status_code=exc.status_code,
+            ) from exc
 
 
 @lru_cache

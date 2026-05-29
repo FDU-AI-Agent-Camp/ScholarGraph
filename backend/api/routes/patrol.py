@@ -5,13 +5,15 @@ from pydantic import BaseModel, Field
 
 from backend.api.deps import get_request_id
 from backend.api.responses import success
+from backend.schemas.patrol import PatrolMode
 from backend.services.patrol_service import PatrolService, get_patrol_service
 
 router = APIRouter(prefix="/patrol")
 
 
 class PatrolRequest(BaseModel):
-    paper_ids: list[str] = Field(min_length=1)
+    paper_ids: list[str] = Field(min_length=2, max_length=2)
+    mode: PatrolMode = PatrolMode.LENS_CLASH
 
 
 def get_patrol_service_dep() -> PatrolService:
@@ -19,10 +21,10 @@ def get_patrol_service_dep() -> PatrolService:
 
 
 @router.post("")
-async def run_patrol(
+async def run_patrol_route(
     body: PatrolRequest,
     request_id: str = Depends(get_request_id),
     service: PatrolService = Depends(get_patrol_service_dep),
 ) -> dict:
-    report = await service.run_patrol(body.paper_ids)
+    report = await service.run_patrol(body.paper_ids, body.mode)
     return success(report, request_id)
