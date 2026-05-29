@@ -4,6 +4,8 @@
 在 BE 模块尚未交付前，这些用例**预期失败**（xfail strict）。
 当 BE-1～2 实现对应 Service 后，应去掉 xfail 直至全部转绿。
 
+ingest 语料详细红灯见 tests/ingest/test_red_corpus.py。
+
 运行：uv run pytest -m red -rx
 默认 CI / 日常：uv run pytest -m "not red"
 """
@@ -14,23 +16,10 @@ import pytest
 from backend.agents.classifier import classify
 from backend.agents.extractor import extract
 from backend.graph.workflow import run_paper_pipeline
-from backend.ingest.pdf import ingest_pdf
 from backend.schemas.paradigm import Paradigm
 from backend.services.paper_service import get_paper_service
 
-CORPUS_STEM = Path("data/corpus/stem-001.pdf")
-CORPUS_HSS = Path("data/corpus/hss-001.pdf")
-
-
-@pytest.mark.red
-@pytest.mark.xfail(strict=True, reason="BE-1: ingest_pdf 尚未实现")
-async def test_ingest_pdf_parses_local_corpus_without_mock(tmp_path: Path) -> None:
-    if not CORPUS_STEM.is_file():
-        pytest.skip("微语料 PDF 未就位，见 docs/v1/corpus.md")
-
-    result = await ingest_pdf(CORPUS_STEM, paper_id="stem-001")
-    assert result["full_text"].strip()
-    assert result["classifier_input"].strip()
+# BE-1 ingest 红灯已迁移至 tests/ingest/test_red_corpus.py
 
 
 @pytest.mark.red

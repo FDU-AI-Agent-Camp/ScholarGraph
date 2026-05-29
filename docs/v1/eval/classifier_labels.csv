@@ -1,4 +1,4 @@
 paper_id,paradigm_gold,notes
-stem-001,STEM,
-hss-001,HSS,
-hss-002,HSS,
+stem-001,STEM,ReAct (Yao et al. 2022) — Agent/LLM
+hss-001,HSS,Platform labor algorithmic management (Lee et al. 2015)
+hss-002,HSS,Platform work typology (Wood et al. 2019); Lens Clash vs hss-001
