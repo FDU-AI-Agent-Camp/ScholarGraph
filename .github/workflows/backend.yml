@@ -1,0 +1,46 @@
+# 后端门禁：ruff + pytest（与 docs/v1/pr-checklist.md、scripts/check_backend.py 一致）
+name: Backend
+
+on:
+  push:
+    branches: [develop, main]
+    paths:
+      - 'backend/**'
+      - 'tests/**'
+      - 'scripts/**'
+      - 'docs/api/**'
+      - 'pyproject.toml'
+      - 'uv.lock'
+      - '.github/workflows/backend.yml'
+  pull_request:
+    branches: [develop, main]
+    paths:
+      - 'backend/**'
+      - 'tests/**'
+      - 'scripts/**'
+      - 'docs/api/**'
+      - 'pyproject.toml'
+      - 'uv.lock'
+      - '.github/workflows/backend.yml'
+
+jobs:
+  gate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Sync dependencies
+        run: uv sync --frozen --group dev
+
+      - name: Ruff lint
+        run: uv run ruff check backend tests scripts
+
+      - name: Ruff format check
+        run: uv run ruff format --check backend tests scripts
+
+      - name: Pytest
+        run: uv run pytest -q -m "not red"

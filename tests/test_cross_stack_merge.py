@@ -1,6 +1,6 @@
 """Cross-stack merge verification: backend HTTP ↔ docs/api fixtures ↔ FE contract.
 
-After merging feature/frontend and feature/backend/platform into develop, these tests
+After merging feature/frontend, feature/backend/platform, and feature/backend/ingest into develop, these tests
 assert live FastAPI responses match the same JSON envelopes the Vue client types and
 fixtures expect.
 """
@@ -14,6 +14,7 @@ import pytest
 from backend.graph.state import STAGE_PERCENT  # noqa: F401 — import before pipeline helpers
 from backend.main import app
 from backend.schemas.paper import FailedDuringStage, PaperStatusData
+from backend.services.paper_service import get_paper_service
 from httpx import ASGITransport, AsyncClient
 
 from tests.helpers.status_contract import assert_snapshot_matches_contract
@@ -151,3 +152,14 @@ async def test_merge_graph_not_ready_returns_409(api_client: AsyncClient) -> Non
     response = await api_client.get(f"/api/v1/papers/{PROCESSING_PAPER_ID}/graph")
     assert response.status_code == 409
     assert response.json()["error"]["code"] == "GRAPH_NOT_READY"
+
+
+def test_merge_classifier_labels_corpus_ids_seeded_in_api() -> None:
+    """FE 列表与 BE 种子数据应覆盖金标语料 paper_id（ingest 分支合入后）。"""
+    from tests.helpers.classifier_labels import load_classifier_labels
+
+    labels = load_classifier_labels()
+    listed_ids = set(get_paper_service()._papers.keys())
+
+    for row in labels:
+        assert row["paper_id"] in listed_ids

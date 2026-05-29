@@ -25,6 +25,22 @@
 - [ ] **未**提交 `.env`、API Key、`API KEY.txt`、`data/corpus/*.pdf`
 - [ ] PR 范围单一（一个模块或一条用户路径，避免「顺手改」无关文件）
 
+### 静态检查（按角色选跑）
+
+| 栈 | 本地一键 | CI |
+|----|----------|-----|
+| **后端** | 仓库根目录：`uv run python scripts/check_backend.py` | [backend.yml](../../.github/workflows/backend.yml) |
+| **前端** | `frontend/`：`npm run check`（typecheck + prettier + eslint + knip） | [frontend.yml](../../.github/workflows/frontend.yml) |
+
+```bash
+# 后端（仓库根目录）
+uv sync --group dev
+uv run python scripts/check_backend.py
+
+# 前端
+cd frontend && npm ci && npm run check:ci
+```
+
 ---
 
 ## 前端（FE）
@@ -45,18 +61,18 @@
 ```bash
 cd frontend
 npm ci
-npm run typecheck
-npm run format:check
-npm run lint
-npm run knip
+npm run check:ci
+```
+
+等价于分步：
+
+```bash
+npm run check    # typecheck + format:check + lint + knip
 npm run test
 npm run build
 ```
 
-- [ ] `npm run typecheck` 通过
-- [ ] `npm run format:check` 通过（Prettier）
-- [ ] `npm run lint` 通过（Vue `recommended` + TS；禁止 `src/` 裸 `axios`）
-- [ ] `npm run knip` 通过（无多余依赖/导出）
+- [ ] `npm run check` 通过（含 typecheck / Prettier / ESLint / Knip）
 - [ ] `npm run test` 通过
 - [ ] `npm run build` 通过
 
@@ -72,7 +88,7 @@ npm run build
 
 ## 后端 · 平台（BE-L）
 
-- [ ] `uv run pytest` 通过
+- [ ] `uv run python scripts/check_backend.py` 通过（ruff lint + format-check + `pytest -m "not red"`）
 - [ ] `docs/api/openapi.yaml` 与实现 `/docs` 同步（若改 API）
 - [ ] CORS 含 `http://localhost:5173`
 - [ ] 路由注册在 `backend/api/`，业务逻辑不堆在 `main.py`
@@ -84,7 +100,7 @@ npm run build
 ## 后端 · 摄入（BE-1）
 
 - [ ] 仅修改 `backend/ingest/**`、`scripts/extract_text.py`、`tests/ingest/**`、语料相关文档
-- [ ] `uv run pytest tests/ingest` 通过
+- [ ] `uv run python scripts/check_backend.py` 通过（或至少 `--lint-only` + `uv run pytest tests/ingest`）
 - [ ] **未** `import backend.agents` 或调用 LLM
 - [ ] 已实现/更新 `ingest_pdf()`，见 [handoff-to-platform.md](./handoff-to-platform.md)
 - [ ] **未**自行添加 FastAPI 路由

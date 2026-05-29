@@ -105,3 +105,48 @@ def mock_pipeline_services():
             yield mocks
 
     return _apply
+
+
+@contextmanager
+def mock_agent_services_only(
+    paper_id: str,
+) -> Iterator[dict[str, MagicMock]]:
+    """Patch agent + store only; ingest runs real ``IngestService`` (BE-1 + platform)."""
+    from backend.schemas.graph import GraphEdge, GraphNode, UnifiedPaperGraph
+    from backend.schemas.paradigm import Paradigm, ParadigmClassification
+    from backend.services.graph_persistence_service import GraphPersistenceService
+    from backend.services.pipeline_completion_service import PipelineCompletionService
+
+    classification = ParadigmClassification(
+        paradigm=Paradigm.STEM,
+        confidence=0.91,
+        reason="three-branch mock classify",
+    )
+    graph = UnifiedPaperGraph(
+        paper_id=paper_id,
+        paradigm=Paradigm.STEM,
+        nodes=[GraphNode(id="n1", label="N", type="Thesis")],
+        edges=[GraphEdge(id="e1", source="n1", target="n1", label="REF", type="REF")],
+    )
+
+    agent_svc = MagicMock()
+    agent_svc.classify_paradigm = AsyncMock(return_value=classification)
+    agent_svc.extract_graph = AsyncMock(return_value=graph)
+
+    with patch("backend.services.graph_persistence_service.GraphStore") as store_cls:
+        store_cls.return_value.save = MagicMock()
+        persistence = GraphPersistenceService(store=store_cls.return_value)
+        completion_svc = PipelineCompletionService(graph_persistence=persistence)
+
+        with (
+            patch("backend.graph.nodes.get_agent_service", return_value=agent_svc),
+            patch(
+                "backend.graph.nodes.get_pipeline_completion_service",
+                return_value=completion_svc,
+            ),
+        ):
+            yield {
+                "agent": agent_svc,
+                "completion": completion_svc,
+                "store_save": store_cls.return_value.save,
+            }

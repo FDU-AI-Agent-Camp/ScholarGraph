@@ -38,6 +38,8 @@ frontend/src/
 | `npm run format`             | Prettier 格式化全仓                                     |
 | `npm run format:check`       | Prettier 检查（CI 用）                                  |
 | `npm run knip`               | 未使用文件/依赖/导出（Knip）                            |
+| `npm run check`              | 静态门禁：typecheck + format:check + lint + knip        |
+| `npm run check:ci`           | CI 全量：check + test + build                           |
 | `npm run generate:api-types` | 从 OpenAPI 生成 `src/api/generated/schema.d.ts`         |
 
 ## 提 PR 前门禁（本地与 CI 一致）
@@ -47,13 +49,10 @@ frontend/src/
 ```bash
 cd frontend
 npm ci
-npm run typecheck
-npm run format:check
-npm run lint
-npm run knip
-npm run test
-npm run build
+npm run check:ci
 ```
+
+等价于 `npm run check`（typecheck + format:check + lint + knip）后接 `test` 与 `build`。
 
 格式化与 ESLint 分工：**Prettier** 管排版（`prettier.config.js`），**ESLint** 管逻辑与 Vue/TS 规则（`eslint.config.js`，末尾 `eslint-config-prettier` 避免冲突）。
 

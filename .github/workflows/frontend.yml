@@ -34,17 +34,8 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Typecheck
-        run: npm run typecheck
-
-      - name: Format check
-        run: npm run format:check
-
-      - name: Lint
-        run: npm run lint
-
-      - name: Knip
-        run: npm run knip
+      - name: Static checks
+        run: npm run check
 
       - name: Test
         run: npm run test

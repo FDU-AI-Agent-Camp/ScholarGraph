@@ -239,9 +239,12 @@ flowchart LR
 ```bash
 uv sync
 cp .env.example .env   # 编辑 SCHOLARGRAPH_API_KEY 等
-uv run pytest
+uv sync --group dev
+uv run python scripts/check_backend.py   # ruff lint + format-check + pytest（排除 red）
 uv run uvicorn backend.main:app --reload --host 127.0.0.1 --port 8000
 ```
+
+分步：`uv run ruff check backend tests scripts`、`uv run ruff format --check backend tests scripts`、`uv run pytest -q -m "not red"`。
 
 - 健康检查：`GET http://127.0.0.1:8000/api/v1/health`
 - Swagger：`http://127.0.0.1:8000/docs`

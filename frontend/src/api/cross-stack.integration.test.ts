@@ -2,7 +2,7 @@
  * Cross-stack merge verification: FE API client ↔ docs/api/fixtures ↔ backend contract.
  *
  * Simulates FastAPI `{ data, meta }` envelopes the Vue app consumes after merging
- * feature/frontend + feature/backend/platform into develop.
+ * feature/frontend + feature/backend/platform + feature/backend/ingest into develop.
  */
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
