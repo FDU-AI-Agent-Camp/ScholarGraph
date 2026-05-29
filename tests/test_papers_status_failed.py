@@ -3,11 +3,10 @@
 import json
 from pathlib import Path
 
-from httpx import ASGITransport, AsyncClient
-
 from backend.main import app
 from backend.schemas.paper import FailedDuringStage
 from backend.services.paper_service import PaperService
+from httpx import ASGITransport, AsyncClient
 
 FAILED_PAPER_ID = "hss-failed-001"
 FIXTURES_DIR = Path(__file__).resolve().parents[1] / "docs" / "api" / "fixtures"

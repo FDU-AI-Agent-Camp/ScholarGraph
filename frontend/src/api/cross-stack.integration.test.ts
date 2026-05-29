@@ -10,7 +10,7 @@ import * as client from '@/api/client'
 import * as papersApi from '@/api/papers'
 import * as patrolApi from '@/api/patrol'
 import type { DataResponse, PaperStatusData, PatrolReport, UnifiedPaperGraph } from '@/api/types'
-import { isFailedStatus, isReadyStatus, isTerminalStatus } from '@/utils/paperStatus'
+import { isFailedStatus, isTerminalStatus } from '@/utils/paperStatus'
 import failedStatusFixture from '../../../docs/api/fixtures/paper-status-hss-failed-001.json'
 import processingStatusFixture from '../../../docs/api/fixtures/paper-status-hss-002.json'
 import papersListFixture from '../../../docs/api/fixtures/papers-list.json'
@@ -70,7 +70,7 @@ describe('cross-stack merge (FE papers API ↔ fixture envelopes)', () => {
     const result = await papersApi.getPaper('hss-001')
 
     expect(result.data.paper_id).toBe('hss-001')
-    expect(isReadyStatus({ ...result.data, status: 'ready' })).toBe(true)
+    expect(result.data.status).toBe('ready')
   })
 
   it('getPaperGraph parses graph-hss fixture shape', async () => {

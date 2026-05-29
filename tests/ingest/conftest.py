@@ -41,12 +41,7 @@ def write_empty_page_pdf(path: Path, *, page_count: int = 1) -> Path:
 
 def write_zero_page_pdf(path: Path) -> Path:
     """Write a minimal PDF shell; PyMuPDF cannot save zero-page documents."""
-    path.write_bytes(
-        b"%PDF-1.4\n"
-        b"1 0 obj<<>>endobj\n"
-        b"trailer<< /Root 1 0 R /Size 1 >>\n"
-        b"startxref\n9\n%%EOF\n"
-    )
+    path.write_bytes(b"%PDF-1.4\n1 0 obj<<>>endobj\ntrailer<< /Root 1 0 R /Size 1 >>\nstartxref\n9\n%%EOF\n")
     return path
 
 

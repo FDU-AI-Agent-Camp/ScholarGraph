@@ -49,10 +49,9 @@ async def test_corpus_ingest_matches_gold_label_metadata(paper_id: str) -> None:
 
     full_lower = result["full_text"].lower()
     hints = TITLE_HINTS[paper_id]
-    assert any(
-        hint.lower() in full_lower if hint.isascii() else hint in result["full_text"]
-        for hint in hints
-    ), f"{paper_id}: full_text missing expected hints {hints} (title={label['title']!r})"
+    assert any(hint.lower() in full_lower if hint.isascii() else hint in result["full_text"] for hint in hints), (
+        f"{paper_id}: full_text missing expected hints {hints} (title={label['title']!r})"
+    )
 
 
 @pytest.mark.parametrize("paper_id", CORPUS_PAPER_IDS)

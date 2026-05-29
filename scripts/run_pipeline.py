@@ -109,9 +109,7 @@ def register_paper_for_pipeline(
 
 def _format_status_line(snapshot: PaperStatusData) -> str:
     stage = snapshot.stage.value if snapshot.stage is not None else "—"
-    return (
-        f"[status] {snapshot.status.value} | {stage} | {snapshot.percent}% | {snapshot.message}"
-    )
+    return f"[status] {snapshot.status.value} | {stage} | {snapshot.percent}% | {snapshot.message}"
 
 
 async def run_single_paper_pipeline(

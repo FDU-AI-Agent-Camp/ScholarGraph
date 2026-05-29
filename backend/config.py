@@ -62,10 +62,7 @@ class Settings(BaseSettings):
         """Return the primary LLM API key or raise a clear error."""
         key = self.scholargraph_api_key.strip() or self.openai_api_key.strip()
         if not key:
-            msg = (
-                "缺少 LLM API Key：请在仓库根目录 .env 中设置 "
-                "SCHOLARGRAPH_API_KEY 或 OPENAI_API_KEY"
-            )
+            msg = "缺少 LLM API Key：请在仓库根目录 .env 中设置 SCHOLARGRAPH_API_KEY 或 OPENAI_API_KEY"
             raise ValueError(msg)
         return key
 
