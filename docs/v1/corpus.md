@@ -26,16 +26,16 @@ ScholarGraph/
 
 | paper_id | 范式（人工） | 标题 | 作者/年份 | 文件路径 | 备注 |
 |----------|--------------|------|-----------|----------|------|
-| `stem-001` | STEM | ReAct: Synergizing Reasoning and Acting in Language Models | Yao et al. / 2022 | `data/corpus/stem-001.pdf` | Agent 推理+行动；arXiv:2210.03629；便于核对实验与基线节点 |
-| `hss-001` | HSS | Algorithmic management in the gig economy: The politics of work visibility and invisibility | Lee et al. / 2015 | `data/corpus/hss-001.pdf` | 平台劳动、算法管理；偏**机制/政治经济**视角；与 hss-002 同议题「零工/平台劳动」 |
-| `hss-002` | HSS | Good gigs: A typology of platform work and its consequences for workers | Wood et al. / 2019 | `data/corpus/hss-002.pdf` | 平台工作类型学；偏**类型划分与工人体验**；与 hss-001 形成 Lens Clash 张力 |
+| `stem-001` | STEM | Transformer-generated atomic embeddings to enhance prediction accuracy of crystal properties with machine learning | Jin et al. / 2025 | `data/corpus/stem-001.pdf` | 材料 ML / 晶体性质；含实验与 GNN 基线 |
+| `hss-001` | HSS | 再探夏尔巴人父系历史 | 洛桑塔杰等 / 2024 | `data/corpus/hss-001.pdf` | 分子考古；夏尔巴族源与 Y 染色体 |
+| `hss-002` | HSS | 当代中国电影的政治传播变迁研究 | 黄叶蕊 / 2025 | `data/corpus/hss-002.pdf` | 政治传播博士论文；与 hss-001 议题不同，便于 Lens Clash |
 
 > **换篇约定**：若团队改用其他 PDF，请**保持 `paper_id` 与文件名不变**，只改本表「标题 / 作者 / 备注」，并同步 `docs/v1/eval/classifier_labels.csv` 的 notes。
 
 ## 选题建议（来自 README）
 
 - **STEM**：熟悉方向的 Agent / LLM 论文，便于核对指标、基线、实验设定节点。
-- **HSS**：两篇围绕**同一社会热点或历史议题**（本集默认：**平台劳动 / 零工经济**），理论或立场可形成对比，便于 **Lens Clash**。
+- **HSS**：两篇可选用不同人文议题（本集为**夏尔巴族源**与**电影政治传播**），便于 **Lens Clash** 对比。
 
 ## 版权与存储
 
@@ -44,6 +44,6 @@ ScholarGraph/
 
 ## 完成定义
 
-- [ ] 三篇 PDF 路径可访问（见上表 `data/corpus/*.pdf`）
-- [x] `docs/v1/eval/classifier_labels.csv` 人工范式标签已填
-- [ ] `scripts/extract_text.py` 对三篇均能导出文本
+- [x] 三篇 PDF 路径可访问（见上表 `data/corpus/*.pdf`）
+- [x] `docs/v1/eval/classifier_labels.csv` 人工范式标签已填（含 `title` 与 `notes`）
+- [x] `scripts/extract_text.py` 对三篇均能导出文本

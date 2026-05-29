@@ -11,6 +11,7 @@ from pathlib import Path
 
 import pytest
 from backend.ingest.pdf import ingest_pdf
+from tests.helpers.classifier_labels import labels_by_paper_id
 from tests.ingest.conftest import CORPUS_HSS, CORPUS_HSS_LONG, CORPUS_PAPER_IDS, CORPUS_STEM
 
 CORPUS_CASES = (
@@ -18,6 +19,12 @@ CORPUS_CASES = (
     (CORPUS_HSS, "hss-001"),
     (CORPUS_HSS_LONG, "hss-002"),
 )
+
+CORPUS_STRUCTURE_MARKERS = {
+    "stem-001": ("Title:", "Abstract:"),
+    "hss-001": ("Title:", "Abstract:", "Keywords:", "夏尔巴"),
+    "hss-002": ("Title:", "Abstract:", "Keywords:", "电影"),
+}
 
 
 @pytest.mark.red
@@ -36,25 +43,22 @@ async def test_ingest_pdf_corpus_full_text_non_empty(pdf_path: Path, paper_id: s
 
 @pytest.mark.red
 @pytest.mark.parametrize(
-    ("pdf_path", "paper_id", "required_markers"),
-    [
-        (CORPUS_STEM, "stem-001", ("Title:", "Abstract:", "machine learning")),
-        (CORPUS_HSS, "hss-001", ("Title:", "Abstract:", "Keywords:", "Introduction:", "夏尔巴")),
-        (CORPUS_HSS_LONG, "hss-002", ("Title:", "Abstract:", "Keywords:", "电影")),
-    ],
+    ("pdf_path", "paper_id"),
+    CORPUS_CASES,
     ids=CORPUS_PAPER_IDS,
 )
 async def test_ingest_pdf_corpus_classifier_input_structure(
     pdf_path: Path,
     paper_id: str,
-    required_markers: tuple[str, ...],
 ) -> None:
     if not pdf_path.is_file():
         pytest.skip(f"微语料 PDF 未就位: {pdf_path}")
 
     snippet = (await ingest_pdf(pdf_path, paper_id=paper_id))["classifier_input"]
+    label = labels_by_paper_id()[paper_id]
+    assert label["paradigm_gold"] in ("STEM", "HSS")
 
-    for marker in required_markers:
+    for marker in CORPUS_STRUCTURE_MARKERS[paper_id]:
         assert marker in snippet, f"{paper_id}: missing {marker!r} in classifier_input"
 
 

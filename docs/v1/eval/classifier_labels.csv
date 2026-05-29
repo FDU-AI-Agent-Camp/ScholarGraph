@@ -1,4 +1,4 @@
-paper_id,paradigm_gold,notes
-stem-001,STEM,ReAct (Yao et al. 2022) — Agent/LLM
-hss-001,HSS,Platform labor algorithmic management (Lee et al. 2015)
-hss-002,HSS,Platform work typology (Wood et al. 2019); Lens Clash vs hss-001
+paper_id,paradigm_gold,title,notes
+stem-001,STEM,Transformer-generated atomic embeddings to enhance prediction accuracy of crystal properties with machine learning,材料机器学习与晶体性质预测；含 GNN 基线与实验指标（Jin et al. 2025）
+hss-001,HSS,再探夏尔巴人父系历史,分子考古与民族史；西夏研究 2024；Y 染色体谱系
+hss-002,HSS,当代中国电影的政治传播变迁研究,新闻传播学博士论文；政治传播与电影；长文（400+ 页）
