@@ -41,6 +41,7 @@ frontend/src/
 | `npm run check`              | 静态门禁：typecheck + format:check + lint + knip        |
 | `npm run check:ci`           | CI 全量：check + test + build                           |
 | `npm run generate:api-types` | 从 OpenAPI 生成 `src/api/generated/schema.d.ts`         |
+| `npm run demo:setup`         | 仓库根目录 seed 巡检图 + 打印浏览器演示 URL（见下方）   |
 
 ## 提 PR 前门禁（本地与 CI 一致）
 
@@ -112,3 +113,17 @@ npm run generate:api-types
 3. 应看到红色告警：`LLM_JSON_INVALID` + 失败说明，以及 `failed_during: classifying`
 
 也可仅跑测试：`npm run test`（含 `types.contract.test.ts` 与 `PaperStatusPanel.integration.spec.ts`）。
+
+## 浏览器全链路演示（答辩路径）
+
+完整步骤见 [docs/v1/eval/frontend-demo-path.md](../docs/v1/eval/frontend-demo-path.md)。
+
+```bash
+# 仓库根目录 — seed 巡检图并打印 URL 清单
+uv run python scripts/run_frontend_demo.py
+
+# 或在 frontend/ 目录
+npm run demo:setup
+```
+
+标准路径：**Home → 文献库/上传 → 详情（轮询）→ 图谱 → 问答（SSE）→ 巡检**。

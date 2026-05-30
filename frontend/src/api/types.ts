@@ -62,17 +62,16 @@ export type UnifiedPaperGraph = {
   edges: GraphEdge[]
 }
 
-export type PatrolInsight = Schema['PatrolInsight'] & {
-  /** Optional display field (fixture/UI); not in OpenAPI PatrolInsight yet. */
-  severity?: string
-}
+export type PatrolMode = Schema['PatrolMode']
+
+export type PatrolInsight = Schema['PatrolInsight']
 
 /** `POST /patrol` response `data` (OpenAPI `PatrolResponse`). */
-export type PatrolReport = NonNullable<Schema['PatrolResponse']['data']> & {
+export type PatrolReport = {
+  mode: PatrolMode
+  paper_ids: string[]
   insights: PatrolInsight[]
-  /** Legacy UI field when present in fixtures. */
-  title?: string
-  report_id?: string
+  generated_at: string
 }
 
 /** SSE `event: message` payload (api-contract §8). */

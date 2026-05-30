@@ -36,6 +36,7 @@ describe('§14.6 key paths (frontend TS hardening)', () => {
     expect(packageJson.scripts.build).toContain('vue-tsc')
     expect(packageJson.scripts.build).toContain('vite build')
     expect(packageJson.scripts.test).toBe('vitest run')
+    expect(packageJson.scripts['demo:setup']).toContain('run_frontend_demo.py')
   })
 
   it('openapi PaperStatusData includes failed-state fields', () => {

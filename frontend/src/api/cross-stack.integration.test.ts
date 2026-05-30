@@ -84,11 +84,16 @@ describe('cross-stack merge (FE papers API ↔ fixture envelopes)', () => {
   })
 
   it('runPatrol POST /patrol parses patrol-lens-clash fixture', async () => {
-    vi.spyOn(client, 'postData').mockResolvedValue(patrolFixture as DataResponse<PatrolReport>)
+    const postSpy = vi.spyOn(client, 'postData').mockResolvedValue(patrolFixture as DataResponse<PatrolReport>)
 
-    const result = await patrolApi.runPatrol(['hss-001'])
+    const result = await patrolApi.runPatrol(['hss-001', 'hss-002'], { mode: 'lens_clash' })
 
+    expect(postSpy).toHaveBeenCalledWith('/patrol', {
+      paper_ids: ['hss-001', 'hss-002'],
+      mode: 'lens_clash',
+    })
     expect(result.data.mode).toBe('lens_clash')
+    expect(result.data.insights[0]?.node_refs.length).toBeGreaterThan(0)
     expect(result.data.insights[0]?.insight_id).toBe('ins-001')
   })
 })

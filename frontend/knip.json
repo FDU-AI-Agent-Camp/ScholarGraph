@@ -7,5 +7,6 @@
     "config": "vite.config.ts"
   },
   "ignoreDependencies": ["@element-plus/icons-vue"],
+  "ignoreBinaries": ["uv"],
   "ignoreExportsUsedInFile": true
 }

@@ -26,8 +26,12 @@ describe('docs/api fixtures vs generated-backed types.ts', () => {
   it('assigns patrol fixture data to PatrolReport', () => {
     const report = patrolFixture.data as PatrolReport
     expect(report.mode).toBe('lens_clash')
+    expect(report.paper_ids).toEqual(['hss-001', 'hss-002'])
+    expect(report.generated_at).toBe('2026-05-19T11:00:00Z')
     expect(report.insights[0]?.insight_id).toBe('ins-001')
+    expect(report.insights[0]?.node_refs).toHaveLength(2)
     expect(report.insights[0]?.node_refs[0]?.paper_id).toBe('hss-001')
+    expect(report.insights[0]?.node_refs[0]?.node_id).toBe('n_lens_a')
   })
 
   it('assigns graph fixture data to UnifiedPaperGraph', () => {
