@@ -123,6 +123,27 @@ cd frontend && npm run check:ci
 uv run python scripts/check_backend.py
 ```
 
+## CP4 端到端 rehearsal（自动化）
+
+前后端已启动时，在**仓库根目录**执行：
+
+```bash
+# 终端 1
+uv run uvicorn backend.main:app --reload --host 127.0.0.1 --port 8000
+
+# 终端 2
+cd frontend && npm run dev
+
+# 终端 3 — 全链路联调（API + Vite 代理 + Playwright 浏览器）
+uv pip install playwright   # 首次需安装
+uv run playwright install chromium
+uv run python scripts/run_cp4_rehearsal.py --seed
+```
+
+脚本覆盖：`GET /papers`、详情/状态（ready/processing/failed）、图谱、SSE 问答、`POST /patrol`、六页 SPA 渲染、详情页 QA 提问、巡检页运行。
+
+退出码 0 表示 **24/24** 步骤通过。
+
 ## 相关文档
 
 - 契约：`docs/api/openapi.yaml`、`docs/v1/api-contract.md`
