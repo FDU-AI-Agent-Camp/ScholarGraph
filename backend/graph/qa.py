@@ -153,9 +153,7 @@ class _GraphQaEngine:
     ) -> AsyncIterator[QaEvent]:
         """Stream LLM response, splitting on [CITE:...] markers."""
         buffer = ""
-        node_label_cache: dict[str, str] = {
-            n.id: n.label for n in graph.nodes
-        }
+        node_label_cache: dict[str, str] = {n.id: n.label for n in graph.nodes}
 
         async for chunk in self._llm.chat.astream(prompt):
             delta: str = ""
@@ -163,9 +161,7 @@ class _GraphQaEngine:
             if isinstance(content, str):
                 delta = content
             elif isinstance(content, list):
-                delta = "".join(
-                    c if isinstance(c, str) else str(c) for c in content
-                )
+                delta = "".join(c if isinstance(c, str) else str(c) for c in content)
             else:
                 delta = str(chunk) if chunk else ""
 
@@ -224,14 +220,8 @@ class _GraphQaEngine:
         """Format the QA prompt with graph context."""
         template = self._load_prompt_template()
 
-        nodes_desc = "\n".join(
-            f"- [{n['id']}] {n['label']} (类型: {n['type']})"
-            for n in subgraph.get("nodes", [])
-        )
-        edges_desc = "\n".join(
-            f"- {e['source']} --[{e['label']}]--> {e['target']}"
-            for e in subgraph.get("edges", [])
-        )
+        nodes_desc = "\n".join(f"- [{n['id']}] {n['label']} (类型: {n['type']})" for n in subgraph.get("nodes", []))
+        edges_desc = "\n".join(f"- {e['source']} --[{e['label']}]--> {e['target']}" for e in subgraph.get("edges", []))
 
         if not nodes_desc:
             nodes_desc = "（图谱中暂无匹配节点）"

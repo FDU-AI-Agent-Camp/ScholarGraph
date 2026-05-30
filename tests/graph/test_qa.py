@@ -97,29 +97,19 @@ def empty_store(tmp_path: Path) -> GraphStore:
 
 
 class TestQaStreamEvents:
-    async def test_yields_message_events_when_llm_responds(
-        self, store_with_graph: GraphStore
-    ) -> None:
+    async def test_yields_message_events_when_llm_responds(self, store_with_graph: GraphStore) -> None:
         llm = _fake_llm("这是一篇关于数字劳动的论文。")
         engine = _GraphQaEngine(store=store_with_graph, llm=llm)
 
-        events = [
-            evt
-            async for evt in engine.stream("hss-001", "这篇论文做了什么？")
-        ]
+        events = [evt async for evt in engine.stream("hss-001", "这篇论文做了什么？")]
         message_events = [e for e in events if e.event == "message"]
         assert len(message_events) >= 1
 
-    async def test_yields_citation_event_for_marker(
-        self, store_with_graph: GraphStore
-    ) -> None:
+    async def test_yields_citation_event_for_marker(self, store_with_graph: GraphStore) -> None:
         llm = _fake_llm("本文核心论点[CITE:n1]涉及社会不平等。")
         engine = _GraphQaEngine(store=store_with_graph, llm=llm)
 
-        events = [
-            evt
-            async for evt in engine.stream("hss-001", "核心论点是什么？")
-        ]
+        events = [evt async for evt in engine.stream("hss-001", "核心论点是什么？")]
         citation_events = [e for e in events if e.event == "citation"]
         assert len(citation_events) >= 1
         cite = citation_events[0]
@@ -131,10 +121,7 @@ class TestQaStreamEvents:
         llm = _fake_llm("test")
         engine = _GraphQaEngine(store=store_with_graph, llm=llm)
 
-        events = [
-            evt
-            async for evt in engine.stream("hss-001", "question")
-        ]
+        events = [evt async for evt in engine.stream("hss-001", "question")]
         done_events = [e for e in events if e.event == "done"]
         assert len(done_events) == 1
         assert done_events[0].data["answer_id"].startswith("ans-")
@@ -143,10 +130,7 @@ class TestQaStreamEvents:
         llm = _fake_llm("test")
         engine = _GraphQaEngine(store=store_with_graph, llm=llm)
 
-        events = [
-            evt
-            async for evt in engine.stream("hss-001", "question")
-        ]
+        events = [evt async for evt in engine.stream("hss-001", "question")]
         assert events[-1].event == "done"
 
 
@@ -156,9 +140,7 @@ class TestQaStreamEvents:
 
 
 class TestQaStreamErrors:
-    async def test_missing_graph_yields_error_then_done(
-        self, empty_store: GraphStore
-    ) -> None:
+    async def test_missing_graph_yields_error_then_done(self, empty_store: GraphStore) -> None:
         engine = _GraphQaEngine(store=empty_store, llm=_fake_llm(""))
         events = [evt async for evt in engine.stream("no-such-id", "question")]
 

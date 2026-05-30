@@ -35,10 +35,7 @@ async def main(paper_id: str, question: str) -> None:
                 sys.stdout.write(evt.data["delta"])
                 sys.stdout.flush()
             elif evt.event == "citation":
-                print(
-                    f"\n  📍 [CITE] node={evt.data['node_id']} "
-                    f"→ {evt.data['label']}"
-                )
+                print(f"\n  📍 [CITE] node={evt.data['node_id']} → {evt.data['label']}")
             elif evt.event == "done":
                 print(f"\n\n✅ answer_id = {evt.data.get('answer_id', '—')}")
             elif evt.event == "error":

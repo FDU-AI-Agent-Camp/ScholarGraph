@@ -11,10 +11,38 @@ from backend.schemas.graph import GraphEdge, GraphNode, UnifiedPaperGraph
 # "这篇论文的核心论点是什么？" yield usable tokens like "核心论点" and "论文".
 # ---------------------------------------------------------------------------
 _STOP_WORDS: set[str] = {
-    "的", "了", "是", "在", "和", "与", "或", "这", "那",
-    "什么", "怎么", "如何", "吗", "呢", "吧", "啊", "哪", "哪些",
-    "一个", "一些", "这个", "那个", "这篇", "这篇论文", "论文",
-    "请", "请问", "一下", "为什么", "谁", "何时", "哪里",
+    "的",
+    "了",
+    "是",
+    "在",
+    "和",
+    "与",
+    "或",
+    "这",
+    "那",
+    "什么",
+    "怎么",
+    "如何",
+    "吗",
+    "呢",
+    "吧",
+    "啊",
+    "哪",
+    "哪些",
+    "一个",
+    "一些",
+    "这个",
+    "那个",
+    "这篇",
+    "这篇论文",
+    "论文",
+    "请",
+    "请问",
+    "一下",
+    "为什么",
+    "谁",
+    "何时",
+    "哪里",
 }
 
 # ---------------------------------------------------------------------------
@@ -85,9 +113,7 @@ class GraphQuery:
         seeds: set[str] = set(node_scores)
 
         # ── Phase 2: build adjacency ────────────────────────────────
-        adj: dict[str, list[tuple[str, GraphEdge]]] = {
-            n.id: [] for n in graph.nodes
-        }
+        adj: dict[str, list[tuple[str, GraphEdge]]] = {n.id: [] for n in graph.nodes}
         edge_index: dict[str, GraphEdge] = {}
         for e in graph.edges:
             if e.source in adj:
@@ -124,10 +150,17 @@ class GraphQuery:
     def _extract_keywords(self, question: str) -> list[str]:
         """Extract meaningful Chinese phrases / entity names from *question*."""
         cleaned = (
-            question.replace("？", " ").replace("？", " ").replace("，", " ")
-            .replace("。", " ").replace("；", " ").replace("：", " ")
-            .replace("、", " ").replace("「", "").replace("」", "")
-            .replace("”", "").replace("“", "")
+            question.replace("？", " ")
+            .replace("？", " ")
+            .replace("，", " ")
+            .replace("。", " ")
+            .replace("；", " ")
+            .replace("：", " ")
+            .replace("、", " ")
+            .replace("「", "")
+            .replace("」", "")
+            .replace("”", "")
+            .replace("“", "")
         )
         tokens = [t for t in cleaned.split() if t not in _STOP_WORDS and len(t) >= 2]
 
@@ -175,10 +208,7 @@ class GraphQuery:
             top_types = {"ResearchQuestion", "Claim", "Method"}
 
         top_ids = {n.id for n in graph.nodes if n.type in top_types}
-        top_edges = [
-            e for e in graph.edges
-            if e.source in top_ids and e.target in top_ids
-        ]
+        top_edges = [e for e in graph.edges if e.source in top_ids and e.target in top_ids]
         return {
             "nodes": [n.model_dump() for n in graph.nodes if n.id in top_ids],
             "edges": [e.model_dump() for e in top_edges],
