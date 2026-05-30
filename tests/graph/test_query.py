@@ -1,7 +1,6 @@
 """Tests for GraphQuery subgraph extraction (BE-3)."""
 
 import pytest
-
 from backend.graph.query import GraphQuery
 from backend.schemas.graph import GraphEdge, GraphNode, UnifiedPaperGraph
 from backend.schemas.paradigm import Paradigm

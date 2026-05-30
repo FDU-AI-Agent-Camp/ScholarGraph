@@ -1,6 +1,5 @@
 """Graph persistence (BE-3: JSON-based storage, G6-ready export)."""
 
-import json
 from pathlib import Path
 
 from backend.config import get_settings

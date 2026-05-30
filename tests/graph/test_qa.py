@@ -10,12 +10,10 @@ from collections.abc import AsyncIterator
 from pathlib import Path
 
 import pytest
-
 from backend.graph.qa import QaEvent, _GraphQaEngine
 from backend.graph.store import GraphStore
 from backend.schemas.graph import GraphEdge, GraphNode, UnifiedPaperGraph
 from backend.schemas.paradigm import Paradigm
-
 
 # ---------------------------------------------------------------------------
 # fake LLM harness — real async generators, not mocks
