@@ -41,4 +41,4 @@ async def test_patrol_service_returns_delegated_report() -> None:
         run.return_value = expected
         result = await service.run_patrol(["hss-001", "hss-002"], PatrolMode.LENS_CLASH)
     assert result == expected
-    run.assert_awaited_once_with(["hss-001", "hss-002"], PatrolMode.LENS_CLASH)
+    run.assert_awaited_once_with(["hss-001", "hss-002"], PatrolMode.LENS_CLASH, store=None)

@@ -3,13 +3,17 @@
 from functools import lru_cache
 
 from backend.api.exceptions import ApiError
+from backend.graph.store import GraphStore
 from backend.patrol.errors import PatrolError
 from backend.patrol.service import run_patrol as patrol_run
 from backend.schemas.patrol import PatrolMode, PatrolReport
 
 
 class PatrolService:
-    """Delegates patrol execution to BE-4 run_patrol orchestration."""
+    """Delegates patrol execution to BE-4 ``run_patrol`` (handoff §5 / collaboration §4.4)."""
+
+    def __init__(self, store: GraphStore | None = None) -> None:
+        self._store = store
 
     async def run_patrol(
         self,
@@ -17,7 +21,7 @@ class PatrolService:
         mode: PatrolMode = PatrolMode.LENS_CLASH,
     ) -> PatrolReport:
         try:
-            return await patrol_run(paper_ids, mode)
+            return await patrol_run(paper_ids, mode, store=self._store)
         except PatrolError as exc:
             raise ApiError(
                 exc.code,

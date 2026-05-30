@@ -113,6 +113,28 @@ async def test_patrol_api_insufficient_lens_data_returns_422(
 
 
 @pytest.mark.asyncio
+async def test_patrol_api_service_integration_matches_corpus_smoke(
+    api_client,
+    patrol_graph_dir,
+) -> None:
+    """POST /patrol uses PatrolService → real run_patrol (handoff §5)."""
+    from tests.helpers.patrol_samples import CORPUS_HSS_PAPER_IDS, seed_corpus_patrol_graphs
+
+    seed_corpus_patrol_graphs(patrol_graph_dir)
+    response = await api_client.post(
+        "/api/v1/patrol",
+        json={
+            "paper_ids": list(CORPUS_HSS_PAPER_IDS),
+            "mode": "lens_clash",
+        },
+    )
+    assert response.status_code == 200
+    data = response.json()["data"]
+    assert len(data["insights"]) >= 1
+    assert data["insights"][0]["node_refs"]
+
+
+@pytest.mark.asyncio
 async def test_patrol_api_contradiction_mode_returns_501(
     api_client: AsyncClient,
     patrol_graph_dir,

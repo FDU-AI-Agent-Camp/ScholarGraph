@@ -28,6 +28,11 @@ describe('§14.6 key paths (frontend TS hardening)', () => {
     expect(packageJson.scripts.lint).toBe('eslint .')
     expect(packageJson.scripts['format:check']).toBe('prettier --check .')
     expect(packageJson.scripts.knip).toBe('knip')
+    expect(packageJson.scripts.check).toContain('typecheck')
+    expect(packageJson.scripts.check).toContain('format:check')
+    expect(packageJson.scripts.check).toContain('lint')
+    expect(packageJson.scripts.check).toContain('knip')
+    expect(packageJson.scripts['check:ci']).toContain('npm run check')
     expect(packageJson.scripts.build).toContain('vue-tsc')
     expect(packageJson.scripts.build).toContain('vite build')
     expect(packageJson.scripts.test).toBe('vitest run')
@@ -71,10 +76,7 @@ describe('§14.6 key paths (frontend TS hardening)', () => {
 
   it('CI workflow runs npm ci gate steps for frontend', () => {
     expect(frontendWorkflow).toContain('npm ci')
-    expect(frontendWorkflow).toContain('npm run typecheck')
-    expect(frontendWorkflow).toContain('npm run format:check')
-    expect(frontendWorkflow).toContain('npm run lint')
-    expect(frontendWorkflow).toContain('npm run knip')
+    expect(frontendWorkflow).toContain('npm run check')
     expect(frontendWorkflow).toContain('npm run test')
     expect(frontendWorkflow).toContain('npm run build')
     expect(frontendWorkflow).toContain('working-directory: frontend')

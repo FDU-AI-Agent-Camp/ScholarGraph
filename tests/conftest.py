@@ -12,12 +12,23 @@ import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 RUN_PIPELINE_SCRIPT = REPO_ROOT / "scripts" / "run_pipeline.py"
+RUN_PATROL_SCRIPT = REPO_ROOT / "scripts" / "run_patrol.py"
 
 
 @pytest.fixture
 def run_pipeline_module():
     """Load scripts/run_pipeline.py as a module (not installed as package)."""
     spec = importlib.util.spec_from_file_location("run_pipeline", RUN_PIPELINE_SCRIPT)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+@pytest.fixture
+def run_patrol_module():
+    """Load scripts/run_patrol.py as a module (not installed as package)."""
+    spec = importlib.util.spec_from_file_location("run_patrol", RUN_PATROL_SCRIPT)
     assert spec is not None and spec.loader is not None
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
