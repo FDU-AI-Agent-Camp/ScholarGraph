@@ -35,9 +35,35 @@
 - 图谱过度装饰导致节点不可读
 - 仅用颜色区分 HSS / STEM（须配合 Badge / 文案）
 
+完整禁止项与文案规范见 §2、§3。
+
 ---
 
-## 2. Figma 文件结构
+## 2. 🎨 前端设计准则（The "Anti-SaaS" Manifesto）
+
+### 🚫 严禁执行（Negative Constraints）
+
+- **禁止色彩**：严禁使用「程序员紫色」、靛蓝色或任何类似 AI 助手默认的蓝紫渐变。
+- **禁止平庸背景**：拒绝 100% 的纯平色块。
+- **禁止默认色板**：严禁直接使用 Tailwind 默认的 `bg-blue-500` 或 `gray-100` 等初级色系。
+- **禁止对称布局**：严禁「Hero + 底部等宽三卡片」的样板房布局。拒绝绝对的水平 / 垂直完美居中对齐。
+- **禁止默认组件**：严禁直接搬运 Shadcn UI 或 Material UI 的原始样式而不做任何深度 CSS 定制。（本项目使用 Element Plus，须同样深度定制主题，见 §1、§5 Design Tokens。）
+- **禁止 Emoji 图标**：严禁在正式功能按钮或导航中使用 Emoji 作为替代图标。
+- **禁止线性思维**：严禁使用毫无动感的 `ease-in-out` 线性动画。
+
+---
+
+## 3. ✍️ 语言与内容准则（The Flesh & Blood Content）
+
+### ❌ 拒绝垃圾话（No Fluff）
+
+- **禁止占位符**：永远不要使用 `Lorem Ipsum`。如果没想好文案，就根据功能推测一段真实的文字。
+- **禁止黑话**：拒绝「卓越的用户体验」、「赋能生产力」、「一体化解决方案」。
+- **禁止被动语态**：拒绝长难句和死板的说明书口吻。
+
+---
+
+## 4. Figma 文件结构
 
 ```text
 ScholarGraph V1
@@ -69,7 +95,7 @@ ScholarGraph V1
 
 ---
 
-## 3. Design Tokens
+## 5. Design Tokens
 
 ### 3.1 色彩
 
@@ -165,7 +191,7 @@ $font-family: 'Source Han Sans SC', sans-serif;
 
 ---
 
-## 4. App Shell（全局框架）
+## 6. App Shell（全局框架）
 
 **Frame 名**：`Shell / Desktop 1440`
 
@@ -213,7 +239,7 @@ $font-family: 'Source Han Sans SC', sans-serif;
 
 ---
 
-## 5. 页面 01 — Home `/`
+## 7. 页面 01 — Home `/`
 
 **Frame**：`01-Home / Default · 1440×900`  
 **代码落点**：`frontend/src/views/HomeView.vue`  
@@ -261,7 +287,7 @@ $font-family: 'Source Han Sans SC', sans-serif;
 
 ---
 
-## 6. 页面 02 — 文献库 `/papers`
+## 8. 页面 02 — 文献库 `/papers`
 
 **Frame**：`02-Papers / *`  
 **代码落点**：`frontend/src/views/PapersView.vue`、`frontend/src/components/papers/PaperUpload.vue`
@@ -331,7 +357,7 @@ $font-family: 'Source Han Sans SC', sans-serif;
 
 ---
 
-## 7. 页面 03 — 论文详情 `/papers/:id`
+## 9. 页面 03 — 论文详情 `/papers/:id`
 
 **Frame**：`03-Detail / *`  
 **代码落点**：`frontend/src/views/PaperDetailView.vue`、`PaperStatusPanel.vue`、`PaperGraph.vue`（compact）
@@ -401,7 +427,7 @@ Meta：paper_id mono · 范式 Badge · status Badge · 时间 caption
 | 元素 | 规格 |
 |------|------|
 | 区块头 | H2「逻辑图谱预览」+ Link「全屏查看 →」 |
-| 画布 | 设计稿高 480px（实现 compact **320px**，见 §12） |
+| 画布 | 设计稿高 480px（实现 compact **320px**，见 §17） |
 | 背景 | `#F1F5F9`，radius 12px |
 | Legend | 左下浮层，白底 shadow-sm |
 
@@ -417,7 +443,7 @@ Meta：paper_id mono · 范式 Badge · status Badge · 时间 caption
 
 ---
 
-## 8. 页面 04 — 知识图谱 `/papers/:id/graph`
+## 10. 页面 04 — 知识图谱 `/papers/:id/graph`
 
 **Frame**：`04-Graph / *`  
 **代码落点**：`frontend/src/views/PaperGraphView.vue`、`frontend/src/components/graph/PaperGraph.vue`
@@ -502,7 +528,7 @@ Evidence           #64748B
 
 ---
 
-## 9. 页面 05 — 共同体巡检 `/patrol`
+## 11. 页面 05 — 共同体巡检 `/patrol`
 
 **Frame**：`05-Patrol / *`  
 **代码落点**：`frontend/src/views/PatrolView.vue`  
@@ -572,7 +598,7 @@ Evidence           #64748B
 
 ---
 
-## 10. 共享组件（Figma Components）
+## 12. 共享组件（Figma Components）
 
 | 组件名 | Variants |
 |--------|----------|
@@ -599,7 +625,7 @@ Evidence           #64748B
 
 ---
 
-## 11. 动效与无障碍
+## 13. 动效与无障碍
 
 | 场景 | 动效 | 时长 |
 |------|------|------|
@@ -616,7 +642,7 @@ Evidence           #64748B
 
 ---
 
-## 12. 响应式（V1 标注，非完整移动适配）
+## 14. 响应式（V1 标注，非完整移动适配）
 
 | 断点 | 行为 |
 |------|------|
@@ -627,7 +653,7 @@ Evidence           #64748B
 
 ---
 
-## 13. 状态矩阵（全页 Frame 清单）
+## 15. 状态矩阵（全页 Frame 清单）
 
 | 页面 | Frame |
 |------|-------|
@@ -642,7 +668,7 @@ Evidence           #64748B
 
 ---
 
-## 14. Prototype 答辩路径
+## 16. Prototype 答辩路径
 
 ```text
 Home
@@ -659,7 +685,7 @@ Home
 
 ---
 
-## 15. 代码对齐清单
+## 17. 代码对齐清单
 
 | Figma | 代码路径 |
 |-------|----------|
@@ -683,7 +709,7 @@ Home
 
 ---
 
-## 16. 变更流程
+## 18. 变更流程
 
 - 视觉 / 布局变更：FE 分支 `feature/frontend/design-*`，PR 附 Figma 链接或截图
 - 若影响 OpenAPI 或页面契约：走 `[API RFC]`（见 [collaboration.md](./collaboration.md)）
