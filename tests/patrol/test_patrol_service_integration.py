@@ -7,7 +7,9 @@ from backend.schemas.patrol import PatrolMode
 from backend.services.patrol_service import PatrolService, get_patrol_service
 from tests.helpers.patrol_graphs import (
     build_hss_graph_with_lens,
+    build_hss_graph_with_thesis,
     build_hss_graph_without_lens,
+    build_hss_graph_without_thesis,
 )
 from tests.helpers.patrol_samples import CORPUS_HSS_PAPER_IDS, seed_corpus_patrol_graphs
 
@@ -54,3 +56,24 @@ def test_get_patrol_service_returns_singleton() -> None:
         assert first is second
     finally:
         get_patrol_service.cache_clear()
+
+
+async def test_patrol_service_runs_contradiction_mode(patrol_graph_dir) -> None:
+    store = GraphStore(base_dir=patrol_graph_dir)
+    store.save(build_hss_graph_with_thesis("hss-001", thesis_id="n_a", thesis_label="论点 A"))
+    store.save(build_hss_graph_with_thesis("hss-002", thesis_id="n_b", thesis_label="论点 B"))
+    service = PatrolService(store=store)
+    report = await service.run_patrol(["hss-001", "hss-002"], PatrolMode.CONTRADICTION)
+    assert report.mode == PatrolMode.CONTRADICTION
+    assert report.insights[0].insight_id == "ins-contradiction-001"
+
+
+async def test_patrol_service_maps_contradiction_insufficient_data(patrol_graph_dir) -> None:
+    store = GraphStore(base_dir=patrol_graph_dir)
+    store.save(build_hss_graph_without_thesis("hss-001"))
+    store.save(build_hss_graph_with_thesis("hss-002", thesis_id="n_b", thesis_label="B"))
+    service = PatrolService(store=store)
+    with pytest.raises(ApiError) as exc_info:
+        await service.run_patrol(["hss-001", "hss-002"], PatrolMode.CONTRADICTION)
+    assert exc_info.value.code == "PATROL_INSUFFICIENT_DATA"
+    assert exc_info.value.status_code == 422

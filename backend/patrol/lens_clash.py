@@ -2,8 +2,10 @@
 
 from collections.abc import Mapping
 
+from backend.llm.client import LlmClient
+from backend.patrol.llm_summary import generate_patrol_summary
 from backend.schemas.graph import GraphNode, UnifiedPaperGraph
-from backend.schemas.patrol import NodeRef, PatrolInsight
+from backend.schemas.patrol import NodeRef, PatrolInsight, PatrolMode
 
 ANALYTICAL_LENS_NODE_TYPE = "AnalyticalLens"
 LENS_CLASH_INSIGHT_ID = "ins-lens-clash-001"
@@ -15,9 +17,11 @@ def analytical_lens_nodes(graph: UnifiedPaperGraph) -> list[GraphNode]:
     return [node for node in graph.nodes if node.type == ANALYTICAL_LENS_NODE_TYPE]
 
 
-def build_lens_clash_insight(
+async def build_lens_clash_insight(
     graphs: Mapping[str, UnifiedPaperGraph],
     paper_ids: list[str],
+    *,
+    llm_client: LlmClient | None = None,
 ) -> PatrolInsight | None:
     """Compare primary analytical lenses across two papers and build one insight."""
     if len(paper_ids) != 2:
@@ -29,7 +33,16 @@ def build_lens_clash_insight(
     if left_lens is None or right_lens is None:
         return None
 
-    summary = _build_lens_clash_summary(left_lens.label, right_lens.label)
+    context = (
+        f"paper_id={left_id}, AnalyticalLens={left_lens.label}\npaper_id={right_id}, AnalyticalLens={right_lens.label}"
+    )
+    llm_summary = await generate_patrol_summary(
+        PatrolMode.LENS_CLASH,
+        context,
+        llm_client=llm_client,
+    )
+    summary = llm_summary or _fallback_lens_clash_summary(left_lens.label, right_lens.label)
+
     return PatrolInsight(
         insight_id=LENS_CLASH_INSIGHT_ID,
         title=LENS_CLASH_TITLE,
@@ -51,7 +64,7 @@ def _primary_lens(graph: UnifiedPaperGraph | None) -> GraphNode | None:
     return lenses[0]
 
 
-def _build_lens_clash_summary(left_label: str, right_label: str) -> str:
+def _fallback_lens_clash_summary(left_label: str, right_label: str) -> str:
     if left_label == right_label:
         return f"两篇论文均采用「{left_label}」作为分析视角，当前图谱中未检出显著学派冲突。"
     return (

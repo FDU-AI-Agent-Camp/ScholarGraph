@@ -112,6 +112,61 @@ def test_cli_subprocess_runs_patrol_with_seed(tmp_path: Path) -> None:
     assert len(payload["insights"]) >= 1
 
 
+async def test_main_contradiction_mode_with_thesis_graphs(run_patrol_module, tmp_path: Path) -> None:
+    from backend.graph.store import GraphStore
+
+    from tests.helpers.patrol_graphs import build_hss_graph_with_thesis
+
+    graph_dir = tmp_path / "graphs"
+    store = GraphStore(base_dir=graph_dir)
+    store.save(build_hss_graph_with_thesis("hss-001", thesis_id="n_a", thesis_label="论点 A"))
+    store.save(build_hss_graph_with_thesis("hss-002", thesis_id="n_b", thesis_label="论点 B"))
+    exit_code = await run_patrol_module.async_main(
+        [
+            "--paper-ids",
+            "hss-001,hss-002",
+            "--mode",
+            "contradiction",
+            "--graph-dir",
+            str(graph_dir),
+        ],
+    )
+    assert exit_code == 0
+    assert store.load("hss-001") is not None
+
+
+def test_cli_subprocess_runs_contradiction_mode(tmp_path: Path) -> None:
+    from backend.graph.store import GraphStore
+
+    from tests.helpers.patrol_graphs import build_hss_graph_with_thesis
+
+    graph_dir = tmp_path / "graphs"
+    store = GraphStore(base_dir=graph_dir)
+    store.save(build_hss_graph_with_thesis("hss-001", thesis_id="n_a", thesis_label="论点 A"))
+    store.save(build_hss_graph_with_thesis("hss-002", thesis_id="n_b", thesis_label="论点 B"))
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(SCRIPT_PATH),
+            "--paper-ids",
+            "hss-001,hss-002",
+            "--mode",
+            "contradiction",
+            "--graph-dir",
+            str(graph_dir),
+            "--compact",
+        ],
+        cwd=REPO_ROOT,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(result.stdout.strip())
+    assert payload["mode"] == "contradiction"
+    assert payload["insights"][0]["insight_id"] == "ins-contradiction-001"
+
+
 def test_execute_patrol_prints_openapi_shape(run_patrol_module, tmp_path: Path, capsys) -> None:
     import asyncio
 

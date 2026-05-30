@@ -135,20 +135,53 @@ async def test_patrol_api_service_integration_matches_corpus_smoke(
 
 
 @pytest.mark.asyncio
-async def test_patrol_api_contradiction_mode_returns_501(
+async def test_patrol_api_contradiction_mode_success(
     api_client: AsyncClient,
     patrol_graph_dir,
 ) -> None:
-    seed_patrol_graphs(
-        patrol_graph_dir,
-        {
-            "hss-001": ("n_lens_a", "消费社会"),
-            "hss-002": ("n_lens_b", "公共领域"),
-        },
+    from backend.graph.store import GraphStore
+    from tests.helpers.patrol_graphs import build_hss_graph_with_thesis
+
+    store = GraphStore(base_dir=patrol_graph_dir)
+    store.save(
+        build_hss_graph_with_thesis(
+            "hss-001",
+            thesis_id="n_t_a",
+            thesis_label="夏尔巴父系源流具有多元融合特征",
+        ),
+    )
+    store.save(
+        build_hss_graph_with_thesis(
+            "hss-002",
+            thesis_id="n_t_b",
+            thesis_label="电影政治传播强化主流意识形态建构",
+        ),
     )
     response = await api_client.post(
         "/api/v1/patrol",
         json={"paper_ids": ["hss-001", "hss-002"], "mode": "contradiction"},
     )
-    assert response.status_code == 501
-    assert response.json()["error"]["code"] == "PATROL_UNSUPPORTED_MODE"
+    assert response.status_code == 200
+    data = response.json()["data"]
+    assert data["mode"] == "contradiction"
+    assert len(data["insights"]) >= 1
+    assert data["insights"][0]["insight_id"] == "ins-contradiction-001"
+
+
+@pytest.mark.asyncio
+async def test_patrol_api_contradiction_insufficient_thesis_returns_422(
+    api_client: AsyncClient,
+    patrol_graph_dir,
+) -> None:
+    from backend.graph.store import GraphStore
+    from tests.helpers.patrol_graphs import build_hss_graph_with_thesis, build_hss_graph_without_thesis
+
+    store = GraphStore(base_dir=patrol_graph_dir)
+    store.save(build_hss_graph_without_thesis("hss-001"))
+    store.save(build_hss_graph_with_thesis("hss-002", thesis_id="n_b", thesis_label="B"))
+    response = await api_client.post(
+        "/api/v1/patrol",
+        json={"paper_ids": ["hss-001", "hss-002"], "mode": "contradiction"},
+    )
+    assert response.status_code == 422
+    assert response.json()["error"]["code"] == "PATROL_INSUFFICIENT_DATA"

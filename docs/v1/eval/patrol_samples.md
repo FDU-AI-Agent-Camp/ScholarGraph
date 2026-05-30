@@ -11,6 +11,19 @@
 
 两篇均为 **HSS** 范式；Lens Clash 应检出 **≥1 条** insight（视角标签不同）。
 
+## Contradiction 模式（Thesis / SubArgument）
+
+| paper_id | 评测用 `Thesis` 标签 |
+|----------|---------------------|
+| `hss-001` | 夏尔巴父系源流具有多元融合特征 |
+| `hss-002` | 电影政治传播强化主流意识形态建构 |
+
+```bash
+uv run python scripts/run_patrol.py --paper-ids hss-001,hss-002 --mode contradiction --seed-demo-graphs
+```
+
+摘要优先由 **LLM 结构化输出**（`PatrolSummaryOutput` JSON Schema）生成；无 Key 或调用失败时回退规则模板（见 `backend/patrol/llm_summary.py`）。
+
 ## 本地冒烟
 
 在仓库根目录（需 `uv sync`）：

@@ -95,17 +95,34 @@ async def test_run_patrol_insight_matches_openapi_fields(tmp_path: Path) -> None
     assert set(payload["insights"][0]["node_refs"][0]) == {"paper_id", "node_id", "label"}
 
 
-async def test_run_patrol_contradiction_not_implemented() -> None:
-    graphs = {
-        "hss-001": build_hss_graph_with_lens("hss-001", lens_id="n_a", lens_label="A"),
-        "hss-002": build_hss_graph_with_lens("hss-002", lens_id="n_b", lens_label="B"),
-    }
+async def test_run_patrol_contradiction_success() -> None:
+    from tests.helpers.patrol_graphs import build_hss_graph_with_thesis
 
+    graphs = {
+        "hss-001": build_hss_graph_with_thesis("hss-001", thesis_id="n_a", thesis_label="论点 A"),
+        "hss-002": build_hss_graph_with_thesis("hss-002", thesis_id="n_b", thesis_label="论点 B"),
+    }
+    report = await run_patrol(
+        ["hss-001", "hss-002"],
+        PatrolMode.CONTRADICTION,
+        graph_loader=graphs.get,
+    )
+    assert report.mode == PatrolMode.CONTRADICTION
+    assert len(report.insights) == 1
+    assert report.insights[0].insight_id == "ins-contradiction-001"
+
+
+async def test_run_patrol_contradiction_insufficient_thesis() -> None:
+    from tests.helpers.patrol_graphs import build_hss_graph_with_thesis, build_hss_graph_without_thesis
+
+    graphs = {
+        "hss-001": build_hss_graph_without_thesis("hss-001"),
+        "hss-002": build_hss_graph_with_thesis("hss-002", thesis_id="n_b", thesis_label="B"),
+    }
     with pytest.raises(PatrolError) as exc_info:
         await run_patrol(
             ["hss-001", "hss-002"],
             PatrolMode.CONTRADICTION,
             graph_loader=graphs.get,
         )
-    assert exc_info.value.code == "PATROL_UNSUPPORTED_MODE"
-    assert exc_info.value.status_code == 501
+    assert exc_info.value.code == "PATROL_INSUFFICIENT_DATA"

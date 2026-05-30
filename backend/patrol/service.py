@@ -4,6 +4,8 @@ from collections.abc import Callable
 from datetime import UTC, datetime
 
 from backend.graph.store import GraphStore
+from backend.llm.client import LlmClient
+from backend.patrol.contradiction import build_contradiction_insight
 from backend.patrol.errors import PatrolError
 from backend.patrol.lens_clash import build_lens_clash_insight
 from backend.schemas.graph import UnifiedPaperGraph
@@ -19,6 +21,7 @@ async def run_patrol(
     *,
     store: GraphStore | None = None,
     graph_loader: GraphLoader | None = None,
+    llm_client: LlmClient | None = None,
 ) -> PatrolReport:
     """Run community patrol for exactly two papers."""
     if len(paper_ids) != PATROL_PAPER_COUNT:
@@ -28,22 +31,24 @@ async def run_patrol(
             status_code=400,
         )
 
-    if mode == PatrolMode.CONTRADICTION:
-        raise PatrolError(
-            "PATROL_UNSUPPORTED_MODE",
-            "contradiction 模式尚未实现",
-            status_code=501,
-        )
-
     load_graph = graph_loader or _default_graph_loader(store)
     graphs = _load_graphs(paper_ids, load_graph)
 
     if mode == PatrolMode.LENS_CLASH:
-        insight = build_lens_clash_insight(graphs, paper_ids)
+        insight = await build_lens_clash_insight(graphs, paper_ids, llm_client=llm_client)
         if insight is None:
             raise PatrolError(
                 "PATROL_INSUFFICIENT_DATA",
                 "未找到可比较的 AnalyticalLens 节点",
+                status_code=422,
+            )
+        insights = [insight]
+    elif mode == PatrolMode.CONTRADICTION:
+        insight = await build_contradiction_insight(graphs, paper_ids, llm_client=llm_client)
+        if insight is None:
+            raise PatrolError(
+                "PATROL_INSUFFICIENT_DATA",
+                "未找到可比较的 Thesis 节点",
                 status_code=422,
             )
         insights = [insight]

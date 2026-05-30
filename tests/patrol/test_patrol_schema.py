@@ -52,3 +52,13 @@ def test_patrol_report_serializes_to_openapi_json_shape() -> None:
     assert payload["mode"] == "lens_clash"
     assert "generated_at" in payload
     assert payload["insights"][0]["node_refs"][0]["node_id"] == "n_a"
+
+
+def test_patrol_summary_output_json_schema_fields() -> None:
+    from backend.schemas.patrol_llm import PatrolSummaryOutput
+
+    payload = PatrolSummaryOutput(
+        summary="Schema 字段校验：摘要长度需满足 OpenAPI/JSON Schema 约束用于 LLM 结构化输出。",
+    ).model_dump(mode="json")
+    assert "summary" in payload
+    assert len(payload["summary"]) >= 20

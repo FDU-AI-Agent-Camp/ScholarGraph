@@ -24,3 +24,33 @@ async def test_corpus_hss_pair_produces_lens_clash_insight(patrol_graph_dir) -> 
     assert labels == expected
     assert CORPUS_PATROL_LENSES["hss-001"][1] in insight.summary
     assert CORPUS_PATROL_LENSES["hss-002"][1] in insight.summary
+
+
+async def test_corpus_hss_pair_produces_contradiction_insight(patrol_graph_dir) -> None:
+    from backend.graph.store import GraphStore
+    from tests.helpers.patrol_graphs import build_hss_graph_with_thesis
+
+    store = GraphStore(base_dir=patrol_graph_dir)
+    store.save(
+        build_hss_graph_with_thesis(
+            "hss-001",
+            thesis_id="n_t_a",
+            thesis_label="夏尔巴父系源流具有多元融合特征",
+        ),
+    )
+    store.save(
+        build_hss_graph_with_thesis(
+            "hss-002",
+            thesis_id="n_t_b",
+            thesis_label="电影政治传播强化主流意识形态建构",
+        ),
+    )
+    report = await run_patrol(
+        list(CORPUS_HSS_PAPER_IDS),
+        PatrolMode.CONTRADICTION,
+        store=store,
+    )
+    assert report.mode == PatrolMode.CONTRADICTION
+    assert len(report.insights) >= 1
+    assert report.insights[0].insight_id == "ins-contradiction-001"
+    assert len(report.insights[0].node_refs) == 2
