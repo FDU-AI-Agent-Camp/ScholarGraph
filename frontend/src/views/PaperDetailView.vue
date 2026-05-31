@@ -5,6 +5,7 @@ import { useRouter } from 'vue-router'
 import { streamPaperQa } from '@/api/qaStream'
 import type { QaStreamCitationData } from '@/api/types'
 import PaperStatusPanel from '@/components/papers/PaperStatusPanel.vue'
+import TagCitation from '@/components/ui/TagCitation.vue'
 import { RouteName } from '@/router/meta'
 import { usePaperStore } from '@/stores/paper'
 import { appendUniqueCitation, citationKey } from '@/utils/qaCitations'
@@ -154,17 +155,16 @@ function onGraphNodeClick(nodeId: string): void {
         <el-card v-if="answer" shadow="never" class="answer">{{ answer }}</el-card>
         <div v-if="citations.length" class="citations">
           <span class="citations-label">引用节点：</span>
-          <el-space wrap>
-            <el-tag
+          <div class="citations-list">
+            <TagCitation
               v-for="item in citations"
               :key="citationKey(item)"
-              :type="item.node_id === highlightNodeId ? 'danger' : 'info'"
-              class="citation-tag"
+              :label="item.label"
+              :node-id="item.node_id"
+              :active="item.node_id === highlightNodeId"
               @click="focusCitation(item)"
-            >
-              {{ item.label }} ({{ item.node_id }})
-            </el-tag>
-          </el-space>
+            />
+          </div>
         </div>
 
         <el-divider>逻辑图谱预览</el-divider>
@@ -203,6 +203,11 @@ function onGraphNodeClick(nodeId: string): void {
   display: inline-block;
   margin-bottom: var(--spacing-8);
   color: var(--color-text-secondary);
+}
+.citations-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--spacing-8);
 }
 .citation-tag {
   cursor: pointer;

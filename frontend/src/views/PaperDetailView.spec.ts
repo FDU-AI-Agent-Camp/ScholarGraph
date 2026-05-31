@@ -66,9 +66,10 @@ const globalStubs = {
   },
   'el-space': { template: '<div><slot /></div>' },
   'el-card': { template: '<div class="answer"><slot /></div>' },
-  'el-tag': {
-    props: ['type'],
-    template: '<span class="citation-tag" @click="$attrs.onClick?.()"><slot /></span>',
+  TagCitation: {
+    props: ['label', 'nodeId', 'active'],
+    template:
+      '<button class="citation-tag tag-citation" :class="{ \'tag-citation--active\': active }" @click="$emit(\'click\')">{{ label }} ({{ nodeId }})</button>',
   },
   'el-alert': {
     props: ['title'],
@@ -124,6 +125,7 @@ describe('PaperDetailView QA SSE', () => {
     expect(mockStreamPaperQa).toHaveBeenCalledWith('hss-001', '问题？', expect.any(Object), expect.any(AbortSignal))
     expect(wrapper.find('.answer').text()).toBe('完整答案')
     expect(wrapper.find('.citation-tag').text()).toContain('核心论点')
+    expect(wrapper.find('.tag-citation--active').exists()).toBe(true)
     expect(wrapper.find('.paper-graph-stub').attributes('data-highlight')).toBe('n1')
   })
 

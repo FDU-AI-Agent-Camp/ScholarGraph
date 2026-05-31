@@ -25,22 +25,26 @@ const processingRow: PaperSummary = {
   created_at: '2026-05-19T10:10:00Z',
 }
 
+const paperStoreState = {
+  items: [readyRow, processingRow] as PaperSummary[],
+  loading: false,
+  fetchList,
+}
+
 vi.mock('vue-router', () => ({
   useRouter: () => ({ push }),
 }))
 
 vi.mock('@/stores/paper', () => ({
-  usePaperStore: () => ({
-    items: [readyRow, processingRow],
-    loading: false,
-    fetchList,
-  }),
+  usePaperStore: () => paperStoreState,
 }))
 
 describe('PapersView', () => {
   beforeEach(() => {
     push.mockReset()
     fetchList.mockClear()
+    paperStoreState.items = [readyRow, processingRow]
+    paperStoreState.loading = false
   })
 
   it('loads paper list on mount', async () => {
@@ -104,5 +108,25 @@ describe('PapersView', () => {
     expect(tableRows).toHaveLength(2)
     expect(tableRows[0]?.status).toBe('ready')
     expect(tableRows.filter((row) => row.status === 'ready')).toHaveLength(1)
+  })
+
+  it('shows EmptyState baseline copy when paper list is empty', async () => {
+    paperStoreState.items = []
+
+    const wrapper = mount(PapersView, {
+      global: {
+        stubs: {
+          PaperUpload: true,
+          'el-table': true,
+          'el-table-column': true,
+        },
+      },
+    })
+
+    await flushPromises()
+
+    expect(wrapper.find('.empty-state__title').text()).toBe('还没有论文')
+    expect(wrapper.find('.empty-state__body').text()).toBe('上传 PDF 开始自动解构')
+    expect(wrapper.find('.table-stub').exists()).toBe(false)
   })
 })

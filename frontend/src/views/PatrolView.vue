@@ -4,6 +4,7 @@ import { ref } from 'vue'
 import { isApiClientError } from '@/api/client'
 import * as patrolApi from '@/api/patrol'
 import type { PatrolInsight, PatrolMode, PatrolReport } from '@/api/types'
+import InsightCard from '@/components/ui/InsightCard.vue'
 import { formatPatrolError, parsePatrolPaperIds, validatePatrolPaperIds } from '@/utils/patrolForm'
 import { getUnknownErrorMessage } from '@/utils/errors'
 
@@ -91,21 +92,22 @@ function modeLabel(value: PatrolMode): string {
         </el-descriptions-item>
       </el-descriptions>
 
-      <el-collapse class="insights">
-        <el-collapse-item
+      <div class="insights">
+        <InsightCard
           v-for="item in report.insights"
           :key="insightKey(item)"
+          :variant="report.mode"
           :title="item.title"
-          :name="item.insight_id"
+          :insight-id="item.insight_id"
+          :summary="item.summary"
         >
-          <p class="insight-summary">{{ item.summary }}</p>
           <el-table v-if="item.node_refs.length" :data="item.node_refs" size="small" stripe>
             <el-table-column prop="paper_id" label="paper_id" width="120" />
             <el-table-column prop="node_id" label="node_id" width="160" />
             <el-table-column prop="label" label="label" min-width="180" />
           </el-table>
-        </el-collapse-item>
-      </el-collapse>
+        </InsightCard>
+      </div>
     </template>
   </div>
 </template>
@@ -135,10 +137,9 @@ h2 {
   margin-top: 16px;
 }
 .insights {
-  margin-top: 16px;
-}
-.insight-summary {
-  margin: 0 0 12px;
-  white-space: pre-wrap;
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-16);
+  margin-top: var(--spacing-16);
 }
 </style>

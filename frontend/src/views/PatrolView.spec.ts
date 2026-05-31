@@ -50,9 +50,8 @@ const globalStubs = {
   },
   'el-descriptions': { template: '<div class="patrol-summary"><slot /></div>' },
   'el-descriptions-item': { template: '<div><slot /></div>' },
-  'el-collapse': { template: '<div class="patrol-insights"><slot /></div>' },
-  'el-collapse-item': {
-    props: ['title'],
+  InsightCard: {
+    props: ['variant', 'title', 'insightId', 'summary'],
     template: '<div class="patrol-insight" :data-title="title"><slot /></div>',
   },
   'el-table': { template: '<div class="patrol-node-refs"><slot /></div>' },

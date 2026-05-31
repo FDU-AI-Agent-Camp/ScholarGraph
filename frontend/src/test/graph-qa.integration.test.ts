@@ -6,7 +6,9 @@ import { describe, expect, it } from 'vitest'
 import graphFixture from '../../../docs/api/fixtures/graph-hss.json'
 import { parseQaStreamEvent } from '@/api/qaStream'
 import type { UnifiedPaperGraph } from '@/api/types'
+import { cssToken } from '@/utils/cssTokens'
 import { appendUniqueCitation, buildHighlightStateMap, toG6GraphPayload } from '@/utils/paperGraph'
+import { DESIGN_SPEC_SEMANTIC_COLORS, loadDesignTokenMap } from '@/test/helpers/designTokens'
 
 describe('graph + QA SSE integration (fixtures)', () => {
   it('chains SSE citation event into highlight state for graph-hss nodes', () => {
@@ -42,5 +44,11 @@ describe('graph + QA SSE integration (fixtures)', () => {
     let citations = appendUniqueCitation([], first.data)
     citations = appendUniqueCitation(citations, second.data)
     expect(citations).toHaveLength(1)
+  })
+
+  it('uses the same citation active token as TagCitation / PaperGraph (#E11D48)', () => {
+    const tokens = loadDesignTokenMap()
+    expect(tokens['--color-citation-active']).toBe(DESIGN_SPEC_SEMANTIC_COLORS.citationActive)
+    expect(cssToken('--color-citation-active', '#e11d48')).toBe('#e11d48')
   })
 })
