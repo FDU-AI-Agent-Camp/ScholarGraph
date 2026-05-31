@@ -3,7 +3,7 @@ import { RouterLink } from 'vue-router'
 </script>
 
 <template>
-  <div class="page-card">
+  <div>
     <h1>ScholarGraph 工作台</h1>
     <p>前后端通用骨架已就绪，各角色在约定目录内扩展功能即可。</p>
     <el-space wrap>

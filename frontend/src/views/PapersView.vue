@@ -28,7 +28,7 @@ function openGraph(row: PaperSummary) {
 </script>
 
 <template>
-  <div class="page-card">
+  <div>
     <h2>文献库</h2>
     <PaperUpload @uploaded="onUploaded" />
     <el-table v-loading="paperStore.loading" :data="paperStore.items" class="table" stripe>

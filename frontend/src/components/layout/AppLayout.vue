@@ -3,6 +3,8 @@ import { Document, HomeFilled, Search } from '@element-plus/icons-vue'
 import { computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 
+import { RouteName } from '@/router/meta'
+
 const route = useRoute()
 const router = useRouter()
 
@@ -17,6 +19,28 @@ const activeNav = computed(() => {
 })
 
 const pageTitle = computed(() => route.meta.title ?? 'ScholarGraph')
+const isFullBleed = computed(() => route.meta.fullBleed === true)
+
+const contentShellClass = computed(() => (isFullBleed.value ? 'shell-content shell-content--full-bleed' : 'page-card'))
+
+interface ShellBreadcrumb {
+  label: string
+  to?: string
+}
+
+const breadcrumbs = computed((): ShellBreadcrumb[] => {
+  const paperId = typeof route.params.paperId === 'string' ? route.params.paperId : ''
+
+  if (route.name === RouteName.PaperGraph && paperId) {
+    return [{ label: '文献库', to: '/papers' }, { label: '论文详情', to: `/papers/${paperId}` }, { label: '知识图谱' }]
+  }
+
+  if (route.name === RouteName.PaperDetail && paperId) {
+    return [{ label: '文献库', to: '/papers' }, { label: '论文详情' }]
+  }
+
+  return []
+})
 
 function handleNavSelect(index: string): void {
   void router.push(index)
@@ -47,11 +71,22 @@ function handleNavSelect(index: string): void {
     </el-aside>
     <el-container class="main-column">
       <el-header class="header">
-        <span class="header-title">{{ pageTitle }} · 学术论文逻辑解构</span>
-        <el-link href="http://127.0.0.1:8000/docs" target="_blank" type="primary">API 文档</el-link>
+        <div class="header-start">
+          <el-breadcrumb v-if="breadcrumbs.length > 0" class="header-breadcrumb" separator="/">
+            <el-breadcrumb-item v-for="item in breadcrumbs" :key="item.label" :to="item.to">
+              {{ item.label }}
+            </el-breadcrumb-item>
+          </el-breadcrumb>
+        </div>
+        <h1 class="header-title">{{ pageTitle }}</h1>
+        <el-link class="header-api-link" href="http://127.0.0.1:8000/docs" target="_blank" type="primary">
+          API 文档 ↗
+        </el-link>
       </el-header>
-      <el-main class="main">
-        <router-view />
+      <el-main :class="['main', { 'main--full-bleed': isFullBleed }]">
+        <div :class="contentShellClass">
+          <router-view />
+        </div>
       </el-main>
     </el-container>
   </el-container>
@@ -142,20 +177,39 @@ function handleNavSelect(index: string): void {
 }
 
 .header {
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
   align-items: center;
-  justify-content: space-between;
+  gap: var(--spacing-16);
   height: 56px;
   padding: 0 var(--spacing-32);
   background: var(--color-bg-surface);
   border-bottom: 1px solid var(--color-border);
 }
 
+.header-start {
+  min-width: 0;
+  justify-self: start;
+}
+
+.header-breadcrumb {
+  font-size: var(--text-caption-size);
+  line-height: var(--text-caption-leading);
+}
+
 .header-title {
+  margin: 0;
+  justify-self: center;
+  font-family: var(--font-sans);
   font-size: 16px;
   font-weight: 500;
   line-height: 1.4;
   color: var(--color-text-primary);
+}
+
+.header-api-link {
+  justify-self: end;
+  font-size: var(--text-body-size);
 }
 
 .main-column {
@@ -165,5 +219,13 @@ function handleNavSelect(index: string): void {
 .main {
   padding: var(--spacing-24) var(--spacing-32);
   background: var(--color-bg-page);
+}
+
+.main--full-bleed {
+  padding: 0;
+}
+
+.shell-content--full-bleed {
+  min-height: calc(100vh - 56px);
 }
 </style>

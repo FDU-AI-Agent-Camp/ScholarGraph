@@ -56,7 +56,7 @@ function modeLabel(value: PatrolMode): string {
 </script>
 
 <template>
-  <div class="page-card">
+  <div>
     <h2>共同体巡检</h2>
     <p>输入恰好 2 篇 ready 论文 ID（逗号分隔），调用 POST /patrol。</p>
     <p class="hint">

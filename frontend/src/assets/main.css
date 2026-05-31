@@ -36,6 +36,10 @@ a.router-link-active {
   font-weight: 600;
 }
 
+.main--full-bleed {
+  padding: 0;
+}
+
 .page-card {
   background: var(--color-bg-surface);
   border: 1px solid var(--color-border);

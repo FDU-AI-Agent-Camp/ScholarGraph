@@ -33,7 +33,7 @@ export const routes: RouteRecordRaw[] = [
     props: (route) => ({
       paperId: typeof route.params.paperId === 'string' ? route.params.paperId : '',
     }),
-    meta: { title: '知识图谱' },
+    meta: { title: '知识图谱', fullBleed: true },
   },
   {
     path: '/patrol',

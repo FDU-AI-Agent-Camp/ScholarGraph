@@ -111,7 +111,7 @@ function onGraphNodeClick(nodeId: string): void {
 </script>
 
 <template>
-  <div v-loading="paperStore.loading" class="page-card">
+  <div v-loading="paperStore.loading">
     <el-page-header @back="router.push('/papers')">
       <template #content>
         <span>{{ paperStore.currentPaper?.title ?? props.paperId }}</span>

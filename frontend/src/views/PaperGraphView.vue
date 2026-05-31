@@ -67,7 +67,7 @@ watch(
 </script>
 
 <template>
-  <div v-loading="graphLoading" class="page-card">
+  <div v-loading="graphLoading" class="graph-view">
     <el-page-header @back="router.push(`/papers/${paperId}`)">
       <template #content>逻辑图谱 · {{ paperId }}</template>
     </el-page-header>
@@ -93,6 +93,11 @@ watch(
 </template>
 
 <style scoped>
+.graph-view {
+  min-height: calc(100vh - 56px);
+  background: var(--color-bg-page);
+}
+
 .meta {
   margin: 16px 0;
 }
