@@ -7,7 +7,7 @@ import EmptyState from '@/components/ui/EmptyState.vue'
 import { EMPTY_STATE_PRESETS } from '@/components/ui/emptyStatePresets'
 import InsightCard from '@/components/ui/InsightCard.vue'
 import TagCitation from '@/components/ui/TagCitation.vue'
-import { readFrontendSource } from '@/test/helpers/designTokens'
+import { readFrontendSource, loadDesignTokenMap } from '@/test/helpers/designTokens'
 
 describe('BadgeParadigm', () => {
   it('renders HSS and STEM with text labels and token colors', () => {
@@ -134,5 +134,13 @@ describe('InsightCard', () => {
 
     expect(wrapper.classes()).toContain('insight-card--contradiction')
     expect(wrapper.find('.refs').exists()).toBe(true)
+  })
+
+  it('uses design-spec left border colors for lens_clash (#CA8A04) and contradiction (#DC2626)', () => {
+    const src = readFrontendSource('components/ui/InsightCard.vue')
+
+    expect(src).toContain('border-left: 4px solid #ca8a04')
+    expect(src).toContain('border-left: 4px solid var(--color-error)')
+    expect(loadDesignTokenMap()['--color-error']).toBe('#dc2626')
   })
 })

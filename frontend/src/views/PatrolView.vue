@@ -1,98 +1,234 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
+import { RouterLink, useRouter } from 'vue-router'
 
 import { isApiClientError } from '@/api/client'
 import * as patrolApi from '@/api/patrol'
 import type { PatrolInsight, PatrolMode, PatrolReport } from '@/api/types'
 import InsightCard from '@/components/ui/InsightCard.vue'
-import { formatPatrolError, parsePatrolPaperIds, validatePatrolPaperIds } from '@/utils/patrolForm'
+import { PATROL_BASELINE_COPY } from '@/constants/patrolCopy'
+import { RouteName } from '@/router/meta'
+import { usePaperStore } from '@/stores/paper'
 import { getUnknownErrorMessage } from '@/utils/errors'
+import {
+  buildPatrolPaperIds,
+  resolvePatrolApiError,
+  validatePatrolSelection,
+  type PatrolErrorPresentation,
+} from '@/utils/patrolForm'
 
-const paperIdsText = ref('hss-001,hss-002')
+const router = useRouter()
+const paperStore = usePaperStore()
+
+const paperIdA = ref('hss-001')
+const paperIdB = ref('hss-002')
 const mode = ref<PatrolMode>('lens_clash')
 const loading = ref(false)
 const report = ref<PatrolReport | null>(null)
-const lastError = ref<string | null>(null)
 const validationError = ref<string | null>(null)
+const apiError = ref<PatrolErrorPresentation | null>(null)
 
-const modeOptions: Array<{ label: string; value: PatrolMode }> = [
-  { label: 'Lens Clash（分析视角）', value: 'lens_clash' },
-  { label: 'Contradiction（核心论点）', value: 'contradiction' },
+const modeOptions = [
+  {
+    value: 'lens_clash' as const,
+    label: PATROL_BASELINE_COPY.modeLensClashLabel,
+    caption: PATROL_BASELINE_COPY.modeLensClashCaption,
+  },
+  {
+    value: 'contradiction' as const,
+    label: PATROL_BASELINE_COPY.modeContradictionLabel,
+    caption: PATROL_BASELINE_COPY.modeContradictionCaption,
+  },
 ]
 
-async function run(): Promise<void> {
-  const ids = parsePatrolPaperIds(paperIdsText.value)
-  const validation = validatePatrolPaperIds(ids)
-  validationError.value = validation
-  if (validation) {
-    report.value = null
-    lastError.value = null
-    return
-  }
+const paperOptions = computed(() => paperStore.items)
+const runButtonLabel = computed(() =>
+  loading.value ? PATROL_BASELINE_COPY.runButtonLoading : PATROL_BASELINE_COPY.runButton,
+)
 
-  loading.value = true
-  lastError.value = null
-  report.value = null
-  try {
-    const res = await patrolApi.runPatrol(ids, { mode: mode.value })
-    report.value = res.data
-  } catch (error: unknown) {
-    if (isApiClientError(error)) {
-      lastError.value = formatPatrolError(error.code, error.message)
-    } else {
-      lastError.value = getUnknownErrorMessage(error)
-    }
-  } finally {
-    loading.value = false
-  }
+onMounted(() => {
+  void paperStore.fetchList().catch(() => undefined)
+})
+
+function modeLabel(value: PatrolMode): string {
+  return modeOptions.find((item) => item.value === value)?.label ?? value
 }
 
 function insightKey(insight: PatrolInsight): string {
   return insight.insight_id
 }
 
-function modeLabel(value: PatrolMode): string {
-  return modeOptions.find((item) => item.value === value)?.label ?? value
+function nodeRefKey(ref: PatrolInsight['node_refs'][number]): string {
+  return `${ref.paper_id}:${ref.node_id}`
+}
+
+function graphLinkForNodeRef(ref: PatrolInsight['node_refs'][number]) {
+  return {
+    name: RouteName.PaperGraph,
+    params: { paperId: ref.paper_id },
+    query: { node: ref.node_id },
+  }
+}
+
+function clearErrors(): void {
+  validationError.value = null
+  apiError.value = null
+}
+
+function resetPaperSelection(): void {
+  paperIdA.value = ''
+  paperIdB.value = ''
+  report.value = null
+  clearErrors()
+}
+
+function onErrorCta(): void {
+  if (apiError.value?.ctaKind === 'papers') {
+    void router.push({ name: RouteName.Papers })
+    return
+  }
+  if (apiError.value?.ctaKind === 'reset-selection') {
+    resetPaperSelection()
+  }
+}
+
+async function run(): Promise<void> {
+  const validation = validatePatrolSelection(paperIdA.value, paperIdB.value)
+  validationError.value = validation
+  if (validation) {
+    report.value = null
+    apiError.value = null
+    return
+  }
+
+  loading.value = true
+  clearErrors()
+  report.value = null
+  const [firstId, secondId] = buildPatrolPaperIds(paperIdA.value, paperIdB.value)
+
+  try {
+    const res = await patrolApi.runPatrol([firstId, secondId], { mode: mode.value })
+    report.value = res.data
+  } catch (error: unknown) {
+    if (isApiClientError(error)) {
+      apiError.value = resolvePatrolApiError(error.code, error.message)
+    } else {
+      apiError.value = { title: getUnknownErrorMessage(error) }
+    }
+  } finally {
+    loading.value = false
+  }
 }
 </script>
 
 <template>
-  <div>
-    <h2>共同体巡检</h2>
-    <p>输入恰好 2 篇 ready 论文 ID（逗号分隔），调用 POST /patrol。</p>
-    <p class="hint">
-      本地联调前请在仓库根目录执行：
-      <code>uv run python scripts/run_patrol.py --seed-demo-graphs</code>
-    </p>
+  <div class="patrol-view">
+    <header class="patrol-view__header">
+      <h1 class="text-h1 patrol-view__title">{{ PATROL_BASELINE_COPY.pageTitle }}</h1>
+      <p class="text-body patrol-view__subtitle">{{ PATROL_BASELINE_COPY.subtitle }}</p>
+    </header>
 
-    <el-form label-width="96px" class="form">
-      <el-form-item label="paper_ids">
-        <el-input v-model="paperIdsText" placeholder="hss-001,hss-002" />
-      </el-form-item>
-      <el-form-item label="mode">
-        <el-radio-group v-model="mode">
-          <el-radio v-for="item in modeOptions" :key="item.value" :value="item.value">
-            {{ item.label }}
-          </el-radio>
-        </el-radio-group>
-      </el-form-item>
-    </el-form>
+    <section class="patrol-view__config page-card">
+      <h2 class="text-h2 patrol-view__config-title">{{ PATROL_BASELINE_COPY.configTitle }}</h2>
 
-    <el-button type="primary" :loading="loading" class="run" @click="run">运行巡检</el-button>
+      <div class="patrol-view__paper-grid">
+        <label class="patrol-view__field">
+          <span class="text-caption patrol-view__field-label">{{ PATROL_BASELINE_COPY.paperLabelA }}</span>
+          <el-select
+            v-model="paperIdA"
+            class="patrol-view__select"
+            filterable
+            allow-create
+            default-first-option
+            :placeholder="PATROL_BASELINE_COPY.paperPlaceholder"
+          >
+            <el-option
+              v-for="paper in paperOptions"
+              :key="paper.paper_id"
+              :label="`${paper.title} (${paper.paper_id})`"
+              :value="paper.paper_id"
+            />
+          </el-select>
+        </label>
 
-    <el-alert v-if="validationError" type="warning" :title="validationError" show-icon class="alert" />
-    <el-alert v-if="lastError" type="error" :title="lastError" show-icon class="alert" />
+        <label class="patrol-view__field">
+          <span class="text-caption patrol-view__field-label">{{ PATROL_BASELINE_COPY.paperLabelB }}</span>
+          <el-select
+            v-model="paperIdB"
+            class="patrol-view__select"
+            filterable
+            allow-create
+            default-first-option
+            :placeholder="PATROL_BASELINE_COPY.paperPlaceholder"
+          >
+            <el-option
+              v-for="paper in paperOptions"
+              :key="`${paper.paper_id}-b`"
+              :label="`${paper.title} (${paper.paper_id})`"
+              :value="paper.paper_id"
+            />
+          </el-select>
+        </label>
+      </div>
 
-    <template v-if="report">
-      <el-descriptions :column="2" border class="summary" size="small">
-        <el-descriptions-item label="mode">{{ modeLabel(report.mode) }}</el-descriptions-item>
-        <el-descriptions-item label="generated_at">{{ report.generated_at }}</el-descriptions-item>
-        <el-descriptions-item label="paper_ids" :span="2">
-          {{ report.paper_ids.join(', ') }}
-        </el-descriptions-item>
-      </el-descriptions>
+      <div class="patrol-view__mode">
+        <span class="text-caption patrol-view__field-label">{{ PATROL_BASELINE_COPY.modeLabel }}</span>
+        <div class="patrol-mode-segment" role="tablist" aria-label="巡检模式">
+          <button
+            v-for="option in modeOptions"
+            :key="option.value"
+            type="button"
+            role="tab"
+            class="patrol-mode-segment__item"
+            :class="{ 'patrol-mode-segment__item--active': mode === option.value }"
+            :aria-selected="mode === option.value ? 'true' : 'false'"
+            @click="mode = option.value"
+          >
+            <span class="patrol-mode-segment__label">{{ option.label }}</span>
+            <span class="text-caption patrol-mode-segment__caption">{{ option.caption }}</span>
+          </button>
+        </div>
+      </div>
 
-      <div class="insights">
+      <el-button type="primary" class="patrol-view__run" :loading="loading" @click="run">
+        {{ runButtonLabel }}
+      </el-button>
+
+      <details class="patrol-view__hint">
+        <summary class="text-caption patrol-view__hint-summary">{{ PATROL_BASELINE_COPY.hintSummary }}</summary>
+        <p class="text-caption patrol-view__hint-body">
+          {{ PATROL_BASELINE_COPY.hintBody }}
+          <code class="text-mono patrol-view__hint-code">{{ PATROL_BASELINE_COPY.hintCommand }}</code>
+        </p>
+      </details>
+    </section>
+
+    <el-alert
+      v-if="validationError"
+      type="warning"
+      :title="validationError"
+      show-icon
+      :closable="false"
+      class="patrol-view__alert"
+    />
+
+    <div v-if="apiError" class="patrol-view__error-panel">
+      <el-alert type="error" :title="apiError.title" :description="apiError.description" show-icon :closable="false" />
+      <el-button v-if="apiError.ctaLabel" type="primary" class="patrol-view__error-cta" @click="onErrorCta">
+        {{ apiError.ctaLabel }}
+      </el-button>
+    </div>
+
+    <section v-if="report" class="patrol-view__report">
+      <div class="patrol-view__report-summary">
+        <span class="patrol-view__mode-badge text-caption">{{ modeLabel(report.mode) }}</span>
+        <span class="text-mono patrol-view__report-time">{{ report.generated_at }}</span>
+        <span class="text-mono patrol-view__report-ids">{{ report.paper_ids.join(' · ') }}</span>
+      </div>
+
+      <h2 class="text-h2 patrol-view__report-title">{{ PATROL_BASELINE_COPY.reportTitle }}</h2>
+
+      <div class="patrol-view__insights">
         <InsightCard
           v-for="item in report.insights"
           :key="insightKey(item)"
@@ -101,45 +237,264 @@ function modeLabel(value: PatrolMode): string {
           :insight-id="item.insight_id"
           :summary="item.summary"
         >
-          <el-table v-if="item.node_refs.length" :data="item.node_refs" size="small" stripe>
-            <el-table-column prop="paper_id" label="paper_id" width="120" />
-            <el-table-column prop="node_id" label="node_id" width="160" />
-            <el-table-column prop="label" label="label" min-width="180" />
-          </el-table>
+          <div v-if="item.node_refs.length" class="patrol-view__node-refs">
+            <RouterLink
+              v-for="nodeRef in item.node_refs"
+              :key="nodeRefKey(nodeRef)"
+              :to="graphLinkForNodeRef(nodeRef)"
+              class="patrol-node-ref text-body"
+            >
+              <span class="patrol-node-ref__label">{{ nodeRef.label }}</span>
+              <span class="text-mono patrol-node-ref__meta">({{ nodeRef.paper_id }} · {{ nodeRef.node_id }})</span>
+              <span class="patrol-node-ref__action">{{ PATROL_BASELINE_COPY.nodeRefGraphLink }}</span>
+            </RouterLink>
+          </div>
         </InsightCard>
       </div>
-    </template>
+    </section>
   </div>
 </template>
 
 <style scoped>
-h2 {
-  margin-top: 0;
+.patrol-view {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-24);
+  max-width: 960px;
 }
-.hint {
+
+.patrol-view__header {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-8);
+}
+
+.patrol-view__title {
+  margin: 0;
+  color: var(--color-text-primary);
+}
+
+.patrol-view__subtitle {
+  margin: 0;
   color: var(--color-text-secondary);
-  font-size: var(--text-caption-size);
-  line-height: var(--text-caption-leading);
 }
-.hint code {
-  font-family: var(--font-mono);
+
+.patrol-view__config {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-24);
+  padding: var(--spacing-24);
 }
-.form {
-  margin-top: 12px;
+
+.patrol-view__config-title {
+  margin: 0;
+  color: var(--color-text-primary);
 }
-.run {
-  margin-top: 4px;
+
+.patrol-view__paper-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--spacing-16);
 }
-.alert {
-  margin-top: 12px;
+
+.patrol-view__field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-8);
 }
-.summary {
-  margin-top: 16px;
+
+.patrol-view__field-label {
+  color: var(--color-text-secondary);
 }
-.insights {
+
+.patrol-view__select {
+  width: 100%;
+}
+
+.patrol-view__mode {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-8);
+}
+
+.patrol-mode-segment {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--spacing-8);
+  padding: var(--spacing-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-bg-subtle);
+}
+
+.patrol-mode-segment__item {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--spacing-4);
+  margin: 0;
+  padding: var(--spacing-12) var(--spacing-16);
+  border: none;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--color-text-primary);
+  font-family: var(--font-sans);
+  text-align: left;
+  cursor: pointer;
+  transition:
+    background-color var(--transition-instant),
+    color var(--transition-instant);
+}
+
+.patrol-mode-segment__item:hover:not(.patrol-mode-segment__item--active) {
+  background: var(--color-bg-surface);
+}
+
+.patrol-mode-segment__item--active {
+  background: var(--color-primary);
+  color: #ffffff;
+}
+
+.patrol-mode-segment__item--active .patrol-mode-segment__caption {
+  color: rgb(255 255 255 / 0.82);
+}
+
+.patrol-mode-segment__label {
+  font-size: var(--text-body-size);
+  font-weight: 600;
+  line-height: var(--text-body-leading);
+}
+
+.patrol-mode-segment__caption {
+  color: var(--color-text-secondary);
+}
+
+.patrol-view__run {
+  align-self: flex-start;
+  min-width: 160px;
+}
+
+.patrol-view__hint {
+  margin: 0;
+  padding: var(--spacing-12) var(--spacing-16);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-bg-subtle);
+}
+
+.patrol-view__hint-summary {
+  cursor: pointer;
+  color: var(--color-text-secondary);
+}
+
+.patrol-view__hint-body {
+  margin: var(--spacing-8) 0 0;
+  color: var(--color-text-secondary);
+}
+
+.patrol-view__hint-code {
+  display: inline-block;
+  margin-top: var(--spacing-4);
+  color: var(--color-text-primary);
+}
+
+.patrol-view__alert {
+  margin: 0;
+}
+
+.patrol-view__error-panel {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--spacing-12);
+}
+
+.patrol-view__error-cta {
+  min-width: 160px;
+}
+
+.patrol-view__report {
   display: flex;
   flex-direction: column;
   gap: var(--spacing-16);
-  margin-top: var(--spacing-16);
+}
+
+.patrol-view__report-summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--spacing-12);
+  padding: var(--spacing-12) var(--spacing-16);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-bg-surface);
+}
+
+.patrol-view__mode-badge {
+  padding: var(--spacing-4) var(--spacing-8);
+  border-radius: var(--radius-md);
+  background: var(--color-primary-light);
+  color: var(--color-primary-hover);
+}
+
+.patrol-view__report-time,
+.patrol-view__report-ids {
+  color: var(--color-text-secondary);
+}
+
+.patrol-view__report-title {
+  margin: 0;
+  color: var(--color-text-primary);
+}
+
+.patrol-view__insights {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-16);
+}
+
+.patrol-view__node-refs {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-8);
+}
+
+.patrol-node-ref {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--spacing-8);
+  padding: var(--spacing-8) var(--spacing-12);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-bg-canvas);
+  color: var(--color-text-primary);
+  text-decoration: none;
+  transition:
+    border-color var(--transition-instant),
+    background-color var(--transition-instant);
+}
+
+.patrol-node-ref:hover {
+  border-color: var(--color-primary-muted);
+  background: var(--color-bg-subtle);
+}
+
+.patrol-node-ref__meta {
+  color: var(--color-text-secondary);
+}
+
+.patrol-node-ref__action {
+  margin-left: auto;
+  color: var(--color-primary);
+  font-size: var(--text-caption-size);
+  line-height: var(--text-caption-leading);
+}
+
+@media (max-width: 768px) {
+  .patrol-view__paper-grid,
+  .patrol-mode-segment {
+    grid-template-columns: 1fr;
+  }
 }
 </style>
