@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from 'vitest'
 import * as papersApi from '@/api/papers'
 import type { DataResponse, PaperStatusData } from '@/api/types'
 import PaperStatusPanel from '@/components/papers/PaperStatusPanel.vue'
+import { DETAIL_BASELINE_COPY } from '@/constants/detailCopy'
 import failedStatusEnvelope from '../../../../docs/api/fixtures/paper-status-hss-failed-001.json'
 import processingStatusEnvelope from '../../../../docs/api/fixtures/paper-status-hss-002.json'
 
@@ -28,9 +29,9 @@ describe('PaperStatusPanel integration (API mock fixture)', () => {
     expect(alert.exists()).toBe(true)
     expect(alert.attributes('data-title')).toBe('LLM_JSON_INVALID')
     expect(alert.attributes('data-description')).toBe(failedStatusResponse.data.message)
-    expect(wrapper.text()).toContain('failed_during')
+    expect(wrapper.text()).toContain('失败阶段')
     expect(wrapper.text()).toContain('classifying')
-    expect(wrapper.text()).toContain('failed')
+    expect(wrapper.text()).toContain('范式分类')
   })
 
   it('shows plain message for processing fixture without failure alert', async () => {
@@ -43,6 +44,7 @@ describe('PaperStatusPanel integration (API mock fixture)', () => {
 
     expect(wrapper.find('.el-alert-stub').exists()).toBe(false)
     expect(wrapper.text()).toContain(processingStatusResponse.data.message)
-    expect(wrapper.text()).toContain('processing')
+    expect(wrapper.text()).toContain(DETAIL_BASELINE_COPY.refreshCaption)
+    expect(wrapper.text()).toContain('范式分类')
   })
 })
