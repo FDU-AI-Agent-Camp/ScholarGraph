@@ -95,8 +95,10 @@ describe('Phase 2 UI acceptance', () => {
     })
 
     it('PaperGraph active stroke reads the same citation active token', () => {
-      expect(graphSrc).toContain("cssToken('--color-citation-active'")
-      expect(graphSrc).toContain("cssToken('--color-citation-active-bg'")
+      const paperGraphUtilSrc = readFrontendSource('utils/paperGraph.ts')
+      expect(paperGraphUtilSrc).toContain("'--color-citation-active'")
+      expect(paperGraphUtilSrc).toContain("'--color-citation-active-bg'")
+      expect(graphSrc).toContain('resolvePaperGraphThemeTokens')
     })
 
     it('cssToken resolves citation active to #e11d48 with tokens.css loaded', () => {

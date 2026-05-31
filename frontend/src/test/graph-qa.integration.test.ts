@@ -102,4 +102,13 @@ describe('graph + QA SSE integration (fixtures)', () => {
     expect(detailSrc).toContain(':highlight-node-id="highlightNodeId"')
     expect(detailSrc).toContain('function onGraphNodeClick')
   })
+
+  it('shares citation active tokens between TagCitation and full Graph theme helpers', () => {
+    const tokens = loadDesignTokenMap()
+    const paperGraphUtilSrc = readFrontendSource('utils/paperGraph.ts')
+
+    expect(tokens['--color-citation-active']).toBe(DESIGN_SPEC_SEMANTIC_COLORS.citationActive)
+    expect(paperGraphUtilSrc).toContain('resolvePaperGraphThemeTokens')
+    expect(paperGraphUtilSrc).toContain("'--color-citation-active'")
+  })
 })
