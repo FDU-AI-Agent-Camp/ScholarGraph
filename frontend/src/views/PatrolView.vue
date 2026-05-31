@@ -115,11 +115,12 @@ h2 {
   margin-top: 0;
 }
 .hint {
-  color: #606266;
-  font-size: 13px;
+  color: var(--color-text-secondary);
+  font-size: var(--text-caption-size);
+  line-height: var(--text-caption-leading);
 }
 .hint code {
-  font-family: ui-monospace, monospace;
+  font-family: var(--font-mono);
 }
 .form {
   margin-top: 12px;

@@ -37,22 +37,22 @@ const pageTitle = computed(() => route.meta.title ?? 'ScholarGraph')
   min-height: 100vh;
 }
 .aside {
-  background: #fff;
-  border-right: 1px solid #e5e7eb;
+  background: var(--color-bg-surface);
+  border-right: 1px solid var(--color-border);
 }
 .brand {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 20px 16px 8px;
+  gap: var(--spacing-8);
+  padding: 20px var(--spacing-16) var(--spacing-8);
   color: inherit;
 }
 .tag {
-  font-size: 12px;
-  background: #e8eefc;
-  color: #1a56db;
-  padding: 2px 6px;
-  border-radius: 4px;
+  font-size: var(--text-caption-size);
+  background: var(--color-primary-light);
+  color: var(--color-primary);
+  padding: 2px var(--spacing-8);
+  border-radius: var(--radius-sm);
 }
 .menu {
   border-right: none;
@@ -61,10 +61,11 @@ const pageTitle = computed(() => route.meta.title ?? 'ScholarGraph')
   display: flex;
   align-items: center;
   justify-content: space-between;
-  background: #fff;
-  border-bottom: 1px solid #e5e7eb;
+  background: var(--color-bg-surface);
+  border-bottom: 1px solid var(--color-border);
 }
 .main {
-  padding: 20px 24px;
+  padding: var(--spacing-24) var(--spacing-32);
+  background: var(--color-bg-page);
 }
 </style>

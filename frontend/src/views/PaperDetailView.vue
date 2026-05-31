@@ -201,8 +201,8 @@ function onGraphNodeClick(nodeId: string): void {
 }
 .citations-label {
   display: inline-block;
-  margin-bottom: 8px;
-  color: #606266;
+  margin-bottom: var(--spacing-8);
+  color: var(--color-text-secondary);
 }
 .citation-tag {
   cursor: pointer;

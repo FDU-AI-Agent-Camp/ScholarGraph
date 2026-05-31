@@ -1,7 +1,9 @@
-@import '../styles/tokens.css';
-
 * {
   box-sizing: border-box;
+}
+
+html {
+  background: var(--color-bg-page);
 }
 
 body {
@@ -12,6 +14,11 @@ body {
   font-weight: var(--text-body-weight);
   line-height: var(--text-body-leading);
   color: var(--color-text-primary);
+  background: var(--color-bg-page);
+}
+
+#app {
+  min-height: 100vh;
   background: var(--color-bg-page);
 }
 

@@ -44,8 +44,7 @@
 
   /* ── Typography stacks ─────────────────────────────────── */
   --font-serif: 'Noto Serif SC', 'Songti SC', serif;
-  --font-sans:
-    'Source Han Sans SC', 'Noto Sans SC', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+  --font-sans: 'Source Han Sans SC', 'Noto Sans SC', 'PingFang SC', 'Microsoft YaHei', sans-serif;
   --font-mono: 'JetBrains Mono', 'Cascadia Code', ui-monospace, monospace;
 
   /* ── Type scale ──────────────────────────────────────── */

@@ -3,6 +3,7 @@ import { Graph, NodeEvent, type IElementEvent } from '@antv/g6'
 import { onMounted, onUnmounted, ref, watch } from 'vue'
 
 import type { UnifiedPaperGraph } from '@/api/types'
+import { cssToken } from '@/utils/cssTokens'
 import { buildHighlightStateMap, toG6GraphPayload } from '@/utils/paperGraph'
 
 const DEFAULT_HEIGHT = 480
@@ -43,6 +44,10 @@ function createGraphInstance(): Graph | null {
 
   const width = containerRef.value.clientWidth || 800
   const payload = toG6GraphPayload(props.graph)
+  const nodeFill = cssToken('--color-primary', '#0d6e6e')
+  const nodeStroke = cssToken('--color-primary-hover', '#0a5858')
+  const activeFill = cssToken('--color-citation-active-bg', '#fff1f2')
+  const activeStroke = cssToken('--color-citation-active', '#e11d48')
 
   return new Graph({
     container: containerRef.value,
@@ -61,14 +66,14 @@ function createGraphInstance(): Graph | null {
         labelText: nodeLabelText,
         labelWordWrap: true,
         labelMaxWidth: 140,
-        fill: '#409eff',
-        stroke: '#337ecc',
+        fill: nodeFill,
+        stroke: nodeStroke,
         lineWidth: 1,
       },
       state: {
         active: {
-          fill: '#f56c6c',
-          stroke: '#c45656',
+          fill: activeFill,
+          stroke: activeStroke,
           lineWidth: 3,
         },
       },
@@ -164,9 +169,9 @@ onUnmounted(() => {
 .placeholder {
   width: 100%;
   min-height: 480px;
-  background: #fafafa;
-  border: 1px dashed #d1d5db;
-  border-radius: 8px;
+  background: var(--color-bg-canvas);
+  border: 1px dashed var(--color-border-strong);
+  border-radius: var(--radius-lg);
 }
 .graph-host.compact {
   min-height: 320px;
@@ -175,6 +180,6 @@ onUnmounted(() => {
   display: flex;
   align-items: center;
   justify-content: center;
-  color: #6b7280;
+  color: var(--color-text-secondary);
 }
 </style>
