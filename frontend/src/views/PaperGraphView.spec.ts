@@ -52,6 +52,15 @@ const paperGraphStub = {
     '<div class="paper-graph-stub" :data-highlight="highlightNodeId" :data-full-bleed="fullBleed ? \'true\' : \'false\'"><button class="emit-node" @click="$emit(\'nodeClick\', \'n2\')">node</button></div>',
 }
 
+const graphOverlayStubs = {
+  GraphLegend: { template: '<div class="graph-legend-stub" />' },
+  GraphNodeDrawer: {
+    props: ['modelValue', 'node'],
+    template:
+      '<div class="graph-node-drawer-stub" :data-open="modelValue ? \'true\' : \'false\'" :data-node-id="node?.id ?? \'\'" />',
+  },
+}
+
 describe('PaperGraphView', () => {
   beforeEach(() => {
     mockFetchGraph.mockReset()
@@ -79,6 +88,7 @@ describe('PaperGraphView', () => {
           PaperGraph: paperGraphStub,
           GraphToolbar: true,
           BadgeParadigm: true,
+          ...graphOverlayStubs,
           'el-alert': {
             props: ['title', 'description'],
             template: '<div class="graph-alert" :data-title="title" :data-desc="description" />',
@@ -111,6 +121,7 @@ describe('PaperGraphView', () => {
           PaperGraph: paperGraphStub,
           GraphToolbar: { template: '<div class="graph-toolbar-stub" />' },
           BadgeParadigm: true,
+          ...graphOverlayStubs,
         },
       },
     })
@@ -128,6 +139,36 @@ describe('PaperGraphView', () => {
     expect(wrapper.find('.graph-view__back').attributes('href')).toContain('/papers/hss-001')
     expect(wrapper.find('.graph-view__counts').text()).toContain('节点 2')
     expect(wrapper.find('.graph-view__counts').text()).toContain('边 1')
+    expect(wrapper.find('.graph-legend-stub').exists()).toBe(true)
+    expect(wrapper.find('.graph-node-drawer-stub').attributes('data-open')).toBe('true')
+    expect(wrapper.find('.graph-node-drawer-stub').attributes('data-node-id')).toBe('n1')
+  })
+
+  it('opens node drawer when a graph node is clicked', async () => {
+    routeQuery.node = undefined
+    mockFetchGraph.mockImplementation(async () => {
+      paperStoreState.currentGraph = sampleGraph
+      return sampleGraph
+    })
+
+    const wrapper = mount(PaperGraphView, {
+      props: { paperId: 'hss-001' },
+      global: {
+        stubs: {
+          PaperGraph: paperGraphStub,
+          GraphToolbar: true,
+          BadgeParadigm: true,
+          ...graphOverlayStubs,
+        },
+      },
+    })
+
+    await flushPromises()
+    await wrapper.find('.emit-node').trigger('click')
+    await flushPromises()
+
+    expect(wrapper.find('.graph-node-drawer-stub').attributes('data-open')).toBe('true')
+    expect(wrapper.find('.graph-node-drawer-stub').attributes('data-node-id')).toBe('n2')
   })
 
   it('disables toolbar while graph fetch fails', async () => {
@@ -143,6 +184,7 @@ describe('PaperGraphView', () => {
             template: '<div class="graph-toolbar-stub" :data-disabled="disabled ? \'true\' : \'false\'" />',
           },
           BadgeParadigm: true,
+          ...graphOverlayStubs,
           'el-alert': true,
           'el-button': true,
         },
@@ -165,6 +207,7 @@ describe('PaperGraphView', () => {
           PaperGraph: paperGraphStub,
           GraphToolbar: true,
           BadgeParadigm: true,
+          ...graphOverlayStubs,
           'el-alert': true,
           'el-button': {
             inheritAttrs: false,
@@ -181,6 +224,32 @@ describe('PaperGraphView', () => {
     expect(mockPush).toHaveBeenCalledWith('/papers/hss-002')
   })
 
+  it('shows generic error without CTA when fetch fails with non-409 code', async () => {
+    mockFetchGraph.mockRejectedValue(new ApiClientError({ code: 'SERVER', message: '服务不可用' }, 500))
+
+    const wrapper = mount(PaperGraphView, {
+      props: { paperId: 'hss-002' },
+      global: {
+        stubs: {
+          PaperGraph: paperGraphStub,
+          GraphToolbar: true,
+          BadgeParadigm: true,
+          ...graphOverlayStubs,
+          'el-alert': {
+            props: ['title'],
+            template: '<div class="graph-alert" :data-title="title" />',
+          },
+          'el-button': true,
+        },
+      },
+    })
+
+    await flushPromises()
+
+    expect(wrapper.find('.graph-alert').attributes('data-title')).toBe('服务不可用')
+    expect(wrapper.find('.graph-view__error-cta').exists()).toBe(false)
+  })
+
   it('syncs highlight query when a graph node is clicked', async () => {
     mockFetchGraph.mockImplementation(async () => {
       paperStoreState.currentGraph = sampleGraph
@@ -194,6 +263,7 @@ describe('PaperGraphView', () => {
           PaperGraph: paperGraphStub,
           GraphToolbar: true,
           BadgeParadigm: true,
+          ...graphOverlayStubs,
         },
       },
     })

@@ -256,11 +256,18 @@ describe('Phase 5 Detail acceptance (5.1–5.10)', () => {
       expect(paperGraphComponentSrc).toContain('GraphLegend')
       expect(paperGraphComponentSrc).toContain('var(--color-bg-canvas)')
       expect(paperGraphComponentSrc).toContain('paper-graph__legend')
-      expect(graphLegendSrc).toContain('DETAIL_BASELINE_COPY.graphLegendTitle')
+      expect(graphLegendSrc).toContain('GRAPH_BASELINE_COPY.legendTitle')
       expect(paperGraphSrc).toContain('listGraphLegendEntries')
       expect(detailViewSrc).toContain('detail-graph__canvas')
       expect(detailViewSrc).toContain(':graph="paperStore.currentGraph"')
       expect(detailViewSrc).toContain('compact')
+    })
+
+    it('§17 Detail compact height uses GRAPH_COMPACT_HEIGHT = 320', () => {
+      expect(paperGraphSrc).toContain('GRAPH_COMPACT_HEIGHT = 320')
+      expect(paperGraphComponentSrc).toContain('GRAPH_COMPACT_HEIGHT')
+      expect(paperGraphComponentSrc).toContain('min-height: 320px')
+      expect(detailViewSrc).toContain('min-height: 320px')
     })
   })
 

@@ -2,7 +2,7 @@
 import { computed } from 'vue'
 
 import type { UnifiedPaperGraph } from '@/api/types'
-import { DETAIL_BASELINE_COPY } from '@/constants/detailCopy'
+import { GRAPH_BASELINE_COPY } from '@/constants/graphCopy'
 import { listGraphLegendEntries } from '@/utils/paperGraph'
 
 const props = defineProps<{
@@ -14,7 +14,7 @@ const entries = computed(() => listGraphLegendEntries(props.graph))
 
 <template>
   <div class="graph-legend" aria-label="图谱节点类型图例">
-    <p class="text-caption graph-legend__title">{{ DETAIL_BASELINE_COPY.graphLegendTitle }}</p>
+    <p class="text-caption graph-legend__title">{{ GRAPH_BASELINE_COPY.legendTitle }}</p>
     <ul class="graph-legend__list">
       <li v-for="entry in entries" :key="entry.type" class="graph-legend__item">
         <span class="graph-legend__swatch" :style="{ backgroundColor: entry.color }" aria-hidden="true" />

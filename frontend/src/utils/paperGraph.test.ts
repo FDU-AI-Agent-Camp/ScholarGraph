@@ -10,11 +10,16 @@ import {
   buildHighlightStateMap,
   citationKey,
   estimateGraphNodeSize,
+  findGraphNodeById,
+  getGraphNodeSnippet,
   getGraphNodeTypeColor,
   listGraphLegendEntries,
   resolvePaperGraphThemeTokens,
   toG6GraphPayload,
   GRAPH_EDGE_STROKE,
+  GRAPH_COMPACT_HEIGHT,
+  GRAPH_DEFAULT_HEIGHT,
+  GRAPH_FULL_MIN_HEIGHT,
   GRAPH_NODE_MIN_WIDTH,
   GRAPH_NODE_MAX_WIDTH,
 } from './paperGraph'
@@ -95,5 +100,35 @@ describe('graph node sizing and G6 style helpers', () => {
     expect(edgeOptions.style.stroke).toBe(GRAPH_EDGE_STROKE)
     expect(edgeOptions.style.lineWidth).toBe(1)
     expect(edgeOptions.style.endArrow).toBe(true)
+  })
+})
+
+describe('§17 graph viewport size constants', () => {
+  it('maps Detail compact design reference to GRAPH_COMPACT_HEIGHT = 320', () => {
+    expect(GRAPH_COMPACT_HEIGHT).toBe(320)
+  })
+
+  it('maps Graph default viewport to GRAPH_DEFAULT_HEIGHT = 480 with 720px full-bleed floor', () => {
+    expect(GRAPH_DEFAULT_HEIGHT).toBe(480)
+    expect(GRAPH_FULL_MIN_HEIGHT).toBe(720)
+    expect(GRAPH_FULL_MIN_HEIGHT).toBeGreaterThan(GRAPH_DEFAULT_HEIGHT)
+  })
+})
+
+describe('graph node lookup helpers', () => {
+  const graph = graphFixture.data as UnifiedPaperGraph
+
+  it('findGraphNodeById returns node for drawer and deep-link selection', () => {
+    const node = findGraphNodeById(graph, 'n_lens')
+    expect(node?.label).toBe('历史制度主义')
+    expect(findGraphNodeById(graph, 'missing')).toBeUndefined()
+  })
+
+  it('getGraphNodeSnippet reads trimmed snippet from node.data', () => {
+    const withSnippet = findGraphNodeById(graph, 'n1')
+    expect(getGraphNodeSnippet(withSnippet)).toBeNull()
+
+    expect(getGraphNodeSnippet({ id: 'n9', label: 'x', type: 'Thesis', data: { snippet: '  摘录  ' } })).toBe('摘录')
+    expect(getGraphNodeSnippet({ id: 'n9', label: 'x', type: 'Thesis', data: { snippet: '   ' } })).toBeNull()
   })
 })

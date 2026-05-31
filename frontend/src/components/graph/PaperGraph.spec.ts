@@ -4,6 +4,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { UnifiedPaperGraph } from '@/api/types'
 import {
   GRAPH_ACTIVE_LINE_WIDTH,
+  GRAPH_COMPACT_HEIGHT,
+  GRAPH_DEFAULT_HEIGHT,
+  GRAPH_FULL_MIN_HEIGHT,
   GRAPH_HOVER_LINE_WIDTH,
   GRAPH_NODE_RADIUS,
   GRAPH_STATE_ANIMATION_MS,
@@ -13,8 +16,9 @@ import {
   GRAPH_EDGE_STROKE,
 } from '@/utils/paperGraph'
 
-const { graphMocks, graphConstructorOptions } = vi.hoisted(() => {
+const { graphMocks, graphConstructorOptions, resizeObserverCallbackRef } = vi.hoisted(() => {
   const options = { value: null as Record<string, unknown> | null }
+  const callbackRef = { value: null as (() => void) | null }
   const mocks = {
     render: vi.fn().mockResolvedValue(undefined),
     destroy: vi.fn(),
@@ -26,7 +30,7 @@ const { graphMocks, graphConstructorOptions } = vi.hoisted(() => {
     fitView: vi.fn().mockResolvedValue(undefined),
     layout: vi.fn().mockResolvedValue(undefined),
   }
-  return { graphMocks: mocks, graphConstructorOptions: options }
+  return { graphMocks: mocks, graphConstructorOptions: options, resizeObserverCallbackRef: callbackRef }
 })
 
 vi.mock('@antv/g6', () => ({
@@ -58,11 +62,17 @@ describe('PaperGraph', () => {
     graphMocks.on.mockClear()
     graphMocks.setSize.mockClear()
     graphConstructorOptions.value = null
+    resizeObserverCallbackRef.value = null
 
     vi.stubGlobal(
       'ResizeObserver',
       class {
+        constructor(callback: () => void) {
+          resizeObserverCallbackRef.value = callback
+        }
+
         observe(): void {}
+
         disconnect(): void {}
       },
     )
@@ -161,6 +171,86 @@ describe('PaperGraph', () => {
 
     expect(wrapper.find('.paper-graph--full-bleed').exists()).toBe(true)
     expect(wrapper.find('.graph-host--full-bleed').exists()).toBe(true)
+  })
+
+  describe('§17 viewport height conventions', () => {
+    it('initializes G6 with GRAPH_DEFAULT_HEIGHT (480px) in default mode', async () => {
+      mount(PaperGraph, {
+        props: { graph: sampleGraph },
+        attachTo: document.body,
+      })
+
+      await flushPromises()
+
+      expect(graphConstructorOptions.value?.height).toBe(GRAPH_DEFAULT_HEIGHT)
+      expect(GRAPH_DEFAULT_HEIGHT).toBe(480)
+    })
+
+    it('initializes G6 with GRAPH_COMPACT_HEIGHT (320px) in compact mode', async () => {
+      mount(PaperGraph, {
+        props: { graph: sampleGraph, compact: true },
+        attachTo: document.body,
+      })
+
+      await flushPromises()
+
+      expect(graphConstructorOptions.value?.height).toBe(GRAPH_COMPACT_HEIGHT)
+      expect(GRAPH_COMPACT_HEIGHT).toBe(320)
+    })
+
+    it('initializes fullBleed G6 height at least GRAPH_FULL_MIN_HEIGHT (720px)', async () => {
+      mount(PaperGraph, {
+        props: { graph: sampleGraph, fullBleed: true },
+        attachTo: document.body,
+      })
+
+      await flushPromises()
+
+      expect(graphConstructorOptions.value?.height).toBeGreaterThanOrEqual(GRAPH_FULL_MIN_HEIGHT)
+      expect(GRAPH_FULL_MIN_HEIGHT).toBe(720)
+    })
+
+    it('resizes G6 canvas via ResizeObserver using default height', async () => {
+      const wrapper = mount(PaperGraph, {
+        props: { graph: sampleGraph },
+        attachTo: document.body,
+      })
+
+      await flushPromises()
+      graphMocks.setSize.mockClear()
+
+      const host = wrapper.find('.graph-host').element as HTMLDivElement
+      Object.defineProperty(host, 'clientWidth', { configurable: true, value: 1024 })
+      Object.defineProperty(host, 'clientHeight', { configurable: true, value: 600 })
+
+      resizeObserverCallbackRef.value?.()
+
+      expect(graphMocks.setSize).toHaveBeenCalledWith(1024, GRAPH_DEFAULT_HEIGHT)
+    })
+
+    it('fullBleed resize uses max(container height, GRAPH_FULL_MIN_HEIGHT)', async () => {
+      const wrapper = mount(PaperGraph, {
+        props: { graph: sampleGraph, fullBleed: true },
+        attachTo: document.body,
+      })
+
+      await flushPromises()
+      graphMocks.setSize.mockClear()
+
+      const host = wrapper.find('.graph-host').element as HTMLDivElement
+      Object.defineProperty(host, 'clientWidth', { configurable: true, value: 800 })
+      Object.defineProperty(host, 'clientHeight', { configurable: true, value: 900 })
+
+      resizeObserverCallbackRef.value?.()
+
+      expect(graphMocks.setSize).toHaveBeenCalledWith(800, 900)
+
+      graphMocks.setSize.mockClear()
+      Object.defineProperty(host, 'clientHeight', { configurable: true, value: 500 })
+      resizeObserverCallbackRef.value?.()
+
+      expect(graphMocks.setSize).toHaveBeenCalledWith(800, GRAPH_FULL_MIN_HEIGHT)
+    })
   })
 
   it('exposes toolbar viewport helpers', async () => {

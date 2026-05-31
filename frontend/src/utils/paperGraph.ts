@@ -1,4 +1,4 @@
-import type { Paradigm, UnifiedPaperGraph } from '@/api/types'
+import type { GraphNode, Paradigm, UnifiedPaperGraph } from '@/api/types'
 import type { QaStreamCitationData } from '@/api/types'
 
 /** G6 node/edge payload derived from API graph (testable without canvas). */
@@ -200,6 +200,17 @@ export function listGraphLegendEntries(graph: UnifiedPaperGraph): GraphLegendEnt
   }
 
   return entries
+}
+
+/** Resolve a graph node by id for drawer / deep-link UX. */
+export function findGraphNodeById(graph: UnifiedPaperGraph, nodeId: string): GraphNode | undefined {
+  return graph.nodes.find((node) => node.id === nodeId)
+}
+
+/** Extract optional snippet text from node.data for the node drawer. */
+export function getGraphNodeSnippet(node: GraphNode | null | undefined): string | null {
+  const snippet = node?.data?.snippet
+  return typeof snippet === 'string' && snippet.trim().length > 0 ? snippet.trim() : null
 }
 
 export function toG6GraphPayload(graph: UnifiedPaperGraph): G6GraphPayload {

@@ -3,12 +3,15 @@ import { computed, defineAsyncComponent, onMounted, ref, watch } from 'vue'
 import { RouterLink, useRoute, useRouter } from 'vue-router'
 
 import { ApiClientError } from '@/api/client'
+import GraphLegend from '@/components/graph/GraphLegend.vue'
+import GraphNodeDrawer from '@/components/graph/GraphNodeDrawer.vue'
 import GraphToolbar from '@/components/graph/GraphToolbar.vue'
 import BadgeParadigm from '@/components/ui/BadgeParadigm.vue'
 import { GRAPH_BASELINE_COPY } from '@/constants/graphCopy'
 import { RouteName } from '@/router/meta'
 import { usePaperStore } from '@/stores/paper'
 import { getUnknownErrorMessage } from '@/utils/errors'
+import { findGraphNodeById } from '@/utils/paperGraph'
 
 const PaperGraph = defineAsyncComponent(() => import('@/components/graph/PaperGraph.vue'))
 
@@ -21,6 +24,8 @@ const graphLoading = ref(false)
 const graphError = ref<string | null>(null)
 const graphErrorCode = ref<string | null>(null)
 const highlightNodeId = ref<string | null>(null)
+const selectedNodeId = ref<string | null>(null)
+const drawerOpen = ref(false)
 const graphRef = ref<{
   zoomIn: () => Promise<void>
   zoomOut: () => Promise<void>
@@ -33,10 +38,42 @@ const paperDetail = computed(() => paperStore.currentPaper)
 const nodeCount = computed(() => graphMeta.value?.nodes.length ?? 0)
 const edgeCount = computed(() => graphMeta.value?.edges.length ?? 0)
 const toolbarDisabled = computed(() => graphLoading.value || Boolean(graphError.value) || !graphMeta.value)
+const selectedNode = computed(() => {
+  if (!graphMeta.value || !selectedNodeId.value) {
+    return null
+  }
+  return findGraphNodeById(graphMeta.value, selectedNodeId.value) ?? null
+})
+const isGraphNotReadyError = computed(() => graphErrorCode.value === 'GRAPH_NOT_READY')
 
-function readHighlightFromRoute(): void {
+function readNodeQueryFromRoute(): string | null {
   const nodeQuery = route.query.node
-  highlightNodeId.value = typeof nodeQuery === 'string' && nodeQuery.length > 0 ? nodeQuery : null
+  return typeof nodeQuery === 'string' && nodeQuery.length > 0 ? nodeQuery : null
+}
+
+function syncSelectionFromRoute(openDrawer: boolean): void {
+  const nodeId = readNodeQueryFromRoute()
+  highlightNodeId.value = nodeId
+
+  if (!nodeId || !graphMeta.value) {
+    selectedNodeId.value = null
+    if (!nodeId) {
+      drawerOpen.value = false
+    }
+    return
+  }
+
+  const node = findGraphNodeById(graphMeta.value, nodeId)
+  if (!node) {
+    selectedNodeId.value = null
+    drawerOpen.value = false
+    return
+  }
+
+  selectedNodeId.value = node.id
+  if (openDrawer) {
+    drawerOpen.value = true
+  }
 }
 
 async function loadGraph(): Promise<void> {
@@ -48,6 +85,7 @@ async function loadGraph(): Promise<void> {
       await paperStore.fetchDetail(props.paperId)
     }
     await paperStore.fetchGraph(props.paperId)
+    syncSelectionFromRoute(true)
   } catch (error: unknown) {
     if (error instanceof ApiClientError) {
       graphErrorCode.value = error.code
@@ -60,8 +98,16 @@ async function loadGraph(): Promise<void> {
   }
 }
 
-function onNodeClick(nodeId: string): void {
+function selectNode(nodeId: string, openDrawer = true): void {
   highlightNodeId.value = nodeId
+  selectedNodeId.value = nodeId
+  if (openDrawer) {
+    drawerOpen.value = true
+  }
+}
+
+function onNodeClick(nodeId: string): void {
+  selectNode(nodeId, true)
   void router.replace({
     name: RouteName.PaperGraph,
     params: { paperId: props.paperId },
@@ -74,14 +120,14 @@ function backToDetail(): void {
 }
 
 onMounted(async () => {
-  readHighlightFromRoute()
+  syncSelectionFromRoute(false)
   await loadGraph()
 })
 
 watch(
   () => route.query.node,
   () => {
-    readHighlightFromRoute()
+    syncSelectionFromRoute(true)
   },
 )
 </script>
@@ -114,24 +160,27 @@ watch(
       <div v-if="graphError" class="graph-view__error-panel">
         <el-alert
           type="error"
-          :title="graphErrorCode === 'GRAPH_NOT_READY' ? GRAPH_BASELINE_COPY.graphNotReadyTitle : graphError"
-          :description="graphErrorCode === 'GRAPH_NOT_READY' ? GRAPH_BASELINE_COPY.graphNotReadyDescription : undefined"
+          :title="isGraphNotReadyError ? GRAPH_BASELINE_COPY.graphNotReadyTitle : graphError"
+          :description="isGraphNotReadyError ? GRAPH_BASELINE_COPY.graphNotReadyDescription : undefined"
           show-icon
           :closable="false"
         />
-        <el-button type="primary" class="graph-view__error-cta" @click="backToDetail">
+        <el-button v-if="isGraphNotReadyError" type="primary" class="graph-view__error-cta" @click="backToDetail">
           {{ GRAPH_BASELINE_COPY.graphNotReadyCta }}
         </el-button>
       </div>
 
-      <PaperGraph
-        v-else-if="graphMeta"
-        ref="graphRef"
-        :full-bleed="true"
-        :graph="graphMeta"
-        :highlight-node-id="highlightNodeId"
-        @node-click="onNodeClick"
-      />
+      <template v-else-if="graphMeta">
+        <PaperGraph
+          ref="graphRef"
+          :full-bleed="true"
+          :graph="graphMeta"
+          :highlight-node-id="highlightNodeId"
+          @node-click="onNodeClick"
+        />
+        <GraphLegend :graph="graphMeta" class="graph-view__legend" />
+        <GraphNodeDrawer v-model="drawerOpen" :node="selectedNode" />
+      </template>
     </section>
   </div>
 </template>
@@ -206,6 +255,14 @@ watch(
   left: 50%;
   z-index: var(--z-graph-toolbar);
   transform: translateX(-50%);
+}
+
+.graph-view__legend {
+  position: absolute;
+  left: var(--spacing-16);
+  bottom: var(--spacing-16);
+  z-index: var(--z-card);
+  max-width: calc(100% - var(--spacing-32));
 }
 
 .graph-view__error-panel {
