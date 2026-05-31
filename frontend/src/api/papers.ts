@@ -36,5 +36,6 @@ export async function uploadPaper(file: File): Promise<DataResponse<PaperCreateR
   form.append('file', file)
   return postData<PaperCreateResult>('/papers', form, {
     headers: { 'Content-Type': 'multipart/form-data' },
+    suppressErrorToast: true,
   })
 }

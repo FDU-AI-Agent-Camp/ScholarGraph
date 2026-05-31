@@ -3,6 +3,11 @@ import { ElMessage } from 'element-plus'
 
 import type { ApiErrorBody, ApiErrorResponse, DataResponse } from './types'
 
+export interface ScholarGraphAxiosRequestConfig extends AxiosRequestConfig {
+  /** When true, skip the global ElMessage toast; caller handles UX inline. */
+  suppressErrorToast?: boolean
+}
+
 const baseURL = import.meta.env.VITE_API_BASE_URL ?? ''
 
 const http = axios.create({
@@ -17,7 +22,10 @@ http.interceptors.response.use(
   (response) => response,
   (error: AxiosError<ApiErrorResponse>) => {
     const clientError = ApiClientError.fromAxios(error)
-    ElMessage.error(clientError.message)
+    const config = error.config as ScholarGraphAxiosRequestConfig | undefined
+    if (!config?.suppressErrorToast) {
+      ElMessage.error(clientError.message)
+    }
     return Promise.reject(clientError)
   },
 )
@@ -61,7 +69,11 @@ export async function getData<T>(url: string, config?: AxiosRequestConfig): Prom
   return data
 }
 
-export async function postData<T>(url: string, body?: unknown, config?: AxiosRequestConfig): Promise<DataResponse<T>> {
+export async function postData<T>(
+  url: string,
+  body?: unknown,
+  config?: ScholarGraphAxiosRequestConfig,
+): Promise<DataResponse<T>> {
   const { data } = await http.post<DataResponse<T>>(url, body, config)
   return data
 }
