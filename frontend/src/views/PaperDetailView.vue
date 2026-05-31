@@ -169,15 +169,25 @@ function onGraphNodeClick(nodeId: string): void {
               :closable="false"
               class="detail-qa__alert"
             />
-            <el-input v-model="question" type="textarea" :rows="3" :disabled="!isReady()" placeholder="输入问题…" />
+            <el-input
+              v-model="question"
+              type="textarea"
+              :rows="3"
+              class="detail-qa__input"
+              :disabled="!isReady()"
+              :placeholder="DETAIL_BASELINE_COPY.qaPlaceholder"
+            />
             <el-space class="detail-qa__actions">
               <el-button type="primary" :loading="streaming" :disabled="!isReady()" @click="ask">提问</el-button>
               <el-button v-if="streaming" :disabled="!isReady()" @click="stopStream">停止</el-button>
               <el-button :disabled="!isReady()" @click="openFullGraph">{{ DETAIL_BASELINE_COPY.fullGraph }}</el-button>
             </el-space>
-            <el-card v-if="answer && isReady()" shadow="never" class="detail-qa__answer">{{ answer }}</el-card>
+            <div v-if="(answer || streaming) && isReady()" class="detail-qa__answer-panel text-body-lg">
+              <span class="detail-qa__answer-text">{{ answer }}</span>
+              <span v-if="streaming" class="detail-qa__cursor" aria-hidden="true">|</span>
+            </div>
             <div v-if="citations.length && isReady()" class="detail-qa__citations">
-              <span class="citations-label">引用节点：</span>
+              <span class="text-caption detail-qa__citations-label">{{ DETAIL_BASELINE_COPY.citationLabel }}：</span>
               <div class="citations-list">
                 <TagCitation
                   v-for="item in citations"
@@ -299,16 +309,31 @@ function onGraphNodeClick(nodeId: string): void {
   margin-top: var(--spacing-12);
 }
 
-.detail-qa__answer {
+.detail-qa__input :deep(.el-textarea__inner) {
+  min-height: 96px;
+}
+
+.detail-qa__answer-panel {
   margin-top: var(--spacing-16);
+  padding: var(--spacing-16);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-bg-subtle);
   white-space: pre-wrap;
+  color: var(--color-text-primary);
+}
+
+.detail-qa__cursor {
+  margin-left: 2px;
+  color: var(--color-primary);
+  animation: detail-qa-cursor-blink var(--duration-blink) step-end infinite;
 }
 
 .detail-qa__citations {
   margin-top: var(--spacing-12);
 }
 
-.citations-label {
+.detail-qa__citations-label {
   display: inline-block;
   margin-bottom: var(--spacing-8);
   color: var(--color-text-secondary);
@@ -338,8 +363,10 @@ function onGraphNodeClick(nodeId: string): void {
 }
 
 .detail-graph__canvas {
+  position: relative;
   min-height: 320px;
-  padding: var(--spacing-16);
+  padding: 0;
+  overflow: hidden;
   border: 1px solid var(--color-border);
   border-radius: var(--radius-xl);
   background: var(--color-bg-canvas);
@@ -356,6 +383,23 @@ function onGraphNodeClick(nodeId: string): void {
   .detail-layout {
     grid-template-columns: 45fr 55fr;
     align-items: start;
+  }
+}
+
+@keyframes detail-qa-cursor-blink {
+  0%,
+  100% {
+    opacity: 1;
+  }
+
+  50% {
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .detail-qa__cursor {
+    animation: none;
   }
 }
 </style>

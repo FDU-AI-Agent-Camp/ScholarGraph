@@ -164,6 +164,10 @@ watch(
   background: var(--color-success);
 }
 
+.status-panel__step--done .status-panel__check {
+  animation: status-step-check-in var(--duration-slow) var(--ease-out-product);
+}
+
 .status-panel__step--failed .status-panel__marker {
   border-color: var(--color-error);
   background: var(--color-error);
@@ -229,8 +233,24 @@ watch(
   }
 }
 
+@keyframes status-step-check-in {
+  from {
+    opacity: 0;
+    transform: scale(0.6);
+  }
+
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .status-panel__step--active .status-panel__marker {
+    animation: none;
+  }
+
+  .status-panel__step--done .status-panel__check {
     animation: none;
   }
 }

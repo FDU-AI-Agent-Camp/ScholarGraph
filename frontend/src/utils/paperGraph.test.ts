@@ -3,7 +3,13 @@ import { describe, expect, it } from 'vitest'
 import graphFixture from '../../../docs/api/fixtures/graph-hss.json'
 import type { UnifiedPaperGraph } from '@/api/types'
 
-import { buildHighlightStateMap, citationKey, toG6GraphPayload } from './paperGraph'
+import {
+  buildHighlightStateMap,
+  citationKey,
+  getGraphNodeTypeColor,
+  listGraphLegendEntries,
+  toG6GraphPayload,
+} from './paperGraph'
 
 describe('citationKey', () => {
   it('joins paper_id and node_id for stable list keys', () => {
@@ -26,5 +32,18 @@ describe('graph-hss fixture parity', () => {
     const states = buildHighlightStateMap(nodeIds, 'n_lens')
     expect(states.n_lens).toBe('active')
     expect(states.n1).toEqual([])
+  })
+})
+
+describe('listGraphLegendEntries', () => {
+  const graph = graphFixture.data as UnifiedPaperGraph
+
+  it('returns unique node types with paradigm colors for compact legend', () => {
+    const entries = listGraphLegendEntries(graph)
+    const types = entries.map((entry) => entry.type)
+
+    expect(new Set(types).size).toBe(types.length)
+    expect(entries.length).toBeGreaterThan(0)
+    expect(entries[0]?.color).toBe(getGraphNodeTypeColor(entries[0]!.type, graph.paradigm))
   })
 })

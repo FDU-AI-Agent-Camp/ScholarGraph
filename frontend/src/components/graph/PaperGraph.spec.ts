@@ -83,4 +83,18 @@ describe('PaperGraph', () => {
     })
     expect(graphMocks.focusElement).toHaveBeenCalledWith('n2')
   })
+
+  it('renders legend overlay and canvas background in compact mode', async () => {
+    const wrapper = mount(PaperGraph, {
+      props: { graph: sampleGraph, compact: true },
+      attachTo: document.body,
+    })
+
+    await flushPromises()
+
+    expect(wrapper.find('.paper-graph.compact').exists()).toBe(true)
+    expect(wrapper.find('.graph-host.compact').exists()).toBe(true)
+    expect(wrapper.find('.graph-legend').exists()).toBe(true)
+    expect(wrapper.find('.paper-graph__legend').exists()).toBe(true)
+  })
 })

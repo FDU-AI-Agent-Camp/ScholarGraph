@@ -68,6 +68,7 @@ describe('PaperStatusPanel', () => {
 
     expect(wrapper.findAll('.status-panel__step--done')).toHaveLength(5)
     expect(wrapper.find('.status-panel__step--active').exists()).toBe(false)
+    expect(wrapper.find('.status-panel__check').exists()).toBe(true)
   })
 
   it('renders failed alert with error_code title and message description', () => {

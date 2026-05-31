@@ -15,7 +15,13 @@ function onClick(): void {
 </script>
 
 <template>
-  <button type="button" class="tag-citation citation-tag" :class="{ 'tag-citation--active': active }" @click="onClick">
+  <button
+    type="button"
+    class="tag-citation citation-tag"
+    :class="{ 'tag-citation--active': active }"
+    :aria-pressed="active ? 'true' : 'false'"
+    @click="onClick"
+  >
     <span class="tag-citation__label">{{ label }}</span>
     <span class="tag-citation__node-id">({{ nodeId }})</span>
   </button>

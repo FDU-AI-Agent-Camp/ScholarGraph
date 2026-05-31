@@ -1,5 +1,5 @@
 /**
- * Phase 5 Detail acceptance (5.1–5.5) — design-spec §9 + ui-design-progress §1.4.
+ * Phase 5 Detail acceptance (5.1–5.10) — design-spec §9 + ui-design-progress §1.4.
  */
 import { ref } from 'vue'
 import { flushPromises, mount } from '@vue/test-utils'
@@ -11,7 +11,7 @@ import PaperStatusPanel from '@/components/papers/PaperStatusPanel.vue'
 import { DETAIL_BASELINE_COPY } from '@/constants/detailCopy'
 import { PIPELINE_STEPS } from '@/utils/pipelineSteps'
 import { processingStatus } from '@/test/fixtures/paperStatus'
-import { readFrontendSource } from '@/test/helpers/designTokens'
+import { loadDesignTokenMap, readFrontendSource } from '@/test/helpers/designTokens'
 import PaperDetailView from '@/views/PaperDetailView.vue'
 
 const detailViewSrc = readFrontendSource('views/PaperDetailView.vue')
@@ -19,6 +19,11 @@ const statusPanelSrc = readFrontendSource('components/papers/PaperStatusPanel.vu
 const metadataCardSrc = readFrontendSource('components/papers/PaperMetadataCard.vue')
 const detailCopySrc = readFrontendSource('constants/detailCopy.ts')
 const pipelineStepsSrc = readFrontendSource('utils/pipelineSteps.ts')
+const paperGraphSrc = readFrontendSource('utils/paperGraph.ts')
+const paperGraphComponentSrc = readFrontendSource('components/graph/PaperGraph.vue')
+const graphLegendSrc = readFrontendSource('components/graph/GraphLegend.vue')
+const tagCitationSrc = readFrontendSource('components/ui/TagCitation.vue')
+const badgeStatusSrc = readFrontendSource('components/ui/BadgeStatus.vue')
 
 const mockFetchDetail = vi.fn()
 const mockFetchGraph = vi.fn()
@@ -83,7 +88,7 @@ const detailViewStubs = {
   },
 }
 
-describe('Phase 5 Detail acceptance (5.1–5.5)', () => {
+describe('Phase 5 Detail acceptance (5.1–5.10)', () => {
   beforeEach(() => {
     mockFetchDetail.mockReset()
     mockFetchGraph.mockReset()
@@ -215,6 +220,106 @@ describe('Phase 5 Detail acceptance (5.1–5.5)', () => {
       expect(detailCopySrc).toContain(DETAIL_BASELINE_COPY.notReadyAlert)
       expect(detailViewSrc).toContain('DETAIL_BASELINE_COPY.notReadyAlert')
       expect(detailViewSrc).toContain(':disabled="!isReady()"')
+    })
+  })
+
+  describe('5.6 QA placeholder and answer panel styling', () => {
+    it('uses baseline placeholder and subtle answer panel with body-lg', () => {
+      expect(detailCopySrc).toContain(DETAIL_BASELINE_COPY.qaPlaceholder)
+      expect(detailViewSrc).toContain('DETAIL_BASELINE_COPY.qaPlaceholder')
+      expect(detailViewSrc).toContain('detail-qa__answer-panel')
+      expect(detailViewSrc).toContain('text-body-lg')
+      expect(detailViewSrc).toContain('var(--color-bg-subtle)')
+    })
+  })
+
+  describe('5.7 SSE streaming cursor', () => {
+    it('renders accent blinking pipe cursor while streaming', () => {
+      expect(detailViewSrc).toContain('detail-qa__cursor')
+      expect(detailViewSrc).toContain('var(--color-primary)')
+      expect(detailViewSrc).toContain('detail-qa-cursor-blink')
+      expect(detailViewSrc).toContain('var(--duration-blink)')
+    })
+  })
+
+  describe('5.8 TagCitation 150ms active sync with highlightNodeId', () => {
+    it('wires citation tags to highlightNodeId with fast transition token', () => {
+      expect(detailViewSrc).toContain(':active="item.node_id === highlightNodeId"')
+      expect(detailViewSrc).toContain('@node-click="onGraphNodeClick"')
+      expect(detailViewSrc).toContain('@click="focusCitation(item)"')
+      expect(tagCitationSrc).toContain('var(--transition-fast)')
+    })
+  })
+
+  describe('5.9 compact graph canvas and legend overlay', () => {
+    it('PaperGraph compact mode uses canvas background and floating legend', () => {
+      expect(paperGraphComponentSrc).toContain('GraphLegend')
+      expect(paperGraphComponentSrc).toContain('var(--color-bg-canvas)')
+      expect(paperGraphComponentSrc).toContain('paper-graph__legend')
+      expect(graphLegendSrc).toContain('DETAIL_BASELINE_COPY.graphLegendTitle')
+      expect(paperGraphSrc).toContain('listGraphLegendEntries')
+      expect(detailViewSrc).toContain('detail-graph__canvas')
+      expect(detailViewSrc).toContain(':graph="paperStore.currentGraph"')
+      expect(detailViewSrc).toContain('compact')
+    })
+  })
+
+  describe('5.10 processing pulse and step done check animation', () => {
+    it('BadgeStatus processing dot pulses and done steps animate check at 250ms', () => {
+      expect(badgeStatusSrc).toContain('badge-status-pulse')
+      expect(badgeStatusSrc).toContain('var(--duration-pulse)')
+      expect(statusPanelSrc).toContain('status-step-check-in')
+      expect(statusPanelSrc).toContain('var(--duration-slow)')
+      expect(statusPanelSrc).toContain('status-step-pulse')
+    })
+  })
+
+  describe('Phase 5 acceptance checklist (ui-design-progress §验收)', () => {
+    it('§1.4.2: dual-column 45/55 grid and left-column module order', () => {
+      expect(detailViewSrc).toContain('grid-template-columns: 45fr 55fr')
+      expect(detailViewSrc.indexOf('PaperMetadataCard')).toBeLessThan(detailViewSrc.indexOf('PaperStatusPanel'))
+      expect(detailViewSrc.indexOf('PaperStatusPanel')).toBeLessThan(detailViewSrc.indexOf('detail-qa'))
+      expect(detailViewSrc).toContain('detail-graph')
+    })
+
+    it('§1.4.4: Step labels, not-ready Alert, and refresh caption match baseline table', () => {
+      expect(detailCopySrc).toContain(DETAIL_BASELINE_COPY.notReadyAlert)
+      expect(detailCopySrc).toContain(DETAIL_BASELINE_COPY.refreshCaption)
+      for (const step of PIPELINE_STEPS) {
+        expect(pipelineStepsSrc).toContain(step.label)
+      }
+      expect(detailViewSrc).toContain('DETAIL_BASELINE_COPY.notReadyAlert')
+    })
+
+    it('§1.4.1 (5.6): answer panel uses subtle #FAFBFC surface inside QA card', () => {
+      const tokens = loadDesignTokenMap()
+
+      expect(tokens['--color-bg-subtle']).toBe('#fafbfc')
+      expect(detailViewSrc).toContain('detail-qa__answer-panel')
+      expect(detailViewSrc).toContain('var(--color-bg-subtle)')
+      expect(detailViewSrc).toContain('text-body-lg')
+    })
+
+    it('§1.4.3 (5.8): TagCitation active sync and graph highlight share highlightNodeId with 150ms token', () => {
+      const tokens = loadDesignTokenMap()
+
+      expect(tokens['--duration-fast']).toBe('150ms')
+      expect(detailViewSrc).toContain(':active="item.node_id === highlightNodeId"')
+      expect(detailViewSrc).toContain('@node-click="onGraphNodeClick"')
+      expect(detailViewSrc).toContain('@click="focusCitation(item)"')
+      expect(tagCitationSrc).toContain('var(--transition-fast)')
+    })
+
+    it('regression gate: PaperDetailView.spec and graph-qa.integration cover QA answer + citation chain', () => {
+      const detailSpecSrc = readFrontendSource('views/PaperDetailView.spec.ts')
+      const graphQaSrc = readFrontendSource('test/graph-qa.integration.test.ts')
+
+      expect(detailSpecSrc).toContain('detail-qa__answer-panel')
+      expect(detailSpecSrc).toContain('§1.4.3 citation ↔ graph highlight (5.8)')
+      expect(detailSpecSrc).toContain('§1.4.1 subtle surface token')
+      expect(graphQaSrc).toContain('chains SSE citation event into highlight state')
+      expect(graphQaSrc).toContain('switches graph highlight when user selects another cited node')
+      expect(graphQaSrc).toContain('maps Detail answer panel to §1.4.1 subtle surface token')
     })
   })
 })

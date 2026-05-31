@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { PaperDetail, QaStreamCitationData, UnifiedPaperGraph } from '@/api/types'
 import { DETAIL_BASELINE_COPY } from '@/constants/detailCopy'
 import { RouteName } from '@/router/meta'
+import { loadDesignTokenMap, readFrontendSource } from '@/test/helpers/designTokens'
 
 const mockStreamPaperQa = vi.fn()
 const mockFetchDetail = vi.fn()
@@ -28,7 +29,10 @@ const paperStoreState: {
   currentGraph: {
     paper_id: 'hss-001',
     paradigm: 'HSS' as const,
-    nodes: [{ id: 'n1', label: '核心论点', type: 'Thesis', data: {} }],
+    nodes: [
+      { id: 'n1', label: '核心论点', type: 'Thesis', data: {} },
+      { id: 'n2', label: '分论点', type: 'SubArgument', data: {} },
+    ],
     edges: [],
   },
   fetchDetail: mockFetchDetail,
@@ -56,27 +60,28 @@ import PaperDetailView from '@/views/PaperDetailView.vue'
 const globalStubs = {
   PaperGraph: {
     props: ['graph', 'highlightNodeId', 'compact'],
-    template: '<div class="paper-graph-stub" :data-highlight="highlightNodeId" />',
+    emits: ['nodeClick'],
+    template:
+      '<div class="paper-graph-stub" :data-highlight="highlightNodeId"><button type="button" class="graph-node-trigger" @click="$emit(\'nodeClick\', \'n2\')">node</button></div>',
   },
   PaperMetadataCard: {
     props: ['classification'],
     template: '<div class="paper-metadata-stub" />',
   },
-  PaperStatusPanel: true,
+  PaperStatusPanel: { template: '<div class="paper-status-panel-stub" />' },
   BadgeParadigm: true,
   BadgeStatus: true,
   'el-divider': true,
   'el-input': {
-    props: ['modelValue', 'disabled'],
+    props: ['modelValue', 'disabled', 'placeholder'],
     template:
-      '<textarea class="qa-textarea" :disabled="disabled" @input="$emit(\'update:modelValue\', $event.target.value)" />',
+      '<textarea class="qa-textarea" :disabled="disabled" :placeholder="placeholder" @input="$emit(\'update:modelValue\', $event.target.value)" />',
   },
   'el-button': {
     props: ['disabled'],
     template: '<button type="button" :disabled="disabled" @click="$attrs.onClick?.()"><slot /></button>',
   },
   'el-space': { template: '<div class="el-space-stub"><slot /></div>' },
-  'el-card': { template: '<div class="answer"><slot /></div>' },
   TagCitation: {
     props: ['label', 'nodeId', 'active'],
     template:
@@ -122,6 +127,25 @@ describe('PaperDetailView', () => {
       expect(wrapper.find('.paper-metadata-stub').exists()).toBe(true)
     })
 
+    it('keeps left-column module order: metadata → status → QA', async () => {
+      const wrapper = mount(PaperDetailView, {
+        props: { paperId: 'hss-001' },
+        global: { stubs: globalStubs },
+      })
+
+      await flushPromises()
+
+      const mainHtml = wrapper.find('.detail-main').html()
+      const metadataIndex = mainHtml.indexOf('paper-metadata-stub')
+      const statusIndex = mainHtml.indexOf('paper-status-panel-stub')
+      const qaIndex = mainHtml.indexOf('detail-qa')
+
+      expect(metadataIndex).toBeGreaterThanOrEqual(0)
+      expect(statusIndex).toBeGreaterThan(metadataIndex)
+      expect(qaIndex).toBeGreaterThan(statusIndex)
+      expect(mainHtml.indexOf('detail-graph')).toBe(-1)
+    })
+
     it('shows paper_id mono meta and QA / graph section titles from baseline copy', async () => {
       const wrapper = mount(PaperDetailView, {
         props: { paperId: 'hss-001' },
@@ -153,6 +177,128 @@ describe('PaperDetailView', () => {
       await flushPromises()
 
       expect(wrapper.find('.paper-metadata-stub').exists()).toBe(true)
+    })
+  })
+
+  describe('§1.4.4 QA baseline copy and answer panel (5.6)', () => {
+    it('uses baseline placeholder on question textarea', async () => {
+      const wrapper = mount(PaperDetailView, {
+        props: { paperId: 'hss-001' },
+        global: { stubs: globalStubs },
+      })
+
+      await flushPromises()
+
+      expect((wrapper.find('.qa-textarea').element as HTMLTextAreaElement).placeholder).toBe(
+        DETAIL_BASELINE_COPY.qaPlaceholder,
+      )
+      expect(wrapper.find('.detail-qa__answer-panel').exists()).toBe(false)
+    })
+
+    it('styles answer panel with subtle background and body-lg typography', async () => {
+      mockStreamPaperQa.mockImplementation(
+        async (
+          _paperId: string,
+          _question: string,
+          handlers: {
+            onDone?: (data: { answer_id: string; answer?: string }) => void
+          },
+        ) => {
+          handlers.onDone?.({ answer_id: 'ans-1', answer: '答案' })
+        },
+      )
+
+      const wrapper = mount(PaperDetailView, {
+        props: { paperId: 'hss-001' },
+        global: { stubs: globalStubs },
+      })
+
+      await flushPromises()
+      await wrapper.find('.qa-textarea').setValue('问题？')
+      await wrapper
+        .findAll('button')
+        .find((button) => button.text() === '提问')
+        ?.trigger('click')
+      await flushPromises()
+
+      const panel = wrapper.find('.detail-qa__answer-panel')
+      expect(panel.classes()).toContain('text-body-lg')
+      expect(panel.attributes('style') ?? '').not.toContain('background')
+    })
+
+    it('uses §1.4.1 subtle surface token (#FAFBFC) on answer panel', () => {
+      const tokens = loadDesignTokenMap()
+      const detailSrc = readFrontendSource('views/PaperDetailView.vue')
+
+      expect(tokens['--color-bg-subtle']).toBe('#fafbfc')
+      expect(detailSrc).toContain('.detail-qa__answer-panel')
+      expect(detailSrc).toContain('background: var(--color-bg-subtle)')
+    })
+  })
+
+  describe('§1.4.3 citation ↔ graph highlight (5.8)', () => {
+    async function mountWithTwoCitations() {
+      mockStreamPaperQa.mockImplementation(
+        async (
+          _paperId: string,
+          _question: string,
+          handlers: {
+            onCitation?: (data: QaStreamCitationData) => void
+            onDone?: (data: { answer_id: string }) => void
+          },
+        ) => {
+          handlers.onCitation?.({ paper_id: 'hss-001', node_id: 'n1', label: '核心论点' })
+          handlers.onCitation?.({ paper_id: 'hss-001', node_id: 'n2', label: '分论点' })
+          handlers.onDone?.({ answer_id: 'ans-1' })
+        },
+      )
+
+      const wrapper = mount(PaperDetailView, {
+        props: { paperId: 'hss-001' },
+        global: { stubs: globalStubs },
+      })
+
+      await flushPromises()
+      await wrapper.find('.qa-textarea').setValue('问题？')
+      await wrapper
+        .findAll('button')
+        .find((button) => button.text() === '提问')
+        ?.trigger('click')
+      await flushPromises()
+
+      return wrapper
+    }
+
+    it('activates TagCitation and graph highlight together on SSE citation', async () => {
+      const wrapper = await mountWithTwoCitations()
+
+      expect(wrapper.findAll('.citation-tag')).toHaveLength(2)
+      expect(wrapper.find('.paper-graph-stub').attributes('data-highlight')).toBe('n2')
+      expect(wrapper.findAll('.tag-citation--active')).toHaveLength(1)
+    })
+
+    it('updates graph highlight when another citation tag is clicked', async () => {
+      const wrapper = await mountWithTwoCitations()
+      const tags = wrapper.findAll('.citation-tag')
+
+      await tags[0]?.trigger('click')
+      await flushPromises()
+
+      expect(wrapper.find('.paper-graph-stub').attributes('data-highlight')).toBe('n1')
+      expect(tags[0]?.classes()).toContain('tag-citation--active')
+      expect(tags[1]?.classes()).not.toContain('tag-citation--active')
+    })
+
+    it('updates active citation when compact graph emits node-click', async () => {
+      const wrapper = await mountWithTwoCitations()
+
+      await wrapper.find('.graph-node-trigger').trigger('click')
+      await flushPromises()
+
+      expect(wrapper.find('.paper-graph-stub').attributes('data-highlight')).toBe('n2')
+      const tags = wrapper.findAll('.citation-tag')
+      expect(tags[1]?.classes()).toContain('tag-citation--active')
+      expect(tags[0]?.classes()).not.toContain('tag-citation--active')
     })
   })
 
@@ -203,6 +349,38 @@ describe('PaperDetailView', () => {
   })
 
   describe('QA SSE', () => {
+    it('shows streaming cursor and answer panel with body-lg styling hooks', async () => {
+      mockStreamPaperQa.mockImplementation(
+        async (
+          _paperId: string,
+          _question: string,
+          handlers: {
+            onMessage?: (data: { delta: string }) => void
+          },
+        ) => {
+          handlers.onMessage?.({ delta: '流式' })
+          await new Promise(() => {})
+        },
+      )
+
+      const wrapper = mount(PaperDetailView, {
+        props: { paperId: 'hss-001' },
+        global: { stubs: globalStubs },
+      })
+
+      await flushPromises()
+      await wrapper.find('.qa-textarea').setValue('问题？')
+      await wrapper
+        .findAll('button')
+        .find((button) => button.text() === '提问')
+        ?.trigger('click')
+      await flushPromises()
+
+      expect(wrapper.find('.detail-qa__answer-panel').exists()).toBe(true)
+      expect(wrapper.find('.detail-qa__cursor').exists()).toBe(true)
+      expect(wrapper.find('.detail-qa__answer-text').text()).toBe('流式')
+    })
+
     it('collects citation events and exposes clickable tags', async () => {
       mockStreamPaperQa.mockImplementation(
         async (
@@ -232,7 +410,8 @@ describe('PaperDetailView', () => {
       await flushPromises()
 
       expect(mockStreamPaperQa).toHaveBeenCalledWith('hss-001', '问题？', expect.any(Object), expect.any(AbortSignal))
-      expect(wrapper.find('.answer').text()).toBe('完整答案')
+      expect(wrapper.find('.detail-qa__answer-text').text()).toBe('完整答案')
+      expect(wrapper.find('.detail-qa__citations-label').text()).toContain(DETAIL_BASELINE_COPY.citationLabel)
       expect(wrapper.find('.citation-tag').text()).toContain('核心论点')
       expect(wrapper.find('.tag-citation--active').exists()).toBe(true)
       expect(wrapper.find('.paper-graph-stub').attributes('data-highlight')).toBe('n1')
@@ -300,7 +479,7 @@ describe('PaperDetailView', () => {
         ?.trigger('click')
       await flushPromises()
 
-      expect(wrapper.find('.answer').text()).toBe('错误: 图谱未就绪')
+      expect(wrapper.find('.detail-qa__answer-text').text()).toBe('错误: 图谱未就绪')
     })
   })
 })

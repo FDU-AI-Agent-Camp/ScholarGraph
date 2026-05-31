@@ -79,6 +79,12 @@ describe('TagCitation', () => {
     expect(src).toContain('var(--transition-instant)')
     expect(src).not.toMatch(/transition:\s*all/i)
   })
+
+  it('uses 150ms --transition-fast when citation is active', () => {
+    const src = readFrontendSource('components/ui/TagCitation.vue')
+    expect(src).toContain('tag-citation--active')
+    expect(src).toContain('var(--transition-fast)')
+  })
 })
 
 describe('EmptyState', () => {

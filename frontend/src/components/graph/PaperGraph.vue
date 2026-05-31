@@ -4,7 +4,9 @@ import { onMounted, onUnmounted, ref, watch } from 'vue'
 
 import type { UnifiedPaperGraph } from '@/api/types'
 import { cssToken } from '@/utils/cssTokens'
-import { buildHighlightStateMap, toG6GraphPayload } from '@/utils/paperGraph'
+import { buildHighlightStateMap, getGraphNodeTypeColor, toG6GraphPayload } from '@/utils/paperGraph'
+
+import GraphLegend from './GraphLegend.vue'
 
 const DEFAULT_HEIGHT = 480
 const COMPACT_HEIGHT = 320
@@ -48,12 +50,25 @@ function createGraphInstance(): Graph | null {
   const nodeStroke = cssToken('--color-primary-hover', '#0a5858')
   const activeFill = cssToken('--color-citation-active-bg', '#fff1f2')
   const activeStroke = cssToken('--color-citation-active', '#e11d48')
+  const payloadWithColors = {
+    ...payload,
+    nodes: payload.nodes.map((node) => {
+      const nodeType = String(node.data.nodeType ?? '')
+      return {
+        ...node,
+        data: {
+          ...node.data,
+          fill: getGraphNodeTypeColor(nodeType, props.graph?.paradigm),
+        },
+      }
+    }),
+  }
 
   return new Graph({
     container: containerRef.value,
     width,
     height: graphHeight(),
-    data: payload,
+    data: payloadWithColors,
     layout: {
       type: 'dagre',
       rankdir: 'TB',
@@ -66,7 +81,7 @@ function createGraphInstance(): Graph | null {
         labelText: nodeLabelText,
         labelWordWrap: true,
         labelMaxWidth: 140,
-        fill: nodeFill,
+        fill: (datum: { data?: { fill?: string } }) => datum.data?.fill ?? nodeFill,
         stroke: nodeStroke,
         lineWidth: 1,
       },
@@ -161,10 +176,26 @@ onUnmounted(() => {
 
 <template>
   <div v-if="!graph" class="placeholder">暂无图谱数据</div>
-  <div v-else ref="containerRef" class="graph-host" :class="{ compact }" />
+  <div v-else class="paper-graph" :class="{ compact }">
+    <div ref="containerRef" class="graph-host" :class="{ compact }" />
+    <GraphLegend v-if="compact" :graph="graph" class="paper-graph__legend" />
+  </div>
 </template>
 
 <style scoped>
+.paper-graph {
+  position: relative;
+  width: 100%;
+}
+
+.paper-graph__legend {
+  position: absolute;
+  left: var(--spacing-16);
+  bottom: var(--spacing-16);
+  z-index: var(--z-card);
+  max-width: calc(100% - var(--spacing-32));
+}
+
 .graph-host,
 .placeholder {
   width: 100%;
@@ -173,8 +204,11 @@ onUnmounted(() => {
   border: 1px dashed var(--color-border-strong);
   border-radius: var(--radius-lg);
 }
+
 .graph-host.compact {
   min-height: 320px;
+  border: none;
+  border-radius: var(--radius-xl);
 }
 .placeholder {
   display: flex;

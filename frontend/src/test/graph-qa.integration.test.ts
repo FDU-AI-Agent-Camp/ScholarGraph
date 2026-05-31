@@ -8,7 +8,7 @@ import { parseQaStreamEvent } from '@/api/qaStream'
 import type { UnifiedPaperGraph } from '@/api/types'
 import { cssToken } from '@/utils/cssTokens'
 import { appendUniqueCitation, buildHighlightStateMap, toG6GraphPayload } from '@/utils/paperGraph'
-import { DESIGN_SPEC_SEMANTIC_COLORS, loadDesignTokenMap } from '@/test/helpers/designTokens'
+import { DESIGN_SPEC_SEMANTIC_COLORS, loadDesignTokenMap, readFrontendSource } from '@/test/helpers/designTokens'
 
 describe('graph + QA SSE integration (fixtures)', () => {
   it('chains SSE citation event into highlight state for graph-hss nodes', () => {
@@ -50,5 +50,56 @@ describe('graph + QA SSE integration (fixtures)', () => {
     const tokens = loadDesignTokenMap()
     expect(tokens['--color-citation-active']).toBe(DESIGN_SPEC_SEMANTIC_COLORS.citationActive)
     expect(cssToken('--color-citation-active', '#e11d48')).toBe('#e11d48')
+  })
+
+  it('maps Detail answer panel to §1.4.1 subtle surface token #FAFBFC', () => {
+    const tokens = loadDesignTokenMap()
+    const detailSrc = readFrontendSource('views/PaperDetailView.vue')
+
+    expect(tokens['--color-bg-subtle']).toBe('#fafbfc')
+    expect(detailSrc).toContain('detail-qa__answer-panel')
+    expect(detailSrc).toContain('var(--color-bg-subtle)')
+    expect(detailSrc).toContain('text-body-lg')
+  })
+
+  it('keeps TagCitation active transition within 150ms motion budget', () => {
+    const tokens = loadDesignTokenMap()
+    const tagSrc = readFrontendSource('components/ui/TagCitation.vue')
+
+    expect(tokens['--duration-fast']).toBe('150ms')
+    expect(tokens['--transition-fast']).toContain('var(--duration-fast)')
+    expect(tagSrc).toContain('tag-citation--active')
+    expect(tagSrc).toContain('var(--transition-fast)')
+  })
+
+  it('switches graph highlight when user selects another cited node', () => {
+    const graph = graphFixture.data as UnifiedPaperGraph
+    const nodeIds = toG6GraphPayload(graph).nodes.map((node) => node.id)
+
+    const firstCitation = { paper_id: 'hss-001', node_id: 'n1', label: '核心论点' }
+    const secondCitation = { paper_id: 'hss-001', node_id: 'n2', label: '分论点' }
+
+    let citations = appendUniqueCitation([], firstCitation)
+    citations = appendUniqueCitation(citations, secondCitation)
+
+    let highlightNodeId = citations[citations.length - 1]?.node_id ?? null
+    let states = buildHighlightStateMap(nodeIds, highlightNodeId)
+    expect(states.n2).toBe('active')
+    expect(states.n1).toEqual([])
+
+    highlightNodeId = citations[0]?.node_id ?? null
+    states = buildHighlightStateMap(nodeIds, highlightNodeId)
+    expect(states.n1).toBe('active')
+    expect(states.n2).toEqual([])
+  })
+
+  it('wires Detail view citation click and graph node-click to shared highlightNodeId', () => {
+    const detailSrc = readFrontendSource('views/PaperDetailView.vue')
+
+    expect(detailSrc).toContain('const highlightNodeId = ref')
+    expect(detailSrc).toContain(':active="item.node_id === highlightNodeId"')
+    expect(detailSrc).toContain('@click="focusCitation(item)"')
+    expect(detailSrc).toContain(':highlight-node-id="highlightNodeId"')
+    expect(detailSrc).toContain('function onGraphNodeClick')
   })
 })
