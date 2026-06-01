@@ -5,7 +5,8 @@ import type { PaperDetail, QaStreamCitationData, UnifiedPaperGraph } from '@/api
 import { DETAIL_BASELINE_COPY } from '@/constants/detailCopy'
 import { RouteName } from '@/router/meta'
 import { loadDesignTokenMap, readFrontendSource } from '@/test/helpers/designTokens'
-import { usesSynchronousHighlightHandlers } from '@/test/helpers/motionDiscipline'
+import { answerPanelTypographyMatchesBaseline, citationTagMixedLayout } from '@/test/helpers/copyDiscipline'
+import { extractStyleBlocks, usesSynchronousHighlightHandlers } from '@/test/helpers/motionDiscipline'
 
 const mockStreamPaperQa = vi.fn()
 const mockFetchDetail = vi.fn()
@@ -234,6 +235,48 @@ describe('PaperDetailView', () => {
       expect(tokens['--color-bg-subtle']).toBe('#fafbfc')
       expect(detailSrc).toContain('.detail-qa__answer-panel')
       expect(detailSrc).toContain('background: var(--color-bg-subtle)')
+    })
+  })
+
+  describe('§1.4.4 typography checklist', () => {
+    it('answer panel mounts with Body-lg + readable answer text (pre-wrap via CSS)', async () => {
+      const detailSrc = readFrontendSource('views/PaperDetailView.vue')
+      expect(answerPanelTypographyMatchesBaseline(detailSrc, extractStyleBlocks(detailSrc))).toBe(true)
+
+      mockStreamPaperQa.mockImplementation(
+        async (
+          _paperId: string,
+          _question: string,
+          handlers: { onDone?: (data: { answer_id: string; answer?: string }) => void },
+        ) => {
+          handlers.onDone?.({
+            answer_id: 'ans-1',
+            answer: '第一行\n第二行',
+          })
+        },
+      )
+
+      const wrapper = mount(PaperDetailView, {
+        props: { paperId: 'hss-001' },
+        global: { stubs: globalStubs },
+      })
+
+      await flushPromises()
+      await wrapper.find('.qa-textarea').setValue('问题？')
+      await wrapper
+        .findAll('button')
+        .find((button) => button.text() === '提问')
+        ?.trigger('click')
+      await flushPromises()
+
+      const panel = wrapper.find('.detail-qa__answer-panel')
+      expect(panel.classes()).toContain('text-body-lg')
+      expect(wrapper.find('.detail-qa__answer-text').text()).toContain('第一行')
+      expect(wrapper.find('.detail-qa__answer-text').classes()).not.toContain('text-mono')
+    })
+
+    it('citation tags expose label + (node_id) mono mix for SSE path', async () => {
+      expect(citationTagMixedLayout(readFrontendSource('components/ui/TagCitation.vue'))).toBe(true)
     })
   })
 

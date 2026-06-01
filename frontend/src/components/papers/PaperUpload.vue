@@ -6,11 +6,7 @@ import type { UploadRequestOptions } from 'element-plus'
 
 import { isApiClientError } from '@/api/client'
 import * as papersApi from '@/api/papers'
-
-const UPLOAD_MAIN_COPY = '拖拽 PDF 到此处，或'
-const UPLOAD_CLICK_LABEL = '点击上传'
-const UPLOAD_TIP = '建议 ≤32MB · 上传后自动进入解构流水线'
-const UPLOADING_LABEL = '上传中…'
+import { PAPERS_BASELINE_COPY } from '@/constants/papersCopy'
 
 const emit = defineEmits<{
   uploaded: [paperId: string]
@@ -18,16 +14,22 @@ const emit = defineEmits<{
 
 const uploading = ref(false)
 const uploadingFileName = ref('')
-const uploadError = ref('')
+const uploadErrorCode = ref('')
+const uploadErrorMessage = ref('')
+
+function clearUploadError(): void {
+  uploadErrorCode.value = ''
+  uploadErrorMessage.value = ''
+}
 
 async function handleUpload(options: UploadRequestOptions) {
   const file = options.file as File
   if (!file.name.toLowerCase().endsWith('.pdf')) {
-    ElMessage.warning('请上传 PDF 文件')
+    ElMessage.warning(PAPERS_BASELINE_COPY.nonPdfWarning)
     return
   }
 
-  uploadError.value = ''
+  clearUploadError()
   uploading.value = true
   uploadingFileName.value = file.name
 
@@ -37,8 +39,13 @@ async function handleUpload(options: UploadRequestOptions) {
     emit('uploaded', res.data.paper_id)
     options.onSuccess?.(res)
   } catch (error: unknown) {
-    const message = isApiClientError(error) ? error.message : '上传失败，请稍后重试'
-    uploadError.value = message
+    if (isApiClientError(error)) {
+      uploadErrorCode.value = error.code
+      uploadErrorMessage.value = error.message
+    } else {
+      uploadErrorCode.value = 'UPLOAD_FAILED'
+      uploadErrorMessage.value = PAPERS_BASELINE_COPY.uploadErrorFallback
+    }
   } finally {
     uploading.value = false
     uploadingFileName.value = ''
@@ -49,14 +56,20 @@ async function handleUpload(options: UploadRequestOptions) {
 <template>
   <div class="paper-upload">
     <el-alert
-      v-if="uploadError"
+      v-if="uploadErrorCode"
       class="paper-upload__error"
       type="error"
-      :title="uploadError"
+      :title="uploadErrorCode"
       show-icon
       :closable="true"
-      @close="uploadError = ''"
-    />
+      @close="clearUploadError"
+    >
+      <p class="paper-upload__error-message text-body">{{ uploadErrorMessage }}</p>
+      <p class="paper-upload__error-hint text-caption">{{ PAPERS_BASELINE_COPY.uploadRetryHint }}</p>
+      <el-button type="primary" plain size="small" class="paper-upload__retry" @click="clearUploadError">
+        {{ PAPERS_BASELINE_COPY.uploadRetryButton }}
+      </el-button>
+    </el-alert>
     <el-upload
       drag
       class="paper-upload__dropzone"
@@ -68,23 +81,37 @@ async function handleUpload(options: UploadRequestOptions) {
       <div v-if="uploading" class="paper-upload__uploading">
         <el-progress :percentage="100" :indeterminate="true" :show-text="false" />
         <p class="paper-upload__filename text-mono">{{ uploadingFileName }}</p>
-        <p class="paper-upload__status text-body">{{ UPLOADING_LABEL }}</p>
+        <p class="paper-upload__status text-body">{{ PAPERS_BASELINE_COPY.uploading }}</p>
       </div>
       <template v-else>
         <el-icon class="paper-upload__icon" aria-hidden="true"><Upload /></el-icon>
         <p class="paper-upload__text text-body">
-          {{ UPLOAD_MAIN_COPY }}
-          <em>{{ UPLOAD_CLICK_LABEL }}</em>
+          {{ PAPERS_BASELINE_COPY.uploadMain }}
+          <em>{{ PAPERS_BASELINE_COPY.uploadClick }}</em>
         </p>
       </template>
     </el-upload>
-    <p class="paper-upload__tip text-caption">{{ UPLOAD_TIP }}</p>
+    <p class="paper-upload__tip text-caption">{{ PAPERS_BASELINE_COPY.uploadTip }}</p>
   </div>
 </template>
 
 <style scoped>
 .paper-upload__error {
   margin-bottom: var(--spacing-12);
+}
+
+.paper-upload__error-message {
+  margin: var(--spacing-8) 0 0;
+  color: var(--color-text-primary);
+}
+
+.paper-upload__error-hint {
+  margin: var(--spacing-4) 0 0;
+  color: var(--color-text-secondary);
+}
+
+.paper-upload__retry {
+  margin-top: var(--spacing-12);
 }
 
 .paper-upload__dropzone {
@@ -135,6 +162,7 @@ async function handleUpload(options: UploadRequestOptions) {
 
 .paper-upload__tip {
   margin: var(--spacing-8) 0 0;
+  color: var(--color-text-secondary);
 }
 
 .paper-upload__uploading {

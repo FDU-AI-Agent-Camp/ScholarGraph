@@ -9,13 +9,9 @@ import PaperUpload from '@/components/papers/PaperUpload.vue'
 import BadgeParadigm from '@/components/ui/BadgeParadigm.vue'
 import BadgeStatus from '@/components/ui/BadgeStatus.vue'
 import EmptyState from '@/components/ui/EmptyState.vue'
+import { PAPERS_BASELINE_COPY } from '@/constants/papersCopy'
 import { RouteName } from '@/router/meta'
 import { usePaperStore } from '@/stores/paper'
-
-const PAPERS_TITLE = '文献库'
-const PAPERS_SUBTITLE = '管理已上传论文，查看解构进度与图谱入口'
-const UPLOAD_SECTION_TITLE = '上传论文'
-const TABLE_SECTION_TITLE = '全部文献'
 
 const router = useRouter()
 const paperStore = usePaperStore()
@@ -54,17 +50,17 @@ async function copyPaperId(paperId: string) {
 <template>
   <div class="papers">
     <header class="papers-header">
-      <h1 class="text-h1 papers-title">{{ PAPERS_TITLE }}</h1>
-      <p class="text-body papers-subtitle">{{ PAPERS_SUBTITLE }}</p>
+      <h1 class="text-h1 papers-title">{{ PAPERS_BASELINE_COPY.title }}</h1>
+      <p class="text-body papers-subtitle">{{ PAPERS_BASELINE_COPY.subtitle }}</p>
     </header>
 
     <section id="papers-upload" ref="uploadSectionRef" class="papers-section">
-      <h2 class="text-h2 papers-section-title">{{ UPLOAD_SECTION_TITLE }}</h2>
+      <h2 class="text-h2 papers-section-title">{{ PAPERS_BASELINE_COPY.uploadSection }}</h2>
       <PaperUpload @uploaded="onUploaded" />
     </section>
 
     <section class="papers-section papers-section--table">
-      <h2 class="text-h2 papers-section-title">{{ TABLE_SECTION_TITLE }}</h2>
+      <h2 class="text-h2 papers-section-title">{{ PAPERS_BASELINE_COPY.tableSection }}</h2>
       <el-table
         v-if="paperStore.items.length > 0"
         v-loading="paperStore.loading"
@@ -111,7 +107,7 @@ async function copyPaperId(paperId: string) {
       </el-table>
       <EmptyState v-else-if="!paperStore.loading" variant="no-papers" class="papers-empty">
         <template #action>
-          <el-button type="primary" plain @click="scrollToUpload">上传 PDF</el-button>
+          <el-button type="primary" plain @click="scrollToUpload">{{ PAPERS_BASELINE_COPY.emptyCta }}</el-button>
         </template>
       </EmptyState>
     </section>

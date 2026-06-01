@@ -1,25 +1,20 @@
 <script setup lang="ts">
+import HomeGraphMock from '@/components/home/HomeGraphMock.vue'
+import BadgeParadigm from '@/components/ui/BadgeParadigm.vue'
+import { HOME_BASELINE_COPY, HOME_STEP_LABELS } from '@/constants/homeCopy'
 import { ChatDotRound, Connection, Upload } from '@element-plus/icons-vue'
 import type { Component } from 'vue'
 import { RouterLink } from 'vue-router'
-
-import HomeGraphMock from '@/components/home/HomeGraphMock.vue'
-import BadgeParadigm from '@/components/ui/BadgeParadigm.vue'
 
 interface HomeStep {
   label: string
   icon: Component
 }
 
-const HOME_EYEBROW = 'AI AGENT · GRAPH RAG'
-const HOME_TITLE_LINES = ['解构论文逻辑，', '发现学术共同体'] as const
-const HOME_SUBTITLE = '面向 HSS 与 STEM 双范式分流：上传 PDF 后自动建图，在同一工作台完成多尺度问答与共同体巡检。'
-const HOME_PARADIGM_CAPTION = 'HSS 侧重理论视角与文本论证；STEM 侧重方法、实验与可复现流程。'
-
 const homeSteps: HomeStep[] = [
-  { label: '上传 PDF', icon: Upload },
-  { label: '自动建图', icon: Connection },
-  { label: '问答·巡检', icon: ChatDotRound },
+  { label: HOME_STEP_LABELS[0], icon: Upload },
+  { label: HOME_STEP_LABELS[1], icon: Connection },
+  { label: HOME_STEP_LABELS[2], icon: ChatDotRound },
 ]
 </script>
 
@@ -27,17 +22,17 @@ const homeSteps: HomeStep[] = [
   <div class="home page-content">
     <div class="home-hero">
       <section class="home-copy">
-        <p class="home-eyebrow">{{ HOME_EYEBROW }}</p>
+        <p class="home-eyebrow">{{ HOME_BASELINE_COPY.eyebrow }}</p>
         <h1 class="text-display home-title">
-          <span v-for="line in HOME_TITLE_LINES" :key="line" class="home-title-line">{{ line }}</span>
+          <span v-for="line in HOME_BASELINE_COPY.titleLines" :key="line" class="home-title-line">{{ line }}</span>
         </h1>
-        <p class="text-body-lg home-subtitle">{{ HOME_SUBTITLE }}</p>
+        <p class="text-body-lg home-subtitle">{{ HOME_BASELINE_COPY.subtitle }}</p>
         <div class="home-ctas">
           <RouterLink v-slot="{ navigate }" to="/papers" custom>
-            <el-button type="primary" @click="navigate">上传论文</el-button>
+            <el-button type="primary" @click="navigate">{{ HOME_BASELINE_COPY.primaryCta }}</el-button>
           </RouterLink>
           <RouterLink v-slot="{ navigate }" to="/papers" custom>
-            <el-button plain @click="navigate">浏览文献库</el-button>
+            <el-button plain @click="navigate">{{ HOME_BASELINE_COPY.secondaryCta }}</el-button>
           </RouterLink>
         </div>
         <ol class="home-steps" aria-label="使用流程">
@@ -53,7 +48,7 @@ const homeSteps: HomeStep[] = [
             <BadgeParadigm paradigm="HSS" />
             <BadgeParadigm paradigm="STEM" />
           </div>
-          <p class="home-paradigms-caption">{{ HOME_PARADIGM_CAPTION }}</p>
+          <p class="home-paradigms-caption">{{ HOME_BASELINE_COPY.paradigmCaption }}</p>
         </div>
       </section>
       <aside class="home-visual" aria-label="逻辑图谱装饰预览">

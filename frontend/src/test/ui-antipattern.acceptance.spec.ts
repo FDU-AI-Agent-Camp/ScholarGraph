@@ -249,7 +249,8 @@ describe('§1.3 Anti-pattern checklist (full audit)', () => {
           expect(src, `found passive pattern "${pattern}"`).not.toContain(pattern)
         }
       }
-      expect(readFrontendSource('components/papers/PaperUpload.vue')).toContain('拖拽 PDF 到此处')
+      expect(readFrontendSource('components/papers/PaperUpload.vue')).toContain('PAPERS_BASELINE_COPY')
+      expect(readFrontendSource('constants/papersCopy.ts')).toContain('拖拽 PDF 到此处')
     })
   })
 })

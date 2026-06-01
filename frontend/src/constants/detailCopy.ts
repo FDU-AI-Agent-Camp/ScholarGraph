@@ -9,6 +9,7 @@ export const DETAIL_BASELINE_COPY = {
   notReadyAlert: '论文尚未 ready，问答与图谱预览将在流水线完成后可用。',
   qaSectionTitle: '多尺度问答',
   qaPlaceholder: '这篇论文的核心论点是什么？',
+  qaPlaceholderAlt: '作者用了哪些分析视角？',
   citationLabel: '引用节点',
   graphPreviewTitle: '逻辑图谱预览',
   graphFullscreenLink: '全屏查看 →',

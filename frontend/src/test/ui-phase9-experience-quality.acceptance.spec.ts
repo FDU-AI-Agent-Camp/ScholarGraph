@@ -34,6 +34,8 @@ const PHASE_ACCEPTANCE_FILES = [
   'test/ui-phase141-background.acceptance.spec.ts',
   'test/ui-phase142-layout.acceptance.spec.ts',
   'test/ui-phase143-motion.acceptance.spec.ts',
+  'test/ui-phase144-copy.acceptance.spec.ts',
+  'test/ui-design-foundation.acceptance.spec.ts',
   'test/ui-antipattern.acceptance.spec.ts',
   'test/demo-path.integration.test.ts',
 ] as const
@@ -198,9 +200,9 @@ describe('§9 Experience quality × Phase checklist (full audit)', () => {
     })
 
     it('§1.4.4: hero baseline copy constants are wired', () => {
-      expect(homeViewSrc).toContain('上传论文')
-      expect(homeViewSrc).toContain('浏览文献库')
-      expect(homeViewSrc).toContain('解构论文逻辑，')
+      expect(homeViewSrc).toContain('HOME_BASELINE_COPY')
+      expect(readSrc('constants/homeCopy.ts')).toContain('浏览文献库')
+      expect(readSrc('constants/homeCopy.ts')).toContain('解构论文逻辑，')
     })
   })
 
@@ -224,7 +226,8 @@ describe('§9 Experience quality × Phase checklist (full audit)', () => {
     })
 
     it('§1.4.4: upload + empty baseline copy is centralized', () => {
-      expect(uploadSrc).toContain('拖拽 PDF 到此处')
+      expect(uploadSrc).toContain('PAPERS_BASELINE_COPY')
+      expect(readSrc('constants/papersCopy.ts')).toContain('拖拽 PDF 到此处')
       expect(papersViewSrc).toContain('EmptyState')
       expect(papersViewSrc).toContain('variant="no-papers"')
     })
@@ -595,6 +598,74 @@ describe('§9 Experience quality × Phase checklist (full audit)', () => {
     })
   })
 
+  describe('§9 文案 §1.4.4 — Phase 对照表验收', () => {
+    const phase144Src = readSrc('test/ui-phase144-copy.acceptance.spec.ts')
+
+    it('keeps ui-phase144-copy acceptance as §1.4.4 automation gate', () => {
+      expect(existsSync(resolve(FRONTEND_SRC, 'test/ui-phase144-copy.acceptance.spec.ts'))).toBe(true)
+      expect(phase144Src).toContain('§1.4.4 排版验收 — checklist')
+    })
+
+    it('Phase 0：typography 工具类（Display / H1–H3 / Body / Body-lg / Mono）', () => {
+      const typographyCss = readSrc('styles/typography.css')
+      expect(typographyCss).toContain('.text-body-lg')
+      expect(typographyCss).toContain('.text-mono')
+      expect(typographyCss).toContain('Body-lg QA')
+    })
+
+    it('Phase 1：route title 文案（App Shell）', () => {
+      expect(readSrc('constants/shellCopy.ts')).toContain('SHELL_BASELINE_COPY')
+      expect(readSrc('components/layout/AppLayout.vue')).toContain('route.meta.title')
+    })
+
+    it('Phase 2：Empty 默认文案', () => {
+      expect(readSrc('components/ui/emptyStatePresets.ts')).toContain('PAPERS_BASELINE_COPY')
+      expect(EMPTY_STATE_PRESETS['no-papers'].title).toBe('还没有论文')
+    })
+
+    it('Phase 3：Home 基准表全文 + 副标题 secondary', () => {
+      expect(readSrc('constants/homeCopy.ts')).toContain('HOME_BASELINE_COPY')
+      expect(readSrc('views/HomeView.vue')).toContain('HOME_BASELINE_COPY')
+      expect(readSrc('views/HomeView.vue')).toMatch(/\.home-subtitle[\s\S]*color: var\(--color-text-secondary\)/)
+    })
+
+    it('Phase 4：Upload / Empty 基准 + upload tip secondary', () => {
+      expect(readSrc('constants/papersCopy.ts')).toContain('PAPERS_BASELINE_COPY')
+      expect(readSrc('components/papers/PaperUpload.vue')).toContain('PAPERS_BASELINE_COPY')
+    })
+
+    it('Phase 5：答案区内嵌灰底 + Step/Alert/placeholder', () => {
+      expect(readSrc('constants/detailCopy.ts')).toContain('DETAIL_BASELINE_COPY')
+      expect(phase144Src).toContain('问答答案区：Body-lg + pre-wrap + 内嵌灰底，长答案可读')
+      expect(DETAIL_BASELINE_COPY.qaPlaceholder).toContain('核心论点')
+    })
+
+    it('Phase 6：409 错误文案 + CTA', () => {
+      expect(GRAPH_BASELINE_COPY.graphNotReadyTitle).toBe('图谱未就绪')
+      expect(readSrc('views/PaperGraphView.vue')).toContain('graph-view__error-cta')
+    })
+
+    it('Phase 7：Patrol 基准 + 错误表 + 副标题 secondary', () => {
+      expect(PATROL_BASELINE_COPY.subtitle).toContain('ready 论文')
+      expect(readSrc('views/PatrolView.vue')).toMatch(
+        /\.patrol-view__subtitle[\s\S]*color: var\(--color-text-secondary\)/,
+      )
+    })
+
+    it('Phase 8：禁止词扫雷（ui-antipattern + phase144）', () => {
+      expect(readSrc('test/ui-antipattern.acceptance.spec.ts')).toContain('无产品黑话')
+      expect(phase144Src).toContain('禁止词表')
+    })
+
+    it('§9 排版验收 checklist — phase144 + graph-qa + demo-path 三门禁', () => {
+      expect(phase144Src).toContain('Mono 仅 ID / code，正文不整段 Mono')
+      expect(phase144Src).toContain('中文与英文/ID 混排：label 正文 + (node_id) Mono 括号')
+      expect(readSrc('test/graph-qa.integration.test.ts')).toContain('§1.4.4 typography acceptance checklist')
+      expect(readSrc('test/demo-path.integration.test.ts')).toContain('§1.4.4 排版验收 checklist')
+      expect(readSrc('views/PaperDetailView.spec.ts')).toContain('§1.4.4 typography checklist')
+    })
+  })
+
   describe('§9 总验收 — cross-cutting gates', () => {
     const styleSources = [
       ...collectSourceFiles('views', ['.vue']),
@@ -669,7 +740,14 @@ describe('§9 Experience quality × Phase checklist (full audit)', () => {
       expect(readSrc('views/PapersView.vue')).toContain('papers-empty')
       expect(readSrc('views/PaperGraphView.vue')).toContain('graph-view__error-cta')
       expect(readSrc('views/PatrolView.vue')).toContain('patrol-view__error-cta')
-      expect(readSrc('components/papers/PaperUpload.vue')).toMatch(/重试|上传/)
+      expect(readSrc('components/papers/PaperUpload.vue')).toMatch(/uploadRetry|PAPERS_BASELINE_COPY/)
+    })
+
+    it('typography discipline: §1.4.4 checklist via phase144 + graph-qa + demo-path', () => {
+      const phase144Src = readSrc('test/ui-phase144-copy.acceptance.spec.ts')
+      expect(phase144Src).toContain('§1.4.4 排版验收 — checklist')
+      expect(readSrc('test/graph-qa.integration.test.ts')).toContain('§1.4.4 typography acceptance checklist')
+      expect(readSrc('test/demo-path.integration.test.ts')).toContain('§1.4.4 排版验收 checklist')
     })
 
     it('demo path §6: router resolves Home → Papers → Detail → Graph → Patrol chain', () => {
@@ -739,6 +817,27 @@ describe('§9 Experience quality × Phase checklist (full audit)', () => {
       expect(phase143Src).toContain('REDUCED_MOTION_ANIMATION_SOURCES')
       expect(phase143Src).toContain('registers graph-qa and demo-path integration gates')
       expect(readSrc('test/graph-qa.integration.test.ts')).toContain('preserves readable node labels')
+    })
+
+    it('§1.4.4 copy gate: ui-phase144 covers baseline table + typography + forbidden words', () => {
+      const phase144Src = readSrc('test/ui-phase144-copy.acceptance.spec.ts')
+      expect(phase144Src).toContain('§1.4.4 Copy & typography discipline')
+      expect(phase144Src).toContain('各页文案基准表')
+      expect(phase144Src).toContain('§1.4.4 排版验收 — checklist')
+      expect(phase144Src).toContain('禁止词表')
+      expect(readSrc('constants/homeCopy.ts')).toContain('HOME_BASELINE_COPY')
+      expect(readSrc('constants/papersCopy.ts')).toContain('PAPERS_BASELINE_COPY')
+      expect(readSrc('test/graph-qa.integration.test.ts')).toContain('§1.4.4 typography acceptance checklist')
+      expect(readSrc('test/demo-path.integration.test.ts')).toContain('§1.4.4 排版验收 checklist')
+    })
+
+    it('§1.2 / §1.5 foundation gate: ui-design-foundation covers decisions + parameter table', () => {
+      const foundationSrc = readSrc('test/ui-design-foundation.acceptance.spec.ts')
+      expect(foundationSrc).toContain('§1.5 设计参数速查')
+      expect(foundationSrc).toContain('§1.2 核心设计决策')
+      expect(foundationSrc).toContain('1440×900')
+      expect(foundationSrc).toContain('答辩必测联动 Tag click')
+      expect(readSrc('test/helpers/designFoundationDiscipline.ts')).toContain('DESIGN_CONTENT_MAX_WIDTH')
     })
   })
 })

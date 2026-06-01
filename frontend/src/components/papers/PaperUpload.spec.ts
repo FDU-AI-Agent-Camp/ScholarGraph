@@ -29,7 +29,10 @@ const globalStubs = {
   'el-progress': true,
   'el-alert': {
     props: ['title', 'type'],
-    template: '<div class="el-alert-stub" :data-title="title" :data-type="type" />',
+    template: '<div class="el-alert-stub" :data-title="title" :data-type="type"><slot /></div>',
+  },
+  'el-button': {
+    template: '<button><slot /></button>',
   },
 }
 
@@ -106,8 +109,10 @@ describe('PaperUpload', () => {
 
     const alert = wrapper.find('.el-alert-stub')
     expect(alert.exists()).toBe(true)
-    expect(alert.attributes('data-title')).toBe('无法解析 PDF')
-    expect(alert.attributes('data-type')).toBe('error')
+    expect(alert.attributes('data-title')).toBe('INGEST_FAILED')
+    expect(alert.text()).toContain('无法解析 PDF')
+    expect(alert.text()).toContain(PAPERS_BASELINE_COPY.uploadRetryHint)
+    expect(wrapper.find('.paper-upload__retry').text()).toBe(PAPERS_BASELINE_COPY.uploadRetryButton)
     expect(elMessageError).not.toHaveBeenCalled()
   })
 

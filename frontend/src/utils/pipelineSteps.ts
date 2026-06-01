@@ -1,5 +1,7 @@
 import type { FailedDuringStage, PaperStatus, PipelineStage } from '@/api/types'
 
+import { DETAIL_BASELINE_COPY } from '@/constants/detailCopy'
+
 export interface PipelineStepDefinition {
   stage: PipelineStage
   label: string
@@ -13,7 +15,7 @@ export const PIPELINE_STEPS: PipelineStepDefinition[] = [
   { stage: 'ready', label: '建图完成' },
 ]
 
-export const PIPELINE_REFRESH_CAPTION = '每 2 秒自动刷新'
+export const PIPELINE_REFRESH_CAPTION = DETAIL_BASELINE_COPY.refreshCaption
 
 export type PipelineStepVisualState = 'pending' | 'active' | 'done' | 'failed'
 

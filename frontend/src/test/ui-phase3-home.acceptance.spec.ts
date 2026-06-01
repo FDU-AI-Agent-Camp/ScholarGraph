@@ -6,18 +6,11 @@ import { describe, expect, it } from 'vitest'
 
 import HomeGraphMock from '@/components/home/HomeGraphMock.vue'
 import HomeView from '@/views/HomeView.vue'
+import { HOME_BASELINE_COPY } from '@/constants/homeCopy'
 import { readFrontendSource } from '@/test/helpers/designTokens'
 
 const homeViewSrc = readFrontendSource('views/HomeView.vue')
 const graphMockSrc = readFrontendSource('components/home/HomeGraphMock.vue')
-
-/** ui-design-progress §1.4.4 Home baseline copy. */
-const HOME_BASELINE_COPY = {
-  eyebrow: 'AI AGENT · GRAPH RAG',
-  titleLines: ['解构论文逻辑，', '发现学术共同体'],
-  primaryCta: '上传论文',
-  secondaryCta: '浏览文献库',
-} as const
 
 function readStyleBlock(source: string, selector: string): string {
   const escaped = selector.replace('.', '\\.')

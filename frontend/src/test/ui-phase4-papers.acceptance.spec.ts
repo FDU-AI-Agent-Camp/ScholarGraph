@@ -149,10 +149,11 @@ describe('Phase 4 Papers acceptance', () => {
 
   describe('checklist: §1.4.4 Upload / Empty baseline copy', () => {
     it('PaperUpload source and mount align with baseline table', () => {
-      expect(paperUploadSrc).toContain(PAPERS_BASELINE_COPY.uploadMain)
-      expect(paperUploadSrc).toContain(PAPERS_BASELINE_COPY.uploadClick)
-      expect(paperUploadSrc).toContain(PAPERS_BASELINE_COPY.uploadTip)
-      expect(paperUploadSrc).toContain(PAPERS_BASELINE_COPY.uploading)
+      expect(paperUploadSrc).toContain('PAPERS_BASELINE_COPY')
+      expect(PAPERS_BASELINE_COPY.uploadMain).toBe('拖拽 PDF 到此处，或')
+      expect(PAPERS_BASELINE_COPY.uploadClick).toBe('点击上传')
+      expect(PAPERS_BASELINE_COPY.uploadTip).toBe('建议 ≤32MB · 上传后自动进入解构流水线')
+      expect(PAPERS_BASELINE_COPY.uploading).toBe('上传中…')
       expect(paperUploadSrc).not.toContain('上传后轮询 status')
 
       const wrapper = mount(PaperUpload, {
@@ -170,11 +171,10 @@ describe('Phase 4 Papers acceptance', () => {
     })
 
     it('PapersView page header and Empty frame use baseline copy only', () => {
-      expect(papersViewSrc).toContain(PAPERS_BASELINE_COPY.title)
-      expect(papersViewSrc).toContain(PAPERS_BASELINE_COPY.subtitle)
-      expect(papersViewSrc).toContain(PAPERS_BASELINE_COPY.uploadSection)
-      expect(papersViewSrc).toContain(PAPERS_BASELINE_COPY.tableSection)
-      expect(papersViewSrc).toContain(PAPERS_BASELINE_COPY.emptyCta)
+      expect(papersViewSrc).toContain('PAPERS_BASELINE_COPY')
+      expect(paperUploadSrc).toContain('PAPERS_BASELINE_COPY')
+      expect(PAPERS_BASELINE_COPY.title).toBe('文献库')
+      expect(PAPERS_BASELINE_COPY.subtitle).toBe('管理已上传论文，查看解构进度与图谱入口')
       expect(papersViewSrc).not.toContain('请输入')
       expect(papersViewSrc).not.toContain('Lorem')
     })

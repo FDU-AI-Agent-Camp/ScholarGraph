@@ -15,6 +15,7 @@ import { routes } from '@/router/index'
 import { RouteName } from '@/router/meta'
 import { buildHighlightStateMap, toG6GraphPayload } from '@/utils/paperGraph'
 import { DESIGN_SPEC_SEMANTIC_COLORS, loadDesignTokenMap, readFrontendSource } from '@/test/helpers/designTokens'
+import { answerPanelTypographyMatchesBaseline, citationTagMixedLayout } from '@/test/helpers/copyDiscipline'
 import { answerPanelStyleBlockHasNoAnimation, extractStyleBlocks } from '@/test/helpers/motionDiscipline'
 
 const DEMO_PAPER_ID = 'hss-001'
@@ -50,7 +51,8 @@ function resolveDefensePath(path: string) {
 describe('design-spec §16 Prototype 答辩路径', () => {
   describe('Home → [上传论文] → Papers / Default', () => {
     it('primary CTA navigates to /papers for upload entry', () => {
-      expect(homeViewSrc).toContain('上传论文')
+      expect(homeViewSrc).toContain('HOME_BASELINE_COPY')
+      expect(homeViewSrc).toContain('to="/papers"')
       expect(homeViewSrc).toMatch(/to="\/papers"/)
     })
 
@@ -58,7 +60,7 @@ describe('design-spec §16 Prototype 答辩路径', () => {
       expect(papersViewSrc).toContain('PaperUpload')
       expect(papersViewSrc).toContain('fetchList')
       expect(papersViewSrc).toContain('openDetail')
-      expect(paperUploadSrc).toContain('拖拽 PDF 到此处')
+      expect(paperUploadSrc).toContain('PAPERS_BASELINE_COPY')
     })
 
     it('upload success routes into Detail via paper_id param', () => {
@@ -268,6 +270,55 @@ describe('design-spec §16 Prototype 答辩路径', () => {
       expect(paperGraphUtilSrc).toContain('labelFill')
       expect(paperGraphUtilSrc).not.toMatch(/scale:\s*1\./)
       expect(readFrontendSource('components/layout/AppLayout.vue')).not.toMatch(/blur\s*\(/i)
+    })
+  })
+
+  describe('§1.4.4 文案验收 checklist', () => {
+    it('答辩路径引用集中 baseline copy 常量', () => {
+      expect(homeViewSrc).toContain('HOME_BASELINE_COPY')
+      expect(readFrontendSource('views/PapersView.vue')).toContain('PAPERS_BASELINE_COPY')
+      expect(detailViewSrc).toContain('DETAIL_BASELINE_COPY')
+      expect(graphViewSrc).toContain('GRAPH_BASELINE_COPY')
+      expect(patrolViewSrc).toContain('PATROL_BASELINE_COPY')
+    })
+
+    it('Upload 失败与 Empty 态含可行动文案', () => {
+      const uploadSrc = readFrontendSource('components/papers/PaperUpload.vue')
+      expect(uploadSrc).toContain('uploadRetryHint')
+      expect(uploadSrc).toContain('paper-upload__retry')
+      expect(readFrontendSource('test/ui-phase144-copy.acceptance.spec.ts')).toContain(
+        '§1.4.4 Copy & typography discipline',
+      )
+    })
+  })
+
+  describe('§1.4.4 排版验收 checklist', () => {
+    it('Detail SSE 答案区 Body-lg + pre-wrap + 灰底可读', () => {
+      const detailStyles = extractStyleBlocks(detailViewSrc)
+      expect(answerPanelTypographyMatchesBaseline(detailViewSrc, detailStyles)).toBe(true)
+    })
+
+    it('Citation Tag label + (node_id) mono 混排', () => {
+      expect(citationTagMixedLayout(readFrontendSource('components/ui/TagCitation.vue'))).toBe(true)
+    })
+
+    it('答辩路径副标题 / upload hint 使用 secondary 色', () => {
+      expect(extractStyleBlocks(readFrontendSource('views/PapersView.vue'))).toMatch(
+        /\.papers-subtitle[\s\S]*color: var\(--color-text-secondary\)/,
+      )
+      expect(extractStyleBlocks(readFrontendSource('components/papers/PaperUpload.vue'))).toMatch(
+        /\.paper-upload__tip[\s\S]*color: var\(--color-text-secondary\)/,
+      )
+    })
+  })
+
+  describe('§1.5 设计参数 — demo-path 答辩锚点', () => {
+    it('Citation #E11D48 + 150ms 与 Shell 240/56 在答辩链路透传', () => {
+      const tokens = loadDesignTokenMap()
+      expect(tokens['--color-citation-active']).toBe('#e11d48')
+      expect(tokens['--content-max-width']).toBe('1280px')
+      expect(readFrontendSource('components/layout/AppLayout.vue')).toContain('width="240px"')
+      expect(readFrontendSource('test/ui-design-foundation.acceptance.spec.ts')).toContain('§1.5 设计参数速查')
     })
   })
 

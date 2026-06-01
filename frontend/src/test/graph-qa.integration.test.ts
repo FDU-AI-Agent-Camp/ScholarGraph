@@ -9,6 +9,7 @@ import type { UnifiedPaperGraph } from '@/api/types'
 import { cssToken } from '@/utils/cssTokens'
 import { appendUniqueCitation, buildHighlightStateMap, toG6GraphPayload } from '@/utils/paperGraph'
 import { DESIGN_SPEC_SEMANTIC_COLORS, loadDesignTokenMap, readFrontendSource } from '@/test/helpers/designTokens'
+import { answerPanelTypographyMatchesBaseline, citationTagMixedLayout } from '@/test/helpers/copyDiscipline'
 import { answerPanelStyleBlockHasNoAnimation, extractStyleBlocks } from '@/test/helpers/motionDiscipline'
 
 describe('graph + QA SSE integration (fixtures)', () => {
@@ -141,6 +142,23 @@ describe('graph + QA SSE integration (fixtures)', () => {
       expect(answerPanelStyleBlockHasNoAnimation(extractStyleBlocks(detailSrc))).toBe(true)
       expect(paperGraphUtilSrc).toContain('labelFill')
       expect(paperGraphUtilSrc).not.toMatch(/\btranslate\s*\(/i)
+    })
+  })
+
+  describe('§1.4.4 typography acceptance checklist', () => {
+    it('SSE answer panel keeps Body-lg + pre-wrap + subtle surface for long answers', () => {
+      const detailSrc = readFrontendSource('views/PaperDetailView.vue')
+      expect(answerPanelTypographyMatchesBaseline(detailSrc, extractStyleBlocks(detailSrc))).toBe(true)
+    })
+
+    it('Citation Tag keeps label sans + (node_id) mono for QA ↔ graph path', () => {
+      const tagSrc = readFrontendSource('components/ui/TagCitation.vue')
+      expect(citationTagMixedLayout(tagSrc)).toBe(true)
+    })
+
+    it('graph QA path does not force answer body into mono', () => {
+      const detailStyles = extractStyleBlocks(readFrontendSource('views/PaperDetailView.vue'))
+      expect(detailStyles).not.toMatch(/\.detail-qa__answer-text[\s\S]*font-family: var\(--font-mono\)/)
     })
   })
 })

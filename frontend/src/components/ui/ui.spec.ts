@@ -7,6 +7,7 @@ import EmptyState from '@/components/ui/EmptyState.vue'
 import { EMPTY_STATE_PRESETS } from '@/components/ui/emptyStatePresets'
 import InsightCard from '@/components/ui/InsightCard.vue'
 import TagCitation from '@/components/ui/TagCitation.vue'
+import { citationTagMixedLayout } from '@/test/helpers/copyDiscipline'
 import { readFrontendSource, loadDesignTokenMap } from '@/test/helpers/designTokens'
 
 describe('BadgeParadigm', () => {
@@ -53,6 +54,7 @@ describe('TagCitation', () => {
 
     expect(wrapper.find('.tag-citation__label').text()).toBe('核心论点')
     expect(wrapper.find('.tag-citation__node-id').text()).toBe('(n1)')
+    expect(citationTagMixedLayout(readFrontendSource('components/ui/TagCitation.vue'))).toBe(true)
   })
 
   it('uses active variant class and emits click', async () => {

@@ -1,3 +1,5 @@
+import { PAPERS_BASELINE_COPY } from '@/constants/papersCopy'
+
 export type EmptyStateVariant = 'no-papers' | 'no-graph' | 'no-report'
 
 export interface EmptyStatePreset {
@@ -7,8 +9,8 @@ export interface EmptyStatePreset {
 
 export const EMPTY_STATE_PRESETS: Record<EmptyStateVariant, EmptyStatePreset> = {
   'no-papers': {
-    title: '还没有论文',
-    description: '上传 PDF 开始自动解构',
+    title: PAPERS_BASELINE_COPY.emptyTitle,
+    description: PAPERS_BASELINE_COPY.emptyBody,
   },
   'no-graph': {
     title: '暂无图谱',
