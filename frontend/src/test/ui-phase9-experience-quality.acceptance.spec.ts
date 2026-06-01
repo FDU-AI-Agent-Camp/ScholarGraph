@@ -28,6 +28,8 @@ const PHASE_ACCEPTANCE_FILES = [
   'test/ui-phase6-graph.acceptance.spec.ts',
   'test/ui-phase7-patrol.acceptance.spec.ts',
   'test/ui-phase8-responsive.acceptance.spec.ts',
+  'test/ui-antipattern.acceptance.spec.ts',
+  'test/demo-path.integration.test.ts',
 ] as const
 
 const FORBIDDEN_PLACEHOLDERS = ['请输入内容', '请输入…', '请输入问题', 'Lorem ipsum'] as const
@@ -336,8 +338,9 @@ describe('§9 Experience quality × Phase checklist (full audit)', () => {
       expect(readSrc('styles/tokens.css')).toContain('--duration-blink: 0ms')
     })
 
-    it('§1.4.4: forbidden marketing words scan is covered by phase 8 acceptance', () => {
+    it('§1.4.4: forbidden marketing words scan is covered by phase 8 + §1.3 antipattern acceptance', () => {
       expect(existsSync(resolve(FRONTEND_SRC, 'test/ui-phase8-responsive.acceptance.spec.ts'))).toBe(true)
+      expect(existsSync(resolve(FRONTEND_SRC, 'test/ui-antipattern.acceptance.spec.ts'))).toBe(true)
     })
   })
 
@@ -428,6 +431,15 @@ describe('§9 Experience quality × Phase checklist (full audit)', () => {
       expect(packageJson.scripts['check:ci']).toContain('npm run check')
       expect(packageJson.scripts['check:ci']).toContain('npm run test')
       expect(packageJson.scripts['check:ci']).toContain('npm run build')
+    })
+
+    it('§1.3 anti-pattern checklist: dedicated acceptance covers visual, motion, and copy gates', () => {
+      const antipatternSrc = readSrc('test/ui-antipattern.acceptance.spec.ts')
+      expect(antipatternSrc).toContain('§1.3 Anti-pattern checklist')
+      expect(antipatternSrc).toContain('无 Inter 字体栈')
+      expect(antipatternSrc).toContain('无裸 transition: all')
+      expect(antipatternSrc).toContain('无产品黑话')
+      expect(antipatternSrc).toContain('图谱节点 hover 禁止位移')
     })
   })
 })
