@@ -87,6 +87,25 @@ describe('usePaperStore', () => {
     expect(store.loading).toBe(false)
   })
 
+  it('fetchDetail records ApiClientError in lastError and clears loading', async () => {
+    mockGetPaper.mockRejectedValue(new ApiClientError({ code: 'NOT_FOUND', message: '论文不存在' }, 404))
+    const store = usePaperStore()
+
+    await expect(store.fetchDetail('missing')).rejects.toBeInstanceOf(ApiClientError)
+    expect(store.lastError).toBe('论文不存在')
+    expect(store.currentPaper).toBeNull()
+    expect(store.loading).toBe(false)
+  })
+
+  it('fetchDetail records generic Error via getUnknownErrorMessage', async () => {
+    mockGetPaper.mockRejectedValue(new Error('network down'))
+    const store = usePaperStore()
+
+    await expect(store.fetchDetail('hss-001')).rejects.toThrow('network down')
+    expect(store.lastError).toBe('network down')
+    expect(store.loading).toBe(false)
+  })
+
   it('fetchGraph returns UnifiedPaperGraph and caches currentGraph', async () => {
     mockGetPaperGraph.mockResolvedValue({
       data: sampleGraph,
@@ -98,6 +117,29 @@ describe('usePaperStore', () => {
 
     expect(graph.nodes).toEqual([])
     expect(store.currentGraph?.paper_id).toBe('hss-001')
+  })
+
+  it('fetchGraph records ApiClientError in lastError without clearing prior graph', async () => {
+    mockGetPaperGraph.mockResolvedValueOnce({
+      data: sampleGraph,
+      meta: { request_id: 'r3' },
+    })
+    mockGetPaperGraph.mockRejectedValueOnce(new ApiClientError({ code: 'GRAPH_NOT_READY', message: '图谱未就绪' }, 409))
+    const store = usePaperStore()
+    await store.fetchGraph('hss-001')
+
+    await expect(store.fetchGraph('hss-001')).rejects.toBeInstanceOf(ApiClientError)
+    expect(store.lastError).toBe('图谱未就绪')
+    expect(store.currentGraph?.paper_id).toBe('hss-001')
+  })
+
+  it('fetchGraph records generic Error via getUnknownErrorMessage', async () => {
+    mockGetPaperGraph.mockRejectedValue(new Error('network timeout'))
+    const store = usePaperStore()
+
+    await expect(store.fetchGraph('hss-001')).rejects.toThrow('network timeout')
+    expect(store.lastError).toBe('network timeout')
+    expect(store.currentGraph).toBeNull()
   })
 
   it('clearCurrent resets detail and graph refs', async () => {

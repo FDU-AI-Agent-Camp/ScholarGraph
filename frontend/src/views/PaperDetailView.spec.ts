@@ -2,6 +2,7 @@ import { flushPromises, mount } from '@vue/test-utils'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import type { PaperDetail, QaStreamCitationData, UnifiedPaperGraph } from '@/api/types'
+import { ApiClientError } from '@/api/client'
 import { DETAIL_BASELINE_COPY } from '@/constants/detailCopy'
 import { RouteName } from '@/router/meta'
 import { loadDesignTokenMap, readFrontendSource } from '@/test/helpers/designTokens'
@@ -536,6 +537,38 @@ describe('PaperDetailView', () => {
       await flushPromises()
 
       expect(wrapper.find('.detail-qa__answer-text').text()).toBe('错误: 图谱未就绪')
+    })
+  })
+
+  describe('robustness (API failures)', () => {
+    it('renders empty shell when fetchDetail rejects without crashing', async () => {
+      paperStoreState.currentPaper = null as unknown as PaperDetail
+      mockFetchDetail.mockRejectedValue(new ApiClientError({ code: 'NOT_FOUND', message: '论文不存在' }, 404))
+
+      const wrapper = mount(PaperDetailView, {
+        props: { paperId: 'missing' },
+        global: { stubs: globalStubs },
+      })
+      await flushPromises()
+
+      expect(wrapper.find('.paper-detail').exists()).toBe(true)
+      expect(wrapper.find('.detail-header').exists()).toBe(false)
+      expect(wrapper.attributes('data-loading')).not.toBe('true')
+    })
+
+    it('clears graphLoading when fetchGraph rejects during preview load', async () => {
+      paperStoreState.currentGraph = null as unknown as UnifiedPaperGraph
+      mockFetchGraph.mockRejectedValue(new Error('network timeout'))
+
+      const wrapper = mount(PaperDetailView, {
+        props: { paperId: 'hss-001' },
+        global: { stubs: globalStubs },
+      })
+      await flushPromises()
+
+      expect(wrapper.find('.detail-graph__canvas').attributes('data-loading')).not.toBe('true')
+      expect(wrapper.find('.detail-graph__placeholder').exists()).toBe(true)
+      expect(wrapper.find('.paper-graph-stub').exists()).toBe(false)
     })
   })
 })

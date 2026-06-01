@@ -251,6 +251,32 @@ describe('PaperGraphView', () => {
     expect(wrapper.find('.graph-view__error-cta').exists()).toBe(false)
   })
 
+  it('shows unknown error message when fetch fails with generic Error', async () => {
+    mockFetchGraph.mockRejectedValue(new Error('network timeout'))
+
+    const wrapper = mount(PaperGraphView, {
+      props: { paperId: 'hss-002' },
+      global: {
+        stubs: {
+          PaperGraph: paperGraphStub,
+          GraphToolbar: true,
+          BadgeParadigm: true,
+          ...graphOverlayStubs,
+          'el-alert': {
+            props: ['title'],
+            template: '<div class="graph-alert" :data-title="title" />',
+          },
+          'el-button': true,
+        },
+      },
+    })
+
+    await flushPromises()
+
+    expect(wrapper.find('.graph-view__error-panel .graph-alert').attributes('data-title')).toBe('network timeout')
+    expect(wrapper.find('.graph-view__error-cta').exists()).toBe(false)
+  })
+
   it('syncs highlight query when a graph node is clicked', async () => {
     mockFetchGraph.mockImplementation(async () => {
       paperStoreState.currentGraph = sampleGraph

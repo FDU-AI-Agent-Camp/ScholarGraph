@@ -1,11 +1,12 @@
-import { defineComponent, h, unref } from 'vue'
 import { flushPromises, mount } from '@vue/test-utils'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import type { PaperSummary } from '@/api/types'
 import { RouteName } from '@/router/meta'
-import { PAPERS_BASELINE_COPY } from '@/test/helpers/papersBaselineCopy'
 import { readFrontendSource } from '@/test/helpers/designTokens'
+import { PAPERS_BASELINE_COPY } from '@/test/helpers/papersBaselineCopy'
+import { createTableDataCapture } from '@/test/helpers/tableDataCaptureStub'
+import { createTableStripeCapture } from '@/test/helpers/tableStripeCaptureStub'
 import PapersView from '@/views/PapersView.vue'
 
 const push = vi.fn()
@@ -84,6 +85,24 @@ describe('PapersView', () => {
     expect(fetchList).toHaveBeenCalled()
   })
 
+  it('mounts safely when fetchList rejects on mount', async () => {
+    fetchList.mockRejectedValue(new Error('list failed'))
+
+    const wrapper = mount(PapersView, {
+      global: {
+        stubs: {
+          PaperUpload: true,
+          'el-table': true,
+          ...tableStubs,
+        },
+      },
+    })
+    await flushPromises()
+
+    expect(wrapper.find('.papers-title').exists()).toBe(true)
+    expect(wrapper.find('.papers').exists()).toBe(true)
+  })
+
   describe('§1.4.4 page header baseline copy', () => {
     it('renders H1, subtitle, and section titles from design-spec §8', () => {
       const wrapper = mount(PapersView, {
@@ -108,27 +127,14 @@ describe('PapersView', () => {
       let stripe = false
       let tableClass = ''
 
-      const TableCapture = defineComponent({
-        props: {
-          stripe: Boolean,
-          class: [String, Array, Object],
-          data: {
-            type: Array,
-            default: () => [],
-          },
-        },
-        setup(props) {
-          stripe = Boolean(props.stripe)
-          tableClass = String(props.class ?? '')
-          return () => h('div', { class: 'table-stub' })
-        },
-      })
-
       mount(PapersView, {
         global: {
           stubs: {
             PaperUpload: true,
-            'el-table': TableCapture,
+            'el-table': createTableStripeCapture((state) => {
+              stripe = state.stripe
+              tableClass = state.tableClass
+            }),
             ...tableStubs,
           },
         },
@@ -166,24 +172,14 @@ describe('PapersView', () => {
 
   it('binds PaperSummary[] to table data', () => {
     let tableRows: PaperSummary[] = []
-    const TableCapture = defineComponent({
-      props: {
-        data: {
-          type: Array,
-          default: () => [],
-        },
-      },
-      setup(props) {
-        tableRows = unref(props.data) as PaperSummary[]
-        return () => h('div', { class: 'table-stub' })
-      },
-    })
 
     mount(PapersView, {
       global: {
         stubs: {
           PaperUpload: true,
-          'el-table': TableCapture,
+          'el-table': createTableDataCapture((rows) => {
+            tableRows = rows
+          }),
           ...tableStubs,
         },
       },

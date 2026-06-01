@@ -284,4 +284,30 @@ describe('PatrolView', () => {
         .some((node) => node.attributes('data-title') === PATROL_BASELINE_COPY.validationExactTwo),
     ).toBe(false)
   })
+
+  describe('robustness (API failures)', () => {
+    it('shows PATROL_FAILED message and resets loading state', async () => {
+      mockRunPatrol.mockRejectedValue(new ApiClientError({ code: 'PATROL_FAILED', message: '巡检失败' }, 500))
+
+      const wrapper = await mountPatrolView()
+      await setPaperSelection(wrapper, 'hss-001', 'hss-002')
+      await wrapper.find('.patrol-run-stub').trigger('click')
+      await flushPromises()
+
+      expect(wrapper.find('.patrol-alert').attributes('data-title')).toBe('巡检失败')
+      expect(wrapper.find('.patrol-run-stub').attributes('data-loading')).toBe('false')
+    })
+
+    it('shows generic network error and resets loading state', async () => {
+      mockRunPatrol.mockRejectedValue(new Error('network down'))
+
+      const wrapper = await mountPatrolView()
+      await setPaperSelection(wrapper, 'hss-001', 'hss-002')
+      await wrapper.find('.patrol-run-stub').trigger('click')
+      await flushPromises()
+
+      expect(wrapper.find('.patrol-alert').attributes('data-title')).toBe('network down')
+      expect(wrapper.find('.patrol-run-stub').attributes('data-loading')).toBe('false')
+    })
+  })
 })

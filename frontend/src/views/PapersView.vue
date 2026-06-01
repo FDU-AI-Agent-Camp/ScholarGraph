@@ -18,7 +18,7 @@ const paperStore = usePaperStore()
 const uploadSectionRef = ref<HTMLElement | null>(null)
 
 onMounted(() => {
-  void paperStore.fetchList()
+  void paperStore.fetchList().catch(() => undefined)
 })
 
 function onUploaded(paperId: string) {

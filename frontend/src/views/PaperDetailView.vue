@@ -56,8 +56,12 @@ async function loadGraphIfReady(): Promise<void> {
 }
 
 onMounted(async () => {
-  await paperStore.fetchDetail(props.paperId)
-  await loadGraphIfReady()
+  try {
+    await paperStore.fetchDetail(props.paperId)
+    await loadGraphIfReady()
+  } catch {
+    // Store records lastError; template guards on currentPaper.
+  }
 })
 
 watch(

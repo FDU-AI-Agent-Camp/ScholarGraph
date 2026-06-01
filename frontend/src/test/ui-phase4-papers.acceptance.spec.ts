@@ -1,14 +1,14 @@
 /**
  * Phase 4 Papers acceptance — design-spec §8 + ui-design-progress §1.4.
  */
-import { defineComponent, h } from 'vue'
 import { flushPromises, mount } from '@vue/test-utils'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import type { PaperSummary } from '@/api/types'
 import PaperUpload from '@/components/papers/PaperUpload.vue'
-import { PAPERS_BASELINE_COPY } from '@/test/helpers/papersBaselineCopy'
 import { loadDesignTokenMap, readFrontendSource } from '@/test/helpers/designTokens'
+import { PAPERS_BASELINE_COPY } from '@/test/helpers/papersBaselineCopy'
+import { createTableStripeCapture } from '@/test/helpers/tableStripeCaptureStub'
 import PapersView from '@/views/PapersView.vue'
 
 const papersViewSrc = readFrontendSource('views/PapersView.vue')
@@ -103,22 +103,6 @@ describe('Phase 4 Papers acceptance', () => {
       let stripe = false
       let tableClass = ''
 
-      const TableCapture = defineComponent({
-        props: {
-          stripe: Boolean,
-          class: [String, Array, Object],
-          data: {
-            type: Array,
-            default: () => [],
-          },
-        },
-        setup(props) {
-          stripe = Boolean(props.stripe)
-          tableClass = String(props.class ?? '')
-          return () => h('div')
-        },
-      })
-
       paperStoreState.items = [
         {
           paper_id: 'stem-001',
@@ -133,7 +117,10 @@ describe('Phase 4 Papers acceptance', () => {
         global: {
           stubs: {
             PaperUpload: true,
-            'el-table': TableCapture,
+            'el-table': createTableStripeCapture((state) => {
+              stripe = state.stripe
+              tableClass = state.tableClass
+            }),
             'el-table-column': true,
             'el-button': true,
             'el-icon': true,

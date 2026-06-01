@@ -1,9 +1,11 @@
-import { defineComponent, h } from 'vue'
 import { flushPromises, mount } from '@vue/test-utils'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { ApiClientError } from '@/api/client'
+import { elUploadStub } from '@/test/helpers/elUploadStub'
 import { PAPERS_BASELINE_COPY } from '@/test/helpers/papersBaselineCopy'
+import { uploadNonPdfStub } from '@/test/helpers/uploadNonPdfStub'
+import { uploadWithSlotStub } from '@/test/helpers/uploadWithSlotStub'
 
 const mockUploadPaper = vi.hoisted(() => vi.fn())
 const elMessageWarning = vi.hoisted(() => vi.fn())
@@ -35,28 +37,6 @@ const globalStubs = {
     template: '<button><slot /></button>',
   },
 }
-
-const ElUploadStub = defineComponent({
-  props: {
-    httpRequest: {
-      type: Function,
-      required: true,
-    },
-  },
-  setup(props) {
-    function run() {
-      const file = new File(['%PDF'], 'sample.pdf', { type: 'application/pdf' })
-      void props.httpRequest({ file, onSuccess: vi.fn(), onError: vi.fn() })
-    }
-    return { run }
-  },
-  template: `
-    <div>
-      <button class="do-upload" @click="run">upload</button>
-      <slot />
-    </div>
-  `,
-})
 
 describe('PaperUpload', () => {
   beforeEach(() => {
@@ -99,7 +79,7 @@ describe('PaperUpload', () => {
       global: {
         stubs: {
           ...globalStubs,
-          'el-upload': ElUploadStub,
+          'el-upload': elUploadStub,
         },
       },
     })
@@ -116,6 +96,27 @@ describe('PaperUpload', () => {
     expect(elMessageError).not.toHaveBeenCalled()
   })
 
+  it('maps generic network Error to UPLOAD_FAILED with fallback copy', async () => {
+    mockUploadPaper.mockRejectedValue(new Error('network'))
+
+    const wrapper = mount(PaperUpload, {
+      global: {
+        stubs: {
+          ...globalStubs,
+          'el-upload': elUploadStub,
+        },
+      },
+    })
+
+    await wrapper.find('.do-upload').trigger('click')
+    await flushPromises()
+
+    const alert = wrapper.find('.el-alert-stub')
+    expect(alert.attributes('data-title')).toBe('UPLOAD_FAILED')
+    expect(alert.text()).toContain(PAPERS_BASELINE_COPY.uploadErrorFallback)
+    expect(elMessageError).not.toHaveBeenCalled()
+  })
+
   it('shows uploading label and filename while request is in flight', async () => {
     let resolveUpload: ((value: unknown) => void) | undefined
     mockUploadPaper.mockImplementation(
@@ -125,27 +126,11 @@ describe('PaperUpload', () => {
         }),
     )
 
-    const UploadWithSlotStub = defineComponent({
-      props: {
-        httpRequest: {
-          type: Function,
-          required: true,
-        },
-      },
-      setup(props, { slots }) {
-        function run() {
-          const file = new File(['%PDF'], 'sample.pdf', { type: 'application/pdf' })
-          void props.httpRequest({ file, onSuccess: vi.fn(), onError: vi.fn() })
-        }
-        return () => h('div', [h('button', { class: 'do-upload', onClick: run }, 'upload'), slots.default?.()])
-      },
-    })
-
     const wrapper = mount(PaperUpload, {
       global: {
         stubs: {
           ...globalStubs,
-          'el-upload': UploadWithSlotStub,
+          'el-upload': uploadWithSlotStub,
         },
       },
     })
@@ -171,7 +156,7 @@ describe('PaperUpload', () => {
       global: {
         stubs: {
           ...globalStubs,
-          'el-upload': ElUploadStub,
+          'el-upload': elUploadStub,
         },
       },
     })
@@ -184,28 +169,11 @@ describe('PaperUpload', () => {
   })
 
   it('warns when file is not PDF', async () => {
-    const UploadNonPdfStub = defineComponent({
-      props: {
-        httpRequest: {
-          type: Function,
-          required: true,
-        },
-      },
-      setup(props) {
-        function run() {
-          const file = new File(['text'], 'notes.txt', { type: 'text/plain' })
-          void props.httpRequest({ file, onSuccess: vi.fn(), onError: vi.fn() })
-        }
-        return { run }
-      },
-      template: '<button class="do-upload" @click="run">upload</button>',
-    })
-
     const wrapper = mount(PaperUpload, {
       global: {
         stubs: {
           ...globalStubs,
-          'el-upload': UploadNonPdfStub,
+          'el-upload': uploadNonPdfStub,
         },
       },
     })

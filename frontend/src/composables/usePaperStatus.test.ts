@@ -132,4 +132,33 @@ describe('usePaperStatus', () => {
     expect(papersApi.getPaperStatus).toHaveBeenCalledTimes(1)
     wrapper.unmount()
   })
+
+  it('stop polling when getPaperStatus rejects', async () => {
+    vi.mocked(papersApi.getPaperStatus).mockRejectedValue(new Error('network'))
+    const { api, wrapper } = mountComposable('paper-001', 1000)
+
+    api.start()
+    await flushPromises()
+
+    expect(api.status.value).toBeNull()
+    expect(api.polling.value).toBe(false)
+    expect(vi.getTimerCount()).toBe(0)
+
+    await vi.advanceTimersByTimeAsync(5000)
+    await flushPromises()
+    expect(papersApi.getPaperStatus).toHaveBeenCalledTimes(1)
+    wrapper.unmount()
+  })
+
+  it('pollOnce rejection stops without updating status', async () => {
+    vi.mocked(papersApi.getPaperStatus).mockRejectedValue(new Error('timeout'))
+    const { api, wrapper } = mountComposable('paper-001')
+
+    await expect(api.pollOnce()).resolves.toBeUndefined()
+    await flushPromises()
+
+    expect(api.status.value).toBeNull()
+    expect(api.polling.value).toBe(false)
+    wrapper.unmount()
+  })
 })
