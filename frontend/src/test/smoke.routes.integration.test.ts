@@ -187,6 +187,26 @@ describe('smoke routes integration (答辩路径)', () => {
     expect(wrapper.find('.paper-graph-smoke-stub').exists()).toBe(true)
   })
 
+  it('passes ?node= query to graph highlight on mount', async () => {
+    setActivePinia(createPinia())
+    const router = createRouter({
+      history: createMemoryHistory(),
+      routes,
+    })
+    await router.push({ path: '/papers/hss-001/graph', query: { node: 'n1' } })
+    await router.isReady()
+
+    const wrapper = mount(routerViewShell, {
+      global: {
+        plugins: [router],
+        stubs: routeStubs,
+      },
+    })
+    await flushPromises()
+
+    expect(wrapper.find('.paper-graph-smoke-stub').attributes('data-highlight')).toBe('n1')
+  })
+
   it('mounts Patrol at /patrol', async () => {
     const { wrapper, router } = await mountRoute('/patrol')
 
@@ -231,17 +251,44 @@ describe('smoke routes robustness (API failures)', () => {
 
     const { wrapper } = await mountRoute('/papers/hss-001/graph')
 
-    expect(wrapper.find('.graph-view__error-panel').exists()).toBe(true)
-    expect(wrapper.find('.graph-view__error-panel .el-alert-stub').attributes('data-title')).toBe('图谱未就绪')
+    const alert = wrapper.find('.graph-view__error-panel .el-alert-stub')
+    expect(alert.exists()).toBe(true)
+    expect(alert.attributes('data-title')).toBe('图谱未就绪')
     expect(wrapper.find('.paper-graph-smoke-stub').exists()).toBe(false)
   })
 
-  it('Graph shows generic error when getPaperGraph rejects with network Error', async () => {
-    mockGetPaperGraph.mockRejectedValue(new Error('network timeout'))
+  it('Graph 409 CTA navigates back to paper detail', async () => {
+    mockGetPaperGraph.mockRejectedValue(new ApiClientError({ code: 'GRAPH_NOT_READY', message: '图谱未就绪' }, 409))
 
-    const { wrapper } = await mountRoute('/papers/hss-001/graph')
+    setActivePinia(createPinia())
+    const router = createRouter({
+      history: createMemoryHistory(),
+      routes,
+    })
+    await router.push('/papers/hss-002/graph')
+    await router.isReady()
 
-    expect(wrapper.find('.graph-view__error-panel').exists()).toBe(true)
-    expect(wrapper.find('.graph-view__error-panel .el-alert-stub').attributes('data-title')).toBe('network timeout')
+    const wrapper = mount(routerViewShell, {
+      global: {
+        plugins: [router],
+        stubs: {
+          ...routeStubs,
+          'el-alert': {
+            props: ['title', 'description'],
+            template: '<div class="el-alert-stub" :data-title="title" :data-description="description"><slot /></div>',
+          },
+          'el-button': {
+            inheritAttrs: false,
+            template:
+              '<button type="button" class="graph-view__error-cta" v-bind="$attrs" @click="$attrs.onClick?.()"><slot /></button>',
+          },
+        },
+      },
+    })
+    await flushPromises()
+
+    const pushSpy = vi.spyOn(router, 'push')
+    await wrapper.find('.graph-view__error-cta').trigger('click')
+    expect(pushSpy).toHaveBeenCalledWith('/papers/hss-002')
   })
 })

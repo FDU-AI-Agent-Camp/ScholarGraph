@@ -96,6 +96,32 @@ describe('cross-stack merge (FE papers API ↔ fixture envelopes)', () => {
     expect(result.data.insights[0]?.node_refs.length).toBeGreaterThan(0)
     expect(result.data.insights[0]?.insight_id).toBe('ins-001')
   })
+
+  it('uploadPaper posts multipart with suppressErrorToast for inline upload UX', async () => {
+    const postSpy = vi.spyOn(client, 'postData').mockResolvedValue({
+      data: { paper_id: 'new-id', status: 'pending', message: '任务已创建' },
+      meta: { request_id: 'req-upload' },
+    })
+    const file = new File(['%PDF'], 'sample.pdf', { type: 'application/pdf' })
+
+    await papersApi.uploadPaper(file)
+
+    expect(postSpy).toHaveBeenCalledTimes(1)
+    const [, body, config] = postSpy.mock.calls[0] as [string, FormData, { suppressErrorToast?: boolean }]
+    expect(body).toBeInstanceOf(FormData)
+    expect(config.suppressErrorToast).toBe(true)
+  })
+
+  it('getPaperGraph rejection maps to ApiClientError for 409 GRAPH_NOT_READY', async () => {
+    vi.spyOn(client, 'getData').mockRejectedValue(
+      new client.ApiClientError({ code: 'GRAPH_NOT_READY', message: '图谱尚未就绪，请轮询 status 接口' }, 409),
+    )
+
+    await expect(papersApi.getPaperGraph('hss-002')).rejects.toMatchObject({
+      code: 'GRAPH_NOT_READY',
+      statusCode: 409,
+    })
+  })
 })
 
 describe('cross-stack merge (fixture parity for BE HTTP tests)', () => {

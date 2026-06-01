@@ -23,5 +23,6 @@ export const paperGraphSmokeStub = defineComponent({
       default: false,
     },
   },
-  template: '<div class="paper-graph-smoke-stub" />',
+  template:
+    '<div class="paper-graph-smoke-stub" :data-highlight="highlightNodeId ?? \'\'" :data-full-bleed="fullBleed ? \'true\' : \'false\'" />',
 })
