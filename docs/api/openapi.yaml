@@ -129,7 +129,7 @@ paths:
         - $ref: "#/components/parameters/PaperId"
       responses:
         "200":
-          description: G6-ready graph
+          description: UnifiedPaperGraph (not G6-nested; FE converts via toG6GraphPayload)
           content:
             application/json:
               schema:

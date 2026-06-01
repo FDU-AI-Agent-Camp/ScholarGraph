@@ -44,11 +44,10 @@ class GraphStore:
 
     @staticmethod
     def to_g6(graph: UnifiedPaperGraph) -> dict:
-        """Convert a ``UnifiedPaperGraph`` into AntV G6 **v5**-compatible dict.
+        """Convert ``UnifiedPaperGraph`` to AntV G6 v5 dict (server-side / tests only).
 
-        G6 v5 expects ``{id, data: {label, type, ...}}`` for nodes and
-        ``{id, source, target, data: {label, type, ...}}`` for edges.  This
-        matches the shape consumed by ``PaperGraph.vue``.
+        HTTP ``GET /papers/{id}/graph`` returns ``UnifiedPaperGraph`` unchanged.
+        The Vue app converts via ``toG6GraphPayload()`` on the client (B-07).
         """
         return {
             "nodes": [

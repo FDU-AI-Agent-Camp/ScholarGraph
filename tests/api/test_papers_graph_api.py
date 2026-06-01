@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import pytest
-from backend.services.paper_service import get_paper_service
+from backend.graph.store import GraphStore
 from httpx import AsyncClient
 from tests.api.conftest import assert_error_envelope, assert_success_envelope
 
@@ -50,8 +50,10 @@ async def test_graph_not_found_paper_returns_404(api_client: AsyncClient) -> Non
 
 @pytest.mark.asyncio
 async def test_graph_ready_missing_graph_data_returns_409_with_message(api_client: AsyncClient) -> None:
-    service = get_paper_service()
-    service._graphs.pop(READY_PAPER_ID, None)
+    graph_path = GraphStore()._path(READY_PAPER_ID)
+    backup = graph_path.read_text(encoding="utf-8") if graph_path.is_file() else None
+    if graph_path.is_file():
+        graph_path.unlink()
 
     response = await api_client.get(f"/api/v1/papers/{READY_PAPER_ID}/graph")
     assert response.status_code == 409
@@ -59,17 +61,8 @@ async def test_graph_ready_missing_graph_data_returns_409_with_message(api_clien
     assert_error_envelope(body, code="GRAPH_NOT_READY")
     assert "缺失" in body["error"]["message"]
 
-    # Restore for downstream tests in same process
-    import json
-    from pathlib import Path
-
-    fixtures = Path(__file__).resolve().parents[2] / "docs" / "api" / "fixtures"
-    graph_payload = json.loads((fixtures / "graph-hss.json").read_text(encoding="utf-8"))
-    from backend.schemas.graph import UnifiedPaperGraph
-
-    service._graphs[READY_PAPER_ID] = UnifiedPaperGraph.model_validate(graph_payload["data"]).model_copy(
-        update={"paper_id": READY_PAPER_ID},
-    )
+    if backup is not None:
+        graph_path.write_text(backup, encoding="utf-8")
 
 
 @pytest.mark.asyncio
