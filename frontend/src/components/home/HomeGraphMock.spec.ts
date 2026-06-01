@@ -11,8 +11,10 @@ describe('HomeGraphMock', () => {
     const wrapper = mount(HomeGraphMock)
 
     expect(mockSrc).toContain('max-width: 520px')
-    expect(mockSrc).toContain('height: 420px')
+    expect(mockSrc).toContain('min-height: 420px')
     expect(mockSrc).toContain('background: var(--color-bg-canvas)')
+    expect(mockSrc).not.toContain('position: absolute')
+    expect(wrapper.find('.home-graph-mock__graph-area').exists()).toBe(true)
     expect(wrapper.find('.home-graph-mock__canvas').exists()).toBe(true)
     expect(wrapper.findAll('.home-graph-mock__node').length).toBeGreaterThanOrEqual(6)
     expect(wrapper.findAll('.home-graph-mock__insight')).toHaveLength(2)

@@ -17,13 +17,13 @@ interface MockInsight {
 }
 
 const mockNodes: MockNode[] = [
-  { id: 'n1', x: 72, y: 56, label: '核心论点' },
-  { id: 'n2', x: 220, y: 48, label: '理论框架' },
-  { id: 'n3', x: 360, y: 72, label: '方法设计' },
-  { id: 'n4', x: 120, y: 168, label: '分析视角' },
-  { id: 'n5', x: 280, y: 152, label: '实验流程' },
-  { id: 'n6', x: 420, y: 188, label: '结论' },
-  { id: 'n7', x: 200, y: 268, label: '引用链' },
+  { id: 'n1', x: 72, y: 48, label: '核心论点' },
+  { id: 'n2', x: 220, y: 40, label: '理论框架' },
+  { id: 'n3', x: 360, y: 56, label: '方法设计' },
+  { id: 'n4', x: 120, y: 140, label: '分析视角' },
+  { id: 'n5', x: 280, y: 128, label: '实验流程' },
+  { id: 'n6', x: 400, y: 156, label: '结论' },
+  { id: 'n7', x: 56, y: 228, label: '引用链' },
 ]
 
 const mockEdges: MockEdge[] = [
@@ -55,7 +55,8 @@ function edgePath(edge: MockEdge): string {
 
 <template>
   <div class="home-graph-mock">
-    <svg class="home-graph-mock__canvas" viewBox="0 0 520 420" aria-hidden="true">
+    <div class="home-graph-mock__graph-area">
+      <svg class="home-graph-mock__canvas" viewBox="0 0 520 300" aria-hidden="true">
       <defs>
         <marker id="home-graph-arrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">
           <path d="M0,0 L8,4 L0,8 Z" fill="var(--color-text-muted)" />
@@ -77,6 +78,7 @@ function edgePath(edge: MockEdge): string {
         </g>
       </g>
     </svg>
+    </div>
     <div class="home-graph-mock__insights" aria-hidden="true">
       <article v-for="item in mockInsights" :key="item.title" class="home-graph-mock__insight">
         <h3 class="home-graph-mock__insight-title">{{ item.title }}</h3>
@@ -88,14 +90,21 @@ function edgePath(edge: MockEdge): string {
 
 <style scoped>
 .home-graph-mock {
-  position: relative;
+  display: flex;
+  flex-direction: column;
   width: 100%;
   max-width: 520px;
-  height: 420px;
+  min-height: 420px;
   border: 1px solid var(--color-border);
   border-radius: 16px;
   background: var(--color-bg-canvas);
   overflow: hidden;
+}
+
+.home-graph-mock__graph-area {
+  flex: 0 0 auto;
+  height: 300px;
+  border-bottom: 1px solid var(--color-border);
 }
 
 .home-graph-mock__canvas {
@@ -123,13 +132,11 @@ function edgePath(edge: MockEdge): string {
 }
 
 .home-graph-mock__insights {
-  position: absolute;
-  right: var(--spacing-16);
-  bottom: var(--spacing-16);
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: var(--spacing-12);
-  width: min(220px, 52%);
+  padding: var(--spacing-16);
+  background: var(--color-bg-surface);
 }
 
 .home-graph-mock__insight {
