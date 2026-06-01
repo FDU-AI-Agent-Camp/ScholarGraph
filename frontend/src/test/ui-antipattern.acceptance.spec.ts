@@ -211,8 +211,12 @@ describe('§1.3 Anti-pattern checklist (full audit)', () => {
     it('图谱节点 hover 禁止位移（仅 stroke / lineWidth / fill 动画）', () => {
       expect(paperGraphUtilSrc).toContain('hover-activate')
       expect(paperGraphUtilSrc).toContain("fields: ['stroke', 'lineWidth', 'fill']")
+      expect(paperGraphUtilSrc).toContain('buildG6Behaviors')
       expect(paperGraphUtilSrc).not.toMatch(/translate[XY]?|scale\s*:|transform\s*:/i)
       expect(paperGraphUtilSrc).not.toMatch(/scale:\s*1\./)
+      expect(readFrontendSource('utils/paperGraph.test.ts')).toContain(
+        'buildG6Behaviors + node animation avoid hover displacement',
+      )
     })
   })
 

@@ -5,23 +5,36 @@ import type { UnifiedPaperGraph } from '@/api/types'
 
 import {
   buildG6EdgeStyleOptions,
+  buildG6FitViewPadding,
   buildG6GraphData,
+  buildG6LayoutOptions,
   buildG6NodeStyleOptions,
   buildHighlightStateMap,
   citationKey,
   estimateGraphNodeSize,
   findGraphNodeById,
+  getGraphNodeFillColor,
   getGraphNodeSnippet,
   getGraphNodeTypeColor,
   listGraphLegendEntries,
+  mixHexColors,
   resolvePaperGraphThemeTokens,
   toG6GraphPayload,
   GRAPH_EDGE_STROKE,
+  GRAPH_FIT_VIEW_PADDING_COMPACT,
+  GRAPH_FIT_VIEW_PADDING_DEFAULT,
   GRAPH_COMPACT_HEIGHT,
   GRAPH_DEFAULT_HEIGHT,
   GRAPH_FULL_MIN_HEIGHT,
+  GRAPH_LAYOUT_COMPACT_NODESEP,
+  GRAPH_LAYOUT_COMPACT_RANKSEP,
+  GRAPH_LAYOUT_DEFAULT_NODESEP,
+  GRAPH_LAYOUT_DEFAULT_RANKSEP,
   GRAPH_NODE_MIN_WIDTH,
   GRAPH_NODE_MAX_WIDTH,
+  GRAPH_NODE_SURFACE_FILL,
+  GRAPH_NODE_FILL_TINT_RATIO,
+  buildG6Behaviors,
 } from './paperGraph'
 
 describe('citationKey', () => {
@@ -38,6 +51,7 @@ describe('graph-hss fixture parity', () => {
     const thesis = payload.nodes.find((node) => node.id === 'n1')
     expect(thesis?.data.nodeType).toBe('Thesis')
     expect(payload.edges[0]?.data.edgeType).toBe('SUB_ARGUMENT_OF')
+    expect(payload.edges.some((edge) => edge.source === 'n_lens')).toBe(true)
   })
 
   it('highlights AnalyticalLens node from fixture for citation UX', () => {
@@ -80,12 +94,13 @@ describe('graph node sizing and G6 style helpers', () => {
     expect(options.state.active.lineWidth).toBe(3)
   })
 
-  it('buildG6GraphData attaches paradigm fill and clamped size to each node', () => {
+  it('buildG6GraphData attaches tinted fill, type stroke, and clamped size to each node', () => {
     const graph = graphFixture.data as UnifiedPaperGraph
     const payload = buildG6GraphData(graph)
     const thesis = payload.nodes.find((node) => node.id === 'n1')
 
-    expect(thesis?.data.fill).toBe(getGraphNodeTypeColor('Thesis', 'HSS'))
+    expect(thesis?.data.fill).toBe(getGraphNodeFillColor('Thesis', 'HSS'))
+    expect(thesis?.data.strokeColor).toBe(getGraphNodeTypeColor('Thesis', 'HSS'))
     expect(Array.isArray(thesis?.data.size)).toBe(true)
     const [width, height] = thesis?.data.size as [number, number]
     expect(width).toBeGreaterThanOrEqual(GRAPH_NODE_MIN_WIDTH)
@@ -93,13 +108,118 @@ describe('graph node sizing and G6 style helpers', () => {
     expect(height).toBeGreaterThanOrEqual(40)
   })
 
-  it('buildG6EdgeStyleOptions uses design-spec edge stroke color', () => {
+  it('buildG6NodeStyleOptions uses readable labelFill and per-type stroke from node data', () => {
+    const theme = resolvePaperGraphThemeTokens((_name, fallback) => fallback)
+    const options = buildG6NodeStyleOptions(theme, () => 'label')
+
+    expect(options.style.labelFill).toBe('#111827')
+    expect(typeof options.style.stroke).toBe('function')
+  })
+
+  it('buildG6EdgeStyleOptions exposes centered labels with background padding', () => {
     const theme = resolvePaperGraphThemeTokens((_name, fallback) => fallback)
     const edgeOptions = buildG6EdgeStyleOptions(theme)
 
     expect(edgeOptions.style.stroke).toBe(GRAPH_EDGE_STROKE)
     expect(edgeOptions.style.lineWidth).toBe(1)
     expect(edgeOptions.style.endArrow).toBe(true)
+    expect(edgeOptions.style.labelPlacement).toBe('center')
+    expect(edgeOptions.style.labelBackground).toBe(true)
+    expect(edgeOptions.style.labelAutoRotate).toBe(false)
+    expect(edgeOptions.style.labelFill).toBe('#6b7280')
+  })
+
+  it('buildG6LayoutOptions widens compact spacing and scales ranksep for large graphs', () => {
+    expect(buildG6LayoutOptions({ compact: true, nodeCount: 3 })).toEqual({
+      type: 'dagre',
+      rankdir: 'TB',
+      nodesep: GRAPH_LAYOUT_COMPACT_NODESEP,
+      ranksep: GRAPH_LAYOUT_COMPACT_RANKSEP,
+    })
+    expect(buildG6LayoutOptions({ compact: false, nodeCount: 3 }).nodesep).toBe(GRAPH_LAYOUT_DEFAULT_NODESEP)
+    expect(buildG6LayoutOptions({ compact: false, nodeCount: 12 }).ranksep).toBe(GRAPH_LAYOUT_DEFAULT_RANKSEP + 16)
+  })
+
+  it('buildG6FitViewPadding reserves compact bottom space for legend overlay', () => {
+    expect(buildG6FitViewPadding({ compact: true })).toEqual(GRAPH_FIT_VIEW_PADDING_COMPACT)
+    expect(buildG6FitViewPadding({ compact: false, fullBleed: true })).toBe(GRAPH_FIT_VIEW_PADDING_DEFAULT)
+  })
+
+  it('mixHexColors tints surface fill toward node type accent', () => {
+    const tinted = mixHexColors(GRAPH_NODE_SURFACE_FILL, '#7c3aed', 0.12)
+    expect(tinted).not.toBe('#7c3aed')
+    expect(getGraphNodeFillColor('AnalyticalLens', 'HSS')).toBe(tinted)
+  })
+})
+
+describe('graph preview viewport + layout helpers (D)', () => {
+  it('buildG6LayoutOptions uses dagre TB with compact vs default spacing constants', () => {
+    expect(buildG6LayoutOptions({ compact: true, nodeCount: 2 })).toMatchObject({
+      type: 'dagre',
+      rankdir: 'TB',
+      nodesep: GRAPH_LAYOUT_COMPACT_NODESEP,
+      ranksep: GRAPH_LAYOUT_COMPACT_RANKSEP,
+    })
+    expect(buildG6LayoutOptions({ compact: false, nodeCount: 2 })).toMatchObject({
+      type: 'dagre',
+      rankdir: 'TB',
+      nodesep: GRAPH_LAYOUT_DEFAULT_NODESEP,
+      ranksep: GRAPH_LAYOUT_DEFAULT_RANKSEP,
+    })
+  })
+
+  it('buildG6FitViewPadding leaves compact bottom inset for floating legend', () => {
+    expect(buildG6FitViewPadding({ compact: true })).toEqual([24, 24, 100, 24])
+    expect(buildG6FitViewPadding({ compact: false })).toBe(32)
+  })
+})
+
+describe('graph node label contrast + edge label chrome (D)', () => {
+  it('keeps saturated type color on stroke while fill stays lighter than stroke for dark types', () => {
+    const graph = graphFixture.data as UnifiedPaperGraph
+    const payload = buildG6GraphData(graph)
+    const lensNode = payload.nodes.find((node) => node.id === 'n_lens')
+
+    expect(lensNode?.data.strokeColor).toBe(getGraphNodeTypeColor('AnalyticalLens', 'HSS'))
+    expect(lensNode?.data.fill).toBe(getGraphNodeFillColor('AnalyticalLens', 'HSS'))
+    expect(lensNode?.data.fill).not.toBe(lensNode?.data.strokeColor)
+    expect(String(lensNode?.data.fill).toLowerCase()).not.toBe('#7c3aed')
+  })
+
+  it('buildG6NodeStyleOptions binds primary labelFill token for readable node text', () => {
+    const theme = resolvePaperGraphThemeTokens((_name, fallback) => fallback)
+    const options = buildG6NodeStyleOptions(theme, () => '核心论点\n(Thesis)')
+
+    expect(options.style.labelFill).toBe(theme.labelFill)
+    expect(options.style.labelFill).toBe('#111827')
+    expect(options.style.fill({ data: { fill: getGraphNodeFillColor('Thesis', 'HSS') } })).toBe(
+      getGraphNodeFillColor('Thesis', 'HSS'),
+    )
+  })
+
+  it('buildG6EdgeStyleOptions wires centered caption labels with surface background padding', () => {
+    const theme = resolvePaperGraphThemeTokens((_name, fallback) => fallback)
+    const edgeOptions = buildG6EdgeStyleOptions(theme)
+
+    expect(edgeOptions.style.labelPlacement).toBe('center')
+    expect(edgeOptions.style.labelBackground).toBe(true)
+    expect(edgeOptions.style.labelBackgroundFill).toBe(theme.edgeLabelBackground)
+    expect(edgeOptions.style.labelPadding).toEqual([2, 4, 2, 4])
+    expect(edgeOptions.style.labelFill).toBe(theme.edgeLabelFill)
+    expect(edgeOptions.style.labelAutoRotate).toBe(false)
+  })
+
+  it('buildG6Behaviors + node animation avoid hover displacement (stroke-only motion budget)', () => {
+    const theme = resolvePaperGraphThemeTokens((_name, fallback) => fallback)
+    const nodeOptions = buildG6NodeStyleOptions(theme, () => 'label')
+    const hoverBehavior = buildG6Behaviors().find((item) => typeof item === 'object' && item.type === 'hover-activate')
+
+    expect(hoverBehavior).toMatchObject({ type: 'hover-activate', state: 'hover' })
+    expect(nodeOptions.state.hover).toEqual({ stroke: theme.hoverStroke, lineWidth: 2 })
+    expect(nodeOptions.animation.update[0].fields).toEqual(['stroke', 'lineWidth', 'fill'])
+    expect(nodeOptions.animation.update[0].fields).not.toContain('x')
+    expect(nodeOptions.animation.update[0].fields).not.toContain('y')
+    expect(GRAPH_NODE_FILL_TINT_RATIO).toBeGreaterThan(0)
   })
 })
 

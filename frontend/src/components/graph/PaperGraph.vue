@@ -7,11 +7,14 @@ import { cssToken } from '@/utils/cssTokens'
 import {
   buildG6Behaviors,
   buildG6EdgeStyleOptions,
+  buildG6FitViewPadding,
   buildG6GraphData,
+  buildG6LayoutOptions,
   buildG6NodeStyleOptions,
   buildHighlightStateMap,
   GRAPH_COMPACT_HEIGHT,
   GRAPH_DEFAULT_HEIGHT,
+  GRAPH_FIT_VIEW_DEBOUNCE_MS,
   GRAPH_FULL_MIN_HEIGHT,
   GRAPH_ZOOM_STEP,
   resolvePaperGraphThemeTokens,
@@ -40,6 +43,11 @@ const emit = defineEmits<{
 const containerRef = ref<HTMLDivElement | null>(null)
 let graphInstance: Graph | null = null
 let resizeObserver: ResizeObserver | null = null
+let fitViewTimer: ReturnType<typeof setTimeout> | null = null
+
+function viewportMode(): { compact: boolean; fullBleed: boolean } {
+  return { compact: props.compact, fullBleed: props.fullBleed }
+}
 
 function graphHeight(): number {
   if (props.compact) {
@@ -70,17 +78,44 @@ function createGraphInstance(): Graph | null {
     container: containerRef.value,
     width,
     height: graphHeight(),
+    padding: buildG6FitViewPadding(viewportMode()),
     data: buildG6GraphData(props.graph),
-    layout: {
-      type: 'dagre',
-      rankdir: 'TB',
-      nodesep: 36,
-      ranksep: 48,
-    },
+    layout: buildG6LayoutOptions({
+      compact: props.compact,
+      nodeCount: props.graph.nodes.length,
+    }),
     node: nodeOptions,
     edge: buildG6EdgeStyleOptions(theme),
     behaviors: buildG6Behaviors(),
   })
+}
+
+function clearFitViewTimer(): void {
+  if (fitViewTimer) {
+    clearTimeout(fitViewTimer)
+    fitViewTimer = null
+  }
+}
+
+async function fitGraphView(): Promise<void> {
+  if (!graphInstance) {
+    return
+  }
+  graphInstance.setOptions({
+    padding: buildG6FitViewPadding(viewportMode()),
+  })
+  await graphInstance.fitView()
+}
+
+function scheduleFitGraphView(): void {
+  if (!graphInstance) {
+    return
+  }
+  clearFitViewTimer()
+  fitViewTimer = setTimeout(() => {
+    fitViewTimer = null
+    void fitGraphView()
+  }, GRAPH_FIT_VIEW_DEBOUNCE_MS)
 }
 
 async function applyHighlight(nodeId: string | null | undefined): Promise<void> {
@@ -89,7 +124,7 @@ async function applyHighlight(nodeId: string | null | undefined): Promise<void> 
   }
   const nodeIds = props.graph.nodes.map((node) => node.id)
   await graphInstance.setElementState(buildHighlightStateMap(nodeIds, nodeId))
-  if (nodeId) {
+  if (nodeId && props.fullBleed) {
     await graphInstance.focusElement(nodeId)
   }
 }
@@ -107,6 +142,7 @@ async function renderGraph(): Promise<void> {
     }
   })
   await graphInstance.render()
+  await fitGraphView()
   await applyHighlight(props.highlightNodeId)
 }
 
@@ -115,6 +151,7 @@ function resizeGraph(): void {
     return
   }
   graphInstance.setSize(containerRef.value.clientWidth || 800, graphHeight())
+  scheduleFitGraphView()
 }
 
 async function zoomIn(): Promise<void> {
@@ -132,10 +169,7 @@ async function zoomOut(): Promise<void> {
 }
 
 async function fitView(): Promise<void> {
-  if (!graphInstance) {
-    return
-  }
-  await graphInstance.fitView()
+  await fitGraphView()
 }
 
 async function resetLayout(): Promise<void> {
@@ -143,7 +177,7 @@ async function resetLayout(): Promise<void> {
     return
   }
   await graphInstance.layout()
-  await graphInstance.fitView()
+  await fitGraphView()
 }
 
 defineExpose({
@@ -183,6 +217,7 @@ watch(
 )
 
 onUnmounted(() => {
+  clearFitViewTimer()
   resizeObserver?.disconnect()
   resizeObserver = null
   graphInstance?.destroy()

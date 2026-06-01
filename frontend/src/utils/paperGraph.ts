@@ -50,6 +50,17 @@ export const GRAPH_STATE_ANIMATION_MS = 120
 export const GRAPH_HOVER_LINE_WIDTH = 2
 export const GRAPH_ACTIVE_LINE_WIDTH = 3
 export const GRAPH_ZOOM_STEP = 1.2
+export const GRAPH_NODE_SURFACE_FILL = '#ffffff'
+export const GRAPH_NODE_FILL_TINT_RATIO = 0.12
+export const GRAPH_LAYOUT_COMPACT_NODESEP = 48
+export const GRAPH_LAYOUT_COMPACT_RANKSEP = 72
+export const GRAPH_LAYOUT_DEFAULT_NODESEP = 40
+export const GRAPH_LAYOUT_DEFAULT_RANKSEP = 56
+export const GRAPH_LAYOUT_LARGE_GRAPH_NODE_THRESHOLD = 8
+export const GRAPH_LAYOUT_LARGE_GRAPH_RANKSEP_BONUS = 16
+export const GRAPH_FIT_VIEW_PADDING_DEFAULT = 32
+export const GRAPH_FIT_VIEW_PADDING_COMPACT: [number, number, number, number] = [24, 24, 100, 24]
+export const GRAPH_FIT_VIEW_DEBOUNCE_MS = 150
 
 export interface PaperGraphThemeTokens {
   defaultStroke: string
@@ -57,6 +68,22 @@ export interface PaperGraphThemeTokens {
   activeFill: string
   activeStroke: string
   edgeStroke: string
+  labelFill: string
+  edgeLabelFill: string
+  edgeLabelBackground: string
+}
+
+export interface G6LayoutConfig {
+  type: 'dagre'
+  rankdir: 'TB'
+  nodesep: number
+  ranksep: number
+  [key: string]: string | number
+}
+
+export interface GraphViewportMode {
+  compact?: boolean
+  fullBleed?: boolean
 }
 
 export function resolvePaperGraphThemeTokens(
@@ -68,7 +95,69 @@ export function resolvePaperGraphThemeTokens(
     activeFill: readToken('--color-citation-active-bg', '#fff1f2'),
     activeStroke: readToken('--color-citation-active', '#e11d48'),
     edgeStroke: GRAPH_EDGE_STROKE,
+    labelFill: readToken('--color-text-primary', '#111827'),
+    edgeLabelFill: readToken('--color-text-secondary', '#6b7280'),
+    edgeLabelBackground: readToken('--color-bg-surface', '#ffffff'),
   }
+}
+
+function parseHexColor(hex: string): [number, number, number] {
+  const normalized = hex.replace('#', '')
+  const expanded =
+    normalized.length === 3
+      ? normalized
+          .split('')
+          .map((channel) => channel + channel)
+          .join('')
+      : normalized
+
+  return [
+    Number.parseInt(expanded.slice(0, 2), 16),
+    Number.parseInt(expanded.slice(2, 4), 16),
+    Number.parseInt(expanded.slice(4, 6), 16),
+  ]
+}
+
+function toHexByte(value: number): string {
+  return Math.round(Math.max(0, Math.min(255, value)))
+    .toString(16)
+    .padStart(2, '0')
+}
+
+export function mixHexColors(base: string, accent: string, accentRatio: number): string {
+  const [baseRed, baseGreen, baseBlue] = parseHexColor(base)
+  const [accentRed, accentGreen, accentBlue] = parseHexColor(accent)
+  const ratio = Math.max(0, Math.min(1, accentRatio))
+
+  return `#${toHexByte(baseRed + (accentRed - baseRed) * ratio)}${toHexByte(baseGreen + (accentGreen - baseGreen) * ratio)}${toHexByte(baseBlue + (accentBlue - baseBlue) * ratio)}`
+}
+
+export function getGraphNodeFillColor(nodeType: string, paradigm?: Paradigm | null): string {
+  return mixHexColors(GRAPH_NODE_SURFACE_FILL, getGraphNodeTypeColor(nodeType, paradigm), GRAPH_NODE_FILL_TINT_RATIO)
+}
+
+export function buildG6LayoutOptions(options: { compact?: boolean; nodeCount?: number }): G6LayoutConfig {
+  const nodesep = options.compact ? GRAPH_LAYOUT_COMPACT_NODESEP : GRAPH_LAYOUT_DEFAULT_NODESEP
+  let ranksep = options.compact ? GRAPH_LAYOUT_COMPACT_RANKSEP : GRAPH_LAYOUT_DEFAULT_RANKSEP
+  const nodeCount = options.nodeCount ?? 0
+
+  if (nodeCount > GRAPH_LAYOUT_LARGE_GRAPH_NODE_THRESHOLD) {
+    ranksep += GRAPH_LAYOUT_LARGE_GRAPH_RANKSEP_BONUS
+  }
+
+  return {
+    type: 'dagre',
+    rankdir: 'TB',
+    nodesep,
+    ranksep,
+  }
+}
+
+export function buildG6FitViewPadding(options: GraphViewportMode): number | [number, number, number, number] {
+  if (options.compact) {
+    return GRAPH_FIT_VIEW_PADDING_COMPACT
+  }
+  return GRAPH_FIT_VIEW_PADDING_DEFAULT
 }
 
 export function estimateGraphNodeSize(label: string, nodeType?: string): [number, number] {
@@ -90,7 +179,8 @@ export function buildG6GraphData(graph: UnifiedPaperGraph): G6GraphPayload {
         ...node,
         data: {
           ...node.data,
-          fill: getGraphNodeTypeColor(nodeType, graph.paradigm),
+          fill: getGraphNodeFillColor(nodeType, graph.paradigm),
+          strokeColor: getGraphNodeTypeColor(nodeType, graph.paradigm),
           size: [width, height],
         },
       }
@@ -112,10 +202,11 @@ export function buildG6NodeStyleOptions(
       labelWordWrap: true,
       labelMaxLines: 2,
       labelMaxWidth: GRAPH_NODE_MAX_WIDTH - 16,
-      fill: (datum: { data?: { fill?: string } }) => datum.data?.fill ?? DEFAULT_NODE_TYPE_COLOR,
+      fill: (datum: { data?: { fill?: string } }) => datum.data?.fill ?? GRAPH_NODE_SURFACE_FILL,
       size: (datum: { data?: { size?: [number, number] } }) =>
         datum.data?.size ?? [GRAPH_NODE_MIN_WIDTH, GRAPH_NODE_MIN_HEIGHT],
-      stroke: theme.defaultStroke,
+      stroke: (datum: { data?: { strokeColor?: string } }) => datum.data?.strokeColor ?? theme.defaultStroke,
+      labelFill: theme.labelFill,
       lineWidth: 1,
     },
     state: {
@@ -147,6 +238,14 @@ export function buildG6EdgeStyleOptions(theme: PaperGraphThemeTokens) {
       lineWidth: 1,
       labelFontSize: 10,
       labelText: (datum: { data?: { label?: string } }) => datum.data?.label ?? '',
+      labelPlacement: 'center' as const,
+      labelBackground: true,
+      labelBackgroundFill: theme.edgeLabelBackground,
+      labelBackgroundOpacity: 1,
+      labelBackgroundRadius: 4,
+      labelPadding: [2, 4, 2, 4] as [number, number, number, number],
+      labelFill: theme.edgeLabelFill,
+      labelAutoRotate: false,
       endArrow: true,
     },
   }

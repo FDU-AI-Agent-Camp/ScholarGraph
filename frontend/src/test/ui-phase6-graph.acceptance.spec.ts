@@ -14,7 +14,10 @@ import {
   GRAPH_HOVER_LINE_WIDTH,
   GRAPH_NODE_RADIUS,
   GRAPH_STATE_ANIMATION_MS,
+  buildG6FitViewPadding,
+  buildG6LayoutOptions,
   findGraphNodeById,
+  getGraphNodeFillColor,
   getGraphNodeSnippet,
   getGraphNodeTypeColor,
 } from '@/utils/paperGraph'
@@ -52,6 +55,13 @@ describe('Phase 6 Graph acceptance (6.1–6.8)', () => {
       expect(getGraphNodeTypeColor('Thesis', 'HSS')).toBe('#0d6e6e')
       expect(getGraphNodeTypeColor('Method', 'STEM')).toBe('#2563eb')
       expect(paperGraphSrc).toContain('buildG6GraphData')
+    })
+
+    it('uses tinted node fill + type stroke for readable labels in preview', () => {
+      expect(paperGraphUtilSrc).toContain('getGraphNodeFillColor')
+      expect(paperGraphUtilSrc).toContain('strokeColor')
+      expect(paperGraphUtilSrc).toContain('labelFill')
+      expect(getGraphNodeFillColor('AnalyticalLens', 'HSS')).not.toBe(getGraphNodeTypeColor('AnalyticalLens', 'HSS'))
     })
 
     it('uses 8px corner radius on rect nodes', () => {
@@ -155,6 +165,16 @@ describe('Phase 6 Graph acceptance (6.1–6.8)', () => {
       expect(detailViewSrc).toContain('min-height: 320px')
     })
 
+    it('Graph preview wires dagre layout spacing and fitView padding helpers', () => {
+      expect(paperGraphUtilSrc).toContain('buildG6LayoutOptions')
+      expect(paperGraphUtilSrc).toContain('buildG6FitViewPadding')
+      expect(paperGraphSrc).toContain('buildG6LayoutOptions')
+      expect(paperGraphSrc).toContain('fitGraphView')
+      expect(paperGraphSrc).toContain('fitView')
+      expect(buildG6LayoutOptions({ compact: true, nodeCount: 3 }).nodesep).toBeGreaterThan(36)
+      expect(buildG6FitViewPadding({ compact: true })).toEqual([24, 24, 100, 24])
+    })
+
     it('Graph full screen: DEFAULT_HEIGHT 480 + ResizeObserver resize with 720px floor', () => {
       expect(GRAPH_DEFAULT_HEIGHT).toBe(480)
       expect(GRAPH_FULL_MIN_HEIGHT).toBe(720)
@@ -205,12 +225,15 @@ describe('Phase 6 Graph acceptance (6.1–6.8)', () => {
       expect(graphViewSpecSrc).toContain('opens node drawer when a graph node is clicked')
       expect(graphViewSpecSrc).toContain('shows generic error without CTA')
       expect(paperGraphSpecSrc).toContain('configures rect nodes with type colors')
+      expect(paperGraphSpecSrc).toContain('calls fitView after render on init')
       expect(paperGraphSpecSrc).toContain('§17 viewport height conventions')
       expect(paperGraphSpecSrc).toContain('ResizeObserver')
       expect(graphToolbarSpecSrc).toContain('emits toolbar actions')
       expect(graphLegendSpecSrc).toContain('renders baseline caption')
       expect(graphDrawerSpecSrc).toContain('320px width and 250ms slide transition token')
       expect(paperGraphTestSrc).toContain('findGraphNodeById returns node')
+      expect(paperGraphTestSrc).toContain('graph preview viewport + layout helpers (D)')
+      expect(paperGraphTestSrc).toContain('graph node label contrast + edge label chrome (D)')
       expect(paperGraphTestSrc).toContain('§17 graph viewport size constants')
     })
 

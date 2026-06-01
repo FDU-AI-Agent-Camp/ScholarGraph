@@ -6,11 +6,15 @@ import {
   GRAPH_ACTIVE_LINE_WIDTH,
   GRAPH_COMPACT_HEIGHT,
   GRAPH_DEFAULT_HEIGHT,
+  GRAPH_FIT_VIEW_DEBOUNCE_MS,
+  GRAPH_FIT_VIEW_PADDING_COMPACT,
+  GRAPH_FIT_VIEW_PADDING_DEFAULT,
   GRAPH_FULL_MIN_HEIGHT,
   GRAPH_HOVER_LINE_WIDTH,
   GRAPH_NODE_RADIUS,
   GRAPH_STATE_ANIMATION_MS,
   buildG6Behaviors,
+  buildG6LayoutOptions,
   buildG6NodeStyleOptions,
   resolvePaperGraphThemeTokens,
   GRAPH_EDGE_STROKE,
@@ -26,6 +30,7 @@ const { graphMocks, graphConstructorOptions, resizeObserverCallbackRef } = vi.ho
     focusElement: vi.fn().mockResolvedValue(undefined),
     on: vi.fn(),
     setSize: vi.fn(),
+    setOptions: vi.fn(),
     zoomBy: vi.fn().mockResolvedValue(undefined),
     fitView: vi.fn().mockResolvedValue(undefined),
     layout: vi.fn().mockResolvedValue(undefined),
@@ -82,6 +87,21 @@ describe('PaperGraph', () => {
     vi.unstubAllGlobals()
   })
 
+  it('calls fitView after render on init', async () => {
+    mount(PaperGraph, {
+      props: { graph: sampleGraph },
+      attachTo: document.body,
+    })
+
+    await flushPromises()
+
+    expect(graphMocks.render).toHaveBeenCalledTimes(1)
+    expect(graphMocks.fitView).toHaveBeenCalled()
+    const renderOrder = graphMocks.render.mock.invocationCallOrder[0] ?? 0
+    const fitViewOrder = graphMocks.fitView.mock.invocationCallOrder[0] ?? 0
+    expect(renderOrder).toBeLessThan(fitViewOrder)
+  })
+
   it('renders G6 graph from API graph payload', async () => {
     mount(PaperGraph, {
       props: { graph: sampleGraph },
@@ -91,7 +111,24 @@ describe('PaperGraph', () => {
     await flushPromises()
 
     expect(graphMocks.render).toHaveBeenCalled()
+    expect(graphConstructorOptions.value?.padding).toBe(GRAPH_FIT_VIEW_PADDING_DEFAULT)
+    expect(graphMocks.setOptions).toHaveBeenCalledWith({ padding: GRAPH_FIT_VIEW_PADDING_DEFAULT })
+    expect(graphMocks.fitView).toHaveBeenCalled()
     expect(graphMocks.on).toHaveBeenCalled()
+  })
+
+  it('uses compact layout spacing and legend-aware fitView padding', async () => {
+    mount(PaperGraph, {
+      props: { graph: sampleGraph, compact: true },
+      attachTo: document.body,
+    })
+
+    await flushPromises()
+
+    const layout = graphConstructorOptions.value?.layout as ReturnType<typeof buildG6LayoutOptions>
+    expect(layout).toEqual(buildG6LayoutOptions({ compact: true, nodeCount: sampleGraph.nodes.length }))
+    expect(graphConstructorOptions.value?.padding).toEqual(GRAPH_FIT_VIEW_PADDING_COMPACT)
+    expect(graphMocks.setOptions).toHaveBeenCalledWith({ padding: GRAPH_FIT_VIEW_PADDING_COMPACT })
   })
 
   it('configures rect nodes with type colors, hover/active states, and 120ms stroke animation', async () => {
@@ -116,7 +153,8 @@ describe('PaperGraph', () => {
     expect(nodeOptions?.state?.active?.lineWidth).toBe(GRAPH_ACTIVE_LINE_WIDTH)
     expect(nodeOptions?.state?.active?.stroke).toBe('#e11d48')
     expect(nodeOptions?.animation?.update?.[0]?.duration).toBe(GRAPH_STATE_ANIMATION_MS)
-    expect(nodeOptions?.animation?.update?.[0]?.fields).toContain('stroke')
+    expect(nodeOptions?.animation?.update?.[0]?.fields).toEqual(['stroke', 'lineWidth', 'fill'])
+    expect(nodeOptions?.animation?.update?.[0]?.fields).not.toContain('x')
 
     const behaviors = options?.behaviors as Array<string | { type?: string; state?: string }>
     expect(
@@ -128,14 +166,15 @@ describe('PaperGraph', () => {
     expect(edgeOptions?.style?.lineWidth).toBe(1)
   })
 
-  it('applies active highlight when highlightNodeId changes', async () => {
+  it('applies active highlight without stealing viewport in compact preview', async () => {
     const wrapper = mount(PaperGraph, {
-      props: { graph: sampleGraph, highlightNodeId: null },
+      props: { graph: sampleGraph, compact: true, highlightNodeId: null },
       attachTo: document.body,
     })
 
     await flushPromises()
     graphMocks.setElementState.mockClear()
+    graphMocks.focusElement.mockClear()
 
     await wrapper.setProps({ highlightNodeId: 'n2' })
     await flushPromises()
@@ -144,6 +183,21 @@ describe('PaperGraph', () => {
       n1: [],
       n2: 'active',
     })
+    expect(graphMocks.focusElement).not.toHaveBeenCalled()
+  })
+
+  it('focuses highlighted node only on full-bleed graph page', async () => {
+    const wrapper = mount(PaperGraph, {
+      props: { graph: sampleGraph, fullBleed: true, highlightNodeId: null },
+      attachTo: document.body,
+    })
+
+    await flushPromises()
+    graphMocks.focusElement.mockClear()
+
+    await wrapper.setProps({ highlightNodeId: 'n2' })
+    await flushPromises()
+
     expect(graphMocks.focusElement).toHaveBeenCalledWith('n2')
   })
 
@@ -211,6 +265,8 @@ describe('PaperGraph', () => {
     })
 
     it('resizes G6 canvas via ResizeObserver using default height', async () => {
+      vi.useFakeTimers()
+
       const wrapper = mount(PaperGraph, {
         props: { graph: sampleGraph },
         attachTo: document.body,
@@ -218,6 +274,8 @@ describe('PaperGraph', () => {
 
       await flushPromises()
       graphMocks.setSize.mockClear()
+      graphMocks.setOptions.mockClear()
+      graphMocks.fitView.mockClear()
 
       const host = wrapper.find('.graph-host').element as HTMLDivElement
       Object.defineProperty(host, 'clientWidth', { configurable: true, value: 1024 })
@@ -226,6 +284,15 @@ describe('PaperGraph', () => {
       resizeObserverCallbackRef.value?.()
 
       expect(graphMocks.setSize).toHaveBeenCalledWith(1024, GRAPH_DEFAULT_HEIGHT)
+      expect(graphMocks.fitView).not.toHaveBeenCalled()
+
+      vi.advanceTimersByTime(GRAPH_FIT_VIEW_DEBOUNCE_MS)
+      await flushPromises()
+
+      expect(graphMocks.setOptions).toHaveBeenCalledWith({ padding: GRAPH_FIT_VIEW_PADDING_DEFAULT })
+      expect(graphMocks.fitView).toHaveBeenCalled()
+
+      vi.useRealTimers()
     })
 
     it('fullBleed resize uses max(container height, GRAPH_FULL_MIN_HEIGHT)', async () => {
@@ -274,6 +341,7 @@ describe('PaperGraph', () => {
     await exposed.resetLayout()
 
     expect(graphMocks.zoomBy).toHaveBeenCalled()
+    expect(graphMocks.setOptions).toHaveBeenCalledWith({ padding: GRAPH_FIT_VIEW_PADDING_DEFAULT })
     expect(graphMocks.fitView).toHaveBeenCalled()
     expect(graphMocks.layout).toHaveBeenCalled()
   })

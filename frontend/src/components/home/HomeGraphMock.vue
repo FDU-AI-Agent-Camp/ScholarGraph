@@ -57,27 +57,27 @@ function edgePath(edge: MockEdge): string {
   <div class="home-graph-mock">
     <div class="home-graph-mock__graph-area">
       <svg class="home-graph-mock__canvas" viewBox="0 0 520 300" aria-hidden="true">
-      <defs>
-        <marker id="home-graph-arrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">
-          <path d="M0,0 L8,4 L0,8 Z" fill="var(--color-text-muted)" />
-        </marker>
-      </defs>
-      <g class="home-graph-mock__edges">
-        <path
-          v-for="(edge, index) in mockEdges"
-          :key="`${edge.from}-${edge.to}-${index}`"
-          :d="edgePath(edge)"
-          class="home-graph-mock__edge"
-          marker-end="url(#home-graph-arrow)"
-        />
-      </g>
-      <g class="home-graph-mock__nodes">
-        <g v-for="node in mockNodes" :key="node.id" :transform="`translate(${node.x} ${node.y})`">
-          <rect class="home-graph-mock__node" width="88" height="36" rx="8" ry="8" />
-          <text class="home-graph-mock__node-label" x="44" y="23" text-anchor="middle">{{ node.label }}</text>
+        <defs>
+          <marker id="home-graph-arrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">
+            <path d="M0,0 L8,4 L0,8 Z" fill="var(--color-text-muted)" />
+          </marker>
+        </defs>
+        <g class="home-graph-mock__edges">
+          <path
+            v-for="(edge, index) in mockEdges"
+            :key="`${edge.from}-${edge.to}-${index}`"
+            :d="edgePath(edge)"
+            class="home-graph-mock__edge"
+            marker-end="url(#home-graph-arrow)"
+          />
         </g>
-      </g>
-    </svg>
+        <g class="home-graph-mock__nodes">
+          <g v-for="node in mockNodes" :key="node.id" :transform="`translate(${node.x} ${node.y})`">
+            <rect class="home-graph-mock__node" width="88" height="36" rx="8" ry="8" />
+            <text class="home-graph-mock__node-label" x="44" y="23" text-anchor="middle">{{ node.label }}</text>
+          </g>
+        </g>
+      </svg>
     </div>
     <div class="home-graph-mock__insights" aria-hidden="true">
       <article v-for="item in mockInsights" :key="item.title" class="home-graph-mock__insight">
