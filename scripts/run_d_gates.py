@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 """
-V1 DoD §6.4 D — 代码基座规范性门禁（D-01～D-06）。
+V1 DoD §6.4 D — 代码基座规范性门禁（D-01～D-10）。
 
 在仓库根目录执行::
 
     uv run python scripts/run_d_gates.py
-    uv run python scripts/run_d_gates.py --skip-frontend   # 仅 D-01/D-02 + D-05/D-06
+    uv run python scripts/run_d_gates.py --skip-frontend   # 仅 D-01/D-02 + D-05～D-10
     uv run python scripts/run_d_gates.py --lint-only       # D-01 only（跳过 pytest）
 
 覆盖：
@@ -13,6 +13,8 @@ V1 DoD §6.4 D — 代码基座规范性门禁（D-01～D-06）。
 - D-03/D-04：frontend ``npm run check``（typecheck + format + lint + knip）
 - D-05：最近 commit subject 符合 Conventional Commits
 - D-06：当前分支名符合 work-assignment §3
+- D-07/D-09/D-10：handoff 无私自路由、``.gitignore``、lock 文件（静态）
+- D-11/D-12：见 ``tests/test_dod_d_standards.py``（Review 抽样，持续）
 
 退出码：0 全部通过；1 有失败步骤。
 """
@@ -44,8 +46,11 @@ def _load_d_gates_lib():
 _dg = _load_d_gates_lib()
 git_current_branch = _dg.git_current_branch
 git_recent_commit_subjects = _dg.git_recent_commit_subjects
+scan_handoff_modules_for_private_routes = _dg.scan_handoff_modules_for_private_routes
 validate_conventional_commit_subject = _dg.validate_conventional_commit_subject
 validate_feature_branch_name = _dg.validate_feature_branch_name
+validate_gitignore_sensitive_entries = _dg.validate_gitignore_sensitive_entries
+validate_lockfiles_present = _dg.validate_lockfiles_present
 
 
 @dataclass
@@ -101,6 +106,28 @@ def check_d06_branch() -> GateStep:
     )
 
 
+def check_d07_handoff_no_private_routes() -> GateStep:
+    violations = scan_handoff_modules_for_private_routes()
+    if violations:
+        preview = "; ".join(violations[:3])
+        return GateStep("D-07 handoff (no private routes)", False, preview)
+    return GateStep("D-07 handoff (no private routes)", True, f"{len(_dg.BE_HANDOFF_MODULE_DIRS)} module roots OK")
+
+
+def check_d09_gitignore() -> GateStep:
+    missing = validate_gitignore_sensitive_entries()
+    if missing:
+        return GateStep("D-09 gitignore sensitive paths", False, ", ".join(missing))
+    return GateStep("D-09 gitignore sensitive paths", True, "required entries present")
+
+
+def check_d10_lockfiles() -> GateStep:
+    missing = validate_lockfiles_present()
+    if missing:
+        return GateStep("D-10 lockfiles", False, ", ".join(missing))
+    return GateStep("D-10 lockfiles", True, "uv.lock + package-lock.json present")
+
+
 def run_gates(*, skip_frontend: bool = False, lint_only: bool = False, commit_sample: int = 10) -> GateReport:
     report = GateReport()
     py = sys.executable
@@ -117,6 +144,9 @@ def run_gates(*, skip_frontend: bool = False, lint_only: bool = False, commit_sa
 
     report.steps.append(check_d05_commits(sample_size=commit_sample))
     report.steps.append(check_d06_branch())
+    report.steps.append(check_d07_handoff_no_private_routes())
+    report.steps.append(check_d09_gitignore())
+    report.steps.append(check_d10_lockfiles())
     return report
 
 

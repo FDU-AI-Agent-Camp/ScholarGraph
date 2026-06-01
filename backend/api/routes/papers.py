@@ -38,6 +38,7 @@ async def list_papers(
     request_id: str = Depends(get_request_id),
     service: PaperService = Depends(get_paper_service_dep),
 ) -> dict:
+    """List papers with optional paradigm/status filters and pagination."""
     items, total = await service.list_papers(
         paradigm=paradigm,
         status=status,
@@ -53,6 +54,7 @@ async def create_paper(
     request_id: str = Depends(get_request_id),
     service: PaperService = Depends(get_paper_service_dep),
 ) -> dict:
+    """Upload a PDF; returns pending paper_id for status polling."""
     content = await file.read()
     result = await service.create_from_upload(
         filename=file.filename or "upload.pdf",
@@ -67,6 +69,7 @@ async def get_paper(
     request_id: str = Depends(get_request_id),
     service: PaperService = Depends(get_paper_service_dep),
 ) -> dict:
+    """Return paper metadata by id."""
     paper = await service.get_paper(paper_id)
     return success(paper, request_id)
 
@@ -77,6 +80,7 @@ async def get_paper_status(
     request_id: str = Depends(get_request_id),
     service: PaperService = Depends(get_paper_service_dep),
 ) -> dict:
+    """Return pipeline progress snapshot for long-polling."""
     status_data = await service.get_status(paper_id)
     return success(status_data, request_id)
 
@@ -87,6 +91,7 @@ async def get_paper_graph(
     request_id: str = Depends(get_request_id),
     service: PaperService = Depends(get_paper_service_dep),
 ) -> dict:
+    """Return UnifiedPaperGraph when paper status is ready."""
     graph = await service.get_graph(paper_id)
     return success(graph, request_id)
 

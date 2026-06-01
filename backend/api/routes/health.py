@@ -12,6 +12,7 @@ router = APIRouter()
 
 @router.get("/health")
 async def health(request_id: str = Depends(get_request_id)) -> dict:
+    """Liveness probe with LLM mode disclosure for FE banners."""
     settings = get_settings()
     return success(
         {

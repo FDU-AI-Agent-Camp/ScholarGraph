@@ -9,8 +9,13 @@ import pytest
 from scripts.d_gates_lib import (
     CONVENTIONAL_COMMIT_TYPES,
     REPO_ROOT,
+    api_route_handlers_missing_docstrings,
+    backend_python_files_exceeding_line_budget,
+    scan_handoff_modules_for_private_routes,
     validate_conventional_commit_subject,
     validate_feature_branch_name,
+    validate_gitignore_sensitive_entries,
+    validate_lockfiles_present,
 )
 
 RUN_D_GATES = REPO_ROOT / "scripts" / "run_d_gates.py"
@@ -128,3 +133,36 @@ def test_run_d_gates_commit_and_branch_checks_pass_on_repo() -> None:
     d06 = check_d06_branch()
     assert d05.ok, d05.detail
     assert d06.ok, d06.detail
+
+
+def test_d07_handoff_modules_do_not_register_http_routes() -> None:
+    """BE-1～4 delivery dirs must not define APIRouter / include_router."""
+    violations = scan_handoff_modules_for_private_routes()
+    assert not violations, f"handoff route leaks: {violations}"
+
+
+def test_d09_gitignore_blocks_sensitive_local_files() -> None:
+    missing = validate_gitignore_sensitive_entries()
+    assert not missing, f".gitignore missing: {missing}"
+
+
+def test_d10_lockfiles_exist_next_to_manifests() -> None:
+    missing = validate_lockfiles_present()
+    assert not missing, f"lock/manifest missing: {missing}"
+
+
+def test_d11_public_api_route_handlers_have_docstrings() -> None:
+    missing = api_route_handlers_missing_docstrings()
+    assert not missing, f"undocumented route handlers: {missing}"
+
+
+def test_d12_backend_python_files_stay_under_god_file_budget() -> None:
+    offenders = backend_python_files_exceeding_line_budget()
+    assert not offenders, f"oversized backend modules: {offenders}"
+
+
+def test_d07_handoff_doc_reiterates_no_private_routes() -> None:
+    handoff = REPO_ROOT / "docs" / "v1" / "handoff-to-platform.md"
+    text = handoff.read_text(encoding="utf-8")
+    assert "不要" in text and "HTTP 路由" in text
+    assert "APIRouter" in text or "只交付 Service" in text

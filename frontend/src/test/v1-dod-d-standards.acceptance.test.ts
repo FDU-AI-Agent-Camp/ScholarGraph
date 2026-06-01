@@ -1,8 +1,11 @@
 /**
- * V1 DoD §6.4 D-01～D-06 — 代码基座规范性（静态契约 + CI 对齐）。
+ * V1 DoD §6.4 D-01～D-12 — 代码基座规范性（静态契约 + CI 对齐）。
  *
  * 与 tests/test_dod_d_standards.py、scripts/run_d_gates.py 成对验收。
  */
+import { readdirSync, readFileSync, statSync } from 'node:fs'
+import { join, relative } from 'node:path'
+
 import { describe, expect, it } from 'vitest'
 
 import packageJson from '../../package.json'
@@ -12,6 +15,25 @@ import frontendWorkflow from '../../../.github/workflows/frontend.yml?raw'
 import eslintConfigSource from '../../eslint.config.js?raw'
 import agentsMd from '../../../AGENTS.md?raw'
 import workAssignment from '../../../docs/v1/work-assignment.md?raw'
+import handoffDoc from '../../../docs/v1/handoff-to-platform.md?raw'
+import gitignoreSource from '../../../.gitignore?raw'
+
+const FRONTEND_ROOT = join(process.cwd())
+const REPO_ROOT = join(FRONTEND_ROOT, '..')
+
+function listSourceFiles(dir: string, acc: string[] = []): string[] {
+  for (const entry of readdirSync(dir)) {
+    const full = join(dir, entry)
+    const stat = statSync(full)
+    if (stat.isDirectory()) {
+      if (entry === 'node_modules' || entry === 'dist') continue
+      listSourceFiles(full, acc)
+      continue
+    }
+    if (/\.(ts|vue)$/.test(entry)) acc.push(full)
+  }
+  return acc
+}
 
 const CONVENTIONAL_TYPES = [
   'feat',
@@ -127,5 +149,60 @@ describe('V1 DoD D-06 — feature branch naming', () => {
       expect(FEATURE_BRANCH.test(branch)).toBe(true)
     }
     expect(FEATURE_BRANCH.test('feature/be1/ingest')).toBe(false)
+  })
+})
+
+describe('V1 DoD D-07 — BE handoff doc (no private routes in delivery modules)', () => {
+  it('handoff-to-platform forbids BE-1～4 from registering HTTP routes', () => {
+    expect(handoffDoc).toContain('不要')
+    expect(handoffDoc).toContain('HTTP 路由')
+    expect(handoffDoc).toContain('只交付 Service')
+  })
+})
+
+describe('V1 DoD D-08 — no raw axios outside src/api', () => {
+  it('eslint restricts axios to src/api/**/*.ts', () => {
+    expect(eslintConfigSource).toContain("files: ['src/api/**/*.ts']")
+  })
+
+  it('source scan finds no axios imports outside src/api', () => {
+    const srcRoot = join(FRONTEND_ROOT, 'src')
+    const axiosImport = /from ['"]axios['"]|require\(['"]axios['"]\)/
+    const offenders: string[] = []
+    for (const file of listSourceFiles(srcRoot)) {
+      const rel = relative(srcRoot, file).replace(/\\/g, '/')
+      if (rel.startsWith('api/')) continue
+      const text = readFileSync(file, 'utf-8')
+      if (axiosImport.test(text)) offenders.push(rel)
+    }
+    expect(offenders).toEqual([])
+  })
+})
+
+describe('V1 DoD D-09 — sensitive paths gitignored', () => {
+  it('.gitignore blocks .env, .cursor/, progress.md, and API KEY.txt', () => {
+    for (const entry of ['.env', '.cursor/', 'progress.md', 'API KEY.txt']) {
+      expect(gitignoreSource).toContain(entry)
+    }
+  })
+})
+
+describe('V1 DoD D-10 — lockfiles committed with manifests', () => {
+  it('uv.lock and package-lock.json exist at repo root paths', () => {
+    expect(statSync(join(REPO_ROOT, 'pyproject.toml')).isFile()).toBe(true)
+    expect(statSync(join(REPO_ROOT, 'uv.lock')).isFile()).toBe(true)
+    expect(statSync(join(FRONTEND_ROOT, 'package.json')).isFile()).toBe(true)
+    expect(statSync(join(FRONTEND_ROOT, 'package-lock.json')).isFile()).toBe(true)
+  })
+})
+
+describe('V1 DoD D-11/D-12 — review sampling (continuous)', () => {
+  it('AGENTS.md documents SRP and function length guidance for D-12 reviews', () => {
+    expect(agentsMd).toContain('职责单一')
+    expect(agentsMd).toContain('上帝类')
+  })
+
+  it('openapi.yaml remains the public API contract reference for D-11 reviews', () => {
+    expect(readFileSync(join(REPO_ROOT, 'docs/api/openapi.yaml'), 'utf-8')).toContain('/papers')
   })
 })
