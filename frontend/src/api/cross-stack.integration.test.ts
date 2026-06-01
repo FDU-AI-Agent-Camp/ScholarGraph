@@ -122,6 +122,28 @@ describe('cross-stack merge (FE papers API ↔ fixture envelopes)', () => {
       statusCode: 409,
     })
   })
+
+  it('runPatrol rejection maps 409 GRAPH_NOT_READY for patrol red path', async () => {
+    vi.spyOn(client, 'postData').mockRejectedValue(
+      new client.ApiClientError({ code: 'GRAPH_NOT_READY', message: '图谱未就绪' }, 409),
+    )
+
+    await expect(patrolApi.runPatrol(['hss-001', 'hss-002'])).rejects.toMatchObject({
+      code: 'GRAPH_NOT_READY',
+      statusCode: 409,
+    })
+  })
+
+  it('runPatrol rejection maps 422 PATROL_INSUFFICIENT_DATA', async () => {
+    vi.spyOn(client, 'postData').mockRejectedValue(
+      new client.ApiClientError({ code: 'PATROL_INSUFFICIENT_DATA', message: '巡检数据不足' }, 422),
+    )
+
+    await expect(patrolApi.runPatrol(['hss-001', 'hss-002'])).rejects.toMatchObject({
+      code: 'PATROL_INSUFFICIENT_DATA',
+      statusCode: 422,
+    })
+  })
 })
 
 describe('cross-stack merge (fixture parity for BE HTTP tests)', () => {

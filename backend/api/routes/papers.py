@@ -88,22 +88,15 @@ async def stream_paper_qa(
     body: QaStreamRequest,
     service: PaperService = Depends(get_paper_service_dep),
 ) -> StreamingResponse:
-    """SSE skeleton — BE-3 replaces with GraphRAG streaming."""
+    """SSE multi-scale QA — delegates to BE-3 ``qa_stream()``."""
 
     await service.get_paper(paper_id)
 
     async def event_generator() -> AsyncIterator[str]:
-        chunks = [
-            {"event": "message", "data": {"delta": "（骨架占位）"}},
-            {
-                "event": "citation",
-                "data": {"node_id": "n1", "label": "示例节点", "snippet": "…"},
-            },
-            {"event": "message", "data": {"delta": f" 收到问题：{body.question[:80]}"}},
-            {"event": "done", "data": {"answer": "请接入 backend/graph/qa.py 后替换本占位流。"}},
-        ]
-        for item in chunks:
-            yield f"event: {item['event']}\ndata: {json.dumps(item['data'], ensure_ascii=False)}\n\n"
+        from backend.graph.qa import qa_stream
+
+        async for evt in qa_stream(paper_id, body.question):
+            yield f"event: {evt.event}\ndata: {json.dumps(evt.data, ensure_ascii=False)}\n\n"
 
     return StreamingResponse(
         event_generator(),

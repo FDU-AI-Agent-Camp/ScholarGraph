@@ -1,5 +1,6 @@
 """Unit tests for scripts/run_pipeline.py helpers and CLI surface."""
 
+import os
 import subprocess
 import sys
 from datetime import UTC, datetime
@@ -14,14 +15,17 @@ from tests.conftest import RUN_PIPELINE_SCRIPT
 REPO_ROOT = RUN_PIPELINE_SCRIPT.parents[1]
 SCRIPT_PATH = RUN_PIPELINE_SCRIPT
 
+_SUBPROCESS_TEXT_KW = {"text": True, "encoding": "utf-8", "errors": "replace"}
+
 
 def test_run_pipeline_help_exits_zero() -> None:
     result = subprocess.run(
         [sys.executable, str(SCRIPT_PATH), "--help"],
         cwd=REPO_ROOT,
         capture_output=True,
-        text=True,
         check=False,
+        env={**os.environ, "PYTHONIOENCODING": "utf-8"},
+        **_SUBPROCESS_TEXT_KW,
     )
     assert result.returncode == 0
     assert "--pdf" in result.stdout

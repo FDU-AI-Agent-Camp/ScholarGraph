@@ -48,7 +48,7 @@ uv sync
 
 # 环境变量
 cp .env.example .env
-# 编辑 .env，填入 SCHOLARGRAPH_API_KEY（向 BE-L 索取，勿提交 Git）
+# 默认 LLM_MODE=mock，无需 Key 即可联调；接华为云 SaaS 时改为 live 并填 SCHOLARGRAPH_API_KEY + LLM_API_BASE_URL
 ```
 
 **冒烟测试**（P0 完成后）：

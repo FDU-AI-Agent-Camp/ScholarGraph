@@ -1,6 +1,7 @@
 """Unit tests for scripts/run_patrol.py helpers and CLI surface."""
 
 import json
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -12,14 +13,17 @@ from tests.conftest import RUN_PATROL_SCRIPT
 REPO_ROOT = RUN_PATROL_SCRIPT.parents[1]
 SCRIPT_PATH = RUN_PATROL_SCRIPT
 
+_SUBPROCESS_TEXT_KW = {"text": True, "encoding": "utf-8", "errors": "replace"}
+
 
 def test_run_patrol_help_exits_zero() -> None:
     result = subprocess.run(
         [sys.executable, str(SCRIPT_PATH), "--help"],
         cwd=REPO_ROOT,
         capture_output=True,
-        text=True,
         check=False,
+        env={**os.environ, "PYTHONIOENCODING": "utf-8"},
+        **_SUBPROCESS_TEXT_KW,
     )
     assert result.returncode == 0
     assert "--paper-ids" in result.stdout
@@ -103,8 +107,9 @@ def test_cli_subprocess_runs_patrol_with_seed(tmp_path: Path) -> None:
         ],
         cwd=REPO_ROOT,
         capture_output=True,
-        text=True,
         check=False,
+        env={**os.environ, "PYTHONIOENCODING": "utf-8"},
+        **_SUBPROCESS_TEXT_KW,
     )
     assert result.returncode == 0, result.stderr
     payload = json.loads(result.stdout.strip())
@@ -158,8 +163,9 @@ def test_cli_subprocess_runs_contradiction_mode(tmp_path: Path) -> None:
         ],
         cwd=REPO_ROOT,
         capture_output=True,
-        text=True,
         check=False,
+        env={**os.environ, "PYTHONIOENCODING": "utf-8"},
+        **_SUBPROCESS_TEXT_KW,
     )
     assert result.returncode == 0, result.stderr
     payload = json.loads(result.stdout.strip())
