@@ -85,6 +85,15 @@ async def test_run_qa_fails_when_graph_missing(run_qa_module, tmp_path: Path) ->
 
 
 @pytest.mark.asyncio
+async def test_run_qa_seed_only_exits_success(run_qa_module, tmp_path: Path) -> None:
+    mod = run_qa_module
+    graph_dir = tmp_path / "graphs"
+    code = await mod.main_async(mod.parse_args(["--seed-demo-graph", "--graph-dir", str(graph_dir)]))
+    assert code == mod.EXIT_SUCCESS
+    assert (graph_dir / "hss-001.json").is_file()
+
+
+@pytest.mark.asyncio
 async def test_run_qa_smoke_m2_requires_seed_or_existing_graph(run_qa_module, tmp_path: Path) -> None:
     mod = run_qa_module
     empty_dir = tmp_path / "empty"
@@ -137,4 +146,24 @@ def test_run_qa_subprocess_smoke_with_seed(tmp_path: Path) -> None:
         **_SUBPROCESS_TEXT_KW,
     )
     assert result.returncode == 0, result.stderr or result.stdout
-    assert "citation" in result.stdout.lower() or "✓ citation" in result.stdout
+    assert "[OK] citation" in result.stdout or "citation" in result.stdout.lower()
+
+
+def test_run_qa_subprocess_smoke_without_utf8_env(tmp_path: Path) -> None:
+    """E-12: default Windows console encoding must not crash run_qa (ASCII-only output)."""
+    graph_dir = tmp_path / "graphs"
+    graph_dir.mkdir()
+    env = {k: v for k, v in os.environ.items() if k != "PYTHONIOENCODING"}
+    env["LLM_MODE"] = "mock"
+    env["GRAPH_DATA_DIR"] = str(graph_dir)
+    result = subprocess.run(
+        [sys.executable, str(RUN_QA_SCRIPT), "--smoke-m2", "--seed-demo-graph", "--graph-dir", str(graph_dir)],
+        cwd=REPO_ROOT,
+        capture_output=True,
+        check=False,
+        env=env,
+    )
+    assert result.returncode == 0, result.stderr.decode("utf-8", errors="replace") or result.stdout.decode(
+        "utf-8",
+        errors="replace",
+    )

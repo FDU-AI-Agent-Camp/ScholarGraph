@@ -135,14 +135,30 @@ uv run uvicorn backend.main:app --reload --host 127.0.0.1 --port 8000
 cd frontend && npm run dev
 
 # 终端 3 — 全链路联调（API + Vite 代理 + Playwright 浏览器）
-uv pip install playwright   # 首次需安装
+uv sync --group e2e
 uv run playwright install chromium
 uv run python scripts/run_cp4_rehearsal.py --seed
+
+# 分段探针
+uv run python scripts/run_cp4_rehearsal.py --seed --api-only      # C-05 仅后端 API（8 步）
+uv run python scripts/run_cp4_rehearsal.py --skip-browser         # C-05 + C-06（16 步）
+
+# C-09：合 develop / 答辩前复跑 A～C（含 check_backend + check:ci + CLI 冒烟）
+uv run python scripts/run_v1_ac_gates.py
+uv run python scripts/run_v1_ac_gates.py --with-cp4-api           # 额外 C-05（需 :8000）
 ```
 
 脚本覆盖：`GET /papers`、详情/状态（ready/processing/failed）、图谱、SSE 问答、`POST /patrol`、六页 SPA 渲染、详情页 QA 提问、巡检页运行。
 
-退出码 0 表示 **24/24** 步骤通过。
+退出码 0 表示 **24/24** 步骤通过（`--api-only` 为 8/8，`--skip-browser` 为 16/16）。
+
+## C-08 人工答辩彩排
+
+按上文 **§1～§5 演示路径** 逐项走读；自动化无法替代口播与临场切换。建议答辩前：
+
+1. 执行 `run_frontend_demo.py` 打印 URL 清单
+2. 跑通 `run_cp4_rehearsal.py --seed`（24/24）
+3. 人工走一遍 Home → Papers → Detail QA → Graph ?node= → Patrol
 
 ## 相关文档
 

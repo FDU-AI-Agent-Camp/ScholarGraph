@@ -91,21 +91,21 @@ async def run_single_qa(paper_id: str, question: str) -> QaRunResult:
             citations.append(evt.data)
         elif evt.event == "error":
             error_code = evt.data["code"]
-            print(f"\n❌ {evt.data['code']}: {evt.data['message']}")
+            print(f"\n[ERROR] {evt.data['code']}: {evt.data['message']}")
         elif evt.event == "done":
-            print(f"\n\n✅ answer_id = {evt.data.get('answer_id', '—')}")
+            print(f"\n\n[OK] answer_id = {evt.data.get('answer_id', '—')}")
 
     return QaRunResult("".join(answer_parts), citations, error_code)
 
 
 async def print_qa_turn(paper_id: str, question: str) -> QaRunResult:
-    print(f"📄 paper_id : {paper_id}")
-    print(f"❓ question : {question}")
+    print(f"paper_id : {paper_id}")
+    print(f"question : {question}")
     print("-" * 60)
     try:
         return await run_single_qa(paper_id, question)
     except Exception as exc:
-        print(f"\n💥 Unhandled: {exc}")
+        print(f"\n[FATAL] Unhandled: {exc}")
         raise
 
 
@@ -113,12 +113,12 @@ def verify_citation(result: QaRunResult, graph_dir: Path, paper_id: str) -> bool
     if result.error_code:
         return False
     if not result.citations:
-        print("❌ 缺少 citation 事件", file=sys.stderr)
+        print("[FAIL] 缺少 citation 事件", file=sys.stderr)
         return False
 
     graph = GraphStore(base_dir=graph_dir).load(paper_id)
     if graph is None:
-        print(f"❌ 图谱不存在: {paper_id}", file=sys.stderr)
+        print(f"[FAIL] 图谱不存在: {paper_id}", file=sys.stderr)
         return False
 
     node_index = {node.id: node for node in graph.nodes}
@@ -126,15 +126,15 @@ def verify_citation(result: QaRunResult, graph_dir: Path, paper_id: str) -> bool
         node_id = cite["node_id"]
         node = node_index.get(node_id)
         if node is None:
-            print(f"❌ citation 节点 {node_id!r} 不在图谱中", file=sys.stderr)
+            print(f"[FAIL] citation 节点 {node_id!r} 不在图谱中", file=sys.stderr)
             return False
         if cite.get("label") != node.label:
             print(
-                f"❌ citation label 不匹配: {cite.get('label')!r} != {node.label!r}",
+                f"[FAIL] citation label 不匹配: {cite.get('label')!r} != {node.label!r}",
                 file=sys.stderr,
             )
             return False
-        print(f"  ✓ citation {node_id} → {node.label} ({node.type})")
+        print(f"  [OK] citation {node_id} -> {node.label} ({node.type})")
     return True
 
 
@@ -153,12 +153,12 @@ async def smoke_m2(graph_dir: Path, *, paper_id: str = M2_DEMO_PAPER_ID) -> int:
         cited_node = next(n for n in graph.nodes if n.id == result.citations[0]["node_id"])
         if cited_node.type not in sample.expected_node_types:
             print(
-                f"❌ 尺度 {sample.scale} 期望节点类型 {sample.expected_node_types}，实际 {cited_node.type}",
+                f"[FAIL] 尺度 {sample.scale} 期望节点类型 {sample.expected_node_types}，实际 {cited_node.type}",
                 file=sys.stderr,
             )
             failed = True
         else:
-            print(f"  ✓ 尺度 {sample.scale} → {cited_node.type}")
+            print(f"  [OK] 尺度 {sample.scale} -> {cited_node.type}")
     return EXIT_QA_FAILED if failed else EXIT_SUCCESS
 
 
@@ -173,6 +173,8 @@ async def main_async(args: argparse.Namespace) -> int:
         return await smoke_m2(graph_dir)
 
     if not args.paper_id or not args.question:
+        if args.seed_demo_graph:
+            return EXIT_SUCCESS
         print("Usage: uv run python scripts/run_qa.py <paper_id> <question>", file=sys.stderr)
         print("       uv run python scripts/run_qa.py --smoke-m2 --seed-demo-graph", file=sys.stderr)
         return EXIT_USAGE_ERROR
