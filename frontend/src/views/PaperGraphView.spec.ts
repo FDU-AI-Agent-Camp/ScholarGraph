@@ -102,7 +102,7 @@ describe('PaperGraphView', () => {
 
     await flushPromises()
 
-    const alert = wrapper.find('.graph-alert')
+    const alert = wrapper.find('.graph-view__error-panel .graph-alert')
     expect(alert.attributes('data-title')).toBe(GRAPH_BASELINE_COPY.graphNotReadyTitle)
     expect(alert.attributes('data-desc')).toContain('ready')
     expect(wrapper.find('.graph-view__error-cta').exists()).toBe(true)
@@ -142,6 +142,7 @@ describe('PaperGraphView', () => {
     expect(wrapper.find('.graph-legend-stub').exists()).toBe(true)
     expect(wrapper.find('.graph-node-drawer-stub').attributes('data-open')).toBe('true')
     expect(wrapper.find('.graph-node-drawer-stub').attributes('data-node-id')).toBe('n1')
+    expect(wrapper.find('.graph-view__mobile-banner').exists()).toBe(true)
   })
 
   it('opens node drawer when a graph node is clicked', async () => {
@@ -246,7 +247,7 @@ describe('PaperGraphView', () => {
 
     await flushPromises()
 
-    expect(wrapper.find('.graph-alert').attributes('data-title')).toBe('服务不可用')
+    expect(wrapper.find('.graph-view__error-panel .graph-alert').attributes('data-title')).toBe('服务不可用')
     expect(wrapper.find('.graph-view__error-cta').exists()).toBe(false)
   })
 

@@ -1,12 +1,17 @@
 <script setup lang="ts">
-import { Document, HomeFilled, Search } from '@element-plus/icons-vue'
-import { computed } from 'vue'
+import { Close, Document, HomeFilled, Menu, Search } from '@element-plus/icons-vue'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 
+import { MOBILE_NAV_MAX_WIDTH_PX, SHELL_BASELINE_COPY } from '@/constants/shellCopy'
 import { RouteName } from '@/router/meta'
 
 const route = useRoute()
 const router = useRouter()
+
+const mobileNavOpen = ref(false)
+const isMobileViewport = ref(false)
+let mobileMediaQuery: MediaQueryList | null = null
 
 const activeNav = computed(() => {
   if (route.path.startsWith('/papers')) {
@@ -42,15 +47,53 @@ const breadcrumbs = computed((): ShellBreadcrumb[] => {
   return []
 })
 
+function syncMobileViewport(matches: boolean): void {
+  isMobileViewport.value = matches
+  if (!matches) {
+    mobileNavOpen.value = false
+  }
+}
+
+function onMobileViewportChange(event: MediaQueryListEvent): void {
+  syncMobileViewport(event.matches)
+}
+
+onMounted(() => {
+  mobileMediaQuery = window.matchMedia(`(max-width: ${MOBILE_NAV_MAX_WIDTH_PX}px)`)
+  syncMobileViewport(mobileMediaQuery.matches)
+  mobileMediaQuery.addEventListener('change', onMobileViewportChange)
+})
+
+onUnmounted(() => {
+  mobileMediaQuery?.removeEventListener('change', onMobileViewportChange)
+})
+
+watch(
+  () => route.path,
+  () => {
+    mobileNavOpen.value = false
+  },
+)
+
+function toggleMobileNav(): void {
+  mobileNavOpen.value = !mobileNavOpen.value
+}
+
+function closeMobileNav(): void {
+  mobileNavOpen.value = false
+}
+
 function handleNavSelect(index: string): void {
+  closeMobileNav()
   void router.push(index)
 }
 </script>
 
 <template>
-  <el-container class="layout">
-    <el-aside width="240px" class="aside">
-      <router-link class="brand" to="/">
+  <el-container class="layout" :class="{ 'layout--mobile-nav-open': mobileNavOpen && isMobileViewport }">
+    <div v-if="mobileNavOpen && isMobileViewport" class="aside-backdrop" aria-hidden="true" @click="closeMobileNav" />
+    <el-aside width="240px" :class="['aside', { 'aside--open': mobileNavOpen }]">
+      <router-link class="brand" to="/" @click="closeMobileNav">
         <strong class="brand-name">ScholarGraph</strong>
         <span class="tag">V1</span>
       </router-link>
@@ -72,6 +115,21 @@ function handleNavSelect(index: string): void {
     <el-container class="main-column">
       <el-header class="header">
         <div class="header-start">
+          <button
+            v-if="isMobileViewport"
+            type="button"
+            class="header-menu-toggle"
+            :aria-label="
+              mobileNavOpen ? SHELL_BASELINE_COPY.mobileNavCloseLabel : SHELL_BASELINE_COPY.mobileNavToggleLabel
+            "
+            :aria-expanded="mobileNavOpen ? 'true' : 'false'"
+            @click="toggleMobileNav"
+          >
+            <el-icon class="header-menu-toggle__icon">
+              <Close v-if="mobileNavOpen" />
+              <Menu v-else />
+            </el-icon>
+          </button>
           <el-breadcrumb v-if="breadcrumbs.length > 0" class="header-breadcrumb" separator="/">
             <el-breadcrumb-item v-for="item in breadcrumbs" :key="item.label" :to="item.to">
               {{ item.label }}
@@ -85,7 +143,11 @@ function handleNavSelect(index: string): void {
       </el-header>
       <el-main :class="['main', { 'main--full-bleed': isFullBleed }]">
         <div :class="contentShellClass">
-          <router-view />
+          <router-view v-slot="{ Component, route: viewRoute }">
+            <transition name="route-fade" mode="out-in">
+              <component :is="Component" :key="viewRoute.fullPath" />
+            </transition>
+          </router-view>
         </div>
       </el-main>
     </el-container>
@@ -95,6 +157,10 @@ function handleNavSelect(index: string): void {
 <style scoped>
 .layout {
   min-height: 100vh;
+}
+
+.aside-backdrop {
+  display: none;
 }
 
 .aside {
@@ -188,8 +254,45 @@ function handleNavSelect(index: string): void {
 }
 
 .header-start {
+  display: flex;
+  align-items: center;
+  gap: var(--spacing-12);
   min-width: 0;
   justify-self: start;
+}
+
+.header-menu-toggle {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-bg-surface);
+  color: var(--color-text-primary);
+  cursor: pointer;
+  transition:
+    background-color var(--transition-instant),
+    border-color var(--transition-instant),
+    color var(--transition-instant);
+}
+
+.header-menu-toggle:hover {
+  background: var(--color-bg-page);
+  border-color: var(--color-border-strong);
+}
+
+.header-menu-toggle:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+}
+
+.header-menu-toggle__icon {
+  width: 18px;
+  height: 18px;
+  font-size: 18px;
 }
 
 .header-breadcrumb {
@@ -227,5 +330,80 @@ function handleNavSelect(index: string): void {
 
 .shell-content--full-bleed {
   min-height: calc(100vh - 56px);
+}
+
+@media (max-width: 767px) {
+  .aside-backdrop {
+    display: block;
+    position: fixed;
+    inset: 0;
+    z-index: calc(var(--z-drawer) - 1);
+    background: rgb(15 23 42 / 35%);
+  }
+
+  .aside {
+    position: fixed;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    z-index: var(--z-drawer);
+    transform: translateX(-100%);
+    transition: transform var(--transition-slow);
+  }
+
+  .aside--open {
+    transform: translateX(0);
+  }
+
+  .header-menu-toggle {
+    display: inline-flex;
+  }
+
+  .header {
+    padding: 0 var(--spacing-16);
+    grid-template-columns: auto minmax(0, 1fr) auto;
+  }
+
+  .main {
+    padding: var(--spacing-16);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .aside {
+    transition: none;
+  }
+}
+</style>
+
+<style>
+.route-fade-enter-active,
+.route-fade-leave-active {
+  transition:
+    opacity var(--duration-normal) var(--ease-out-product),
+    transform var(--duration-normal) var(--ease-out-product);
+}
+
+.route-fade-enter-from {
+  opacity: 0;
+  transform: translateY(8px);
+}
+
+.route-fade-leave-to {
+  opacity: 0;
+  transform: translateY(-8px);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .route-fade-enter-active,
+  .route-fade-leave-active {
+    transition: none;
+  }
+
+  .route-fade-enter-from,
+  .route-fade-leave-to {
+    opacity: 1;
+    transform: none;
+  }
 }
 </style>

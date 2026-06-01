@@ -19,6 +19,7 @@ export const GRAPH_BASELINE_COPY = {
   graphNotReadyTitle: '图谱未就绪',
   graphNotReadyDescription: '论文尚未 ready，请先在详情页等待流水线完成。',
   graphNotReadyCta: '返回论文详情',
+  mobileDesktopBanner: '建议使用桌面浏览器查看知识图谱',
 } as const
 
 export const GRAPH_DRAWER_WIDTH_PX = 320

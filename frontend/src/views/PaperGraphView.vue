@@ -134,6 +134,13 @@ watch(
 
 <template>
   <div v-loading="graphLoading" class="graph-view">
+    <el-alert
+      class="graph-view__mobile-banner"
+      type="info"
+      :title="GRAPH_BASELINE_COPY.mobileDesktopBanner"
+      show-icon
+      :closable="false"
+    />
     <header class="graph-view__header">
       <RouterLink :to="`/papers/${paperId}`" class="graph-view__back">← {{ GRAPH_BASELINE_COPY.backLink }}</RouterLink>
       <h1 class="text-h1 graph-view__title">{{ GRAPH_BASELINE_COPY.pageTitle }}</h1>
@@ -191,6 +198,17 @@ watch(
   flex-direction: column;
   min-height: calc(100vh - 56px);
   background: var(--color-bg-canvas);
+}
+
+.graph-view__mobile-banner {
+  display: none;
+  margin: var(--spacing-12) var(--spacing-16) 0;
+}
+
+@media (max-width: 767px) {
+  .graph-view__mobile-banner {
+    display: block;
+  }
 }
 
 .graph-view__header {

@@ -379,7 +379,14 @@ function onGraphNodeClick(nodeId: string): void {
   color: var(--color-text-muted);
 }
 
-@media (min-width: 1024px) {
+@media (min-width: 1024px) and (max-width: 1279px) {
+  .detail-layout {
+    grid-template-columns: 1fr 1fr;
+    align-items: start;
+  }
+}
+
+@media (min-width: 1280px) {
   .detail-layout {
     grid-template-columns: 45fr 55fr;
     align-items: start;

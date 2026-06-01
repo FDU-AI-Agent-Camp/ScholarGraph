@@ -1,8 +1,9 @@
 import { ref } from 'vue'
-import { mount, type VueWrapper } from '@vue/test-utils'
+import { flushPromises, mount, type VueWrapper } from '@vue/test-utils'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import AppLayout from '@/components/layout/AppLayout.vue'
+import { SHELL_BASELINE_COPY } from '@/constants/shellCopy'
 import { RouteName } from '@/router/meta'
 
 const routeMeta = ref<{ title?: string; fullBleed?: boolean }>({ title: '文献库' })
@@ -10,6 +11,18 @@ const routePath = ref('/papers')
 const routeName = ref<string | symbol | null | undefined>(RouteName.Papers)
 const routeParams = ref<Record<string, string | string[]>>({})
 const routerPush = vi.hoisted(() => vi.fn())
+
+function mockMatchMedia(matches = false): void {
+  Object.defineProperty(window, 'matchMedia', {
+    writable: true,
+    value: vi.fn().mockImplementation((query: string) => ({
+      matches,
+      media: query,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+    })),
+  })
+}
 
 vi.mock('vue-router', () => ({
   useRoute: () => ({
@@ -35,6 +48,7 @@ function mountLayout(): VueWrapper {
   return mount(AppLayout, {
     global: {
       stubs: {
+        transition: false,
         'el-container': { template: '<div class="el-container-stub"><slot /></div>' },
         'el-aside': {
           props: ['width'],
@@ -60,10 +74,19 @@ function mountLayout(): VueWrapper {
           template: '<span class="el-breadcrumb-item-stub" :data-to="to"><slot /></span>',
         },
         'router-link': { props: ['to'], template: '<a class="router-link-stub" :href="to"><slot /></a>' },
-        'router-view': true,
+        'router-view': {
+          setup() {
+            const mockRoute = { fullPath: '/papers' }
+            const mockComponent = { template: '<div class="route-view-content" />' }
+            return { mockRoute, mockComponent }
+          },
+          template: '<div class="router-view-stub"><slot :Component="mockComponent" :route="mockRoute" /></div>',
+        },
         HomeFilled: { template: '<svg data-testid="icon-home" />' },
         Document: { template: '<svg data-testid="icon-document" />' },
         Search: { template: '<svg data-testid="icon-search" />' },
+        Menu: { template: '<svg data-testid="icon-menu" />' },
+        Close: { template: '<svg data-testid="icon-close" />' },
       },
     },
   })
@@ -71,6 +94,7 @@ function mountLayout(): VueWrapper {
 
 describe('AppLayout', () => {
   beforeEach(() => {
+    mockMatchMedia(false)
     routeMeta.value = { title: '文献库' }
     routePath.value = '/papers'
     routeName.value = RouteName.Papers
@@ -172,5 +196,33 @@ describe('AppLayout', () => {
     await wrapper.find('.el-menu-stub').trigger('click')
 
     expect(routerPush).toHaveBeenCalledWith('/patrol')
+  })
+
+  it('wraps routed content in route-fade transition (§8.1)', () => {
+    const wrapper = mountLayout()
+
+    expect(wrapper.find('.router-view-stub').exists()).toBe(true)
+    expect(wrapper.find('.route-view-content').exists()).toBe(true)
+  })
+
+  it('shows mobile nav toggle on narrow viewport (§8.3)', async () => {
+    mockMatchMedia(true)
+    const wrapper = mountLayout()
+    await flushPromises()
+
+    const toggle = wrapper.find('.header-menu-toggle')
+    expect(toggle.exists()).toBe(true)
+    expect(toggle.attributes('aria-label')).toBe(SHELL_BASELINE_COPY.mobileNavToggleLabel)
+  })
+
+  it('opens aside drawer when mobile toggle is clicked', async () => {
+    mockMatchMedia(true)
+    const wrapper = mountLayout()
+    await flushPromises()
+
+    expect(wrapper.find('.aside').classes()).not.toContain('aside--open')
+    await wrapper.find('.header-menu-toggle').trigger('click')
+    expect(wrapper.find('.aside').classes()).toContain('aside--open')
+    expect(wrapper.find('.header-menu-toggle').attributes('aria-label')).toBe(SHELL_BASELINE_COPY.mobileNavCloseLabel)
   })
 })

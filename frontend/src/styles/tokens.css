@@ -138,5 +138,6 @@
     --duration-normal: 0ms;
     --duration-slow: 0ms;
     --duration-pulse: 0ms;
+    --duration-blink: 0ms;
   }
 }
