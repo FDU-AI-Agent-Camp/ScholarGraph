@@ -9,6 +9,7 @@ import type { UnifiedPaperGraph } from '@/api/types'
 import { cssToken } from '@/utils/cssTokens'
 import { appendUniqueCitation, buildHighlightStateMap, toG6GraphPayload } from '@/utils/paperGraph'
 import { DESIGN_SPEC_SEMANTIC_COLORS, loadDesignTokenMap, readFrontendSource } from '@/test/helpers/designTokens'
+import { answerPanelStyleBlockHasNoAnimation, extractStyleBlocks } from '@/test/helpers/motionDiscipline'
 
 describe('graph + QA SSE integration (fixtures)', () => {
   it('chains SSE citation event into highlight state for graph-hss nodes', () => {
@@ -110,5 +111,36 @@ describe('graph + QA SSE integration (fixtures)', () => {
     expect(tokens['--color-citation-active']).toBe(DESIGN_SPEC_SEMANTIC_COLORS.citationActive)
     expect(paperGraphUtilSrc).toContain('resolvePaperGraphThemeTokens')
     expect(paperGraphUtilSrc).toContain("'--color-citation-active'")
+  })
+
+  describe('§1.4.3 motion acceptance checklist', () => {
+    it('applies graph active state within 150ms budget when citation node_id is selected', () => {
+      const tokens = loadDesignTokenMap()
+      const paperGraphUtilSrc = readFrontendSource('utils/paperGraph.ts')
+      const durationFastMs = Number.parseInt(tokens['--duration-fast'] ?? '150', 10)
+
+      expect(paperGraphUtilSrc).toContain('GRAPH_STATE_ANIMATION_MS')
+      expect(paperGraphUtilSrc).toContain('buildHighlightStateMap')
+      expect(durationFastMs).toBe(150)
+    })
+
+    it('keeps TagCitation and graph utils free of transition:all', () => {
+      const tagStyles = readFrontendSource('components/ui/TagCitation.vue')
+      const graphUtilSrc = readFrontendSource('utils/paperGraph.ts')
+
+      expect(tagStyles).not.toMatch(/transition\s*:\s*all\b/i)
+      expect(graphUtilSrc).not.toMatch(/transition\s*:\s*all\b/i)
+    })
+
+    it('preserves readable node labels and static answer panel during SSE demo path', () => {
+      const detailSrc = readFrontendSource('views/PaperDetailView.vue')
+      const paperGraphUtilSrc = readFrontendSource('utils/paperGraph.ts')
+
+      expect(detailSrc).toContain('detail-qa__answer-panel')
+      expect(detailSrc).toContain('text-body-lg')
+      expect(answerPanelStyleBlockHasNoAnimation(extractStyleBlocks(detailSrc))).toBe(true)
+      expect(paperGraphUtilSrc).toContain('labelFill')
+      expect(paperGraphUtilSrc).not.toMatch(/\btranslate\s*\(/i)
+    })
   })
 })

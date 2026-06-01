@@ -172,6 +172,10 @@ async function copyPaperId(paperId: string) {
   background: var(--color-bg-subtle);
 }
 
+.papers-table :deep(.el-table__body tr > td.el-table__cell) {
+  transition: background-color var(--transition-instant);
+}
+
 .papers-table :deep(.el-table__body tr:hover > td.el-table__cell) {
   background: rgb(230 243 243 / 20%);
 }

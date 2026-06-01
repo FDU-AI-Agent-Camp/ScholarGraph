@@ -15,6 +15,7 @@ import { routes } from '@/router/index'
 import { RouteName } from '@/router/meta'
 import { buildHighlightStateMap, toG6GraphPayload } from '@/utils/paperGraph'
 import { DESIGN_SPEC_SEMANTIC_COLORS, loadDesignTokenMap, readFrontendSource } from '@/test/helpers/designTokens'
+import { answerPanelStyleBlockHasNoAnimation, extractStyleBlocks } from '@/test/helpers/motionDiscipline'
 
 const DEMO_PAPER_ID = 'hss-001'
 const DEMO_PATROL_PAPER_B = 'hss-002'
@@ -245,6 +246,31 @@ describe('design-spec §16 Prototype 答辩路径', () => {
     })
   })
 
+  describe('§1.4.3 动效验收 checklist', () => {
+    it('Citation 点击：150ms token + 同步 highlightNodeId 绑定', () => {
+      const tokens = loadDesignTokenMap()
+      expect(tokens['--duration-fast']).toBe('150ms')
+      expect(tagCitationSrc).toContain('var(--transition-fast)')
+      expect(detailViewSrc).toContain(':active="item.node_id === highlightNodeId"')
+      expect(detailViewSrc).toContain(':highlight-node-id="highlightNodeId"')
+      expect(paperGraphUtilSrc).toContain('GRAPH_STATE_ANIMATION_MS')
+    })
+
+    it('答辩路径无 transition:all（Tag + Graph 工具链）', () => {
+      expect(tagCitationSrc).not.toMatch(/transition\s*:\s*all\b/i)
+      expect(paperGraphUtilSrc).not.toMatch(/transition\s*:\s*all\b/i)
+      expect(readFrontendSource('test/ui-antipattern.acceptance.spec.ts')).toContain('无裸 transition: all')
+    })
+
+    it('SSE 演示不遮挡阅读：答案区无 animation，图谱 labelFill 无 hover 位移', () => {
+      expect(detailViewSrc).toContain('detail-qa__answer-text')
+      expect(answerPanelStyleBlockHasNoAnimation(extractStyleBlocks(detailViewSrc))).toBe(true)
+      expect(paperGraphUtilSrc).toContain('labelFill')
+      expect(paperGraphUtilSrc).not.toMatch(/scale:\s*1\./)
+      expect(readFrontendSource('components/layout/AppLayout.vue')).not.toMatch(/blur\s*\(/i)
+    })
+  })
+
   describe('§1.4 四维 — 答辩路径目视检查锚点', () => {
     it('background: shell/page/surface/canvas tokens present on defense screens', () => {
       expect(readFrontendSource('components/layout/AppLayout.vue')).toContain('var(--color-bg-page)')
@@ -260,6 +286,13 @@ describe('design-spec §16 Prototype 答辩路径', () => {
       expect(detailViewSrc.indexOf('PaperMetadataCard')).toBeLessThan(detailViewSrc.indexOf('PaperStatusPanel'))
       expect(detailViewSrc.indexOf('PaperStatusPanel')).toBeLessThan(detailViewSrc.indexOf('detail-qa'))
       expect(graphViewSrc).toContain('min-height: 720px')
+    })
+
+    it('motion: Citation 150ms + route-fade + reduced-motion on defense branch', () => {
+      expect(readFrontendSource('assets/main.css')).toContain(':focus-visible')
+      expect(readFrontendSource('components/ui/TagCitation.vue')).toContain('var(--transition-fast)')
+      expect(readFrontendSource('components/layout/AppLayout.vue')).toContain('route-fade')
+      expect(detailViewSrc).toContain('highlightNodeId')
     })
 
     it('layout: Home asymmetric grids + shell inset padding on defense path', () => {

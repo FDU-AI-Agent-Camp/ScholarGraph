@@ -54,3 +54,11 @@ a.router-link-active {
   max-width: var(--content-max-width);
   margin-inline: auto;
 }
+
+/* §1.4.3 a11y — keyboard focus ring (do not rely on hover alone) */
+a:focus-visible,
+button:focus-visible,
+[role='button']:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+}

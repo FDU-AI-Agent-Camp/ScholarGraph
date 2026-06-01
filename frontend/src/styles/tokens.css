@@ -121,17 +121,17 @@
   /* ── Layout — content max-width 1280 (Graph full-bleed exempt) ─ */
   --content-max-width: 1280px;
 
-  /* ── Motion (§1.4.3) ───────────────────────────────── */
+  /* ── Motion (§1.4.3) — ease-out-product default; avoid global in-out easing ─ */
   --ease-out-product: cubic-bezier(0.22, 1, 0.36, 1);
   --ease-in-subtle: cubic-bezier(0.4, 0, 0.2, 1);
-  --duration-instant: 120ms;
-  --duration-fast: 150ms;
-  --duration-normal: 200ms;
-  --duration-slow: 250ms;
-  --duration-pulse: 1.5s;
-  --duration-blink: 1s;
+  --duration-instant: 120ms; /* Nav/button/table/graph hover, upload drag-over */
+  --duration-fast: 150ms; /* Citation Tag ↔ graph active stroke sync */
+  --duration-normal: 200ms; /* route-fade opacity + translateY(8px) */
+  --duration-slow: 250ms; /* Step check-in, Drawer translateX */
+  --duration-pulse: 1.5s; /* processing badge + pipeline step pulse */
+  --duration-blink: 1s; /* SSE answer cursor blink (step-end) */
 
-  /* Shorthand transitions — animate explicit properties only */
+  /* Shorthand transitions — explicit CSS properties only (never animate all props) */
   --transition-instant: var(--duration-instant) var(--ease-out-product);
   --transition-fast: var(--duration-fast) var(--ease-out-product);
   --transition-normal: var(--duration-normal) var(--ease-out-product);
@@ -140,6 +140,7 @@
 
 @media (prefers-reduced-motion: reduce) {
   :root {
+    /* Disable pulse/slide/blink; color feedback stays instant via 0ms transitions */
     --duration-instant: 0ms;
     --duration-fast: 0ms;
     --duration-normal: 0ms;

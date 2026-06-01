@@ -33,6 +33,7 @@ const PHASE_ACCEPTANCE_FILES = [
   'test/ui-phase8-responsive.acceptance.spec.ts',
   'test/ui-phase141-background.acceptance.spec.ts',
   'test/ui-phase142-layout.acceptance.spec.ts',
+  'test/ui-phase143-motion.acceptance.spec.ts',
   'test/ui-antipattern.acceptance.spec.ts',
   'test/demo-path.integration.test.ts',
 ] as const
@@ -529,6 +530,71 @@ describe('§9 Experience quality × Phase checklist (full audit)', () => {
     })
   })
 
+  describe('§9 动效 §1.4.3 — Phase 对照表验收', () => {
+    const tokens = loadDesignTokenMap()
+    const phase143Src = readSrc('test/ui-phase143-motion.acceptance.spec.ts')
+
+    it('keeps ui-phase143-motion acceptance as §1.4.3 automation gate', () => {
+      expect(existsSync(resolve(FRONTEND_SRC, 'test/ui-phase143-motion.acceptance.spec.ts'))).toBe(true)
+      expect(phase143Src).toContain('§1.4.3 Motion & interaction discipline')
+      expect(phase143Src).toContain('§1.4.3 动效验收 — checklist')
+    })
+
+    it('Phase 0：动效 CSS 变量', () => {
+      expect(tokens['--duration-instant']).toBe('120ms')
+      expect(tokens['--ease-out-product']).toContain('cubic-bezier')
+      expect(readSrc('styles/tokens.css')).toContain('--transition-instant')
+    })
+
+    it('Phase 1：Nav hover 120ms', () => {
+      expect(readSrc('components/layout/AppLayout.vue')).toContain('var(--transition-instant)')
+    })
+
+    it('Phase 2：Tag hover 120ms', () => {
+      expect(readSrc('components/ui/TagCitation.vue')).toContain('var(--transition-instant)')
+    })
+
+    it('Phase 3：卡片 hover 120ms', () => {
+      expect(readSrc('views/HomeView.vue')).toContain('var(--transition-instant)')
+    })
+
+    it('Phase 4：Upload drag-over 120ms', () => {
+      expect(readSrc('components/papers/PaperUpload.vue')).toContain('var(--transition-instant)')
+    })
+
+    it('Phase 5：Citation 150ms、SSE 光标、Step 脉冲', () => {
+      expect(readSrc('components/ui/TagCitation.vue')).toContain('var(--transition-fast)')
+      expect(readSrc('views/PaperDetailView.vue')).toContain('detail-qa-cursor-blink')
+      expect(readSrc('components/papers/PaperStatusPanel.vue')).toContain('status-step-pulse')
+    })
+
+    it('Phase 6：Graph 节点 120ms + Drawer 250ms', () => {
+      expect(readSrc('utils/paperGraph.ts')).toContain('GRAPH_STATE_ANIMATION_MS')
+      expect(readSrc('components/graph/GraphNodeDrawer.vue')).toContain('var(--transition-slow)')
+    })
+
+    it('Phase 7：Segmented 切换 instant 颜色反馈', () => {
+      expect(readSrc('views/PatrolView.vue')).toContain('var(--transition-instant)')
+    })
+
+    it('Phase 8：route-fade + reduced-motion 审计', () => {
+      expect(readSrc('components/layout/AppLayout.vue')).toContain('route-fade')
+      expect(readSrc('test/ui-phase8-responsive.acceptance.spec.ts')).toContain('prefers-reduced-motion audit')
+    })
+
+    it('§9 总验收 — focus-visible ring + 无 transition:all', () => {
+      expect(readSrc('assets/main.css')).toContain(':focus-visible')
+      expect(phase143Src).toContain('无任何 transition: all')
+    })
+
+    it('§9 动效验收 checklist — phase143 + graph-qa + demo-path 三门禁', () => {
+      expect(phase143Src).toContain('Citation 点击后 Tag 与节点同一帧内开始变化')
+      expect(phase143Src).toContain('演示时动效不遮挡 SSE 阅读与图谱节点 label')
+      expect(readSrc('test/graph-qa.integration.test.ts')).toContain('§1.4.3 motion acceptance checklist')
+      expect(readSrc('test/demo-path.integration.test.ts')).toContain('§1.4.3 动效验收 checklist')
+    })
+  })
+
   describe('§9 总验收 — cross-cutting gates', () => {
     const styleSources = [
       ...collectSourceFiles('views', ['.vue']),
@@ -565,6 +631,14 @@ describe('§9 Experience quality × Phase checklist (full audit)', () => {
       expect(readSrc('views/HomeView.vue')).toContain('grid-template-columns: 58fr 42fr')
       expect(readSrc('views/PaperDetailView.vue')).toContain('grid-template-columns: 45fr 55fr')
       expect(readSrc('components/layout/AppLayout.vue')).toContain('padding: var(--spacing-24) var(--spacing-32)')
+    })
+
+    it('motion discipline: §1.4.3 checklist — Citation sync, no transition:all, demo readability', () => {
+      const phase143Src = readSrc('test/ui-phase143-motion.acceptance.spec.ts')
+      expect(phase143Src).toContain('Citation 点击后 Tag 与节点同一帧内开始变化')
+      expect(readSrc('test/graph-qa.integration.test.ts')).toContain('§1.4.3 motion acceptance checklist')
+      expect(readSrc('test/demo-path.integration.test.ts')).toContain('§1.4.3 动效验收 checklist')
+      expect(loadDesignTokenMap()['--duration-fast']).toBe('150ms')
     })
 
     it('motion discipline: src/ has no transition:all or ease-in-out keyword defaults', () => {
@@ -658,6 +732,13 @@ describe('§9 Experience quality × Phase checklist (full audit)', () => {
       expect(phase142Src).toContain('VISUAL_DENSITY')
       expect(phase142Src).toContain('each primary view keeps ≤3 H2 section titles per screen')
       expect(phase142Src).toContain('WORKBENCH_LAYOUT_FILES')
+    })
+
+    it('§1.4.3 motion gate: ui-phase143 + graph-qa + demo-path cover motion checklist', () => {
+      const phase143Src = readSrc('test/ui-phase143-motion.acceptance.spec.ts')
+      expect(phase143Src).toContain('REDUCED_MOTION_ANIMATION_SOURCES')
+      expect(phase143Src).toContain('registers graph-qa and demo-path integration gates')
+      expect(readSrc('test/graph-qa.integration.test.ts')).toContain('preserves readable node labels')
     })
   })
 })

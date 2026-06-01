@@ -5,6 +5,7 @@ import type { PaperDetail, QaStreamCitationData, UnifiedPaperGraph } from '@/api
 import { DETAIL_BASELINE_COPY } from '@/constants/detailCopy'
 import { RouteName } from '@/router/meta'
 import { loadDesignTokenMap, readFrontendSource } from '@/test/helpers/designTokens'
+import { usesSynchronousHighlightHandlers } from '@/test/helpers/motionDiscipline'
 
 const mockStreamPaperQa = vi.fn()
 const mockFetchDetail = vi.fn()
@@ -282,11 +283,23 @@ describe('PaperDetailView', () => {
       const tags = wrapper.findAll('.citation-tag')
 
       await tags[0]?.trigger('click')
-      await flushPromises()
 
       expect(wrapper.find('.paper-graph-stub').attributes('data-highlight')).toBe('n1')
       expect(tags[0]?.classes()).toContain('tag-citation--active')
       expect(tags[1]?.classes()).not.toContain('tag-citation--active')
+    })
+
+    it('syncs Tag and graph highlight in the same tick on citation click (§1.4.3 checklist)', async () => {
+      const detailSrc = readFrontendSource('views/PaperDetailView.vue')
+      const script = detailSrc.match(/<script[^>]*>([\s\S]*?)<\/script>/)?.[1] ?? ''
+      expect(usesSynchronousHighlightHandlers(script)).toBe(true)
+
+      const wrapper = await mountWithTwoCitations()
+      const tags = wrapper.findAll('.citation-tag')
+      await tags[0]?.trigger('click')
+
+      expect(wrapper.find('.paper-graph-stub').attributes('data-highlight')).toBe('n1')
+      expect(tags[0]?.classes()).toContain('tag-citation--active')
     })
 
     it('updates active citation when compact graph emits node-click', async () => {
