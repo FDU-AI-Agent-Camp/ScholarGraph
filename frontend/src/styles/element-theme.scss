@@ -1,0 +1,38 @@
+/**
+ * Element Plus theme — ScholarGraph V1
+ * Maps design tokens to EP SCSS variables (design-spec §5.3.4).
+ */
+
+@forward 'element-plus/theme-chalk/src/common/var.scss' with (
+  $colors: (
+    'primary': (
+      'base': #0d6e6e,
+    ),
+    'success': (
+      'base': #059669,
+    ),
+    'warning': (
+      'base': #d97706,
+    ),
+    'danger': (
+      'base': #dc2626,
+    ),
+    'error': (
+      'base': #dc2626,
+    ),
+    'info': (
+      'base': #2563eb,
+    ),
+  ),
+  $border-radius: (
+    'base': 6px,
+    'small': 4px,
+    'round': 20px,
+    'circle': 100%,
+  ),
+  $font-family: (
+    '': "'Source Han Sans SC', 'Noto Sans SC', 'PingFang SC', 'Microsoft YaHei', sans-serif",
+  )
+);
+
+@use 'element-plus/theme-chalk/src/index.scss' as *;

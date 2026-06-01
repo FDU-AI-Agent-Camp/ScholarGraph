@@ -31,6 +31,7 @@ describe('router', () => {
   it('maps graph route props and marks nav entries', () => {
     const graph = routes.find((r) => r.name === RouteName.PaperGraph)
     expect(graph?.meta?.title).toBe('知识图谱')
+    expect(graph?.meta?.fullBleed).toBe(true)
     if (typeof graph?.props === 'function') {
       expect(graph.props({ params: { paperId: 'stem-001' } } as never)).toEqual({
         paperId: 'stem-001',

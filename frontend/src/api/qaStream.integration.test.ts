@@ -88,4 +88,28 @@ describe('streamPaperQa integration', () => {
 
     expect(errorMessage).toBe('图谱未就绪')
   })
+
+  it('routes fetchEventSource onerror to onError before rejecting', async () => {
+    fetchEventSource.mockImplementation(
+      async (
+        _url: string,
+        options: {
+          onerror?: (err: unknown) => void
+        },
+      ) => {
+        options.onerror?.(new Error('connection reset'))
+      },
+    )
+
+    let errorMessage = ''
+    await expect(
+      streamPaperQa('hss-001', 'q', {
+        onError: (message) => {
+          errorMessage = message
+        },
+      }),
+    ).rejects.toThrow('connection reset')
+
+    expect(errorMessage).toBe('connection reset')
+  })
 })

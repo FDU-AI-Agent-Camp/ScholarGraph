@@ -1,10 +1,15 @@
 <script setup lang="ts">
 import { defineAsyncComponent, onMounted, ref, watch } from 'vue'
-import { useRouter } from 'vue-router'
+import { RouterLink, useRouter } from 'vue-router'
 
 import { streamPaperQa } from '@/api/qaStream'
 import type { QaStreamCitationData } from '@/api/types'
+import PaperMetadataCard from '@/components/papers/PaperMetadataCard.vue'
 import PaperStatusPanel from '@/components/papers/PaperStatusPanel.vue'
+import BadgeParadigm from '@/components/ui/BadgeParadigm.vue'
+import BadgeStatus from '@/components/ui/BadgeStatus.vue'
+import TagCitation from '@/components/ui/TagCitation.vue'
+import { DETAIL_BASELINE_COPY } from '@/constants/detailCopy'
 import { RouteName } from '@/router/meta'
 import { usePaperStore } from '@/stores/paper'
 import { appendUniqueCitation, citationKey } from '@/utils/qaCitations'
@@ -25,6 +30,19 @@ let abort: AbortController | null = null
 
 const isReady = () => paperStore.currentPaper?.status === 'ready'
 
+function formatDetailTime(iso: string | undefined): string {
+  if (!iso) {
+    return '—'
+  }
+  return new Date(iso).toLocaleString('zh-CN', {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+  })
+}
+
 async function loadGraphIfReady(): Promise<void> {
   if (!isReady() || paperStore.currentGraph?.paper_id === props.paperId) {
     return
@@ -38,8 +56,12 @@ async function loadGraphIfReady(): Promise<void> {
 }
 
 onMounted(async () => {
-  await paperStore.fetchDetail(props.paperId)
-  await loadGraphIfReady()
+  try {
+    await paperStore.fetchDetail(props.paperId)
+    await loadGraphIfReady()
+  } catch {
+    // Store records lastError; template guards on currentPaper.
+  }
 })
 
 watch(
@@ -111,100 +133,284 @@ function onGraphNodeClick(nodeId: string): void {
 </script>
 
 <template>
-  <div v-loading="paperStore.loading" class="page-card">
-    <el-page-header @back="router.push('/papers')">
-      <template #content>
-        <span>{{ paperStore.currentPaper?.title ?? props.paperId }}</span>
-      </template>
-    </el-page-header>
-
+  <div v-loading="paperStore.loading" class="paper-detail">
     <template v-if="paperStore.currentPaper">
-      <el-descriptions :column="2" border class="meta">
-        <el-descriptions-item label="paper_id">{{ paperStore.currentPaper.paper_id }}</el-descriptions-item>
-        <el-descriptions-item label="status">{{ paperStore.currentPaper.status }}</el-descriptions-item>
-        <el-descriptions-item label="paradigm">{{ paperStore.currentPaper.paradigm ?? '—' }}</el-descriptions-item>
-        <el-descriptions-item v-if="paperStore.currentPaper.classification" label="classification">
-          {{ paperStore.currentPaper.classification.paradigm }}
-          ({{ paperStore.currentPaper.classification.confidence }})
-        </el-descriptions-item>
-      </el-descriptions>
-
-      <PaperStatusPanel
-        :paper-id="props.paperId"
-        :auto-start="paperStore.currentPaper.status !== 'ready'"
-        @ready="paperStore.fetchDetail(props.paperId)"
-      />
-
-      <el-divider>多尺度问答（SSE）</el-divider>
-      <el-alert
-        v-if="!isReady()"
-        type="info"
-        title="论文尚未 ready，问答与图谱预览将在流水线完成后可用。"
-        show-icon
-        :closable="false"
-        class="qa-hint"
-      />
-      <template v-else>
-        <el-input v-model="question" type="textarea" :rows="3" placeholder="输入问题…" />
-        <el-space class="actions">
-          <el-button type="primary" :loading="streaming" @click="ask">提问</el-button>
-          <el-button v-if="streaming" @click="stopStream">停止</el-button>
-          <el-button @click="openFullGraph"> 全屏图谱 </el-button>
-        </el-space>
-        <el-card v-if="answer" shadow="never" class="answer">{{ answer }}</el-card>
-        <div v-if="citations.length" class="citations">
-          <span class="citations-label">引用节点：</span>
-          <el-space wrap>
-            <el-tag
-              v-for="item in citations"
-              :key="citationKey(item)"
-              :type="item.node_id === highlightNodeId ? 'danger' : 'info'"
-              class="citation-tag"
-              @click="focusCitation(item)"
-            >
-              {{ item.label }} ({{ item.node_id }})
-            </el-tag>
-          </el-space>
+      <header class="detail-header">
+        <div class="detail-header__toolbar">
+          <RouterLink to="/papers" class="detail-header__back">← {{ DETAIL_BASELINE_COPY.backLink }}</RouterLink>
+          <el-button v-if="isReady()" link type="primary" @click="openFullGraph">
+            {{ DETAIL_BASELINE_COPY.fullGraph }}
+          </el-button>
         </div>
+        <h1 class="text-h1 detail-header__title">{{ paperStore.currentPaper.title }}</h1>
+        <div class="detail-header__meta">
+          <span class="text-mono detail-header__paper-id">{{ paperStore.currentPaper.paper_id }}</span>
+          <BadgeParadigm :paradigm="paperStore.currentPaper.paradigm" />
+          <BadgeStatus :status="paperStore.currentPaper.status" />
+          <span class="text-caption detail-header__time">
+            {{ formatDetailTime(paperStore.currentPaper.updated_at ?? paperStore.currentPaper.created_at) }}
+          </span>
+        </div>
+      </header>
 
-        <el-divider>逻辑图谱预览</el-divider>
-        <div v-loading="graphLoading">
-          <PaperGraph
-            v-if="paperStore.currentGraph"
-            compact
-            :graph="paperStore.currentGraph"
-            :highlight-node-id="highlightNodeId"
-            @node-click="onGraphNodeClick"
+      <div class="detail-layout">
+        <div class="detail-main">
+          <PaperMetadataCard :classification="paperStore.currentPaper.classification" />
+
+          <PaperStatusPanel
+            :paper-id="props.paperId"
+            :auto-start="paperStore.currentPaper.status !== 'ready'"
+            @ready="paperStore.fetchDetail(props.paperId)"
           />
+
+          <section class="detail-qa">
+            <h2 class="text-h2 detail-qa__title">{{ DETAIL_BASELINE_COPY.qaSectionTitle }}</h2>
+            <el-alert
+              v-if="!isReady()"
+              type="info"
+              :title="DETAIL_BASELINE_COPY.notReadyAlert"
+              show-icon
+              :closable="false"
+              class="detail-qa__alert"
+            />
+            <el-input
+              v-model="question"
+              type="textarea"
+              :rows="3"
+              class="detail-qa__input"
+              :disabled="!isReady()"
+              :placeholder="DETAIL_BASELINE_COPY.qaPlaceholder"
+            />
+            <el-space class="detail-qa__actions">
+              <el-button type="primary" :loading="streaming" :disabled="!isReady()" @click="ask">提问</el-button>
+              <el-button v-if="streaming" :disabled="!isReady()" @click="stopStream">停止</el-button>
+              <el-button :disabled="!isReady()" @click="openFullGraph">{{ DETAIL_BASELINE_COPY.fullGraph }}</el-button>
+            </el-space>
+            <div v-if="(answer || streaming) && isReady()" class="detail-qa__answer-panel text-body-lg">
+              <span class="detail-qa__answer-text">{{ answer }}</span>
+              <span v-if="streaming" class="detail-qa__cursor" aria-hidden="true">|</span>
+            </div>
+            <div v-if="citations.length && isReady()" class="detail-qa__citations">
+              <span class="text-caption detail-qa__citations-label">{{ DETAIL_BASELINE_COPY.citationLabel }}：</span>
+              <div class="citations-list">
+                <TagCitation
+                  v-for="item in citations"
+                  :key="citationKey(item)"
+                  :label="item.label"
+                  :node-id="item.node_id"
+                  :active="item.node_id === highlightNodeId"
+                  @click="focusCitation(item)"
+                />
+              </div>
+            </div>
+          </section>
         </div>
-      </template>
+
+        <aside class="detail-graph">
+          <div class="detail-graph__header">
+            <h2 class="text-h2 detail-graph__title">{{ DETAIL_BASELINE_COPY.graphPreviewTitle }}</h2>
+            <el-button v-if="isReady()" link type="primary" @click="openFullGraph">
+              {{ DETAIL_BASELINE_COPY.graphFullscreenLink }}
+            </el-button>
+          </div>
+          <div v-loading="graphLoading" class="detail-graph__canvas">
+            <PaperGraph
+              v-if="isReady() && paperStore.currentGraph"
+              compact
+              :graph="paperStore.currentGraph"
+              :highlight-node-id="highlightNodeId"
+              @node-click="onGraphNodeClick"
+            />
+            <p v-else class="text-caption detail-graph__placeholder">图谱预览将在论文 ready 后展示</p>
+          </div>
+        </aside>
+      </div>
     </template>
   </div>
 </template>
 
 <style scoped>
-.meta {
-  margin-top: 16px;
+.paper-detail {
+  min-width: 0;
 }
-.qa-hint {
-  margin-bottom: 12px;
+
+.detail-header {
+  padding-bottom: var(--spacing-16);
+  border-bottom: 1px solid var(--color-border);
 }
-.actions {
-  margin-top: 12px;
+
+.detail-header__toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacing-16);
 }
-.answer {
-  margin-top: 16px;
+
+.detail-header__back {
+  font-family: var(--font-sans);
+  font-size: var(--text-body-size);
+  font-weight: 500;
+  line-height: var(--text-body-leading);
+  color: var(--color-primary);
+  text-decoration: none;
+  transition: color var(--transition-instant);
+}
+
+.detail-header__back:hover {
+  color: var(--color-primary-hover);
+}
+
+.detail-header__title {
+  margin: var(--spacing-12) 0 0;
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  color: var(--color-text-primary);
+}
+
+.detail-header__meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--spacing-12);
+  margin-top: var(--spacing-12);
+}
+
+.detail-header__paper-id {
+  color: var(--color-text-secondary);
+}
+
+.detail-header__time {
+  color: var(--color-text-muted);
+}
+
+.detail-layout {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--spacing-24);
+  margin-top: var(--spacing-24);
+}
+
+.detail-main {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-24);
+  min-width: 0;
+}
+
+.detail-qa__title {
+  margin: 0 0 var(--spacing-16);
+  color: var(--color-text-primary);
+}
+
+.detail-qa__alert {
+  margin-bottom: var(--spacing-12);
+}
+
+.detail-qa__actions {
+  margin-top: var(--spacing-12);
+}
+
+.detail-qa__input :deep(.el-textarea__inner) {
+  min-height: 96px;
+}
+
+.detail-qa__answer-panel {
+  margin-top: var(--spacing-16);
+  padding: var(--spacing-16);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-bg-subtle);
   white-space: pre-wrap;
+  color: var(--color-text-primary);
 }
-.citations {
-  margin-top: 12px;
+
+.detail-qa__cursor {
+  margin-left: 2px;
+  color: var(--color-primary);
+  animation: detail-qa-cursor-blink var(--duration-blink) step-end infinite;
 }
-.citations-label {
+
+.detail-qa__citations {
+  margin-top: var(--spacing-12);
+}
+
+.detail-qa__citations-label {
   display: inline-block;
-  margin-bottom: 8px;
-  color: #606266;
+  margin-bottom: var(--spacing-8);
+  color: var(--color-text-secondary);
 }
-.citation-tag {
-  cursor: pointer;
+
+.citations-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--spacing-8);
+}
+
+.detail-graph {
+  min-width: 0;
+}
+
+.detail-graph__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacing-12);
+  margin-bottom: var(--spacing-12);
+}
+
+.detail-graph__title {
+  margin: 0;
+  color: var(--color-text-primary);
+}
+
+.detail-graph__canvas {
+  position: relative;
+  min-height: 320px;
+  padding: 0;
+  overflow: hidden;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-xl);
+  background: var(--color-bg-canvas);
+}
+
+.detail-graph__placeholder {
+  margin: 0;
+  padding: var(--spacing-48) var(--spacing-16);
+  text-align: center;
+  color: var(--color-text-muted);
+}
+
+@media (min-width: 1024px) and (max-width: 1279px) {
+  .detail-layout {
+    grid-template-columns: 1fr 1fr;
+    align-items: start;
+  }
+}
+
+@media (min-width: 1280px) {
+  .detail-layout {
+    grid-template-columns: 45fr 55fr;
+    align-items: start;
+  }
+}
+
+@keyframes detail-qa-cursor-blink {
+  0%,
+  100% {
+    opacity: 1;
+  }
+
+  50% {
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .detail-qa__cursor {
+    animation: none;
+  }
 }
 </style>

@@ -18,9 +18,13 @@ export function usePaperStatus(paperId: string, intervalMs = 2000): UsePaperStat
   let timer: ReturnType<typeof setInterval> | null = null
 
   async function pollOnce(): Promise<void> {
-    const res = await papersApi.getPaperStatus(paperId)
-    status.value = res.data
-    if (isTerminalStatus(res.data.status)) {
+    try {
+      const res = await papersApi.getPaperStatus(paperId)
+      status.value = res.data
+      if (isTerminalStatus(res.data.status)) {
+        stop()
+      }
+    } catch {
       stop()
     }
   }

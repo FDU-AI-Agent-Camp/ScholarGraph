@@ -1,3 +1,5 @@
+import '@/styles/tokens.css'
+
 import { config } from '@vue/test-utils'
 import type { Directive } from 'vue'
 import { vi } from 'vitest'

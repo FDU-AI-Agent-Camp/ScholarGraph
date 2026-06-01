@@ -4,6 +4,8 @@ export interface AppRouteMeta {
   title: string
   /** Show in primary navigation when true. */
   nav?: boolean
+  /** Graph canvas routes: no page-card, main area full-bleed. */
+  fullBleed?: boolean
 }
 
 declare module 'vue-router' {

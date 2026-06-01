@@ -1,36 +1,64 @@
-:root {
-  font-family:
-    'Segoe UI',
-    system-ui,
-    -apple-system,
-    sans-serif;
-  line-height: 1.5;
-  font-weight: 400;
-  color: #1f2937;
-  background: #f5f7fa;
-}
-
 * {
   box-sizing: border-box;
+}
+
+html {
+  background: var(--color-bg-page);
 }
 
 body {
   margin: 0;
   min-height: 100vh;
+  font-family: var(--font-sans);
+  font-size: var(--text-body-size);
+  font-weight: var(--text-body-weight);
+  line-height: var(--text-body-leading);
+  color: var(--color-text-primary);
+  background: var(--color-bg-page);
+}
+
+#app {
+  min-height: 100vh;
+  background: var(--color-bg-page);
 }
 
 a {
-  color: #1a56db;
+  color: var(--color-primary);
   text-decoration: none;
+  transition: color var(--transition-instant);
+}
+
+a:hover {
+  color: var(--color-primary-hover);
 }
 
 a.router-link-active {
   font-weight: 600;
 }
 
+.main--full-bleed {
+  padding: 0;
+}
+
 .page-card {
-  background: #fff;
-  border-radius: 8px;
-  padding: 20px 24px;
-  box-shadow: 0 1px 3px rgb(0 0 0 / 8%);
+  background: var(--color-bg-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-xl);
+  padding: var(--spacing-24);
+  box-shadow: var(--shadow-sm);
+}
+
+.page-content {
+  box-sizing: border-box;
+  width: 100%;
+  max-width: var(--content-max-width);
+  margin-inline: auto;
+}
+
+/* §1.4.3 a11y — keyboard focus ring (do not rely on hover alone) */
+a:focus-visible,
+button:focus-visible,
+[role='button']:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
 }
