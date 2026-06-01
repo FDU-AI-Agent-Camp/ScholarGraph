@@ -1,0 +1,130 @@
+"""V1 DoD §6.4 D-01～D-06 — code-base standards (static + gate wiring)."""
+
+from __future__ import annotations
+
+import subprocess
+import sys
+
+import pytest
+from scripts.d_gates_lib import (
+    CONVENTIONAL_COMMIT_TYPES,
+    REPO_ROOT,
+    validate_conventional_commit_subject,
+    validate_feature_branch_name,
+)
+
+RUN_D_GATES = REPO_ROOT / "scripts" / "run_d_gates.py"
+CHECK_BACKEND = REPO_ROOT / "scripts" / "check_backend.py"
+BACKEND_WORKFLOW = REPO_ROOT / ".github" / "workflows" / "backend.yml"
+FRONTEND_WORKFLOW = REPO_ROOT / ".github" / "workflows" / "frontend.yml"
+PYPROJECT = REPO_ROOT / "pyproject.toml"
+AGENTS_MD = REPO_ROOT / "AGENTS.md"
+
+
+@pytest.mark.parametrize(
+    ("subject", "expected"),
+    [
+        ("feat(qa): wire SSE to qa_stream", True),
+        ("test(integration): E robustness FE↔BE", True),
+        ("docs(README): 完善协作说明", True),
+        ("fix: patch patrol 409 mapping", True),
+        ("chore: bump lockfile", True),
+        ("Merge branch 'develop' into feature/x", True),
+        ("update stuff", False),
+        ("feat bad subject", False),
+        ("WIP: temp", False),
+    ],
+)
+def test_d05_conventional_commit_header(subject: str, expected: bool) -> None:
+    assert validate_conventional_commit_subject(subject) is expected
+
+
+@pytest.mark.parametrize(
+    ("branch", "expected"),
+    [
+        ("develop", True),
+        ("main", True),
+        ("feature/frontend/scaffold-mock", True),
+        ("feature/backend/graph-qa/multiscale-qa", True),
+        ("feature/backend/be3-graph-qa-complete", True),
+        ("feature/be1/ingest", False),
+        ("feature/agent/foo", False),
+        ("random-branch", False),
+    ],
+)
+def test_d06_feature_branch_naming(branch: str, expected: bool) -> None:
+    assert validate_feature_branch_name(branch) is expected
+
+
+def test_d01_check_backend_script_exists_and_ruff_targets() -> None:
+    source = CHECK_BACKEND.read_text(encoding="utf-8")
+    assert "ruff check" in source
+    assert "ruff format --check" in source
+    assert "backend" in source and "tests" in source and "scripts" in source
+
+
+def test_d02_pyproject_excludes_red_marker_by_default() -> None:
+    text = PYPROJECT.read_text(encoding="utf-8")
+    assert "addopts = \"-m 'not red'\"" in text or 'addopts = "-m not red"' in text
+    assert "red:" in text
+
+
+def test_d01_d02_backend_ci_matches_check_backend_commands() -> None:
+    workflow = BACKEND_WORKFLOW.read_text(encoding="utf-8")
+    assert "uv run ruff check backend tests scripts" in workflow
+    assert "uv run ruff format --check backend tests scripts" in workflow
+    assert 'pytest -q -m "not red"' in workflow
+
+
+def test_d03_d04_frontend_ci_runs_check_not_only_typecheck() -> None:
+    workflow = FRONTEND_WORKFLOW.read_text(encoding="utf-8")
+    assert "npm run check" in workflow
+    assert "npm run test" in workflow
+    assert "npm run build" in workflow
+
+
+def test_d05_agents_md_lists_conventional_commit_types() -> None:
+    text = AGENTS_MD.read_text(encoding="utf-8")
+    for commit_type in CONVENTIONAL_COMMIT_TYPES:
+        assert f"`{commit_type}`" in text
+
+
+def test_d05_recent_git_commits_follow_conventional_commits_if_history_exists() -> None:
+    result = subprocess.run(
+        ["git", "log", "-5", "--format=%s"],
+        cwd=REPO_ROOT,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        check=False,
+    )
+    if result.returncode != 0:
+        pytest.skip("not a git repo")
+    subjects = [line for line in result.stdout.splitlines() if line.strip()]
+    if not subjects:
+        pytest.skip("empty git history")
+    bad = [subject for subject in subjects if not validate_conventional_commit_subject(subject)]
+    assert not bad, f"non-conventional recent commits: {bad}"
+
+
+def test_run_d_gates_help_exits_zero() -> None:
+    result = subprocess.run(
+        [sys.executable, str(RUN_D_GATES), "--help"],
+        cwd=REPO_ROOT,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == 0
+    assert "D-01" in result.stdout or "check_backend" in result.stdout
+
+
+def test_run_d_gates_commit_and_branch_checks_pass_on_repo() -> None:
+    """Fast D-05/D-06 only — no ruff/pytest/npm."""
+    from scripts.run_d_gates import check_d05_commits, check_d06_branch
+
+    d05 = check_d05_commits(sample_size=10)
+    d06 = check_d06_branch()
+    assert d05.ok, d05.detail
+    assert d06.ok, d06.detail

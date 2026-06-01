@@ -10,7 +10,6 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { ApiClientError } from '@/api/client'
 import { parseQaStreamEvent } from '@/api/qaStream'
-import * as patrolApi from '@/api/patrol'
 import type { PaperDetail, PatrolReport, QaStreamCitationData } from '@/api/types'
 import { DETAIL_BASELINE_COPY } from '@/constants/detailCopy'
 import { GRAPH_BASELINE_COPY } from '@/constants/graphCopy'
@@ -217,9 +216,7 @@ describe('V1 DoD E-05 — patrol client-side validation blocks bad requests', ()
     await wrapper.find('.patrol-view__run').trigger('click')
     await flushPromises()
 
-    expect(wrapper.find('.patrol-view__alert').attributes('data-title')).toBe(
-      PATROL_BASELINE_COPY.validationExactTwo,
-    )
+    expect(wrapper.find('.patrol-view__alert').attributes('data-title')).toBe(PATROL_BASELINE_COPY.validationExactTwo)
     expect(mockRunPatrol).not.toHaveBeenCalled()
   })
 
@@ -384,9 +381,7 @@ describe('V1 DoD E-01/E-04 — graph and failed status FE feedback', () => {
       data: { ...readyDetail, paper_id: 'hss-002', status: 'processing' },
       meta: { request_id: 'e' },
     })
-    mockGetPaperGraph.mockRejectedValue(
-      new ApiClientError({ code: 'GRAPH_NOT_READY', message: '图谱尚未就绪' }, 409),
-    )
+    mockGetPaperGraph.mockRejectedValue(new ApiClientError({ code: 'GRAPH_NOT_READY', message: '图谱尚未就绪' }, 409))
 
     const { wrapper } = await mountAt('/papers/hss-002/graph')
     await flushPromises()
