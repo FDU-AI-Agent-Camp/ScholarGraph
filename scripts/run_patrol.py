@@ -5,6 +5,7 @@
 在仓库根目录执行::
 
     uv run python scripts/run_patrol.py --seed-demo-graphs
+    uv run python scripts/run_patrol.py --seed-demo-graphs --smoke-patrol
     uv run python scripts/run_patrol.py --paper-ids hss-001,hss-002 --mode lens_clash
 
 ``--seed-demo-graphs`` 向 ``GRAPH_DATA_DIR`` 写入 ``docs/v1/eval/patrol_samples.md`` 中的评测图谱。
@@ -55,6 +56,11 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         "--seed-demo-graphs",
         action="store_true",
         help="运行前写入 patrol_samples 评测图谱（开发冒烟用）",
+    )
+    parser.add_argument(
+        "--smoke-patrol",
+        action="store_true",
+        help="同 --seed-demo-graphs（C-04 巡检 CLI 冒烟别名）",
     )
     parser.add_argument(
         "--compact",
@@ -116,7 +122,7 @@ async def async_main(argv: list[str] | None = None) -> int:
             paper_ids,
             mode,
             graph_dir=graph_dir,
-            seed_demo_graphs=args.seed_demo_graphs,
+            seed_demo_graphs=args.seed_demo_graphs or args.smoke_patrol,
         )
     except PatrolError as exc:
         print(f"[{exc.code}] {exc.message}", file=sys.stderr)

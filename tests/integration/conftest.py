@@ -8,6 +8,7 @@ from pathlib import Path
 
 import pytest
 from backend.config import get_settings
+from backend.graph.qa_samples import seed_m2_qa_graph
 from backend.graph.store import GraphStore
 from backend.llm.client import reset_llm_client_cache
 from backend.main import app
@@ -83,6 +84,20 @@ def mock_llm_env(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Path:
     yield graph_dir
     get_settings.cache_clear()
     reset_llm_client_cache()
+    get_paper_service.cache_clear()
+
+
+@pytest.fixture
+def graph_hss_fixture_env(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Path:
+    """Isolated GRAPH_DATA_DIR seeded with docs/api/fixtures/graph-hss.json (hss-001)."""
+    graph_dir = tmp_path / "graphs"
+    graph_dir.mkdir(parents=True, exist_ok=True)
+    monkeypatch.setenv("GRAPH_DATA_DIR", str(graph_dir))
+    get_settings.cache_clear()
+    get_paper_service.cache_clear()
+    seed_m2_qa_graph(graph_dir)
+    yield graph_dir
+    get_settings.cache_clear()
     get_paper_service.cache_clear()
 
 

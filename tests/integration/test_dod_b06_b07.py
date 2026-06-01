@@ -22,6 +22,8 @@ READY_PAPER_ID = "hss-001"
 PROCESSING_PAPER_ID = "hss-002"
 FAILED_PAPER_ID = "hss-failed-001"
 
+pytestmark = pytest.mark.usefixtures("graph_hss_fixture_env")
+
 
 def _load_graph_hss_fixture() -> dict:
     return json.loads((FIXTURES_DIR / "graph-hss.json").read_text(encoding="utf-8"))["data"]

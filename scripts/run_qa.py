@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import os
 import sys
 from dataclasses import dataclass
 from pathlib import Path
@@ -70,6 +71,12 @@ def resolve_graph_dir(explicit: Path | None) -> Path:
     if explicit is not None:
         return explicit.resolve()
     return Path(get_settings().graph_data_dir).resolve()
+
+
+def bind_graph_dir(graph_dir: Path) -> None:
+    """Point ``qa_stream`` / ``GraphStore`` at *graph_dir* (CLI ``--graph-dir``)."""
+    os.environ["GRAPH_DATA_DIR"] = str(graph_dir)
+    get_settings.cache_clear()
 
 
 async def run_single_qa(paper_id: str, question: str) -> QaRunResult:
@@ -158,6 +165,7 @@ async def smoke_m2(graph_dir: Path, *, paper_id: str = M2_DEMO_PAPER_ID) -> int:
 async def main_async(args: argparse.Namespace) -> int:
     graph_dir = resolve_graph_dir(args.graph_dir)
     graph_dir.mkdir(parents=True, exist_ok=True)
+    bind_graph_dir(graph_dir)
     if args.seed_demo_graph:
         seed_m2_qa_graph(graph_dir)
 
