@@ -24,7 +24,7 @@ const homeSteps: HomeStep[] = [
 </script>
 
 <template>
-  <div class="home">
+  <div class="home page-content">
     <div class="home-hero">
       <section class="home-copy">
         <p class="home-eyebrow">{{ HOME_EYEBROW }}</p>
@@ -82,9 +82,6 @@ const homeSteps: HomeStep[] = [
 
 <style scoped>
 .home {
-  box-sizing: border-box;
-  max-width: 1200px;
-  margin: 0 auto;
   padding-top: var(--spacing-48);
 }
 
@@ -158,7 +155,7 @@ const homeSteps: HomeStep[] = [
   border-radius: var(--radius-full);
   background: var(--color-primary-light);
   color: var(--color-primary);
-  font-size: 20px;
+  font-size: var(--text-h2-size);
 }
 
 .home-step-label {

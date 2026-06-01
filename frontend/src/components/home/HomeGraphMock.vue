@@ -96,7 +96,7 @@ function edgePath(edge: MockEdge): string {
   max-width: 520px;
   min-height: 420px;
   border: 1px solid var(--color-border);
-  border-radius: 16px;
+  border-radius: var(--radius-2xl);
   background: var(--color-bg-canvas);
   overflow: hidden;
 }
@@ -127,7 +127,7 @@ function edgePath(edge: MockEdge): string {
 
 .home-graph-mock__node-label {
   font-family: var(--font-sans);
-  font-size: 11px;
+  font-size: var(--text-caption-size);
   fill: var(--color-text-primary);
 }
 

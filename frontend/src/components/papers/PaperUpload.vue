@@ -118,7 +118,7 @@ async function handleUpload(options: UploadRequestOptions) {
 }
 
 .paper-upload__icon {
-  font-size: 48px;
+  font-size: var(--spacing-48);
   color: var(--color-text-muted);
 }
 

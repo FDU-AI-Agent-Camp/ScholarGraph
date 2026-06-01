@@ -174,10 +174,11 @@ watch(
 }
 
 .status-panel__check {
-  font-size: 10px;
+  font-size: var(--text-caption-size);
   font-weight: 700;
   line-height: 1;
   color: var(--color-bg-surface);
+  transform: scale(0.85);
 }
 
 .status-panel__label {

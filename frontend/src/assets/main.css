@@ -47,3 +47,10 @@ a.router-link-active {
   padding: var(--spacing-24);
   box-shadow: var(--shadow-sm);
 }
+
+.page-content {
+  box-sizing: border-box;
+  width: 100%;
+  max-width: var(--content-max-width);
+  margin-inline: auto;
+}

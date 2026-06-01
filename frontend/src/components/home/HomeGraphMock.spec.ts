@@ -12,6 +12,7 @@ describe('HomeGraphMock', () => {
 
     expect(mockSrc).toContain('max-width: 520px')
     expect(mockSrc).toContain('min-height: 420px')
+    expect(mockSrc).toContain('border-radius: var(--radius-2xl)')
     expect(mockSrc).toContain('background: var(--color-bg-canvas)')
     expect(mockSrc).not.toContain('position: absolute')
     expect(wrapper.find('.home-graph-mock__graph-area').exists()).toBe(true)

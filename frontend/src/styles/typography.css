@@ -1,6 +1,7 @@
 /**
- * Typography utilities — map design-spec §5 type scale to composable classes.
- * Prefer these over ad-hoc font-size in views.
+ * Typography utilities — ui-design-progress §1.4.2 type hierarchy.
+ * Display (Home only) · H1 page · H2 section (≤3/screen) · H3 card · Body · Body-lg QA · Caption · Mono.
+ * Prefer these classes or var(--text-*) — avoid ad-hoc font-size in views.
  */
 
 .font-serif {

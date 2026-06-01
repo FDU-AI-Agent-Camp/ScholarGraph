@@ -21,8 +21,8 @@ const globalStubs = {
 }
 
 describe('HomeView', () => {
-  it('defines 58/42 hero grid, max-width 1200, and padding-top 48 in layout styles', () => {
-    expect(homeViewSrc).toContain('max-width: 1200px')
+  it('defines 58/42 hero grid, page-content max-width, and padding-top 48 in layout styles', () => {
+    expect(homeViewSrc).toContain('page-content')
     expect(homeViewSrc).toContain('padding-top: var(--spacing-48)')
     expect(homeViewSrc).toContain('grid-template-columns: 58fr 42fr')
   })

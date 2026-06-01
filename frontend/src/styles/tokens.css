@@ -81,6 +81,12 @@
   --text-mono-weight: 400;
   --text-mono-leading: 1.5;
 
+  /*
+   * §1.4.2 layout discipline (design-spec §1)
+   * DESIGN_VARIANCE 5–6: Home/Patrol may use asymmetric grids; Shell/Papers/Detail stay symmetric.
+   * VISUAL_DENSITY 5–7: Papers/Detail compact (52px table rows); Home sparse (48/64 section gaps).
+   * Spacing scale only — control groups 8–12; modules 24–32; page blocks 48–64.
+   */
   /* ── Spacing (4 / 8 / 12 / 16 / 24 / 32 / 48 / 64) ───── */
   --spacing-4: 4px;
   --spacing-8: 8px;
@@ -91,7 +97,7 @@
   --spacing-48: 48px;
   --spacing-64: 64px;
 
-  /* ── Radius (sm / md / lg / xl / 2xl / full) ─────────── */
+  /* ── Radius — sm Badge · md EP control · lg graph · xl card · 2xl Home mock only ─ */
   --radius-sm: 4px;
   --radius-md: 6px;
   --radius-lg: 8px;
@@ -112,7 +118,7 @@
   --z-drawer: 40;
   --z-modal: 50;
 
-  /* ── Layout ──────────────────────────────────────────── */
+  /* ── Layout — content max-width 1280 (Graph full-bleed exempt) ─ */
   --content-max-width: 1280px;
 
   /* ── Motion (§1.4.3) ───────────────────────────────── */

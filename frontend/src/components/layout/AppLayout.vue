@@ -174,16 +174,16 @@ function handleNavSelect(index: string): void {
   gap: var(--spacing-8);
   box-sizing: border-box;
   height: 72px;
-  padding: 20px var(--spacing-16);
+  padding: var(--spacing-16);
   color: inherit;
   text-decoration: none;
 }
 
 .brand-name {
   font-family: var(--font-sans);
-  font-size: 18px;
-  font-weight: 600;
-  line-height: 1.3;
+  font-size: var(--text-h2-size);
+  font-weight: var(--text-h2-weight);
+  line-height: var(--text-h2-leading);
   color: var(--color-text-primary);
 }
 
@@ -233,7 +233,7 @@ function handleNavSelect(index: string): void {
 .nav-icon {
   width: 20px;
   height: 20px;
-  font-size: 20px;
+  font-size: var(--text-h2-size);
   flex-shrink: 0;
 }
 
@@ -292,7 +292,7 @@ function handleNavSelect(index: string): void {
 .header-menu-toggle__icon {
   width: 18px;
   height: 18px;
-  font-size: 18px;
+  font-size: var(--text-h2-size);
 }
 
 .header-breadcrumb {
@@ -304,9 +304,9 @@ function handleNavSelect(index: string): void {
   margin: 0;
   justify-self: center;
   font-family: var(--font-sans);
-  font-size: 16px;
-  font-weight: 500;
-  line-height: 1.4;
+  font-size: var(--text-h3-size);
+  font-weight: var(--text-h3-weight);
+  line-height: var(--text-h3-leading);
   color: var(--color-text-primary);
 }
 

@@ -17,6 +17,7 @@ import { PIPELINE_STEPS } from '@/utils/pipelineSteps'
 import { GRAPH_STATE_ANIMATION_MS } from '@/utils/paperGraph'
 import { contrastRatio, WCAG_AA_TEXT_CONTRAST, WCAG_AA_UI_CONTRAST } from '@/test/helpers/colorContrast'
 import { loadDesignTokenMap } from '@/test/helpers/designTokens'
+import { countHeadingLevel } from '@/test/helpers/layoutDiscipline'
 import { getGraphNodeFillColor, listGraphNodeTypeStrokeColors, GRAPH_NODE_SURFACE_FILL } from '@/utils/paperGraph'
 
 const FRONTEND_SRC = resolve(dirname(fileURLToPath(import.meta.url)), '..')
@@ -31,6 +32,7 @@ const PHASE_ACCEPTANCE_FILES = [
   'test/ui-phase7-patrol.acceptance.spec.ts',
   'test/ui-phase8-responsive.acceptance.spec.ts',
   'test/ui-phase141-background.acceptance.spec.ts',
+  'test/ui-phase142-layout.acceptance.spec.ts',
   'test/ui-antipattern.acceptance.spec.ts',
   'test/demo-path.integration.test.ts',
 ] as const
@@ -444,6 +446,89 @@ describe('§9 Experience quality × Phase checklist (full audit)', () => {
     })
   })
 
+  describe('§9 布局 §1.4.2 — Phase 对照表验收', () => {
+    const tokens = loadDesignTokenMap()
+    const phase142Src = readSrc('test/ui-phase142-layout.acceptance.spec.ts')
+
+    it('keeps ui-phase142-layout acceptance as §1.4.2 automation gate', () => {
+      expect(existsSync(resolve(FRONTEND_SRC, 'test/ui-phase142-layout.acceptance.spec.ts'))).toBe(true)
+      expect(phase142Src).toContain('§1.4.2 Layout & typography discipline')
+      expect(phase142Src).toContain('DESIGN_VARIANCE')
+      expect(phase142Src).toContain('Detail left column module order')
+    })
+
+    it('Phase 0：typography 工具类 + spacing/radius tokens', () => {
+      expect(readSrc('styles/typography.css')).toContain('.text-h1')
+      expect(tokens['--spacing-48']).toBe('48px')
+      expect(tokens['--radius-xl']).toBe('12px')
+      expect(tokens['--content-max-width']).toBe('1280px')
+    })
+
+    it('Phase 1：240/56/44 网格', () => {
+      const appLayoutSrc = readSrc('components/layout/AppLayout.vue')
+      expect(appLayoutSrc).toContain('width="240px"')
+      expect(appLayoutSrc).toContain('height: 56px')
+      expect(appLayoutSrc).toContain('height: 44px')
+    })
+
+    it('Phase 2：组件尺寸统一（TagCitation compact pill）', () => {
+      const tagSrc = readSrc('components/ui/TagCitation.vue')
+      expect(tagSrc).toContain('border-radius: var(--radius-md)')
+      expect(tagSrc).toContain('padding: var(--spacing-4) var(--spacing-12)')
+    })
+
+    it('Phase 3：58/42 非对称 + Home 48/64 间距', () => {
+      const homeSrc = readSrc('views/HomeView.vue')
+      expect(homeSrc).toContain('grid-template-columns: 58fr 42fr')
+      expect(homeSrc).toContain('page-content')
+      expect(homeSrc).toContain('margin-top: var(--spacing-64)')
+    })
+
+    it('Phase 4：高密度表格 52px 行高', () => {
+      expect(readSrc('views/PapersView.vue')).toContain('height: 52px')
+    })
+
+    it('Phase 5：双栏 45/55 + Detail 视线流', () => {
+      const detailSrc = readSrc('views/PaperDetailView.vue')
+      expect(detailSrc).toContain('grid-template-columns: 45fr 55fr')
+      expect(detailSrc).toContain('gap: var(--spacing-24)')
+      expect(countHeadingLevel(detailSrc, 2)).toBeLessThanOrEqual(3)
+    })
+
+    it('Phase 6：full-bleed 图谱 stage min 720px', () => {
+      expect(readSrc('views/PaperGraphView.vue')).toContain('min-height: 720px')
+    })
+
+    it('Phase 7：Patrol 表单 + 报告区分区', () => {
+      expect(readSrc('views/PatrolView.vue')).toContain('var(--content-max-width)')
+      expect(readSrc('views/PatrolView.vue')).toContain('patrol-view__config')
+    })
+
+    it('Phase 8：断点折叠（Detail 1024/1280 + mobile shell）', () => {
+      expect(readSrc('views/PaperDetailView.vue')).toContain('@media (min-width: 1024px)')
+      expect(readSrc('components/layout/AppLayout.vue')).toContain('@media (max-width: 767px)')
+    })
+
+    it('§9 总验收 — 主视图 H2 ≤3、content-max-width 1280', () => {
+      for (const viewPath of [
+        'views/HomeView.vue',
+        'views/PapersView.vue',
+        'views/PaperDetailView.vue',
+        'views/PatrolView.vue',
+      ]) {
+        expect(countHeadingLevel(readSrc(viewPath), 2)).toBeLessThanOrEqual(3)
+      }
+      expect(readSrc('assets/main.css')).toContain('var(--content-max-width)')
+    })
+
+    it('§9 布局验收 checklist — phase142 四项门禁已注册', () => {
+      expect(phase142Src).toContain('§1.4.2 布局验收 — checklist')
+      expect(phase142Src).toContain('Home：58/42 hero + 底部 60/40 quick links')
+      expect(phase142Src).toContain('Detail：≥1024px 双栏 45/55')
+      expect(phase142Src).toContain('表格 / Stepper / 表单对齐网格')
+    })
+  })
+
   describe('§9 总验收 — cross-cutting gates', () => {
     const styleSources = [
       ...collectSourceFiles('views', ['.vue']),
@@ -472,6 +557,14 @@ describe('§9 Experience quality × Phase checklist (full audit)', () => {
       expect(contrastRatio(textPrimary, tokens['--color-bg-page'] ?? '#f8f9fb')).toBeGreaterThanOrEqual(
         WCAG_AA_TEXT_CONTRAST,
       )
+    })
+
+    it('layout discipline: §1.4.2 checklist — Home asymmetric, Detail sightline, no magic spacing', () => {
+      const phase142Src = readSrc('test/ui-phase142-layout.acceptance.spec.ts')
+      expect(phase142Src).toContain('§1.4.2 布局验收 — checklist')
+      expect(readSrc('views/HomeView.vue')).toContain('grid-template-columns: 58fr 42fr')
+      expect(readSrc('views/PaperDetailView.vue')).toContain('grid-template-columns: 45fr 55fr')
+      expect(readSrc('components/layout/AppLayout.vue')).toContain('padding: var(--spacing-24) var(--spacing-32)')
     })
 
     it('motion discipline: src/ has no transition:all or ease-in-out keyword defaults', () => {
@@ -558,6 +651,13 @@ describe('§9 Experience quality × Phase checklist (full audit)', () => {
       const phase141Src = readSrc('test/ui-phase141-background.acceptance.spec.ts')
       expect(phase141Src).toContain('semantic status tokens stay within badge/alert allowlist')
       expect(phase141Src).toContain('CARD_SURFACE_FILES')
+    })
+
+    it('§1.4.2 layout gate: ui-phase142 covers spacing scale + Detail sightline', () => {
+      const phase142Src = readSrc('test/ui-phase142-layout.acceptance.spec.ts')
+      expect(phase142Src).toContain('VISUAL_DENSITY')
+      expect(phase142Src).toContain('each primary view keeps ≤3 H2 section titles per screen')
+      expect(phase142Src).toContain('WORKBENCH_LAYOUT_FILES')
     })
   })
 })

@@ -256,7 +256,17 @@ describe('design-spec §16 Prototype 答辩路径', () => {
     it('layout: Detail dual-column + Graph full-bleed preserved on defense branch', () => {
       expect(detailViewSrc).toContain('detail-layout')
       expect(detailViewSrc).toContain('grid-template-columns: 45fr 55fr')
+      expect(detailViewSrc).toContain('gap: var(--spacing-24)')
+      expect(detailViewSrc.indexOf('PaperMetadataCard')).toBeLessThan(detailViewSrc.indexOf('PaperStatusPanel'))
+      expect(detailViewSrc.indexOf('PaperStatusPanel')).toBeLessThan(detailViewSrc.indexOf('detail-qa'))
       expect(graphViewSrc).toContain('min-height: 720px')
+    })
+
+    it('layout: Home asymmetric grids + shell inset padding on defense path', () => {
+      expect(homeViewSrc).toContain('grid-template-columns: 58fr 42fr')
+      expect(homeViewSrc).toContain('grid-template-columns: 60fr 40fr')
+      const appLayoutStyles = readFrontendSource('components/layout/AppLayout.vue')
+      expect(appLayoutStyles).toContain('padding: var(--spacing-24) var(--spacing-32)')
     })
 
     it('motion: route-fade + reduced-motion hooks exist for cross-page continuity', () => {

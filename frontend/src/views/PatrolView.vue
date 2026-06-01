@@ -260,7 +260,7 @@ async function run(): Promise<void> {
   display: flex;
   flex-direction: column;
   gap: var(--spacing-24);
-  max-width: 960px;
+  max-width: var(--content-max-width);
 }
 
 .patrol-view__header {
