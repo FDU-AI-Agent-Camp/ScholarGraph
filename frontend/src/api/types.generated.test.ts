@@ -69,12 +69,15 @@ describe('types.ts vs generated OpenAPI schema', () => {
   it('exports path types for core HTTP routes', () => {
     type ListPapers = paths['/papers']['get']
     type PaperStatus = paths['/papers/{paper_id}/status']['get']
+    type QaStream = paths['/papers/{paper_id}/qa/stream']['post']
     type Patrol = paths['/patrol']['post']
     const _list: ListPapers = {} as ListPapers
     const _status: PaperStatus = {} as PaperStatus
+    const _qa: QaStream = {} as QaStream
     const _patrol: Patrol = {} as Patrol
     expect(_list).toBeDefined()
     expect(_status).toBeDefined()
+    expect(_qa).toBeDefined()
     expect(_patrol).toBeDefined()
   })
 

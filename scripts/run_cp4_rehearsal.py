@@ -185,9 +185,10 @@ def report_api_checks(client: httpx.Client, report: RehearsalReport) -> None:
     )
     qa_events = parse_sse_events(qa_resp.text) if qa_resp.status_code == 200 else []
     event_names = [name for name, _ in qa_events]
+    citation_ok = any(name == "citation" for name in event_names)
     report.add(
         "POST /papers/hss-001/qa/stream SSE",
-        qa_resp.status_code == 200 and "message" in event_names and "done" in event_names,
+        qa_resp.status_code == 200 and "message" in event_names and citation_ok and "done" in event_names,
         ",".join(event_names) or qa_resp.text[:120],
     )
 
@@ -268,7 +269,12 @@ def report_browser_checks(report: RehearsalReport) -> None:
             page.get_by_role("button", name="提问").click()
             page.wait_for_timeout(2000)
             body_text = page.locator("body").inner_text()
-            qa_ok = "示例节点" in body_text or "收到问题" in body_text or "占位" in body_text
+            qa_ok = (
+                "引用节点" in body_text
+                or "核心论点" in body_text
+                or "Mock 答复" in body_text
+                or "尚未接入" in body_text
+            )
             report.add("浏览器 QA SSE 流式", qa_ok, "详情页问答区")
 
             page.goto(f"{FRONTEND_BASE}/patrol", wait_until="networkidle", timeout=30_000)

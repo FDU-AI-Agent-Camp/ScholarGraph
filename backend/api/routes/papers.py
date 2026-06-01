@@ -1,6 +1,5 @@
 """Paper routes — register here; business logic lives in services + BE modules."""
 
-import json
 from collections.abc import AsyncIterator
 
 from fastapi import APIRouter, Depends, File, Query, UploadFile
@@ -9,6 +8,7 @@ from pydantic import BaseModel, Field, field_validator
 
 from backend.api.deps import get_paper_service_dep, get_request_id
 from backend.api.responses import paginated, success
+from backend.api.sse import QA_STREAM_HEADERS, format_sse_event
 from backend.schemas.paper import PaperStatus
 from backend.schemas.paradigm import Paradigm
 from backend.services.paper_service import PaperService
@@ -105,10 +105,10 @@ async def stream_paper_qa(
         from backend.graph.qa import qa_stream
 
         async for evt in qa_stream(paper_id, body.question):
-            yield f"event: {evt.event}\ndata: {json.dumps(evt.data, ensure_ascii=False)}\n\n"
+            yield format_sse_event(evt.event, evt.data)
 
     return StreamingResponse(
         event_generator(),
         media_type="text/event-stream",
-        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+        headers=QA_STREAM_HEADERS,
     )
