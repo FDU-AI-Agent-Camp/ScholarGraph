@@ -11,10 +11,11 @@
   --color-primary-muted: #b8dede;
 
   /* ── Background layers (page / surface / canvas) ─────── */
-  --color-bg-page: #f8f9fb;
-  --color-bg-surface: #ffffff;
-  --color-bg-canvas: #f1f5f9;
-  --color-bg-subtle: #fafbfc;
+  /* §1.4.1 three-layer discipline — do not use raw hex in views */
+  --color-bg-page: #f8f9fb; /* Main content, table headers; not for cards */
+  --color-bg-surface: #ffffff; /* Sidebar, header, cards, drawer, legend float */
+  --color-bg-canvas: #f1f5f9; /* Graph stage, Home mock container */
+  --color-bg-subtle: #fafbfc; /* Upload zone, answer panel inset, secondary inset */
 
   /* ── Border ──────────────────────────────────────────── */
   --color-border: #e5e7eb;

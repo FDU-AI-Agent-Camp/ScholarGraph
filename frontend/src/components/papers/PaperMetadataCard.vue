@@ -52,6 +52,7 @@ function confidencePercent(confidence: number): number {
   border: 1px solid var(--color-border);
   border-radius: var(--radius-xl);
   background: var(--color-bg-surface);
+  box-shadow: var(--shadow-sm);
   overflow: hidden;
 }
 

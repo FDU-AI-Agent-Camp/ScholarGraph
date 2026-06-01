@@ -17,6 +17,7 @@ import {
   getGraphNodeSnippet,
   getGraphNodeTypeColor,
   listGraphLegendEntries,
+  listGraphNodeTypeStrokeColors,
   mixHexColors,
   resolvePaperGraphThemeTokens,
   toG6GraphPayload,
@@ -145,10 +146,15 @@ describe('graph node sizing and G6 style helpers', () => {
     expect(buildG6FitViewPadding({ compact: false, fullBleed: true })).toBe(GRAPH_FIT_VIEW_PADDING_DEFAULT)
   })
 
-  it('mixHexColors tints surface fill toward node type accent', () => {
+  it('mixHexColors tints surface fill toward node type accent (helper retained for tokens)', () => {
     const tinted = mixHexColors(GRAPH_NODE_SURFACE_FILL, '#7c3aed', 0.12)
     expect(tinted).not.toBe('#7c3aed')
-    expect(getGraphNodeFillColor('AnalyticalLens', 'HSS')).toBe(tinted)
+    expect(getGraphNodeFillColor('AnalyticalLens', 'HSS')).toBe(GRAPH_NODE_SURFACE_FILL)
+  })
+
+  it('listGraphNodeTypeStrokeColors exposes palette for contrast audits', () => {
+    expect(listGraphNodeTypeStrokeColors('HSS')).toContain('#0d6e6e')
+    expect(listGraphNodeTypeStrokeColors('STEM')).toContain('#2563eb')
   })
 })
 
@@ -175,15 +181,14 @@ describe('graph preview viewport + layout helpers (D)', () => {
 })
 
 describe('graph node label contrast + edge label chrome (D)', () => {
-  it('keeps saturated type color on stroke while fill stays lighter than stroke for dark types', () => {
+  it('keeps type stroke on nodes while fill uses surface layer for canvas separation', () => {
     const graph = graphFixture.data as UnifiedPaperGraph
     const payload = buildG6GraphData(graph)
     const lensNode = payload.nodes.find((node) => node.id === 'n_lens')
 
     expect(lensNode?.data.strokeColor).toBe(getGraphNodeTypeColor('AnalyticalLens', 'HSS'))
-    expect(lensNode?.data.fill).toBe(getGraphNodeFillColor('AnalyticalLens', 'HSS'))
+    expect(lensNode?.data.fill).toBe(GRAPH_NODE_SURFACE_FILL)
     expect(lensNode?.data.fill).not.toBe(lensNode?.data.strokeColor)
-    expect(String(lensNode?.data.fill).toLowerCase()).not.toBe('#7c3aed')
   })
 
   it('buildG6NodeStyleOptions binds primary labelFill token for readable node text', () => {

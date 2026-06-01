@@ -20,8 +20,8 @@ const HSS_NODE_TYPE_COLORS: Record<string, string> = {
   SubArgument: '#0891b2',
   Analytical_Lens: '#7c3aed',
   AnalyticalLens: '#7c3aed',
-  Object_or_Data: '#ca8a04',
-  ObjectOrData: '#ca8a04',
+  Object_or_Data: '#b45309',
+  ObjectOrData: '#b45309',
 }
 
 const STEM_NODE_TYPE_COLORS: Record<string, string> = {
@@ -30,7 +30,7 @@ const STEM_NODE_TYPE_COLORS: Record<string, string> = {
   Method: '#2563eb',
   Dataset: '#0891b2',
   Metric: '#059669',
-  Claim: '#d97706',
+  Claim: '#b45309',
   Evidence: '#64748b',
 }
 
@@ -52,6 +52,9 @@ export const GRAPH_ACTIVE_LINE_WIDTH = 3
 export const GRAPH_ZOOM_STEP = 1.2
 export const GRAPH_NODE_SURFACE_FILL = '#ffffff'
 export const GRAPH_NODE_FILL_TINT_RATIO = 0.12
+export const GRAPH_NODE_DEFAULT_LINE_WIDTH = 1.5
+export const GRAPH_NODE_SHADOW_BLUR = 6
+export const GRAPH_NODE_SHADOW_COLOR = 'rgba(15, 23, 42, 0.1)'
 export const GRAPH_LAYOUT_COMPACT_NODESEP = 48
 export const GRAPH_LAYOUT_COMPACT_RANKSEP = 72
 export const GRAPH_LAYOUT_DEFAULT_NODESEP = 40
@@ -132,8 +135,15 @@ export function mixHexColors(base: string, accent: string, accentRatio: number):
   return `#${toHexByte(baseRed + (accentRed - baseRed) * ratio)}${toHexByte(baseGreen + (accentGreen - baseGreen) * ratio)}${toHexByte(baseBlue + (accentBlue - baseBlue) * ratio)}`
 }
 
-export function getGraphNodeFillColor(nodeType: string, paradigm?: Paradigm | null): string {
-  return mixHexColors(GRAPH_NODE_SURFACE_FILL, getGraphNodeTypeColor(nodeType, paradigm), GRAPH_NODE_FILL_TINT_RATIO)
+export function getGraphNodeFillColor(nodeType?: string, paradigm?: Paradigm | null): string {
+  void nodeType
+  void paradigm
+  return GRAPH_NODE_SURFACE_FILL
+}
+
+export function listGraphNodeTypeStrokeColors(paradigm?: Paradigm | null): string[] {
+  const palette = paradigm === 'STEM' ? STEM_NODE_TYPE_COLORS : HSS_NODE_TYPE_COLORS
+  return [...new Set([...Object.values(palette), DEFAULT_NODE_TYPE_COLOR])]
 }
 
 export function buildG6LayoutOptions(options: { compact?: boolean; nodeCount?: number }): G6LayoutConfig {
@@ -207,7 +217,11 @@ export function buildG6NodeStyleOptions(
         datum.data?.size ?? [GRAPH_NODE_MIN_WIDTH, GRAPH_NODE_MIN_HEIGHT],
       stroke: (datum: { data?: { strokeColor?: string } }) => datum.data?.strokeColor ?? theme.defaultStroke,
       labelFill: theme.labelFill,
-      lineWidth: 1,
+      lineWidth: GRAPH_NODE_DEFAULT_LINE_WIDTH,
+      shadowBlur: GRAPH_NODE_SHADOW_BLUR,
+      shadowColor: GRAPH_NODE_SHADOW_COLOR,
+      shadowOffsetX: 0,
+      shadowOffsetY: 1,
     },
     state: {
       hover: {

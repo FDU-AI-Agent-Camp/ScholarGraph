@@ -15,7 +15,9 @@ import { routes } from '@/router/index'
 import { RouteName } from '@/router/meta'
 import { PIPELINE_STEPS } from '@/utils/pipelineSteps'
 import { GRAPH_STATE_ANIMATION_MS } from '@/utils/paperGraph'
+import { contrastRatio, WCAG_AA_TEXT_CONTRAST, WCAG_AA_UI_CONTRAST } from '@/test/helpers/colorContrast'
 import { loadDesignTokenMap } from '@/test/helpers/designTokens'
+import { getGraphNodeFillColor, listGraphNodeTypeStrokeColors, GRAPH_NODE_SURFACE_FILL } from '@/utils/paperGraph'
 
 const FRONTEND_SRC = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const FRONTEND_ROOT = resolve(FRONTEND_SRC, '..')
@@ -28,6 +30,7 @@ const PHASE_ACCEPTANCE_FILES = [
   'test/ui-phase6-graph.acceptance.spec.ts',
   'test/ui-phase7-patrol.acceptance.spec.ts',
   'test/ui-phase8-responsive.acceptance.spec.ts',
+  'test/ui-phase141-background.acceptance.spec.ts',
   'test/ui-antipattern.acceptance.spec.ts',
   'test/demo-path.integration.test.ts',
 ] as const
@@ -90,8 +93,12 @@ describe('§9 Experience quality × Phase checklist (full audit)', () => {
       expect(tokens['--color-bg-page']).toBe('#f8f9fb')
       expect(tokens['--color-bg-surface']).toBe('#ffffff')
       expect(tokens['--color-bg-canvas']).toBe('#f1f5f9')
+      expect(tokens['--color-bg-subtle']).toBe('#fafbfc')
       expect(tokens['--color-primary']).toBe('#0d6e6e')
+      expect(tokens['--color-primary-light']).toBe('#e6f3f3')
+      expect(tokens['--color-citation-active']).toBe('#e11d48')
       expect(tokensCss).not.toContain('#409eff')
+      expect(tokensCss).toContain('§1.4.1 three-layer discipline')
     })
 
     it('§1.4.2: typography utility classes map to token scale', () => {
@@ -266,6 +273,8 @@ describe('§9 Experience quality × Phase checklist (full audit)', () => {
       expect(graphViewSrc).toContain('var(--color-bg-canvas)')
       expect(readSrc('components/graph/GraphLegend.vue')).toContain('var(--color-bg-surface)')
       expect(drawerSrc).toContain('var(--color-bg-surface)')
+      expect(readSrc('utils/paperGraph.ts')).toContain('GRAPH_NODE_SURFACE_FILL')
+      expect(readSrc('utils/paperGraph.ts')).toContain('shadowBlur')
     })
 
     it('§1.4.2: graph route is fullBleed with min 720px stage', () => {
@@ -344,6 +353,97 @@ describe('§9 Experience quality × Phase checklist (full audit)', () => {
     })
   })
 
+  describe('§9 背景 §1.4.1 — Phase 对照表验收', () => {
+    const tokens = loadDesignTokenMap()
+    const phase141Src = readSrc('test/ui-phase141-background.acceptance.spec.ts')
+
+    it('keeps ui-phase141-background acceptance as §1.4.1 automation gate', () => {
+      expect(existsSync(resolve(FRONTEND_SRC, 'test/ui-phase141-background.acceptance.spec.ts'))).toBe(true)
+      expect(phase141Src).toContain('§1.4.1 Background & color discipline')
+      expect(phase141Src).toContain('正文 --color-text-primary 对 surface/page 对比度')
+      expect(phase141Src).toContain('图谱节点 surface fill + type stroke')
+    })
+
+    it('Phase 0：三层 Token + 主色纪律', () => {
+      expect(tokens['--color-bg-page']).toBe('#f8f9fb')
+      expect(tokens['--color-bg-surface']).toBe('#ffffff')
+      expect(tokens['--color-bg-canvas']).toBe('#f1f5f9')
+      expect(tokens['--color-bg-subtle']).toBe('#fafbfc')
+      expect(readSrc('styles/tokens.css')).toContain('--color-primary: #0d6e6e')
+      expect(readSrc('assets/main.css')).toContain('var(--color-bg-page)')
+    })
+
+    it('Phase 1：page/surface 分层', () => {
+      const appLayoutSrc = readSrc('components/layout/AppLayout.vue')
+      expect(appLayoutSrc).toContain('background: var(--color-bg-page)')
+      expect(appLayoutSrc).toContain('background: var(--color-bg-surface)')
+    })
+
+    it('Phase 2：Badge 语义色', () => {
+      const badgeParadigmSrc = readSrc('components/ui/BadgeParadigm.vue')
+      const badgeStatusSrc = readSrc('components/ui/BadgeStatus.vue')
+      expect(badgeParadigmSrc).toContain('var(--color-hss-bg)')
+      expect(badgeStatusSrc).toContain('var(--color-success)')
+      expect(badgeParadigmSrc).not.toMatch(/#[0-9a-f]{6}/i)
+    })
+
+    it('Phase 3：canvas mock 区', () => {
+      const homeGraphMockSrc = readSrc('components/home/HomeGraphMock.vue')
+      expect(homeGraphMockSrc).toContain('var(--color-bg-canvas)')
+      expect(homeGraphMockSrc).toContain('var(--color-bg-surface)')
+      expect(readSrc('views/HomeView.vue')).toContain('box-shadow: var(--shadow-sm)')
+    })
+
+    it('Phase 4：上传区/表头分层', () => {
+      const papersViewSrc = readSrc('views/PapersView.vue')
+      const uploadSrc = readSrc('components/papers/PaperUpload.vue')
+      expect(papersViewSrc).toContain('var(--color-bg-page)')
+      expect(papersViewSrc).toContain('var(--color-bg-subtle)')
+      expect(uploadSrc).toContain('var(--color-bg-subtle)')
+    })
+
+    it('Phase 5：答案区内嵌灰底', () => {
+      expect(tokens['--color-bg-subtle']).toBe('#fafbfc')
+      expect(readSrc('views/PaperDetailView.vue')).toContain('var(--color-bg-subtle)')
+    })
+
+    it('Phase 6：canvas + 浮层', () => {
+      expect(readSrc('views/PaperGraphView.vue')).toContain('var(--color-bg-canvas)')
+      expect(readSrc('components/graph/GraphLegend.vue')).toContain('var(--color-bg-surface)')
+      expect(getGraphNodeFillColor('Thesis', 'HSS')).toBe(GRAPH_NODE_SURFACE_FILL)
+    })
+
+    it('Phase 7：Insight 卡 surface', () => {
+      expect(readSrc('components/ui/InsightCard.vue')).toContain('background: var(--color-bg-surface)')
+      expect(readSrc('views/PatrolView.vue')).toContain('var(--color-bg-subtle)')
+    })
+
+    it('Phase 8：全站 hex 扫雷 + 对比度门禁', () => {
+      expect(phase141Src).toContain('views avoid flat root hex backgrounds')
+      expect(
+        contrastRatio(tokens['--color-text-primary'] ?? '#111827', tokens['--color-bg-surface'] ?? '#ffffff'),
+      ).toBeGreaterThanOrEqual(WCAG_AA_TEXT_CONTRAST)
+      const canvasBg = tokens['--color-bg-canvas'] ?? '#f1f5f9'
+      for (const strokeColor of listGraphNodeTypeStrokeColors('HSS')) {
+        expect(contrastRatio(strokeColor, canvasBg)).toBeGreaterThanOrEqual(WCAG_AA_UI_CONTRAST)
+      }
+    })
+
+    it('§9 总验收 — 三层背景 discipline：无整页单色、无主色大面积铺底', () => {
+      for (const viewPath of VIEW_FILES) {
+        const src = readSrc(viewPath)
+        expect(
+          src.includes('var(--color-bg-page)') ||
+            src.includes('var(--color-bg-surface)') ||
+            src.includes('var(--color-bg-canvas)') ||
+            src.includes('var(--color-bg-subtle)'),
+          viewPath,
+        ).toBe(true)
+      }
+      expect(phase141Src).toContain('主色不作视口级容器大底铺色')
+    })
+  })
+
   describe('§9 总验收 — cross-cutting gates', () => {
     const styleSources = [
       ...collectSourceFiles('views', ['.vue']),
@@ -357,9 +457,21 @@ describe('§9 Experience quality × Phase checklist (full audit)', () => {
         const hasLayeredBg =
           src.includes('var(--color-bg-page)') ||
           src.includes('var(--color-bg-surface)') ||
-          src.includes('var(--color-bg-canvas)')
+          src.includes('var(--color-bg-canvas)') ||
+          src.includes('var(--color-bg-subtle)')
         expect(hasLayeredBg, `${viewPath} should reference bg layer tokens`).toBe(true)
       }
+    })
+
+    it('background discipline: text primary meets WCAG AA on page/surface (§1.4.1)', () => {
+      const tokens = loadDesignTokenMap()
+      const textPrimary = tokens['--color-text-primary'] ?? '#111827'
+      expect(contrastRatio(textPrimary, tokens['--color-bg-surface'] ?? '#ffffff')).toBeGreaterThanOrEqual(
+        WCAG_AA_TEXT_CONTRAST,
+      )
+      expect(contrastRatio(textPrimary, tokens['--color-bg-page'] ?? '#f8f9fb')).toBeGreaterThanOrEqual(
+        WCAG_AA_TEXT_CONTRAST,
+      )
     })
 
     it('motion discipline: src/ has no transition:all or ease-in-out keyword defaults', () => {
@@ -440,6 +552,12 @@ describe('§9 Experience quality × Phase checklist (full audit)', () => {
       expect(antipatternSrc).toContain('无裸 transition: all')
       expect(antipatternSrc).toContain('无产品黑话')
       expect(antipatternSrc).toContain('图谱节点 hover 禁止位移')
+    })
+
+    it('§1.4.1 background gate: ui-phase141 covers contrast + card layering', () => {
+      const phase141Src = readSrc('test/ui-phase141-background.acceptance.spec.ts')
+      expect(phase141Src).toContain('semantic status tokens stay within badge/alert allowlist')
+      expect(phase141Src).toContain('CARD_SURFACE_FILES')
     })
   })
 })

@@ -57,11 +57,13 @@ describe('Phase 6 Graph acceptance (6.1–6.8)', () => {
       expect(paperGraphSrc).toContain('buildG6GraphData')
     })
 
-    it('uses tinted node fill + type stroke for readable labels in preview', () => {
+    it('uses surface node fill + type stroke for readable labels in preview', () => {
       expect(paperGraphUtilSrc).toContain('getGraphNodeFillColor')
       expect(paperGraphUtilSrc).toContain('strokeColor')
       expect(paperGraphUtilSrc).toContain('labelFill')
-      expect(getGraphNodeFillColor('AnalyticalLens', 'HSS')).not.toBe(getGraphNodeTypeColor('AnalyticalLens', 'HSS'))
+      expect(paperGraphUtilSrc).toContain('GRAPH_NODE_SHADOW_BLUR')
+      expect(getGraphNodeFillColor('AnalyticalLens', 'HSS')).toBe('#ffffff')
+      expect(getGraphNodeTypeColor('AnalyticalLens', 'HSS')).toBe('#7c3aed')
     })
 
     it('uses 8px corner radius on rect nodes', () => {
