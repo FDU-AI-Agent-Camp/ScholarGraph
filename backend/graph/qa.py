@@ -23,6 +23,26 @@ logger = logging.getLogger(__name__)
 _CITE_RE = re.compile(r"\[CITE:(\S+?)\]")
 _CITE_DELIM = "[CITE:"
 
+
+def _split_incomplete_cite(buffer: str) -> tuple[str, str] | None:
+    """Return ``(safe_prefix, held_suffix)`` when *buffer* ends with a partial ``[CITE:…]``."""
+    cite_start = buffer.rfind(_CITE_DELIM)
+    if cite_start != -1:
+        tail = buffer[cite_start:]
+        if _CITE_RE.search(tail) is None:
+            return buffer[:cite_start], tail
+
+    for prefix_len in range(len(_CITE_DELIM), 0, -1):
+        prefix = _CITE_DELIM[:prefix_len]
+        if buffer.endswith(prefix):
+            return buffer[:-prefix_len], prefix
+
+    if buffer.endswith("["):
+        return buffer[:-1], "["
+
+    return None
+
+
 # ---------------------------------------------------------------------------
 # Resolve the prompts directory once at import time.
 # ---------------------------------------------------------------------------
@@ -186,30 +206,38 @@ class _GraphQaEngine:
                     buffer = buffer[match.end() :]
                     continue
 
-                # Check if buffer ends with a prefix of "[CITE:" that
-                # might be completed by the next chunk.
-                held_len = 0
-                for prefix_len in range(len(_CITE_DELIM), 0, -1):
-                    if buffer.endswith(_CITE_DELIM[:prefix_len]):
-                        held_len = prefix_len
-                        break
-
-                if held_len > 0:
-                    safe = buffer[:-held_len]
+                # Hold partial ``[CITE:…]`` markers that span chunk boundaries.
+                incomplete = _split_incomplete_cite(buffer)
+                if incomplete is not None:
+                    safe, held = incomplete
                     if safe:
                         yield QaEvent("message", {"delta": safe})
-                    buffer = buffer[-held_len:]
+                    buffer = held
                 else:
                     yield QaEvent("message", {"delta": buffer})
                     buffer = ""
 
                 break
 
-        # Drain remaining buffer
-        if buffer:
-            cleaned = _CITE_RE.sub("", buffer).rstrip("[")
-            if cleaned.strip():
-                yield QaEvent("message", {"delta": cleaned})
+        # Drain remaining buffer (process any trailing complete cites first).
+        while buffer:
+            match = _CITE_RE.search(buffer)
+            if not match:
+                if buffer.strip():
+                    yield QaEvent("message", {"delta": buffer})
+                break
+
+            text_before = buffer[: match.start()]
+            if text_before:
+                yield QaEvent("message", {"delta": text_before})
+
+            node_id = match.group(1)
+            label = node_label_cache.get(node_id, node_id)
+            yield QaEvent(
+                "citation",
+                {"paper_id": paper_id, "node_id": node_id, "label": label},
+            )
+            buffer = buffer[match.end() :]
 
     def _build_prompt(
         self,

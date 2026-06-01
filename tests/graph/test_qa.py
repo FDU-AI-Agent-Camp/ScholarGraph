@@ -117,6 +117,18 @@ class TestQaStreamEvents:
         assert cite.data["paper_id"] == "hss-001"
         assert "核心论点" in cite.data["label"]
 
+    async def test_yields_citation_when_marker_splits_across_chunks(
+        self,
+        store_with_graph: GraphStore,
+    ) -> None:
+        llm = _fake_llm("参见节点[CITE:n_lens]完成验证。", chunk_size=8)
+        engine = _GraphQaEngine(store=store_with_graph, llm=llm)
+
+        events = [evt async for evt in engine.stream("hss-001", "验证")]
+        citation_events = [e for e in events if e.event == "citation"]
+        assert len(citation_events) == 1
+        assert citation_events[0].data["node_id"] == "n_lens"
+
     async def test_yields_done_event(self, store_with_graph: GraphStore) -> None:
         llm = _fake_llm("test")
         engine = _GraphQaEngine(store=store_with_graph, llm=llm)

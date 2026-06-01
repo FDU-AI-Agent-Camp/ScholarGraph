@@ -5,7 +5,7 @@ from collections.abc import AsyncIterator
 
 from fastapi import APIRouter, Depends, File, Query, UploadFile
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from backend.api.deps import get_paper_service_dep, get_request_id
 from backend.api.responses import paginated, success
@@ -18,6 +18,15 @@ router = APIRouter(prefix="/papers")
 
 class QaStreamRequest(BaseModel):
     question: str = Field(min_length=1, max_length=4000)
+
+    @field_validator("question")
+    @classmethod
+    def strip_and_require_non_empty(cls, value: str) -> str:
+        trimmed = value.strip()
+        if not trimmed:
+            msg = "question must not be empty"
+            raise ValueError(msg)
+        return trimmed
 
 
 @router.get("")

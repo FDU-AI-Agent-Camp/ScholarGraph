@@ -8,12 +8,15 @@ from typing import Any
 
 from langchain_core.messages import BaseMessage
 
+from backend.llm.qa_scale import detect_question_scale, preferred_node_types
+from backend.schemas.paradigm import Paradigm
 from backend.schemas.patrol_llm import PatrolSummaryOutput
 
 MOCK_DISCLAIMER = "（Mock 答复：LLM 云服务尚未接入，仅供联调与演示。）"
 MOCK_PATROL_PREFIX = "【Mock 巡检摘要】"
 _MOCK_CHUNK_SIZE = 8
-_NODE_ID_RE = re.compile(r"\[(n[\w-]+)\]")
+_NODE_LINE_RE = re.compile(r"- \[(?P<id>\S+)\] (?P<label>.+?) \(类型: (?P<type>\w+)\)")
+_PARADIGM_RE = re.compile(r"## 当前论文范式\s*\n\s*(\w+)", re.MULTILINE)
 _QUESTION_RE = re.compile(r"## 用户问题\s*\n(.+?)(?:\n## |\Z)", re.DOTALL)
 
 
@@ -63,9 +66,50 @@ def _human_content(messages: Sequence[BaseMessage]) -> str:
 def _mock_qa_response(prompt: str) -> str:
     question_match = _QUESTION_RE.search(prompt)
     question = question_match.group(1).strip() if question_match else "您的问题"
-    node_ids = _NODE_ID_RE.findall(prompt)
-    cite_target = node_ids[0] if node_ids else "n1"
-    return f"根据知识图谱上下文，关于「{question}」可参考节点[CITE:{cite_target}]。{MOCK_DISCLAIMER}"
+    paradigm = _parse_paradigm(prompt)
+    scale = detect_question_scale(question, paradigm=paradigm)
+    nodes = _parse_nodes_from_prompt(prompt)
+    cite_target = _pick_citation_node(nodes, scale, paradigm)
+    scale_label = {"summary": "摘要", "detail": "细节", "verification": "验证"}[scale]
+    return (
+        f"【{scale_label}尺度】根据知识图谱上下文，关于「{question}」可参考节点[CITE:{cite_target}]。{MOCK_DISCLAIMER}"
+    )
+
+
+def _parse_paradigm(prompt: str) -> Paradigm | None:
+    match = _PARADIGM_RE.search(prompt)
+    if not match:
+        return None
+    raw = match.group(1).strip().upper()
+    if raw == Paradigm.STEM.value:
+        return Paradigm.STEM
+    if raw == Paradigm.HSS.value:
+        return Paradigm.HSS
+    return None
+
+
+def _parse_nodes_from_prompt(prompt: str) -> list[tuple[str, str, str]]:
+    return [
+        (match.group("id"), match.group("label").strip(), match.group("type"))
+        for match in _NODE_LINE_RE.finditer(prompt)
+    ]
+
+
+def _pick_citation_node(
+    nodes: list[tuple[str, str, str]],
+    scale: str,
+    paradigm: Paradigm | None,
+) -> str:
+    if not nodes:
+        return "n1"
+
+    resolved_paradigm = paradigm or Paradigm.HSS
+    preferred = preferred_node_types(scale, paradigm=resolved_paradigm)  # type: ignore[arg-type]
+    for node_type in preferred:
+        for node_id, _label, ntype in nodes:
+            if ntype == node_type:
+                return node_id
+    return nodes[0][0]
 
 
 def _mock_patrol_summary(context: str) -> str:

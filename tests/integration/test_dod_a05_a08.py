@@ -198,9 +198,21 @@ async def test_a06_patrol_insufficient_data_422_envelope(
     assert_error_envelope(body, code="PATROL_INSUFFICIENT_DATA")
 
 
+@pytest.fixture
+def live_llm_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Force live LLM path so BE-2 NotImplemented tests stay valid under default mock."""
+    monkeypatch.setenv("LLM_MODE", "live")
+    from backend.config import get_settings
+    from backend.llm.client import reset_llm_client_cache
+
+    get_settings.cache_clear()
+    reset_llm_client_cache()
+
+
 @pytest.mark.asyncio
-async def test_a07_classify_not_implemented_maps_pipeline_failed() -> None:
+async def test_a07_classify_not_implemented_maps_pipeline_failed(live_llm_env) -> None:
     """BE-2 未交付：真实 classify() → AgentService PIPELINE_FAILED。"""
+    _ = live_llm_env
     service = AgentService()
     with pytest.raises(ServiceError) as err:
         await service.classify_paradigm("abstract snippet")
@@ -209,7 +221,8 @@ async def test_a07_classify_not_implemented_maps_pipeline_failed() -> None:
 
 
 @pytest.mark.asyncio
-async def test_a07_classify_direct_raises_not_implemented() -> None:
+async def test_a07_classify_direct_raises_not_implemented(live_llm_env) -> None:
+    _ = live_llm_env
     with pytest.raises(NotImplementedError, match="BE-2"):
         await classify("text")
 
@@ -220,7 +233,8 @@ def test_a07_gold_labels_three_papers_two_paradigms() -> None:
 
 
 @pytest.mark.asyncio
-async def test_a08_extract_not_implemented_maps_pipeline_failed() -> None:
+async def test_a08_extract_not_implemented_maps_pipeline_failed(live_llm_env) -> None:
+    _ = live_llm_env
     service = AgentService()
     with pytest.raises(ServiceError) as err:
         await service.extract_graph("full text", Paradigm.HSS, paper_id="hss-001")
@@ -229,7 +243,8 @@ async def test_a08_extract_not_implemented_maps_pipeline_failed() -> None:
 
 
 @pytest.mark.asyncio
-async def test_a08_extract_direct_raises_not_implemented() -> None:
+async def test_a08_extract_direct_raises_not_implemented(live_llm_env) -> None:
+    _ = live_llm_env
     with pytest.raises(NotImplementedError, match="BE-2"):
         await extract("full text", Paradigm.STEM)
 

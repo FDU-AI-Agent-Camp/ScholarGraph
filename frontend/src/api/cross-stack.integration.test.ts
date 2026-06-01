@@ -160,4 +160,16 @@ describe('cross-stack merge (fixture parity for BE HTTP tests)', () => {
     expect(processingStatusFixture.data.percent).toBe(50)
     expect(processingStatusFixture.data.stage).toBe('classifying')
   })
+
+  it('M2 graph-hss fixture node ids align with BE qa_samples citation targets', () => {
+    const graph = graphFixture.data as UnifiedPaperGraph
+    const ids = graph.nodes.map((node) => node.id)
+    expect(ids).toContain('n1')
+    expect(ids).toContain('n2')
+    expect(ids).toContain('n_lens')
+    const thesis = graph.nodes.find((node) => node.type === 'Thesis')
+    const lens = graph.nodes.find((node) => node.type === 'AnalyticalLens')
+    expect(thesis?.id).toBe('n1')
+    expect(lens?.id).toBe('n_lens')
+  })
 })
