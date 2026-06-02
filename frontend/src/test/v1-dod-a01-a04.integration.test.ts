@@ -373,4 +373,11 @@ describe('V1 DoD A-04 — 图谱 G6 + ?node= 高亮 + 409 未就绪提示', () =
     expect(wrapper.text()).toContain(GRAPH_BASELINE_COPY.graphNotReadyCta)
     expect(wrapper.find('.paper-graph-smoke-stub').exists()).toBe(false)
   })
+
+  it('tolerates unknown ?node= without breaking graph route shell', async () => {
+    const { wrapper } = await mountRoute('/papers/hss-001/graph', { node: 'ghost-node' })
+
+    expect(wrapper.find('.paper-graph-smoke-stub').attributes('data-highlight')).toBe('ghost-node')
+    expect(wrapper.find('.graph-view').exists()).toBe(true)
+  })
 })

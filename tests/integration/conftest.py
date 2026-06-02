@@ -102,6 +102,19 @@ def graph_hss_fixture_env(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Pa
 
 
 @pytest.fixture
+def upload_dir(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    """Isolated upload directory for POST /papers integration tests."""
+    upload_path = tmp_path / "uploads"
+    upload_path.mkdir(parents=True, exist_ok=True)
+    monkeypatch.setenv("UPLOAD_DIR", str(upload_path))
+    get_settings.cache_clear()
+    get_paper_service.cache_clear()
+    yield upload_path
+    get_settings.cache_clear()
+    get_paper_service.cache_clear()
+
+
+@pytest.fixture
 async def api_client() -> AsyncIterator[AsyncClient]:
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
