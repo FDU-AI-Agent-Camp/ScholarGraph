@@ -57,7 +57,7 @@ async def test_handoff_classify_output_feeds_extract(integration_paper: tuple[st
     graph = UnifiedPaperGraph(
         paper_id=paper_id,
         paradigm=Paradigm.STEM,
-        nodes=[GraphNode(id="n1", label="N", type="Thesis")],
+        nodes=[GraphNode(id="n1", label="N", type="Method")],
         edges=[],
     )
 

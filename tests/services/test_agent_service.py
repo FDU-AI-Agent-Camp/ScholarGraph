@@ -70,7 +70,7 @@ async def test_extract_graph_aligns_paper_id_and_paradigm() -> None:
     raw_graph = UnifiedPaperGraph(
         paper_id="wrong",
         paradigm=Paradigm.STEM,
-        nodes=[GraphNode(id="n1", label="n", type="Thesis")],
+        nodes=[GraphNode(id="n1", label="n", type="Method")],
         edges=[],
     )
     with patch("backend.services.agent_service.extract", new_callable=AsyncMock) as raw:

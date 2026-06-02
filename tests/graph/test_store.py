@@ -81,7 +81,7 @@ class TestToG6:
         graph = UnifiedPaperGraph(
             paper_id="test",
             paradigm=Paradigm.HSS,
-            nodes=[GraphNode(id="n1", label="L", type="T", data={"extra": 42})],
+            nodes=[GraphNode(id="n1", label="L", type="Thesis", data={"extra": 42})],
             edges=[],
         )
         result = GraphStore.to_g6(graph)

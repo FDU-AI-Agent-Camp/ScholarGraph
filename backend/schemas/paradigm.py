@@ -11,6 +11,8 @@ class Paradigm(StrEnum):
 
 
 class ParadigmClassification(BaseModel):
+    """Stable JSON output of the paradigm classifier."""
+
     paradigm: Paradigm
     confidence: float = Field(ge=0.0, le=1.0)
-    reason: str
+    reason: str = Field(min_length=1)

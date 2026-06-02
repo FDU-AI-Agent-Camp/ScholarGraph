@@ -11,7 +11,6 @@ from backend.graph.store import GraphStore
 from backend.llm.mock_chat import MOCK_DISCLAIMER, MOCK_PATROL_PREFIX
 from backend.schemas.paradigm import Paradigm
 from backend.services.agent_service import AgentService
-from backend.services.errors import ServiceError
 from httpx import AsyncClient
 
 from tests.api.conftest import assert_error_envelope
@@ -200,7 +199,7 @@ async def test_a06_patrol_insufficient_data_422_envelope(
 
 @pytest.fixture
 def live_llm_env(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Force live LLM path so BE-2 NotImplemented tests stay valid under default mock."""
+    """Force live LLM path for BE-2 heuristic classify/extract tests."""
     monkeypatch.setenv("LLM_MODE", "live")
     from backend.config import get_settings
     from backend.llm.client import reset_llm_client_cache
@@ -210,21 +209,21 @@ def live_llm_env(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 @pytest.mark.asyncio
-async def test_a07_classify_not_implemented_maps_pipeline_failed(live_llm_env) -> None:
-    """BE-2 未交付：真实 classify() → AgentService PIPELINE_FAILED。"""
+async def test_a07_classify_live_heuristic_returns_stem(live_llm_env) -> None:
+    """BE-2 live path: heuristic classify without cloud LLM."""
     _ = live_llm_env
-    service = AgentService()
-    with pytest.raises(ServiceError) as err:
-        await service.classify_paradigm("abstract snippet")
-    assert err.value.code == "PIPELINE_FAILED"
-    assert "BE-2" in err.value.message
+    result = await AgentService().classify_paradigm(
+        "Title: benchmark. We evaluate the model on datasets with accuracy and baselines."
+    )
+    assert result.paradigm == Paradigm.STEM
+    assert result.reason
 
 
 @pytest.mark.asyncio
-async def test_a07_classify_direct_raises_not_implemented(live_llm_env) -> None:
+async def test_a07_classify_direct_live_heuristic(live_llm_env) -> None:
     _ = live_llm_env
-    with pytest.raises(NotImplementedError, match="BE-2"):
-        await classify("text")
+    result = await classify("标题：平台零工经济。本文通过访谈材料和理论视角分析劳动者经验。")
+    assert result.paradigm == Paradigm.HSS
 
 
 def test_a07_gold_labels_three_papers_two_paradigms() -> None:
@@ -233,20 +232,27 @@ def test_a07_gold_labels_three_papers_two_paradigms() -> None:
 
 
 @pytest.mark.asyncio
-async def test_a08_extract_not_implemented_maps_pipeline_failed(live_llm_env) -> None:
+async def test_a08_extract_live_heuristic_returns_valid_graph(live_llm_env) -> None:
     _ = live_llm_env
-    service = AgentService()
-    with pytest.raises(ServiceError) as err:
-        await service.extract_graph("full text", Paradigm.HSS, paper_id="hss-001")
-    assert err.value.code == "PIPELINE_FAILED"
-    assert "BE-2" in err.value.message
+    graph = await AgentService().extract_graph(
+        "标题：实验方法\nWe report benchmark accuracy on datasets.",
+        Paradigm.STEM,
+        paper_id="hss-001",
+    )
+    assert graph.paper_id == "hss-001"
+    assert graph.paradigm == Paradigm.STEM
+    assert graph.nodes
 
 
 @pytest.mark.asyncio
-async def test_a08_extract_direct_raises_not_implemented(live_llm_env) -> None:
+async def test_a08_extract_direct_live_heuristic(live_llm_env) -> None:
     _ = live_llm_env
-    with pytest.raises(NotImplementedError, match="BE-2"):
-        await extract("full text", Paradigm.STEM)
+    graph = await extract(
+        "标题：近代口岸研究\n本文认为通商口岸体现制度路径依赖。",
+        Paradigm.HSS,
+    )
+    assert graph.paradigm == Paradigm.HSS
+    assert any(str(node.type) == "Thesis" for node in graph.nodes)
 
 
 @pytest.mark.asyncio

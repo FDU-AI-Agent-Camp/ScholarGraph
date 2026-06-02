@@ -1,7 +1,7 @@
 """Pydantic schemas shared by API and agents."""
 
 from backend.schemas.envelope import DataResponse, ErrorBody, ErrorResponse, Meta, PaginatedData
-from backend.schemas.graph import GraphEdge, GraphNode, UnifiedPaperGraph
+from backend.schemas.graph import GraphEdge, GraphNode, NodeType, UnifiedPaperGraph
 from backend.schemas.paper import (
     PaperCreateResult,
     PaperDetail,
@@ -20,6 +20,7 @@ __all__ = [
     "GraphEdge",
     "GraphNode",
     "Meta",
+    "NodeType",
     "PaginatedData",
     "PaperCreateResult",
     "PaperDetail",

@@ -16,7 +16,6 @@ from backend.ingest.pdf import ingest_pdf
 from backend.schemas.graph import UnifiedPaperGraph
 from backend.schemas.paradigm import Paradigm
 from pydantic import ValidationError
-from tests.helpers.patrol_graphs import build_hss_graph_with_thesis
 
 FIXTURES_DIR = Path(__file__).resolve().parents[2] / "docs" / "api" / "fixtures"
 
@@ -62,11 +61,25 @@ def test_m1_stem_sample_graph_passes_schema() -> None:
 def test_m1_graph_store_persists_hss_and_stem(tmp_path: Path) -> None:
     store = GraphStore(base_dir=tmp_path)
     hss = _load_graph_fixture("graph-hss.json")
-    stem = build_hss_graph_with_thesis(
-        "stem-001",
-        thesis_id="n_claim",
-        thesis_label="材料性质预测",
-    ).model_copy(update={"paradigm": Paradigm.STEM})
+    stem = UnifiedPaperGraph.model_validate(
+        {
+            "paper_id": "stem-001",
+            "paradigm": "STEM",
+            "nodes": [
+                {"id": "n_claim", "label": "GNN 提升晶体性质预测", "type": "Claim", "data": {}},
+                {"id": "n_method", "label": "Transformer 原子嵌入", "type": "Method", "data": {}},
+            ],
+            "edges": [
+                {
+                    "id": "e1",
+                    "source": "n_method",
+                    "target": "n_claim",
+                    "label": "SUPPORTS",
+                    "type": "SUPPORTS",
+                },
+            ],
+        },
+    )
 
     store.save(hss)
     store.save(stem)

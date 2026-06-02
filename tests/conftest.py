@@ -136,8 +136,16 @@ def mock_agent_services_only(
     graph = UnifiedPaperGraph(
         paper_id=paper_id,
         paradigm=Paradigm.STEM,
-        nodes=[GraphNode(id="n1", label="N", type="Thesis")],
-        edges=[GraphEdge(id="e1", source="n1", target="n1", label="REF", type="REF")],
+        nodes=[GraphNode(id="n1", label="N", type="Method")],
+        edges=[
+            GraphEdge(
+                id="e1",
+                source="n1",
+                target="n1",
+                label="SUPPORTS",
+                type="SUPPORTS",
+            ),
+        ],
     )
 
     agent_svc = MagicMock()

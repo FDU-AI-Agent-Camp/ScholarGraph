@@ -151,29 +151,27 @@ def test_a11_run_pipeline_missing_pdf_exits_usage_error() -> None:
 
 
 @pytest.mark.asyncio
-async def test_a11_pipeline_live_mode_classify_not_implemented_fails(
+async def test_a11_pipeline_live_mode_heuristic_be2_succeeds(
     run_pipeline_module,
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Red path: LLM_MODE=live + BE-2 未交付 → failed status + stderr message."""
+    """LLM_MODE=live uses BE-2 heuristic classify/extract (no cloud LLM required)."""
     mod = run_pipeline_module
     monkeypatch.setenv("LLM_MODE", "live")
     get_settings.cache_clear()
     reset_llm_client_cache()
     get_paper_service.cache_clear()
 
-    paper_id = "a11-live-fail"
-    pdf_path = write_text_pdf(tmp_path / "live-fail.pdf", "夏尔巴人父系历史研究")
+    paper_id = "a11-live-heuristic"
+    pdf_path = write_text_pdf(tmp_path / "live-heuristic.pdf", "夏尔巴人父系历史研究")
     mod.register_paper_for_pipeline(paper_id, pdf_path, copy_to_upload_dir=False)
 
     code = await mod.run_single_paper_pipeline(paper_id, pdf_path)
-    assert code == mod.EXIT_PIPELINE_FAILED
+    assert code == mod.EXIT_SUCCESS
 
     status = await get_paper_service().get_status(paper_id)
-    assert status.status == PaperStatus.FAILED
-    assert status.error_code == "PIPELINE_FAILED"
-    assert status.message
+    assert status.status == PaperStatus.READY
 
 
 @pytest.mark.asyncio
