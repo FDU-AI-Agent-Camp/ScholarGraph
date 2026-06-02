@@ -199,7 +199,7 @@ async def test_a06_patrol_insufficient_data_422_envelope(
 
 @pytest.fixture
 def live_llm_env(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Force live LLM path so BE-2 NotImplemented tests stay valid under default mock."""
+    """Force live LLM path for BE-2 heuristic classify/extract tests."""
     monkeypatch.setenv("LLM_MODE", "live")
     from backend.config import get_settings
     from backend.llm.client import reset_llm_client_cache
