@@ -8,7 +8,7 @@ V1 A～C 自动化门禁（C-09：合 develop / 答辩前复跑）。
     uv run python scripts/run_v1_ac_gates.py --with-cp4-api   # 需后端 :8000
 
 覆盖：
-- A/D：check_backend（ruff + pytest）；详见 ``scripts/run_d_gates.py``（D-01～D-06）
+- A/D：check_backend（ruff + pytest）；详见 ``scripts/run_d_gates.py``（D-01～D-10；D-11/D-12 见 pytest）
 - B/C-02：frontend npm run check:ci
 - C-03/C-04：run_qa --smoke-m2、run_patrol --smoke-patrol
 - 可选：run_cp4_rehearsal --api-only（C-05）

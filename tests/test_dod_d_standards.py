@@ -1,4 +1,4 @@
-"""V1 DoD §6.4 D-01～D-06 — code-base standards (static + gate wiring)."""
+"""V1 DoD §6.4 D-01～D-12 — code-base standards (static + gate wiring)."""
 
 from __future__ import annotations
 
