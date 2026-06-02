@@ -21,6 +21,7 @@ from backend.schemas.paper import (
 from backend.schemas.paradigm import Paradigm, ParadigmClassification
 
 FIXTURES_DIR = Path(__file__).resolve().parents[2] / "docs" / "api" / "fixtures"
+DEFAULT_GRAPH_DATA_DIR = Path("./data/graphs")
 MAX_UPLOAD_BYTES = 32 * 1024 * 1024
 
 
@@ -36,7 +37,6 @@ class PaperService:
     def __init__(self, settings: Settings | None = None) -> None:
         self._settings = settings or get_settings()
         self._papers: dict[str, PaperDetail] = {}
-        self._graphs: dict[str, UnifiedPaperGraph] = {}
         self._status: dict[str, PaperStatusData] = {}
         self._seed_from_fixtures()
 
@@ -65,8 +65,20 @@ class PaperService:
             if graph_path.is_file():
                 graph_payload = json.loads(graph_path.read_text(encoding="utf-8"))
                 graph = UnifiedPaperGraph.model_validate(graph_payload["data"])
-                self._graphs[detail.paper_id] = graph.model_copy(update={"paper_id": detail.paper_id})
+                graph = graph.model_copy(update={"paper_id": detail.paper_id})
+                self._seed_graph_fixture_if_needed(graph)
             self._seed_status_for_detail(detail)
+
+    def _seed_graph_fixture_if_needed(self, graph: UnifiedPaperGraph) -> None:
+        """Persist demo fixture graphs only under the default local ``./data/graphs`` dir."""
+        from backend.graph.store import GraphStore
+
+        store = GraphStore()
+        if store.load(graph.paper_id) is not None:
+            return
+        if store._base_dir.resolve() != DEFAULT_GRAPH_DATA_DIR.resolve():
+            return
+        store.save(graph)
 
     def _seed_status_for_detail(self, detail: PaperDetail) -> None:
         """Prefer per-paper status fixtures; otherwise synthesize api-contract snapshots."""
@@ -211,9 +223,10 @@ class PaperService:
                 "updated_at": now,
             },
         )
-        self._graphs[paper_id] = graph
+        from backend.graph.store import GraphStore
         from backend.services.pipeline_status_service import get_pipeline_status_service
 
+        GraphStore().save(graph)
         get_pipeline_status_service().mark_ready(paper_id)
 
     def fail_pipeline(
@@ -261,7 +274,9 @@ class PaperService:
                 "图谱尚未就绪，请轮询 status 接口",
                 status_code=409,
             )
-        graph = self._graphs.get(paper_id)
+        from backend.graph.store import GraphStore
+
+        graph = GraphStore().load(paper_id)
         if graph is None:
             raise ApiError("GRAPH_NOT_READY", "图谱数据缺失", status_code=409)
         return graph

@@ -95,6 +95,53 @@ describe('client HTTP helpers', () => {
     }
   })
 
+  it('response interceptor shows ElMessage.error for API failures', async () => {
+    const { ElMessage } = await import('element-plus')
+    mockGet.mockImplementation(async () => {
+      const axiosError = {
+        response: {
+          status: 500,
+          data: { error: { code: 'SERVER', message: '服务不可用' } },
+        },
+        message: 'Internal Server Error',
+      }
+      return interceptorErrorHandler(axiosError)
+    })
+
+    const { getData } = await import('./client')
+
+    await expect(getData('/papers')).rejects.toMatchObject({ code: 'SERVER' })
+    expect(ElMessage.error).toHaveBeenCalledWith('服务不可用')
+  })
+
+  it('suppressErrorToast skips global toast for upload client', async () => {
+    const { ElMessage } = await import('element-plus')
+    vi.mocked(ElMessage.error).mockClear()
+    mockGet.mockReset()
+    mockPost.mockReset()
+    interceptorErrorHandler.mockReset()
+    vi.resetModules()
+
+    mockPost.mockImplementation(async (_url, _body, config) => {
+      const axiosError = {
+        config,
+        response: {
+          status: 400,
+          data: { error: { code: 'INGEST_FAILED', message: '无法解析 PDF' } },
+        },
+        message: 'Bad Request',
+      }
+      return interceptorErrorHandler(axiosError)
+    })
+
+    const { postData } = await import('./client')
+
+    await expect(postData('/papers', new FormData(), { suppressErrorToast: true })).rejects.toMatchObject({
+      code: 'INGEST_FAILED',
+    })
+    expect(ElMessage.error).not.toHaveBeenCalled()
+  })
+
   it('getApiV1Root respects VITE_API_BASE_URL', async () => {
     const { getApiV1Root } = await import('./client')
     vi.stubEnv('VITE_API_BASE_URL', '')

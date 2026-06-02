@@ -41,6 +41,16 @@ uv run python scripts/check_backend.py
 cd frontend && npm ci && npm run check:ci
 ```
 
+### 合 develop / 答辩前（推荐）
+
+| 脚本 | 用途 |
+|------|------|
+| `uv run python scripts/run_d_gates.py` | D-01～D-10（`check_backend` + `npm run check` + 分支/提交/ handoff / lockfile） |
+| `uv run python scripts/run_v1_ac_gates.py` | A～C：`check:ci` + `run_qa` / `run_patrol` CLI smoke |
+| `uv run python scripts/run_cp4_rehearsal.py --seed` | CP4 全链路 24 步（需 uvicorn + `npm run dev`；Playwright 见 `uv sync --group e2e`） |
+
+按角色可加跑：`uv run pytest tests/graph`（BE-3）、`uv run pytest tests/patrol`（BE-4）、`uv run pytest tests/integration`（DoD 联调）。
+
 ---
 
 ## 前端（FE）
@@ -127,9 +137,9 @@ npm run build
 - [ ] `uv run pytest tests/graph` 通过
 - [ ] `to_g6()` 输出与 [graph-hss.json](../api/fixtures/graph-hss.json) 结构一致
 - [ ] `qa_stream()` 事件含 `message` / `citation` / `done` / `error`
-- [ ] **未**自行添加 FastAPI 路由（SSE 壳由 BE-L 接）
+- [ ] **未**自行添加 FastAPI 路由（平台层由 BE-L 在 `papers.py` 等注册；交付时 PR 描述仍须写明 handoff）
 
-**自测说明**：例：`uv run python scripts/run_qa.py`（或模块内脚本）。
+**自测说明**：`uv run python scripts/run_qa.py --smoke-m2 --seed-demo-graph`；HTTP 探针见 `run_cp4_rehearsal.py --api-only`。
 
 ---
 

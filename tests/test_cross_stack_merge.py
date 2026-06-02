@@ -175,6 +175,41 @@ async def test_merge_graph_not_ready_returns_409(api_client: AsyncClient) -> Non
     assert response.json()["error"]["code"] == "GRAPH_NOT_READY"
 
 
+@pytest.mark.asyncio
+async def test_merge_upload_valid_pdf_returns_pending(api_client: AsyncClient, tmp_path, monkeypatch) -> None:
+    from backend.config import get_settings
+    from backend.services.paper_service import get_paper_service
+
+    monkeypatch.setenv("UPLOAD_DIR", str(tmp_path))
+    get_settings.cache_clear()
+    get_paper_service.cache_clear()
+
+    response = await api_client.post(
+        "/api/v1/papers",
+        files={"file": ("cross-stack.pdf", b"%PDF-1.4\ncross-stack", "application/pdf")},
+    )
+    assert response.status_code == 201
+    _assert_api_envelope(response.json())
+    assert response.json()["data"]["status"] == "pending"
+
+
+@pytest.mark.asyncio
+async def test_merge_upload_invalid_pdf_returns_ingest_failed(api_client: AsyncClient) -> None:
+    response = await api_client.post(
+        "/api/v1/papers",
+        files={"file": ("bad.txt", b"not pdf", "text/plain")},
+    )
+    assert response.status_code == 400
+    assert response.json()["error"]["code"] == "INGEST_FAILED"
+
+
+@pytest.mark.asyncio
+async def test_merge_graph_failed_paper_returns_409(api_client: AsyncClient) -> None:
+    response = await api_client.get(f"/api/v1/papers/{FAILED_PAPER_ID}/graph")
+    assert response.status_code == 409
+    assert response.json()["error"]["code"] == "GRAPH_NOT_READY"
+
+
 def test_merge_classifier_labels_corpus_ids_seeded_in_api() -> None:
     """FE 列表与 BE 种子数据应覆盖金标语料 paper_id（ingest 分支合入后）。"""
     from tests.helpers.classifier_labels import load_classifier_labels

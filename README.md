@@ -238,15 +238,18 @@ flowchart LR
 
 ```bash
 uv sync
-cp .env.example .env   # 编辑 SCHOLARGRAPH_API_KEY 等
+cp .env.example .env   # 默认 LLM_MODE=mock；接华为云时改为 live 并填 Key
 uv sync --group dev
 uv run python scripts/check_backend.py   # ruff lint + format-check + pytest（排除 red）
+uv run python scripts/run_d_gates.py     # D-01～D-10 代码基座（含 FE npm run check，可 --skip-frontend）
 uv run uvicorn backend.main:app --reload --host 127.0.0.1 --port 8000
 ```
 
+合 **develop** / 答辩前可再跑：`uv run python scripts/run_v1_ac_gates.py`（`check:ci` + `run_qa`/`run_patrol` smoke）；E2E 见 `scripts/run_cp4_rehearsal.py`（24 步，需前后端已启动）。
+
 分步：`uv run ruff check backend tests scripts`、`uv run ruff format --check backend tests scripts`、`uv run pytest -q -m "not red"`。
 
-- 健康检查：`GET http://127.0.0.1:8000/api/v1/health`
+- 健康检查：`GET http://127.0.0.1:8000/api/v1/health`（含 `llm_mode` / `llm_connected`）
 - Swagger：`http://127.0.0.1:8000/docs`
 - 新成员详见 [docs/v1/onboarding.md](docs/v1/onboarding.md)
 

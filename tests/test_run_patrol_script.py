@@ -1,6 +1,7 @@
 """Unit tests for scripts/run_patrol.py helpers and CLI surface."""
 
 import json
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -12,18 +13,22 @@ from tests.conftest import RUN_PATROL_SCRIPT
 REPO_ROOT = RUN_PATROL_SCRIPT.parents[1]
 SCRIPT_PATH = RUN_PATROL_SCRIPT
 
+_SUBPROCESS_TEXT_KW = {"text": True, "encoding": "utf-8", "errors": "replace"}
+
 
 def test_run_patrol_help_exits_zero() -> None:
     result = subprocess.run(
         [sys.executable, str(SCRIPT_PATH), "--help"],
         cwd=REPO_ROOT,
         capture_output=True,
-        text=True,
         check=False,
+        env={**os.environ, "PYTHONIOENCODING": "utf-8"},
+        **_SUBPROCESS_TEXT_KW,
     )
     assert result.returncode == 0
     assert "--paper-ids" in result.stdout
     assert "--seed-demo-graphs" in result.stdout
+    assert "--smoke-patrol" in result.stdout
 
 
 def test_parse_args_defaults(run_patrol_module) -> None:
@@ -88,6 +93,22 @@ def test_main_sync_wrapper_returns_exit_code(run_patrol_module, tmp_path: Path) 
     assert exit_code == 0
 
 
+async def test_main_smoke_patrol_alias_only(run_patrol_module, tmp_path: Path) -> None:
+    graph_dir = tmp_path / "graphs"
+    exit_code = await run_patrol_module.async_main(
+        [
+            "--paper-ids",
+            "hss-001,hss-002",
+            "--graph-dir",
+            str(graph_dir),
+            "--smoke-patrol",
+            "--compact",
+        ],
+    )
+    assert exit_code == 0
+    assert (graph_dir / "hss-001.json").is_file()
+
+
 def test_cli_subprocess_runs_patrol_with_seed(tmp_path: Path) -> None:
     graph_dir = tmp_path / "graphs"
     result = subprocess.run(
@@ -103,8 +124,9 @@ def test_cli_subprocess_runs_patrol_with_seed(tmp_path: Path) -> None:
         ],
         cwd=REPO_ROOT,
         capture_output=True,
-        text=True,
         check=False,
+        env={**os.environ, "PYTHONIOENCODING": "utf-8"},
+        **_SUBPROCESS_TEXT_KW,
     )
     assert result.returncode == 0, result.stderr
     payload = json.loads(result.stdout.strip())
@@ -158,8 +180,9 @@ def test_cli_subprocess_runs_contradiction_mode(tmp_path: Path) -> None:
         ],
         cwd=REPO_ROOT,
         capture_output=True,
-        text=True,
         check=False,
+        env={**os.environ, "PYTHONIOENCODING": "utf-8"},
+        **_SUBPROCESS_TEXT_KW,
     )
     assert result.returncode == 0, result.stderr
     payload = json.loads(result.stdout.strip())

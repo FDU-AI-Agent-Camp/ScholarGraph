@@ -33,6 +33,9 @@ dev = [
     "httpx>=0.28.0",
     "ruff>=0.8.0",
 ]
+e2e = [
+    "playwright>=1.49.0",
+]
 
 [build-system]
 requires = ["hatchling"]

@@ -326,6 +326,7 @@ export function getGraphNodeSnippet(node: GraphNode | null | undefined): string 
   return typeof snippet === 'string' && snippet.trim().length > 0 ? snippet.trim() : null
 }
 
+/** FE-only G6 adapter — API returns UnifiedPaperGraph; do not expect G6 shape from BE (B-07). */
 export function toG6GraphPayload(graph: UnifiedPaperGraph): G6GraphPayload {
   return {
     nodes: graph.nodes.map((node) => ({

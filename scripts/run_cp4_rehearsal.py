@@ -9,6 +9,8 @@ CP4 端到端联调 / rehearsal 脚本。
 可选::
 
     uv run python scripts/run_cp4_rehearsal.py --seed
+    uv run python scripts/run_cp4_rehearsal.py --api-only          # C-05 后端 API
+    uv run python scripts/run_cp4_rehearsal.py --skip-browser      # C-05 + C-06，无 Playwright
     uv run python scripts/run_cp4_rehearsal.py --frontend-only
 
 退出码：0 全部通过；1 有失败步骤。
@@ -95,14 +97,24 @@ def run_seed() -> None:
     from pathlib import Path
 
     repo_root = Path(__file__).resolve().parents[1]
-    cmd = [sys.executable, str(repo_root / "scripts" / "run_patrol.py"), "--seed-demo-graphs"]
-    print(">>", " ".join(cmd))
-    completed = subprocess.run(cmd, cwd=repo_root, check=False)
-    if completed.returncode != 0:
-        raise RuntimeError(f"seed 失败，退出码 {completed.returncode}")
+    seed_cmds = [
+        [sys.executable, str(repo_root / "scripts" / "run_patrol.py"), "--seed-demo-graphs"],
+        # hss-001 恢复为 M2 graph-hss，供 GET graph + QA SSE 探针
+        [sys.executable, str(repo_root / "scripts" / "run_qa.py"), "--seed-demo-graph"],
+    ]
+    for cmd in seed_cmds:
+        print(">>", " ".join(cmd))
+        completed = subprocess.run(cmd, cwd=repo_root, check=False)
+        if completed.returncode != 0:
+            raise RuntimeError(f"seed 失败: {' '.join(cmd)} → 退出码 {completed.returncode}")
 
 
-def run_rehearsal(*, frontend_only: bool = False) -> RehearsalReport:
+def run_rehearsal(
+    *,
+    frontend_only: bool = False,
+    api_only: bool = False,
+    skip_browser: bool = False,
+) -> RehearsalReport:
     report = RehearsalReport()
 
     with httpx.Client(follow_redirects=True) as client:
@@ -116,6 +128,9 @@ def run_rehearsal(*, frontend_only: bool = False) -> RehearsalReport:
         if not frontend_only:
             report_api_checks(client, report)
 
+        if api_only:
+            return report
+
         try:
             wait_for_url(client, FRONTEND_BASE, "前端")
             report.add("前端就绪", True, FRONTEND_BASE)
@@ -126,7 +141,8 @@ def run_rehearsal(*, frontend_only: bool = False) -> RehearsalReport:
         report_frontend_checks(client, report)
         report_proxy_checks(client, report)
 
-    report_browser_checks(report)
+    if not skip_browser:
+        report_browser_checks(report)
 
     return report
 
@@ -185,9 +201,10 @@ def report_api_checks(client: httpx.Client, report: RehearsalReport) -> None:
     )
     qa_events = parse_sse_events(qa_resp.text) if qa_resp.status_code == 200 else []
     event_names = [name for name, _ in qa_events]
+    citation_ok = any(name == "citation" for name in event_names)
     report.add(
         "POST /papers/hss-001/qa/stream SSE",
-        qa_resp.status_code == 200 and "message" in event_names and "done" in event_names,
+        qa_resp.status_code == 200 and "message" in event_names and citation_ok and "done" in event_names,
         ",".join(event_names) or qa_resp.text[:120],
     )
 
@@ -232,7 +249,11 @@ def report_browser_checks(report: RehearsalReport) -> None:
         from playwright.sync_api import TimeoutError as PlaywrightTimeout
         from playwright.sync_api import sync_playwright
     except ImportError:
-        report.add("浏览器渲染检查", False, "未安装 playwright（uv pip install playwright）")
+        report.add(
+            "浏览器渲染检查",
+            False,
+            "未安装 playwright（uv sync --group e2e && uv run playwright install chromium）",
+        )
         return
 
     browser_pages: list[tuple[str, str, list[str]]] = [
@@ -245,7 +266,16 @@ def report_browser_checks(report: RehearsalReport) -> None:
     ]
 
     with sync_playwright() as playwright:
-        browser = playwright.chromium.launch(headless=True)
+        try:
+            browser = playwright.chromium.launch(headless=True)
+        except Exception as exc:
+            report.add(
+                "浏览器渲染检查",
+                False,
+                f"Chromium 未安装: {exc}（uv run playwright install chromium）",
+            )
+            return
+
         page = browser.new_page()
         try:
             for label, path, needles in browser_pages:
@@ -268,22 +298,29 @@ def report_browser_checks(report: RehearsalReport) -> None:
             page.get_by_role("button", name="提问").click()
             page.wait_for_timeout(2000)
             body_text = page.locator("body").inner_text()
-            qa_ok = "示例节点" in body_text or "收到问题" in body_text or "占位" in body_text
+            qa_ok = (
+                "引用节点" in body_text
+                or "核心论点" in body_text
+                or "Mock 答复" in body_text
+                or "尚未接入" in body_text
+            )
             report.add("浏览器 QA SSE 流式", qa_ok, "详情页问答区")
 
             page.goto(f"{FRONTEND_BASE}/patrol", wait_until="networkidle", timeout=30_000)
-            page.locator("input").first.fill("hss-001,hss-002")
-            page.get_by_role("button", name="运行巡检").click()
+            page.locator(".patrol-view__run").click()
             page.wait_for_timeout(5000)
             patrol_text = page.locator("body").inner_text()
-            patrol_ok = (
-                "node_refs" in patrol_text
-                or "insight" in patrol_text.lower()
-                or "Lens" in patrol_text
-                or "理论" in patrol_text
+            patrol_ok = any(
+                needle in patrol_text
+                for needle in (
+                    "理论视角",
+                    "Lens",
+                    "分子考古",
+                    "政治传播",
+                    "Mock 巡检",
+                    "巡检摘要",
+                )
             )
-            if not patrol_ok:
-                patrol_ok = "n_lens" in patrol_text or "消费" in patrol_text or "generated_at" in patrol_text
             report.add("浏览器 Patrol 运行", patrol_ok, "/patrol")
         finally:
             browser.close()
@@ -302,7 +339,17 @@ def report_proxy_checks(client: httpx.Client, report: RehearsalReport) -> None:
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="ScholarGraph CP4 联调 rehearsal")
-    parser.add_argument("--seed", action="store_true", help="运行前 seed 巡检评测图谱")
+    parser.add_argument("--seed", action="store_true", help="运行前 seed patrol + M2 QA 评测图谱")
+    parser.add_argument(
+        "--api-only",
+        action="store_true",
+        help="仅直连后端 API 探针（C-05，无需前端）",
+    )
+    parser.add_argument(
+        "--skip-browser",
+        action="store_true",
+        help="跳过 Playwright 浏览器步（C-05 + C-06 SPA/代理）",
+    )
     parser.add_argument(
         "--frontend-only",
         action="store_true",
@@ -320,7 +367,11 @@ def main(argv: list[str] | None = None) -> int:
     if args.seed:
         run_seed()
 
-    report = run_rehearsal(frontend_only=args.frontend_only)
+    report = run_rehearsal(
+        frontend_only=args.frontend_only,
+        api_only=args.api_only,
+        skip_browser=args.skip_browser,
+    )
 
     print()
     print("=" * 60)

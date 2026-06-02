@@ -1,14 +1,14 @@
 """Paper routes — register here; business logic lives in services + BE modules."""
 
-import json
 from collections.abc import AsyncIterator
 
 from fastapi import APIRouter, Depends, File, Query, UploadFile
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from backend.api.deps import get_paper_service_dep, get_request_id
 from backend.api.responses import paginated, success
+from backend.api.sse import QA_STREAM_HEADERS, format_sse_event
 from backend.schemas.paper import PaperStatus
 from backend.schemas.paradigm import Paradigm
 from backend.services.paper_service import PaperService
@@ -18,6 +18,15 @@ router = APIRouter(prefix="/papers")
 
 class QaStreamRequest(BaseModel):
     question: str = Field(min_length=1, max_length=4000)
+
+    @field_validator("question")
+    @classmethod
+    def strip_and_require_non_empty(cls, value: str) -> str:
+        trimmed = value.strip()
+        if not trimmed:
+            msg = "question must not be empty"
+            raise ValueError(msg)
+        return trimmed
 
 
 @router.get("")
@@ -29,6 +38,7 @@ async def list_papers(
     request_id: str = Depends(get_request_id),
     service: PaperService = Depends(get_paper_service_dep),
 ) -> dict:
+    """List papers with optional paradigm/status filters and pagination."""
     items, total = await service.list_papers(
         paradigm=paradigm,
         status=status,
@@ -44,6 +54,7 @@ async def create_paper(
     request_id: str = Depends(get_request_id),
     service: PaperService = Depends(get_paper_service_dep),
 ) -> dict:
+    """Upload a PDF; returns pending paper_id for status polling."""
     content = await file.read()
     result = await service.create_from_upload(
         filename=file.filename or "upload.pdf",
@@ -58,6 +69,7 @@ async def get_paper(
     request_id: str = Depends(get_request_id),
     service: PaperService = Depends(get_paper_service_dep),
 ) -> dict:
+    """Return paper metadata by id."""
     paper = await service.get_paper(paper_id)
     return success(paper, request_id)
 
@@ -68,6 +80,7 @@ async def get_paper_status(
     request_id: str = Depends(get_request_id),
     service: PaperService = Depends(get_paper_service_dep),
 ) -> dict:
+    """Return pipeline progress snapshot for long-polling."""
     status_data = await service.get_status(paper_id)
     return success(status_data, request_id)
 
@@ -78,6 +91,7 @@ async def get_paper_graph(
     request_id: str = Depends(get_request_id),
     service: PaperService = Depends(get_paper_service_dep),
 ) -> dict:
+    """Return UnifiedPaperGraph when paper status is ready."""
     graph = await service.get_graph(paper_id)
     return success(graph, request_id)
 
@@ -88,25 +102,18 @@ async def stream_paper_qa(
     body: QaStreamRequest,
     service: PaperService = Depends(get_paper_service_dep),
 ) -> StreamingResponse:
-    """SSE skeleton — BE-3 replaces with GraphRAG streaming."""
+    """SSE multi-scale QA — delegates to BE-3 ``qa_stream()``."""
 
     await service.get_paper(paper_id)
 
     async def event_generator() -> AsyncIterator[str]:
-        chunks = [
-            {"event": "message", "data": {"delta": "（骨架占位）"}},
-            {
-                "event": "citation",
-                "data": {"node_id": "n1", "label": "示例节点", "snippet": "…"},
-            },
-            {"event": "message", "data": {"delta": f" 收到问题：{body.question[:80]}"}},
-            {"event": "done", "data": {"answer": "请接入 backend/graph/qa.py 后替换本占位流。"}},
-        ]
-        for item in chunks:
-            yield f"event: {item['event']}\ndata: {json.dumps(item['data'], ensure_ascii=False)}\n\n"
+        from backend.graph.qa import qa_stream
+
+        async for evt in qa_stream(paper_id, body.question):
+            yield format_sse_event(evt.event, evt.data)
 
     return StreamingResponse(
         event_generator(),
         media_type="text/event-stream",
-        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+        headers=QA_STREAM_HEADERS,
     )

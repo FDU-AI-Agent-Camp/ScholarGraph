@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import inspect
+import os
 import subprocess
 import sys
 from collections.abc import Coroutine
@@ -315,8 +316,11 @@ def test_subprocess_missing_pdf_returns_usage_exit() -> None:
         [sys.executable, str(RUN_PIPELINE_SCRIPT), "--pdf", "definitely-missing.pdf"],
         cwd=REPO_ROOT,
         capture_output=True,
-        text=True,
         check=False,
+        env={**os.environ, "PYTHONIOENCODING": "utf-8"},
+        text=True,
+        encoding="utf-8",
+        errors="replace",
     )
     assert result.returncode == 2
     assert "错误" in result.stderr or "PDF" in result.stderr

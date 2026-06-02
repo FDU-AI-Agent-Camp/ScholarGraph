@@ -138,6 +138,8 @@ async def qa_stream(paper_id: str, question: str) -> AsyncIterator[QaEvent]:
   - **请 BE-L 注册 `GET /papers/{id}/graph` → GraphStore + to_g6**
   - **请 BE-L 注册 `POST /papers/{id}/qa/stream` → qa_stream**
 
+> **平台接线状态（联调分支）**：`backend/api/routes/papers.py` 已委托 `qa_stream()`，`get_graph` 经 `GraphStore.load`。新模块 PR 仍须勾选上列交付项，便于 Review 与回归。
+
 ### 禁止
 
 - 定义 `UnifiedPaperGraph` 结构（归 BE-2）；可读类型即可

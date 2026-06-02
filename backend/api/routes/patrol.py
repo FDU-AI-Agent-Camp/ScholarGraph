@@ -26,5 +26,6 @@ async def run_patrol_route(
     request_id: str = Depends(get_request_id),
     service: PatrolService = Depends(get_patrol_service_dep),
 ) -> dict:
+    """Run lens_clash or contradiction patrol across two ready papers."""
     report = await service.run_patrol(body.paper_ids, body.mode)
     return success(report, request_id)

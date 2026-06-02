@@ -112,4 +112,75 @@ describe('streamPaperQa integration', () => {
 
     expect(errorMessage).toBe('connection reset')
   })
+
+  it('sends Accept text/event-stream and POST JSON question body', async () => {
+    fetchEventSource.mockResolvedValue(undefined)
+
+    await streamPaperQa('hss-001', '  trimmed?  ', {})
+
+    expect(fetchEventSource).toHaveBeenCalledWith(
+      '/api/v1/papers/hss-001/qa/stream',
+      expect.objectContaining({
+        method: 'POST',
+        headers: expect.objectContaining({
+          Accept: 'text/event-stream',
+          'Content-Type': 'application/json',
+        }),
+        body: JSON.stringify({ question: '  trimmed?  ' }),
+      }),
+    )
+  })
+
+  it('ignores empty SSE data lines and unknown events without crashing handlers', async () => {
+    fetchEventSource.mockImplementation(
+      async (
+        _url: string,
+        options: {
+          onmessage?: (ev: { event?: string; data: string }) => void
+        },
+      ) => {
+        options.onmessage?.({ event: 'message', data: '' })
+        options.onmessage?.({ event: 'ping', data: '{}' })
+        options.onmessage?.({ event: 'message', data: 'not-json' })
+        options.onmessage?.({
+          event: 'message',
+          data: JSON.stringify({ delta: 'ok' }),
+        })
+      },
+    )
+
+    const deltas: string[] = []
+    await streamPaperQa('hss-001', 'q', {
+      onMessage: (data) => {
+        deltas.push(data.delta)
+      },
+    })
+
+    expect(deltas).toEqual(['ok'])
+  })
+
+  it('surfaces default error message when SSE error payload omits message', async () => {
+    fetchEventSource.mockImplementation(
+      async (
+        _url: string,
+        options: {
+          onmessage?: (ev: { event?: string; data: string }) => void
+        },
+      ) => {
+        options.onmessage?.({
+          event: 'error',
+          data: JSON.stringify({ code: 'QA_STREAM_ERROR' }),
+        })
+      },
+    )
+
+    let errorMessage = ''
+    await streamPaperQa('hss-001', 'q', {
+      onError: (message) => {
+        errorMessage = message
+      },
+    })
+
+    expect(errorMessage).toBe('SSE error')
+  })
 })
