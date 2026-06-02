@@ -130,7 +130,18 @@ npx openapi-typescript ../docs/api/openapi.yaml -o src/types/api.ts
 | 周会 | 30min，过 [任务看板](./work-assignment.md#6-任务看板) |
 | 契约变更 | Issue `[API RFC]` / `[Schema RFC]`，@BE-L + 相关人 |
 
+**门禁脚本**（仓库根目录，与 CI 对齐）：
+
+```bash
+uv run python scripts/check_backend.py          # 每个后端 PR
+uv run python scripts/run_d_gates.py            # 合 develop 前（D-01～D-10）
+cd frontend && npm run check:ci                 # 每个前端 PR（= CI frontend.yml）
+uv run python scripts/run_v1_ac_gates.py        # 答辩前 A～C 聚合
+uv run python scripts/run_cp4_rehearsal.py --seed   # CP4 24 步（需前后端 dev）
+```
+
 ---
+
 
 ## 7. 常见问题
 

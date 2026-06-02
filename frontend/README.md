@@ -127,3 +127,5 @@ npm run demo:setup
 ```
 
 标准路径：**Home → 文献库/上传 → 详情（轮询）→ 图谱 → 问答（SSE）→ 巡检**。
+
+仓库根目录还可跑：`uv run python scripts/run_d_gates.py`（含本目录 `npm run check`）、`uv run python scripts/run_v1_ac_gates.py`（`check:ci` + 后端 CLI smoke）。

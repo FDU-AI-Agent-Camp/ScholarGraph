@@ -116,10 +116,14 @@ uv run python scripts/run_patrol.py --paper-ids hss-001,hss-002 --mode lens_clas
 ## 自动化门禁（开发侧）
 
 ```bash
+# 代码基座 D-01～D-10（仓库根目录）
+uv run python scripts/run_d_gates.py
+uv run python scripts/run_d_gates.py --skip-frontend   # 仅后端 + Git 治理
+
 # 前端 CI 等价
 cd frontend && npm run check:ci
 
-# 后端
+# 后端（与 CI backend.yml 一致）
 uv run python scripts/check_backend.py
 ```
 
