@@ -1,6 +1,6 @@
-"""Unified paper graph schema with paradigm-specific validation."""
+"""Unified paper graph schema with paradigm-specific validation (G6 via GraphStore)."""
 
-from enum import Enum
+from enum import StrEnum
 from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
@@ -8,7 +8,7 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 from backend.schemas.paradigm import Paradigm
 
 
-class NodeType(str, Enum):
+class NodeType(StrEnum):
     """Node labels exposed to graph consumers and G6."""
 
     RESEARCH_QUESTION = "ResearchQuestion"
@@ -59,6 +59,7 @@ STEM_EDGE_TYPES = frozenset(
         "MEASURED_BY",
         "COMPARES_TO",
         "SUPPORTS",
+        "SUPPORTED_BY",
         "PRODUCES",
         "RELATES_TO",
     }
@@ -71,6 +72,9 @@ HSS_EDGE_TYPES = frozenset(
         "SUPPORTS",
         "CONTEXTUALIZES",
         "RELATES_TO",
+        "LENS_OF",
+        "INFORMS",
+        "REF",
     }
 )
 
@@ -94,17 +98,16 @@ class GraphEdge(BaseModel):
     target: str = Field(min_length=1)
     label: str = Field(min_length=1)
     type: str = Field(min_length=1)
+    data: dict[str, Any] = Field(default_factory=dict)
 
 
 class UnifiedPaperGraph(BaseModel):
     """Single-paper logic graph used by extraction, storage, QA, and patrol modules."""
 
-    model_config = ConfigDict(use_enum_values=True)
-
     paper_id: str = Field(min_length=1)
-    title: str = Field(min_length=1)
+    title: str | None = None
     paradigm: Paradigm
-    nodes: list[GraphNode] = Field(min_length=1)
+    nodes: list[GraphNode] = Field(default_factory=list)
     edges: list[GraphEdge] = Field(default_factory=list)
     summary: str | None = None
 
@@ -133,14 +136,3 @@ class UnifiedPaperGraph(BaseModel):
         if forbidden_edges:
             raise ValueError(f"{self.paradigm} graph contains forbidden edge types: {forbidden_edges}")
         return self
-
-    def to_g6(self) -> dict[str, Any]:
-        """Return the OpenAPI/G6-compatible graph payload body."""
-
-        return {
-            "paper_id": self.paper_id,
-            "paradigm": self.paradigm,
-            "nodes": [node.model_dump(mode="json") for node in self.nodes],
-            "edges": [edge.model_dump(mode="json") for edge in self.edges],
-        }
-

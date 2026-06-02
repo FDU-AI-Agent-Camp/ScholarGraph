@@ -12,4 +12,3 @@ def ensure_graph_matches_paradigm(graph: UnifiedPaperGraph) -> UnifiedPaperGraph
     if forbidden:
         raise ValueError(f"{graph.paradigm} graph contains forbidden node types: {forbidden}")
     return graph
-

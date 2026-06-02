@@ -1,8 +1,7 @@
 """Paradigm classifier service for BE-2.
 
-The implementation is deterministic by default so tests and demos do not depend on
-external LLM credentials. BE-L can later wrap this module with a real LLM client
-that returns the same `ParadigmClassification` schema.
+Deterministic heuristics when ``LLM_MODE`` is not mock; fixture-backed ``mock_classify``
+when ``is_llm_mock`` so CP4 and integration tests need no cloud credentials.
 """
 
 from __future__ import annotations
@@ -10,8 +9,9 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 
+from backend.agents.mock_agents import mock_classify
+from backend.config import get_settings
 from backend.schemas.paradigm import Paradigm, ParadigmClassification
-
 
 STEM_KEYWORDS = frozenset(
     {
@@ -137,6 +137,8 @@ def _reason(paradigm: Paradigm, evidence: KeywordEvidence) -> str:
 
 async def classify(classifier_input: str) -> ParadigmClassification:
     """Classify a paper snippet as STEM or HSS and return stable JSON."""
+    if get_settings().is_llm_mock:
+        return mock_classify(classifier_input)
 
     if not classifier_input or not classifier_input.strip():
         raise ValueError("classifier_input must be a non-empty string.")
@@ -147,4 +149,3 @@ async def classify(classifier_input: str) -> ParadigmClassification:
         confidence=round(_confidence(evidence), 2),
         reason=_reason(paradigm, evidence),
     )
-

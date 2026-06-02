@@ -25,24 +25,80 @@
 - [ ] **未**提交 `.env`、API Key、`API KEY.txt`、`data/corpus/*.pdf`
 - [ ] PR 范围单一（一个模块或一条用户路径，避免「顺手改」无关文件）
 
+### 静态检查（按角色选跑）
+
+| 栈 | 本地一键 | CI |
+|----|----------|-----|
+| **后端** | 仓库根目录：`uv run python scripts/check_backend.py` | [backend.yml](../../.github/workflows/backend.yml) |
+| **前端** | `frontend/`：`npm run check`（typecheck + prettier + eslint + knip） | [frontend.yml](../../.github/workflows/frontend.yml) |
+
+```bash
+# 后端（仓库根目录）
+uv sync --group dev
+uv run python scripts/check_backend.py
+
+# 前端
+cd frontend && npm ci && npm run check:ci
+```
+
+### 合 develop / 答辩前（推荐）
+
+| 脚本 | 用途 |
+|------|------|
+| `uv run python scripts/run_d_gates.py` | D-01～D-10（`check_backend` + `npm run check` + 分支/提交/ handoff / lockfile） |
+| `uv run python scripts/run_v1_ac_gates.py` | A～C：`check:ci` + `run_qa` / `run_patrol` CLI smoke |
+| `uv run python scripts/run_cp4_rehearsal.py --seed` | CP4 全链路 24 步（需 uvicorn + `npm run dev`；Playwright 见 `uv sync --group e2e`） |
+
+按角色可加跑：`uv run pytest tests/graph`（BE-3）、`uv run pytest tests/patrol`（BE-4）、`uv run pytest tests/integration`（DoD 联调）。
+
 ---
 
 ## 前端（FE）
 
-- [ ] 仅修改 `frontend/**`（或文档 `docs/design/`）
-- [ ] `npm run build` 通过
+### 范围与契约
+
+- [ ] 仅修改 `frontend/**`（或文档 `docs/design/`、`docs/api/` 中与 Mock/契约相关部分）
 - [ ] 请求路径均为 `/api/v1/...`，与 [api-contract.md](./api-contract.md) 一致
 - [ ] SSE 使用 **`POST .../papers/{id}/qa/stream`**，非 GET `EventSource`
-- [ ] Mock 数据与 [`docs/api/fixtures/`](../api/fixtures/) 或 `openapi.yaml` 字段一致
+- [ ] Mock / 测试数据与 [`docs/api/fixtures/`](../api/fixtures/) 或 [openapi.yaml](../api/openapi.yaml) 字段一致
 - [ ] 未在浏览器或前端 env 中配置 LLM Key
+- [ ] 若改对外 API：已有 **`[API RFC]`** Issue，并已 @BE-L @FE（见下方契约同步）
 
-**自测说明（必填一行）**：例：`npm run dev`，上传页 Mock 轮询 status 正常。
+### CI 门禁（与 [frontend.yml](../../.github/workflows/frontend.yml) 一致）
+
+在 `frontend/` 目录执行（**PR 前必跑**；合并前须 CI 绿）：
+
+```bash
+cd frontend
+npm ci
+npm run check:ci
+```
+
+等价于分步：
+
+```bash
+npm run check    # typecheck + format:check + lint + knip
+npm run test
+npm run build
+```
+
+- [ ] `npm run check` 通过（含 typecheck / Prettier / ESLint / Knip）
+- [ ] `npm run test` 通过
+- [ ] `npm run build` 通过
+
+### 契约同步（仅当 PR 含 `docs/api/openapi.yaml` 或后端契约字段变更时勾选）
+
+- [ ] 已按 RFC 更新 `docs/api/openapi.yaml` / `api-contract.md`（BE-L 侧或联调分支已合入）
+- [ ] 已执行 `npm run generate:api-types` 并提交 `frontend/src/api/generated/schema.d.ts`
+- [ ] 已检查 `frontend/src/api/types.ts` 薄封装与 SSE 手写类型（`qaStream.ts` 等）
+
+**自测说明（必填一行）**：例：`npm ci && npm run typecheck && npm run format:check && npm run lint && npm run knip && npm run test && npm run build`；`npm run dev` 打开 `/papers/hss-failed-001` 见失败态告警。
 
 ---
 
 ## 后端 · 平台（BE-L）
 
-- [ ] `uv run pytest` 通过
+- [ ] `uv run python scripts/check_backend.py` 通过（ruff lint + format-check + `pytest -m "not red"`）
 - [ ] `docs/api/openapi.yaml` 与实现 `/docs` 同步（若改 API）
 - [ ] CORS 含 `http://localhost:5173`
 - [ ] 路由注册在 `backend/api/`，业务逻辑不堆在 `main.py`
@@ -54,7 +110,7 @@
 ## 后端 · 摄入（BE-1）
 
 - [ ] 仅修改 `backend/ingest/**`、`scripts/extract_text.py`、`tests/ingest/**`、语料相关文档
-- [ ] `uv run pytest tests/ingest` 通过
+- [ ] `uv run python scripts/check_backend.py` 通过（或至少 `--lint-only` + `uv run pytest tests/ingest`）
 - [ ] **未** `import backend.agents` 或调用 LLM
 - [ ] 已实现/更新 `ingest_pdf()`，见 [handoff-to-platform.md](./handoff-to-platform.md)
 - [ ] **未**自行添加 FastAPI 路由
@@ -81,9 +137,9 @@
 - [ ] `uv run pytest tests/graph` 通过
 - [ ] `to_g6()` 输出与 [graph-hss.json](../api/fixtures/graph-hss.json) 结构一致
 - [ ] `qa_stream()` 事件含 `message` / `citation` / `done` / `error`
-- [ ] **未**自行添加 FastAPI 路由（SSE 壳由 BE-L 接）
+- [ ] **未**自行添加 FastAPI 路由（平台层由 BE-L 在 `papers.py` 等注册；交付时 PR 描述仍须写明 handoff）
 
-**自测说明**：例：`uv run python scripts/run_qa.py`（或模块内脚本）。
+**自测说明**：`uv run python scripts/run_qa.py --smoke-m2 --seed-demo-graph`；HTTP 探针见 `run_cp4_rehearsal.py --api-only`。
 
 ---
 

@@ -1,13 +1,11 @@
-"""Paradigm classification schema shared by agent and API layers."""
+"""Paradigm classification schemas."""
 
-from enum import Enum
+from enum import StrEnum
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, Field
 
 
-class Paradigm(str, Enum):
-    """Supported ScholarGraph paper paradigms."""
-
+class Paradigm(StrEnum):
     STEM = "STEM"
     HSS = "HSS"
 
@@ -15,9 +13,6 @@ class Paradigm(str, Enum):
 class ParadigmClassification(BaseModel):
     """Stable JSON output of the paradigm classifier."""
 
-    model_config = ConfigDict(use_enum_values=True)
-
     paradigm: Paradigm
     confidence: float = Field(ge=0.0, le=1.0)
     reason: str = Field(min_length=1)
-

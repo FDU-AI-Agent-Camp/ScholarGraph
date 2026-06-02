@@ -1,8 +1,7 @@
 """Deterministic paper graph extractor for BE-2.
 
-This module provides the `extract(full_text, paradigm)` service contract. The
-heuristic path is intentionally conservative and schema-first; an LLM extractor
-can replace the internals later as long as it returns `UnifiedPaperGraph`.
+Heuristic extraction when ``LLM_MODE`` is not mock; ``mock_extract`` loads API fixtures
+when mock so the LangGraph pipeline and CP4 rehearsal stay green without cloud LLM.
 """
 
 from __future__ import annotations
@@ -10,9 +9,10 @@ from __future__ import annotations
 import hashlib
 import re
 
+from backend.agents.mock_agents import mock_extract
+from backend.config import get_settings
 from backend.schemas.graph import GraphEdge, GraphNode, NodeType, UnifiedPaperGraph
 from backend.schemas.paradigm import Paradigm
-
 
 TITLE_PREFIXES = ("title:", "标题：", "标题:")
 SENTENCE_SPLIT_PATTERN = re.compile(r"(?<=[。！？.!?])\s*|\n+")
@@ -153,17 +153,25 @@ def _build_hss_graph(full_text: str, title: str) -> UnifiedPaperGraph:
         paradigm=Paradigm.HSS,
         nodes=nodes,
         edges=edges,
-        summary=f"抽取出 HSS 论证图谱：核心论点、分论点、理论视角、研究对象与学术谱系。",
+        summary="抽取出 HSS 论证图谱：核心论点、分论点、理论视角、研究对象与学术谱系。",
     )
 
 
 def _build_stem_graph(full_text: str, title: str) -> UnifiedPaperGraph:
     question_label = _first_sentence_matching(full_text, ("problem", "task", "问题", "任务"), f"{title} 的研究问题")
-    method_label = _first_sentence_matching(full_text, ("method", "model", "algorithm", "方法", "模型", "算法"), "主要方法")
+    method_label = _first_sentence_matching(
+        full_text,
+        ("method", "model", "algorithm", "方法", "模型", "算法"),
+        "主要方法",
+    )
     dataset_label = _first_sentence_matching(full_text, ("dataset", "benchmark", "数据集", "基准"), "实验数据集")
     metric_label = _first_sentence_matching(full_text, ("accuracy", "f1", "metric", "指标", "准确率"), "评测指标")
     baseline_label = _first_sentence_matching(full_text, ("baseline", "基线", "对比方法"), "对比基线")
-    claim_label = _first_sentence_matching(full_text, ("claim", "improve", "outperform", "提升", "优于"), "核心实验声称")
+    claim_label = _first_sentence_matching(
+        full_text,
+        ("claim", "improve", "outperform", "提升", "优于"),
+        "核心实验声称",
+    )
     evidence_label = _first_sentence_matching(full_text, ("experiment", "result", "实验", "结果"), "实验结果证据")
     nodes = [
         GraphNode(id="n_question", label=question_label, type=NodeType.RESEARCH_QUESTION),
@@ -176,9 +184,21 @@ def _build_stem_graph(full_text: str, title: str) -> UnifiedPaperGraph:
     ]
     edges = [
         GraphEdge(id="e_method_question", source="n_method", target="n_question", label="ADDRESSES", type="ADDRESSES"),
-        GraphEdge(id="e_method_dataset", source="n_method", target="n_dataset", label="EVALUATED_ON", type="EVALUATED_ON"),
+        GraphEdge(
+            id="e_method_dataset",
+            source="n_method",
+            target="n_dataset",
+            label="EVALUATED_ON",
+            type="EVALUATED_ON",
+        ),
         GraphEdge(id="e_claim_metric", source="n_claim", target="n_metric", label="MEASURED_BY", type="MEASURED_BY"),
-        GraphEdge(id="e_claim_baseline", source="n_claim", target="n_baseline", label="COMPARES_TO", type="COMPARES_TO"),
+        GraphEdge(
+            id="e_claim_baseline",
+            source="n_claim",
+            target="n_baseline",
+            label="COMPARES_TO",
+            type="COMPARES_TO",
+        ),
         GraphEdge(id="e_evidence_claim", source="n_evidence", target="n_claim", label="SUPPORTS", type="SUPPORTS"),
     ]
     return UnifiedPaperGraph(
@@ -192,7 +212,9 @@ def _build_stem_graph(full_text: str, title: str) -> UnifiedPaperGraph:
 
 
 async def extract(full_text: str, paradigm: Paradigm) -> UnifiedPaperGraph:
-    """Extract a validated `UnifiedPaperGraph` for the requested paradigm."""
+    """Extract a validated ``UnifiedPaperGraph`` for the requested paradigm."""
+    if get_settings().is_llm_mock:
+        return mock_extract(full_text, paradigm)
 
     if not full_text or not full_text.strip():
         raise ValueError("full_text must be a non-empty string.")

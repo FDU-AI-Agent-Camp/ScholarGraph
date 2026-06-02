@@ -32,8 +32,8 @@ V1 是首个**可演示、可评测**的纵向切片版本：从 PDF/文本输�
 2. 各范式至少 1 篇生成可解析的 `UnifiedPaperGraph` JSON，Schema 校验通过且无越界节点类型。
 3. 对单篇至少 3 类问题（摘要 / 细节 / 验证）能返回**可复核**的图谱路径引用。
 4. 双文巡检产出 1 份结构化报告（含范式、触发模式、涉及节点）。
-5. `uv sync` + `uv run pytest` 通过；`uv run` 可一键跑通 LangGraph 主流程或等价入口脚本。
-6. 文档：`docs/v1/` 任务状态与 `README` 运行说明同步更新。
+5. `uv sync` + `uv run python scripts/check_backend.py` 通过；`uv run python scripts/run_v1_ac_gates.py` 与 `run_cp4_rehearsal.py --seed` 在合 develop 前可复跑。
+6. 文档：`docs/v1/`、`README`、门禁脚本说明与当前实现对齐。
 
 ## 技术栈（既定）
 

@@ -1,0 +1,72 @@
+[project]
+name = "scholargraph"
+version = "0.1.0"
+description = "ScholarGraph — 学术论文逻辑解构与共同体发现 Agent（后端）"
+readme = "README.md"
+requires-python = ">=3.11,<3.14"
+license = { text = "MIT" }
+authors = [{ name = "FDU-AI-Agent-Camp" }]
+dependencies = [
+    "fastapi>=0.115.0",
+    "uvicorn[standard]>=0.32.0",
+    "pydantic>=2.10.0",
+    "pydantic-settings>=2.6.0",
+    "python-dotenv>=1.0.0",
+    "python-multipart>=0.0.12",
+    "httpx>=0.28.0",
+    "langgraph>=0.2.60",
+    "langchain-core>=0.3.0",
+    "langchain-openai>=0.3.0",
+    "pymupdf>=1.24.0",
+]
+
+[project.optional-dependencies]
+mysql = [
+    "pymysql>=1.1.0",
+    "cryptography>=43.0.0",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.3.0",
+    "pytest-asyncio>=0.24.0",
+    "httpx>=0.28.0",
+    "ruff>=0.8.0",
+]
+e2e = [
+    "playwright>=1.49.0",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["backend"]
+
+[tool.uv]
+default-groups = ["dev"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+testpaths = ["tests"]
+pythonpath = ["."]
+filterwarnings = [
+    "ignore::DeprecationWarning",
+]
+markers = [
+    "red: 红灯用例，依赖尚未交付的 BE 模块；默认排除，使用 pytest -m red",
+    "integration: 跨节点 / 编译后工作流集成测试",
+    "three_branch: FE + platform + ingest 三分支联调（语料缺失时 skip）",
+]
+addopts = "-m 'not red'"
+
+[tool.ruff]
+line-length = 120
+target-version = "py311"
+src = ["backend", "tests", "scripts"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+ignore = ["B008"]

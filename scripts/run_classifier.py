@@ -10,11 +10,10 @@ import sys
 from pathlib import Path
 from typing import Any
 
-
 REPO_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO_ROOT))
 
-from backend.agents import classify
+from backend.agents import classify  # noqa: E402
 
 LABELS_PATH = REPO_ROOT / "docs" / "v1" / "eval" / "classifier_labels.csv"
 PAPERS_LIST_PATH = REPO_ROOT / "docs" / "api" / "fixtures" / "papers-list.json"
@@ -23,13 +22,7 @@ PAPERS_LIST_PATH = REPO_ROOT / "docs" / "api" / "fixtures" / "papers-list.json"
 def _load_fixture_inputs() -> dict[str, str]:
     payload = json.loads(PAPERS_LIST_PATH.read_text(encoding="utf-8"))
     items = payload["data"]["items"]
-    return {
-        item["paper_id"]: (
-            f"Title: {item['title']}\n"
-            f"Known workflow status: {item['status']}"
-        )
-        for item in items
-    }
+    return {item["paper_id"]: (f"Title: {item['title']}\nKnown workflow status: {item['status']}") for item in items}
 
 
 async def _classify_text(text: str) -> dict[str, Any]:

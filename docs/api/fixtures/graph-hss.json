@@ -14,6 +14,20 @@
         "target": "n1",
         "label": "SUB_ARGUMENT_OF",
         "type": "SUB_ARGUMENT_OF"
+      },
+      {
+        "id": "e2",
+        "source": "n_lens",
+        "target": "n1",
+        "label": "LENS_OF",
+        "type": "LENS_OF"
+      },
+      {
+        "id": "e3",
+        "source": "n_lens",
+        "target": "n2",
+        "label": "INFORMS",
+        "type": "INFORMS"
       }
     ]
   },

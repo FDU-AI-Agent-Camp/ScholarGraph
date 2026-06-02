@@ -43,12 +43,12 @@ feature/backend/{工作类型}/{简述}
 # 安装 uv 后
 uv --version
 
-# 同步依赖（P0 合并后可用；若 pyproject 尚未合入，先跳过，等 BE-L 通知）
-uv sync --group dev
+# 同步依赖（含开发组 pytest / ruff）
+uv sync
 
 # 环境变量
 cp .env.example .env
-# 编辑 .env，填入 SCHOLARGRAPH_API_KEY（向 BE-L 索取，勿提交 Git）
+# 默认 LLM_MODE=mock，无需 Key 即可联调；接华为云 SaaS 时改为 live 并填 SCHOLARGRAPH_API_KEY + LLM_API_BASE_URL
 ```
 
 **冒烟测试**（P0 完成后）：
@@ -78,6 +78,8 @@ uv run pytest -m integration
 
 ## 4. 前端（FE）
 
+`frontend/` 骨架已包含 Vue 3 + Vite + Pinia + Element Plus + G6；详见 [frontend/README.md](../../frontend/README.md)。
+
 ```bash
 cd frontend
 npm install
@@ -90,7 +92,7 @@ npm run dev
 
 **Mock 开发**（后端未就绪时）：
 
-1. 复制 [`docs/api/fixtures/`](../api/fixtures/) 到 `frontend/src/mocks/`
+1. 使用 [`docs/api/fixtures/`](../api/fixtures/)（后端 Mock 同源）；可选 `import '@/mocks'` 见 [`frontend/src/mocks/README.md`](../../frontend/src/mocks/README.md)
 2. 或用 MSW 拦截 `/api/v1/*`，响应体与 fixtures 一致
 3. 类型生成（OpenAPI 就绪后）：
 
@@ -128,7 +130,18 @@ npx openapi-typescript ../docs/api/openapi.yaml -o src/types/api.ts
 | 周会 | 30min，过 [任务看板](./work-assignment.md#6-任务看板) |
 | 契约变更 | Issue `[API RFC]` / `[Schema RFC]`，@BE-L + 相关人 |
 
+**门禁脚本**（仓库根目录，与 CI 对齐）：
+
+```bash
+uv run python scripts/check_backend.py          # 每个后端 PR
+uv run python scripts/run_d_gates.py            # 合 develop 前（D-01～D-10）
+cd frontend && npm run check:ci                 # 每个前端 PR（= CI frontend.yml）
+uv run python scripts/run_v1_ac_gates.py        # 答辩前 A～C 聚合
+uv run python scripts/run_cp4_rehearsal.py --seed   # CP4 24 步（需前后端 dev）
+```
+
 ---
+
 
 ## 7. 常见问题
 

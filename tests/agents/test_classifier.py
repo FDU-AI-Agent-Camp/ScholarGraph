@@ -10,7 +10,6 @@ from pathlib import Path
 from backend.agents import classify
 from backend.schemas import Paradigm
 
-
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
 
@@ -38,10 +37,7 @@ def test_classifies_stem_experiment_text() -> None:
 
 def test_classifies_hss_theory_text() -> None:
     result = run_async(
-        classify(
-            "标题：平台零工经济与劳动者心理。本文通过访谈材料和公共领域理论视角，"
-            "分析劳动者经验并修正既有研究。"
-        )
+        classify("标题：平台零工经济与劳动者心理。本文通过访谈材料和公共领域理论视角，分析劳动者经验并修正既有研究。")
     )
 
     assert result.paradigm == Paradigm.HSS.value
@@ -57,4 +53,3 @@ def test_fixture_labels_are_three_for_three() -> None:
     predictions = {row["paper_id"]: run_async(classify(inputs[row["paper_id"]])).paradigm for row in rows}
 
     assert predictions == {row["paper_id"]: row["paradigm_gold"] for row in rows}
-

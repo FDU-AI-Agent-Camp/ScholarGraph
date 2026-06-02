@@ -7,12 +7,11 @@ import asyncio
 import sys
 from pathlib import Path
 
-
 REPO_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO_ROOT))
 
-from backend.agents import extract
-from backend.schemas import Paradigm
+from backend.agents import extract  # noqa: E402
+from backend.schemas import Paradigm  # noqa: E402
 
 
 def _parse_args() -> argparse.Namespace:
