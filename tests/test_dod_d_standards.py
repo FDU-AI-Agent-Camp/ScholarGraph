@@ -10,7 +10,12 @@ from scripts.d_gates_lib import (
     CONVENTIONAL_COMMIT_TYPES,
     REPO_ROOT,
     api_route_handlers_missing_docstrings,
+    backend_files_defining_api_router_outside_platform,
     backend_python_files_exceeding_line_budget,
+    git_paths_are_ignored,
+    git_sensitive_paths_must_not_be_tracked,
+    lockfile_declares_npm_package,
+    lockfile_declares_python_project,
     scan_handoff_modules_for_private_routes,
     validate_conventional_commit_subject,
     validate_feature_branch_name,
@@ -166,3 +171,28 @@ def test_d07_handoff_doc_reiterates_no_private_routes() -> None:
     text = handoff.read_text(encoding="utf-8")
     assert "不要" in text and "HTTP 路由" in text
     assert "APIRouter" in text or "只交付 Service" in text
+
+
+def test_d07_platform_layer_is_only_api_router_owner() -> None:
+    assert not backend_files_defining_api_router_outside_platform()
+
+
+def test_d09_git_ignores_env_and_progress_when_in_work_tree() -> None:
+    result = subprocess.run(
+        ["git", "rev-parse", "--is-inside-work-tree"],
+        cwd=REPO_ROOT,
+        capture_output=True,
+        check=False,
+    )
+    if result.returncode != 0:
+        pytest.skip("not a git work tree")
+    assert not git_paths_are_ignored((".env", "progress.md"))
+
+
+def test_d09_sensitive_paths_not_in_git_index() -> None:
+    assert not git_sensitive_paths_must_not_be_tracked()
+
+
+def test_d10_lockfiles_declare_project_names() -> None:
+    assert lockfile_declares_python_project("scholargraph")
+    assert lockfile_declares_npm_package("scholargraph-frontend")

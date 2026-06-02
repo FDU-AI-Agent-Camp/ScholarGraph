@@ -199,3 +199,82 @@ def git_recent_commit_subjects(*, count: int = 10) -> list[str]:
     if result.returncode != 0:
         return []
     return [line for line in (result.stdout or "").splitlines() if line.strip()]
+
+
+# Paths that must never appear in ``git ls-files`` (D-09).
+SENSITIVE_TRACKED_PATHS = (
+    ".env",
+    "progress.md",
+    "ui-design-progress.md",
+    "API KEY.txt",
+)
+
+# Only BE-L platform layer may define FastAPI routers (D-07).
+PLATFORM_ROUTER_PREFIXES = (
+    "backend/api/routes/",
+    "backend/api/router.py",
+)
+
+
+def backend_files_defining_api_router_outside_platform() -> list[str]:
+    """Return backend ``*.py`` paths outside platform layer that reference ``APIRouter``."""
+    violations: list[str] = []
+    backend_root = REPO_ROOT / "backend"
+    if not backend_root.is_dir():
+        return violations
+    for path in sorted(backend_root.rglob("*.py")):
+        rel = path.relative_to(REPO_ROOT).as_posix()
+        if "APIRouter" not in path.read_text(encoding="utf-8"):
+            continue
+        if any(rel.startswith(prefix) or rel == prefix for prefix in PLATFORM_ROUTER_PREFIXES):
+            continue
+        violations.append(rel)
+    return violations
+
+
+def git_sensitive_paths_must_not_be_tracked() -> list[str]:
+    """Return sensitive paths that are currently tracked by git."""
+    result = subprocess.run(
+        ["git", "ls-files", "--error-unmatch", *SENSITIVE_TRACKED_PATHS],
+        cwd=REPO_ROOT,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        check=False,
+    )
+    if result.returncode == 0:
+        return [line.strip() for line in result.stdout.splitlines() if line.strip()]
+    if result.returncode == 1 and "did not match" in (result.stderr or ""):
+        return []
+    return []
+
+
+def git_paths_are_ignored(relative_paths: tuple[str, ...]) -> list[str]:
+    """Return paths from *relative_paths* that are not ignored by git."""
+    not_ignored: list[str] = []
+    for rel in relative_paths:
+        check = subprocess.run(
+            ["git", "check-ignore", "-q", rel],
+            cwd=REPO_ROOT,
+            capture_output=True,
+            check=False,
+        )
+        if check.returncode != 0:
+            not_ignored.append(rel)
+    return not_ignored
+
+
+def lockfile_declares_python_project(project_name: str) -> bool:
+    lock_path = REPO_ROOT / "uv.lock"
+    if not lock_path.is_file():
+        return False
+    return f'name = "{project_name}"' in lock_path.read_text(encoding="utf-8")
+
+
+def lockfile_declares_npm_package(package_name: str) -> bool:
+    lock_path = REPO_ROOT / "frontend" / "package-lock.json"
+    if not lock_path.is_file():
+        return False
+    text = lock_path.read_text(encoding="utf-8")
+    return f'"name": "{package_name}"' in text and '"lockfileVersion"' in text
