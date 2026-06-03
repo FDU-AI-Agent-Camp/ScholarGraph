@@ -167,7 +167,7 @@ ScholarGraph 是面向科研阅读的 **AI Agent** 项目：编排（如 LangGra
 
 1. **安装依赖**：在 `frontend/` 下执行 `npm install`（勿在仓库根目录用 npm 管理后端）。
 2. **本地开发**：`npm run dev`（默认 `http://localhost:5173`），后端 `uv run uvicorn backend.main:app --reload`（默认 `http://localhost:8000`）。
-3. **环境变量**：`frontend/.env.development` 中配置 `VITE_API_BASE_URL=http://localhost:8000`（或走 Vite 代理 `/api`）。
+3. **环境变量**：复制 `frontend/.env.development.example` 为 `.env.development`。本地开发推荐 **留空** `VITE_API_BASE_URL`，由 Vite 将 `/api` 代理到 `http://127.0.0.1:8000`；直连后端时再设为 `http://localhost:8000`。可选 `VITE_USE_MOCK=false` 关闭前端 Mock。
 4. **对接方式**：常规 CRUD 用 REST；**多尺度问答**用 **SSE** 流式输出；**PDF 解构建图**用 `POST /papers` + **长轮询** `GET /papers/{id}/status`（详见 tech-stack 文档）。
 5. **契约**：后端图谱 JSON 字段与 `UnifiedPaperGraph` / OpenAPI 一致；前端先用 Mock，禁止在浏览器内持有 LLM API Key。
 

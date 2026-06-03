@@ -30,8 +30,9 @@ FE 联调 develop
 
 | 类型 | 路径 |
 |------|------|
-| 实现 | `backend/ingest/pdf.py`、`backend/ingest/snippets.py` |
+| 实现 | `backend/ingest/pdf.py`（PyMuPDF 全文 + 前 25 页 head）、`backend/ingest/snippets.py`（分类器输入切片） |
 | 导出 | `backend/ingest/__init__.py` 暴露 `ingest_pdf` |
+| 门面 | `backend/services/ingest_service.py`（workflow / API 调用） |
 | 脚本 | `scripts/extract_text.py` |
 | 测试 | `tests/ingest/` |
 | 文档 | `docs/v1/corpus.md` 填齐 |
@@ -110,7 +111,7 @@ async def extract(full_text: str, paradigm: Paradigm) -> UnifiedPaperGraph: ...
 | 类型 | 路径 |
 |------|------|
 | 存储/查询 | `backend/graph/store.py`、`backend/graph/query.py` |
-| 问答 | `backend/agents/qa.py`、`backend/prompts/qa.md` |
+| 问答 | `backend/graph/qa.py`、`backend/prompts/qa.md` |
 | 脚本 | `scripts/run_qa.py` |
 | 测试 | `tests/graph/` |
 
@@ -138,7 +139,7 @@ async def qa_stream(paper_id: str, question: str) -> AsyncIterator[QaEvent]:
   - **请 BE-L 注册 `GET /papers/{id}/graph` → GraphStore + to_g6**
   - **请 BE-L 注册 `POST /papers/{id}/qa/stream` → qa_stream**
 
-> **平台接线状态（联调分支）**：`backend/api/routes/papers.py` 已委托 `qa_stream()`，`get_graph` 经 `GraphStore.load`。新模块 PR 仍须勾选上列交付项，便于 Review 与回归。
+> **平台接线状态**：`backend/api/routes/papers.py` 已注册 `GET .../graph`、`POST .../qa/stream`（委托 `backend/graph/qa.py` `qa_stream()`）。`POST /papers` 经 `paper_pipeline_scheduler.schedule_paper_pipeline` 异步启动 workflow。新模块 PR 仍须勾选上列交付项，便于 Review 与回归。
 
 ### 禁止
 
@@ -188,11 +189,11 @@ async def run_patrol(paper_ids: list[str], mode: PatrolMode) -> PatrolReport:
 | 步骤 | 动作 |
 |------|------|
 | 1 | `from backend.ingest import ingest_pdf` 等导入无循环依赖 |
-| 2 | `workflow.py` 节点：`ingest` → `classify` → `extract` → `store`，更新 `PaperStatus` / `stage` |
-| 3 | `api/routes/papers.py`：REST + 调用 `run_paper_pipeline` |
-| 4 | `api/routes/qa.py`：SSE 序列化 `qa_stream` |
+| 2 | `graph/workflow.py` 节点：`ingest` → `classify` → `extract` → `store`，经 `PipelineStatusService` 更新 `stage` / `percent` |
+| 3 | `api/routes/papers.py`：REST + `schedule_paper_pipeline` |
+| 4 | `api/routes/papers.py`：`POST .../qa/stream` SSE 序列化 `qa_stream()` |
 | 5 | `api/routes/patrol.py`：调用 `run_patrol` |
-| 6 | `tests/integration/test_pipeline_mock.py` 端到端 Mock |
+| 6 | `tests/integration/` 端到端 Mock / DoD |
 | 7 | 同步 `openapi.yaml` 与 `/docs` |
 
 ---
@@ -201,10 +202,10 @@ async def run_patrol(paper_ids: list[str], mode: PatrolMode) -> PatrolReport:
 
 | HTTP | 调用 |
 |------|------|
-| `POST /papers` | 存文件 → `asyncio.create_task(run_paper_pipeline(...))` |
-| `GET /papers/{id}/status` | 读任务状态表 / 内存状态 |
+| `POST /papers` | 存文件 → `schedule_paper_pipeline(paper_id, pdf_path)` |
+| `GET /papers/{id}/status` | `PaperService.get_status` / `PipelineStatusService` 快照 |
 | `GET /papers/{id}/graph` | `GraphStore.load` + `to_g6` |
-| `POST /papers/{id}/qa/stream` | `qa_stream` → SSE |
+| `POST /papers/{id}/qa/stream` | `qa_stream` → SSE（同在 `papers.py`） |
 | `POST /patrol` | `run_patrol` |
 
 ---

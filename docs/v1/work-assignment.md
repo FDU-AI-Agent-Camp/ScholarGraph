@@ -5,6 +5,8 @@
 > **协作方式**（接口、Service、RFC、联调）→ 见 [协作规范](./collaboration.md)  
 > **版本范围** → 见 [V1 README](./README.md)
 
+> **实现状态（2026-06）**：P0～P6 与 FE 主路径已在 `develop` 合入；CP4 24 步 rehearsal、E-10 live 异常路径、上传后自动流水线均已可复跑。下文任务 ID 仍作历史分工参考；验收以 [onboarding.md](./onboarding.md) 门禁脚本与 [frontend-demo-path.md](./eval/frontend-demo-path.md) 为准。
+
 ---
 
 ## 1. 角色与依赖总览
@@ -15,7 +17,7 @@
 | **BE-L** | 后端负责人 · 基座与编排 | `backend/api/`、`llm/`、`graph/workflow.py`、`docs/api/` | `feature/backend/platform/{简述}` |
 | **BE-1** | 后端 · 摄入 | `backend/ingest/` | `feature/backend/ingest/{简述}` |
 | **BE-2** | 后端 · Agent | `backend/schemas/`、`backend/agents/`（分类/抽取）、`backend/prompts/` | `feature/backend/agent/{简述}` |
-| **BE-3** | 后端 · 图谱与问答 | `backend/graph/`、`backend/agents/qa.py` | `feature/backend/graph-qa/{简述}` |
+| **BE-3** | 后端 · 图谱与问答 | `backend/graph/`（含 `qa.py`） | `feature/backend/graph-qa/{简述}` |
 | **BE-4** | 后端 · 巡检 | `backend/patrol/`、`backend/schemas/patrol.py` | `feature/backend/patrol/{简述}` |
 
 ```mermaid

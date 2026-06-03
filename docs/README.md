@@ -2,6 +2,8 @@
 
 产品愿景与架构总览：[README.md](../README.md)。
 
+> **V1 已实现**：FastAPI + Vue 3 工作台、LangGraph 流水线、SSE 问答与双文巡检均已合入；新人从 [v1/onboarding.md](./v1/onboarding.md) 起，答辩路径见 [v1/eval/frontend-demo-path.md](./v1/eval/frontend-demo-path.md)。
+
 ## V1 核心文档（请优先阅读）
 
 | 文档 | 说明 |

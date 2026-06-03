@@ -36,7 +36,21 @@
 
 - `status=processing` 时必有 `stage`（且 `stage` ≠ `ready`）。
 - `status=ready` 时 `stage=ready`，`percent=100`。
+- `status=failed` 时 `stage=failed`，`percent=0`（流水线写入；Mock 样例 `hss-failed-001` 为 UI 演示保留 `percent=40`，见 [§8](#8-get-apiv1paperspaper_idstatus) 说明）。
 - `status=pending`：任务已创建，流水线尚未写入 `stage` 时可返回 `stage=null` 或省略。
+
+### 2.1 流水线 `stage` 与 `percent` 映射
+
+与 `backend/graph/state.py` `STAGE_PERCENT` 一致：
+
+| `stage` | `percent` |
+|---------|-----------|
+| `ingesting` | 20 |
+| `classifying` | 50 |
+| `extracting` | 80 |
+| `storing` | 95 |
+| `ready` | 100 |
+| `failed` | 0 |
 
 ---
 
@@ -50,11 +64,36 @@
 | 请求体 | `{"question": "..."}` |
 | FE 库 | `@microsoft/fetch-event-source`（**不用** GET + `EventSource`） |
 
-详见 [§8](#8-post-apiv1paperspaper_idqastream)。
+详见 [§9](#9-post-apiv1paperspaper_idqastream)。
 
 ---
 
-## 4. `POST /api/v1/papers`
+## 4. `GET /api/v1/health`
+
+**200**：
+
+```json
+{
+  "data": {
+    "status": "ok",
+    "version": "1.0.0",
+    "llm_mode": "mock",
+    "llm_connected": false,
+    "llm_note": "Mock 模式：LLM 云服务尚未接入，问答/巡检返回本地模板。"
+  },
+  "meta": { "request_id": "…" }
+}
+```
+
+| 字段 | 说明 |
+|------|------|
+| `llm_mode` | `mock` \| `live`，与 `.env` `LLM_MODE` 一致 |
+| `llm_connected` | `live` 时为 `true`；`mock` 时为 `false` |
+| `llm_note` | 供前端 Banner 展示的人类可读说明 |
+
+---
+
+## 5. `POST /api/v1/papers`
 
 **请求**：`multipart/form-data`，字段 `file`（PDF，`application/pdf`，建议 ≤32MB）。
 
@@ -85,7 +124,7 @@
 
 ---
 
-## 5. `GET /api/v1/papers`
+## 6. `GET /api/v1/papers`
 
 **查询参数（均可选）**：
 
@@ -121,7 +160,7 @@
 
 ---
 
-## 6. `GET /api/v1/papers/{paper_id}`
+## 7. `GET /api/v1/papers/{paper_id}`
 
 **200（`ready`）**：
 
@@ -148,7 +187,7 @@
 
 ---
 
-## 7. `GET /api/v1/papers/{paper_id}/status`
+## 8. `GET /api/v1/papers/{paper_id}/status`
 
 **200（处理中）**：
 
@@ -168,14 +207,14 @@
 
 **200（完成）**：`status=ready`，`stage=ready`，`percent=100`。  
 
-**200（失败）**：`status=failed`，`stage=failed`；并返回 `error_code` 与 `failed_during`（失败时所在流水线步骤，不含 `ready`/`failed`）：
+**200（失败）**：`status=failed`，`stage=failed`，`percent=0`；并返回 `error_code` 与 `failed_during`（失败时所在流水线步骤，不含 `ready`/`failed`）：
 
 ```json
 {
   "data": {
     "paper_id": "hss-failed-001",
     "status": "failed",
-    "percent": 40,
+    "percent": 0,
     "stage": "failed",
     "message": "分类阶段 LLM 返回无效 JSON",
     "updated_at": "2026-05-19T10:15:00Z",
@@ -186,11 +225,11 @@
 }
 ```
 
-本地 Mock 论文 ID：`hss-failed-001`（fixture 见 `docs/api/fixtures/paper-status-hss-failed-001.json`）。
+> **Mock 样例说明**：[`fixtures/paper-status-hss-failed-001.json`](../api/fixtures/paper-status-hss-failed-001.json) 中 `percent=40` 为前端联调历史样例（模拟「卡在分类阶段」的进度条）；**真实流水线**经 `PipelineStatusService.mark_failed()` 写入 `percent=0`。联调时以 `error_code` / `failed_during` / `message` 为准。
 
 ---
 
-## 8. `POST /api/v1/papers/{paper_id}/qa/stream`
+## 9. `POST /api/v1/papers/{paper_id}/qa/stream`
 
 **请求**：
 
@@ -220,13 +259,13 @@ data: {"answer_id":"ans-550e8400"}
 | `message` | `{"delta": string}` |
 | `citation` | `{"paper_id", "node_id", "label"}` |
 | `done` | `{"answer_id": string}` |
-| `error` | `{"code", "message"}` |
+| `error` | `{"code", "message"}` — 流内 LLM/网络异常时为 `QA_STREAM_ERROR`（HTTP 仍为 200 + SSE，随后通常有 `done`） |
 
 建立流之前的错误（如 404/409）返回 JSON 错误体，不是 SSE。
 
 ---
 
-## 9. `POST /api/v1/patrol`
+## 10. `POST /api/v1/patrol`
 
 **请求**：
 
@@ -236,6 +275,13 @@ data: {"answer_id":"ans-550e8400"}
   "mode": "lens_clash"
 }
 ```
+
+| `mode` | 说明 |
+|--------|------|
+| `lens_clash` | HSS：同一研究对象上不同 `Analytical_Lens` 的学派冲突（**默认**） |
+| `contradiction` | STEM：相互冲突的核心声称 / 实验结论对照 |
+
+`paper_ids` 长度必须为 **2**；两篇论文均须 `status=ready`。
 
 **200**：
 
@@ -266,7 +312,7 @@ V1 同步接口，建议超时 60s。
 
 ---
 
-## 10. Fixtures
+## 11. Fixtures
 
 | 文件 | 用途 |
 |------|------|

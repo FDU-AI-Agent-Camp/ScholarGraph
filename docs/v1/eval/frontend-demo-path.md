@@ -66,7 +66,8 @@ npm run dev
 - URL：`http://localhost:5173/papers`
 - 操作：在页面内嵌上传区选择 PDF，提交 `POST /papers`。
 - 验收：列表刷新或出现新论文；失败时展示 `INGEST_FAILED` 等错误提示。
-- 备注：若后端 ingest 未就绪，可跳过上传，直接使用 seed 论文 `hss-001` / `hss-002`。
+- 上传成功后详情页自动轮询 `GET .../status`，直至 `ready` / `failed`（支持暂停/继续刷新）。
+- 亦可跳过上传，直接使用 seed 论文 `hss-001` / `hss-002`。
 
 ### 3. 论文详情（状态轮询）
 
@@ -91,7 +92,7 @@ npm run dev
   - 流式 `message` 增量展示答案；
   - `citation` 事件生成可点选标签；
   - 点选 citation 后内嵌 compact 图谱高亮，可跳转全屏图谱页 `?node=`。
-- 备注：BE-3 真流未就绪时，后端可能仍返回 Mock SSE；前端壳与单测已覆盖事件解析。
+- `LLM_MODE=mock` 时返回本地模板；`live` 时走真实 MaaS。流内异常见 SSE `error` 事件 `QA_STREAM_ERROR`。
 
 ### 6. 共同体巡检（Patrol）
 
