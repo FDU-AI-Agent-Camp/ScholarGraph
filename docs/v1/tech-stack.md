@@ -27,7 +27,7 @@
 | 框架 | **Vue 3** | Composition API |
 | 构建 | **Vite** | 开发服务器默认 `http://localhost:5173` |
 | 状态 | **Pinia** | 论文列表、当前 `paper_id`、任务进度、问答会话等 |
-| UI 组件库 | **Ant Design Vue** 或 **Element Plus** | 表格、抽屉、步骤条、上传等「工作台」组件 |
+| UI 组件库 | **Element Plus** | 表格、抽屉、步骤条、上传等「工作台」组件（V1 已采用） |
 | 图谱渲染 | **AntV G6 v5** | 知识图谱主视图；节点点击与 QA 引用联动 |
 | HTTP 客户端 | **axios** 或 `fetch` 封装 | 统一 baseURL、错误处理 |
 | 类型（可选） | `openapi-typescript` | 由后端 OpenAPI 生成 TS 类型 |
@@ -60,7 +60,7 @@
 
 | 场景 | 方法 | 示例路径 |
 |------|------|----------|
-| 健康检查 | GET | `/health` |
+| 健康检查 | GET | `/api/v1/health`（含 `llm_mode` / `llm_connected`） |
 | 文献列表 | GET | `/papers` |
 | 上传 PDF | POST | `/papers`（`multipart/form-data`） |
 | 论文元数据 / 范式 | GET | `/papers/{paper_id}`（含内嵌 `classification`） |
@@ -80,12 +80,19 @@
 
 - **用途**：单篇「PDF 解析 → 分类 → 抽取 → 建图」约 1–2 分钟。
 - **流程**：
-  1. `POST /papers` 立即返回 `{ "paper_id", "status": "pending" }`
-  2. FE 轮询 `GET /papers/{id}/status`，例如：
-     - `20%` 正在解析 PDF
-     - `50%` 正在范式分类 / HSS 理论视角识别
-     - `80%` 正在抽取图谱
-     - `100%` 建图完成
+  1. `POST /papers` 立即返回 `{ "paper_id", "status": "pending" }`，后台 `asyncio.create_task(run_paper_pipeline(...))`
+  2. FE 轮询 `GET /papers/{id}/status`，阶段与进度百分比（实现见 `backend/graph/state.py` `STAGE_PERCENT`）：
+
+     | `stage` | `percent` | 典型 `message` |
+     |---------|-----------|----------------|
+     | `ingesting` | 20 | 正在解析 PDF |
+     | `classifying` | 50 | 正在识别范式与理论视角… |
+     | `extracting` | 80 | 正在抽取逻辑图谱 |
+     | `storing` | 95 | 正在写入图谱存储 |
+     | `ready` | 100 | 建图完成 |
+     | `failed` | 0 | 流水线失败（含 `error_code` / `failed_during`） |
+
+  3. `status=ready` 后 `GET /papers/{id}/graph` 拉取 G6 数据
 - **WebSocket**：人力充裕时可由 L 增加 `WS /papers/{id}/progress`；V1 不强制。
 
 ```mermaid
@@ -118,7 +125,7 @@ sequenceDiagram
 | API 文档 | `http://localhost:8000/docs` |
 
 **CORS（L 负责）**：FastAPI 配置 `CORSMiddleware`，允许前端源（含 `5173`）及必要 Header。  
-**Vite 代理（可选）**：`frontend/vite.config.ts` 中 `/api` → `8000`，生产环境用 `VITE_API_BASE_URL`。
+**Vite 代理（推荐）**：`frontend/vite.config.ts` 将 `/api` → `http://127.0.0.1:8000`；此时 `VITE_API_BASE_URL` **留空**，axios / SSE 使用相对路径 `/api/v1`。生产环境再配置完整 `VITE_API_BASE_URL`。
 
 ```python
 # 基座示例（backend/main.py）

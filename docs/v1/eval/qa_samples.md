@@ -30,6 +30,7 @@ uv run python scripts/run_qa.py --smoke-m2 --seed-demo-graph
 uv run pytest tests/eval/test_m2_qa_multiscale.py -q
 ```
 
-## Live 模式（待验）
+## Live 模式
 
-接华为云 SaaS 时将 `LLM_MODE=live` 并配置 Key；人工按上表抽检 citation 是否与图谱节点一致。
+接华为云 ModelArts MaaS 时将 `LLM_MODE=live` 并配置 Key；人工按上表抽检 citation 是否与图谱节点一致。  
+异常路径（无效 Key、超时）见 `tests/integration/test_dod_e10_live_exceptions.py` 与 `scripts/probe_e10_live_exceptions.py`。

@@ -96,20 +96,21 @@ sequenceDiagram
 | `PAPER_NOT_FOUND` | 404 | 无 paper_id |
 | `INGEST_FAILED` | 400 | PDF 失败 |
 | `GRAPH_NOT_READY` | 409 | 建图未完成 |
-| `LLM_JSON_INVALID` | 502 | 模型 JSON 非法 |
+| `LLM_JSON_INVALID` | 502 | 模型 JSON 非法（流水线 `status=failed` 时亦作 `error_code`） |
 | `LLM_TIMEOUT` | 504 | 超时 |
+| `QA_STREAM_ERROR` | —（SSE `error` 事件） | 问答流内 LLM/网络异常；HTTP 200 + `text/event-stream` |
 
 ### 3.2 REST 端点索引
 
 | 方法 | 路径 | 主责 | 说明 |
 |------|------|------|------|
-| GET | `/health` | BE-L | 健康检查 |
+| GET | `/health` | BE-L | 健康检查；返回 `llm_mode` / `llm_connected` / `llm_note` |
 | GET | `/papers` | BE-L | 列表；`?paradigm=&status=&offset=&limit=` |
-| POST | `/papers` | BE-L | 上传 PDF；201 / 400 `INGEST_FAILED` → [§4](./api-contract.md#4-post-apiv1papers) |
-| GET | `/papers/{paper_id}` | BE-L | 元数据 + **内嵌** `classification` → [§6](./api-contract.md#6-get-apiv1paperspaper_id) |
-| GET | `/papers/{paper_id}/status` | BE-L | 长轮询；含 `status`+`stage` → [§7](./api-contract.md#7-get-apiv1paperspaper_idstatus) |
+| POST | `/papers` | BE-L | 上传 PDF；201 / 400 `INGEST_FAILED` → [§5](./api-contract.md#5-post-apiv1papers) |
+| GET | `/papers/{paper_id}` | BE-L | 元数据 + **内嵌** `classification` → [§7](./api-contract.md#7-get-apiv1paperspaper_id) |
+| GET | `/papers/{paper_id}/status` | BE-L | 长轮询；含 `status`+`stage` → [§8](./api-contract.md#8-get-apiv1paperspaper_idstatus) |
 | GET | `/papers/{paper_id}/graph` | BE-3 | G6；409 若未 ready |
-| POST | `/patrol` | BE-4 | 双文巡检 → [§9](./api-contract.md#9-post-apiv1patrol) |
+| POST | `/patrol` | BE-4 | 双文巡检 → [§10](./api-contract.md#10-post-apiv1patrol) |
 
 ### 3.3 SSE — 多尺度问答（已冻结）
 
@@ -118,9 +119,9 @@ sequenceDiagram
 | 路径 | **`POST /api/v1/papers/{paper_id}/qa/stream`** |
 | Body | `{"question": string}` |
 | FE | `@microsoft/fetch-event-source` + `AbortController` |
-| 实现 | BE-L 路由壳；BE-3 `qa_stream()` |
+| 实现 | BE-L 路由壳；BE-3 `backend/graph/qa.py` → `qa_stream()` |
 
-事件：`message` / `citation` / `done` / `error` → [api-contract §8](./api-contract.md#8-post-apiv1paperspaper_idqastream)
+事件：`message` / `citation` / `done` / `error`（含 `QA_STREAM_ERROR`）→ [api-contract §9](./api-contract.md#9-post-apiv1paperspaper_idqastream)
 
 ---
 
@@ -134,7 +135,7 @@ sequenceDiagram
 class IngestResult(TypedDict):
     paper_id: str
     full_text: str
-    classifier_input: str
+    classifier_input: str  # 标题+摘要+关键词+引言片段（PyMuPDF 前 25 页 head + snippets.py）
 
 async def ingest_pdf(file_path: Path, paper_id: str | None = None) -> IngestResult: ...
 ```
@@ -157,6 +158,7 @@ class GraphStore:
 class GraphQuery:
     def subgraph_for_question(self, graph: UnifiedPaperGraph, question: str) -> dict: ...
 
+# backend/graph/qa.py
 async def qa_stream(paper_id: str, question: str) -> AsyncIterator[QaEvent]: ...
 ```
 
@@ -197,7 +199,7 @@ async def run_paper_pipeline(paper_id: str, pdf_path: Path) -> None:
 | `backend/schemas/graph.py`、`paradigm.py`、`validators.py` | BE-2 | BE-3/4 只读；RFC |
 | `backend/schemas/patrol.py` | BE-4 | BE-L Review |
 | `backend/agents/classifier.py`、`extractor.py` | BE-2 | — |
-| `backend/agents/qa.py` | BE-3 | — |
+| `backend/graph/qa.py` | BE-3 | — |
 | `backend/graph/store.py`、`query.py` | BE-3 | BE-4 只读 store |
 | `backend/patrol/**` | BE-4 | — |
 | `backend/graph/workflow.py` | BE-L | 只调 Service，不内联业务 |
@@ -223,7 +225,7 @@ Issue 标题：`[Schema RFC] 简述` — 含动机、字段 diff、对 G6/OpenAP
 
 | 项 | 约定 |
 |----|------|
-| Base URL | `VITE_API_BASE_URL`，默认 `http://localhost:8000` |
+| Base URL | `VITE_API_BASE_URL`；**本地留空**时 axios / SSE 使用 `/api/v1`（Vite 代理到 8000） |
 | 路径 | `/api/v1/...` |
 | 认证 | V1 无；禁止浏览器持有 LLM Key |
 | 上传 | `FormData`，字段 `file` |

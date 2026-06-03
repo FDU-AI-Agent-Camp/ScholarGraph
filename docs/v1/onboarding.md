@@ -48,7 +48,9 @@ uv sync
 
 # 环境变量
 cp .env.example .env
-# 默认 LLM_MODE=mock，无需 Key 即可联调；接华为云 SaaS 时改为 live 并填 SCHOLARGRAPH_API_KEY + LLM_API_BASE_URL
+# 默认 LLM_MODE=mock，无需 Key 即可联调
+# 接华为云 ModelArts MaaS：LLM_MODE=live，填 SCHOLARGRAPH_API_KEY + LLM_API_BASE_URL
+# 模型名见 .env.example（默认 DeepSeek-V3-64K / Qwen3-32B-64K，与 backend/config.py 一致）
 ```
 
 **冒烟测试**（P0 完成后）：
@@ -63,6 +65,9 @@ uv run uvicorn backend.main:app --reload --host 127.0.0.1 --port 8000
 
 ```bash
 uv run pytest -m integration
+# E-10 live 异常路径（无效 Key / 超时，需 LLM_MODE=live 与真实 .env）
+uv run pytest tests/integration/test_dod_e10_live_exceptions.py -m live_e10 -q
+uv run python scripts/probe_e10_live_exceptions.py
 ```
 
 日常开发优先跑默认 pytest（Mock LLM，不耗额度）。
@@ -83,8 +88,9 @@ uv run pytest -m integration
 ```bash
 cd frontend
 npm install
-cp .env.development.example .env.development   # 若仓库已提供；否则新建：
-# VITE_API_BASE_URL=http://localhost:8000
+cp .env.development.example .env.development
+# 推荐留空 VITE_API_BASE_URL，走 Vite /api 代理；直连后端时设为 http://localhost:8000
+# VITE_USE_MOCK=false  # 默认关闭前端 Mock，走真实 API
 
 npm run dev
 # 默认 http://localhost:5173
@@ -145,8 +151,11 @@ uv run python scripts/run_cp4_rehearsal.py --seed   # CP4 24 步（需前后端 
 
 ## 7. 常见问题
 
-**Q：`uv sync` 失败 / 没有 `backend` 包？**  
-A：P0 可能尚未合入 `develop`，先阅读文档与 Mock 开发，等 BE-L 通知。
+**Q：`uv sync` 失败 / 找不到模块？**  
+A：确认在仓库根目录执行；Python 3.11+ 与 uv 已安装。仍失败时在群内 @BE-L。
+
+**Q：前端请求 404 / CORS？**  
+A：确认后端 `uv run uvicorn backend.main:app --reload --host 127.0.0.1 --port 8000` 已启动；前端 `VITE_API_BASE_URL` 留空走 Vite 代理，或设为 `http://localhost:8000` 直连。
 
 **Q：我能自己加一条 API 路由方便自测吗？**  
 A：不要。模块内写 Service + 脚本自测；路由由 BE-L 在汇总 PR 中注册。

@@ -2,6 +2,8 @@
 
 V1 是首个**可演示、可评测**的纵向切片版本：从 PDF/文本输入到范式分流、单篇逻辑图谱、带引用的多尺度问答，并完成**至少一种**双文共同体巡检（HSS Lens Clash 或 STEM 矛盾探测），最后由 LangGraph 串联全链路。
 
+> **当前状态**：上述能力已在仓库实现并通过 CP4 / DoD 门禁；答辩与联调见 [eval/frontend-demo-path.md](./eval/frontend-demo-path.md)。
+
 ## 版本目标
 
 | 维度 | V1 要做到 | V1 不做 |

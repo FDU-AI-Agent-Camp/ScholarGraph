@@ -228,13 +228,13 @@ flowchart LR
 | Agent 编排 | LangGraph | 分流状态机、多步工具调用、检查点与可观测日志 |
 | 结构化抽取 | Pydantic + 范式分 Schema | STEM / HSS 分支禁止越界节点类型 |
 | 抽取与生成 | GPT-4o、Llama 3 等 + JSON Schema | 分类器、抽取器、问答均需强约束输出 |
-| 前端与演示 | **Vue 3 + Vite**（主路径）；Gradio / Streamlit 仅作答辩备用 | 见 [docs/v1/tech-stack.md](docs/v1/tech-stack.md) |
+| 前端与演示 | **Vue 3 + Vite + Pinia + Element Plus + AntV G6 v5**（主路径）；Gradio / Streamlit 仅作答辩备用 | 见 [docs/v1/tech-stack.md](docs/v1/tech-stack.md) |
 
 具体版本与依赖以仓库根目录 **`pyproject.toml`** 与 **`uv.lock`** 为准（由 [uv](https://docs.astral.sh/uv/) 管理）。
 
-### 本地运行（后端）
+### 本地运行
 
-在仓库根目录：
+**终端 1 — 后端**（仓库根目录）：
 
 ```bash
 uv sync
@@ -245,13 +245,24 @@ uv run python scripts/run_d_gates.py     # D-01～D-10 代码基座（含 FE npm
 uv run uvicorn backend.main:app --reload --host 127.0.0.1 --port 8000
 ```
 
-合 **develop** / 答辩前可再跑：`uv run python scripts/run_v1_ac_gates.py`（`check:ci` + `run_qa`/`run_patrol` smoke）；E2E 见 `scripts/run_cp4_rehearsal.py`（24 步，需前后端已启动）。
+**终端 2 — 前端**（`frontend/`）：
 
-分步：`uv run ruff check backend tests scripts`、`uv run ruff format --check backend tests scripts`、`uv run pytest -q -m "not red"`。
+```bash
+cd frontend
+npm install
+cp .env.development.example .env.development   # 推荐留空 VITE_API_BASE_URL，走 Vite /api 代理
+npm run dev
+```
 
+- 前端：`http://localhost:5173`（`/api` 代理到 `http://127.0.0.1:8000`）
 - 健康检查：`GET http://127.0.0.1:8000/api/v1/health`（含 `llm_mode` / `llm_connected`）
 - Swagger：`http://127.0.0.1:8000/docs`
+- 浏览器答辩路径：`uv run python scripts/run_frontend_demo.py`（详见 [docs/v1/eval/frontend-demo-path.md](docs/v1/eval/frontend-demo-path.md)）
 - 新成员详见 [docs/v1/onboarding.md](docs/v1/onboarding.md)
+
+合 **develop** / 答辩前可再跑：`uv run python scripts/run_v1_ac_gates.py`（`check:ci` + `run_qa`/`run_patrol` smoke）；E2E 见 `scripts/run_cp4_rehearsal.py`（24 步，需前后端已启动）。
+
+分步（后端）：`uv run ruff check backend tests scripts`、`uv run ruff format --check backend tests scripts`、`uv run pytest -q -m "not red"`。
 
 ---
 
@@ -294,11 +305,30 @@ uv run uvicorn backend.main:app --reload --host 127.0.0.1 --port 8000
 
 ---
 
+## 实现状态（V1）
+
+仓库已包含可运行的 **V1 纵向切片**（`develop` / `main` 合入后）：
+
+| 能力 | 实现位置 | 说明 |
+|------|----------|------|
+| HTTP 基座 | `backend/api/routes/` | REST + SSE；前缀 `/api/v1` |
+| PDF 摄入 | `backend/ingest/` | PyMuPDF 解析；`ingest_pdf()` 供 workflow 调用 |
+| 范式分类 / 抽取 | `backend/agents/` | STEM / HSS 双轨；Pydantic Schema 约束 |
+| 图谱存储 / 问答 | `backend/graph/` | JSON 持久化；`qa_stream()` SSE 事件 |
+| 共同体巡检 | `backend/patrol/` | `lens_clash` / `contradiction` |
+| LangGraph 流水线 | `backend/graph/workflow.py` | 上传后 `asyncio.create_task` 异步跑通 ingest → store |
+| 前端工作台 | `frontend/` | 文献库、上传、详情轮询、G6 图谱、SSE 问答、巡检 |
+| LLM | `backend/llm/` | `LLM_MODE=mock`（默认）或 `live`（华为云 MaaS 等 OpenAI 兼容网关） |
+
+**操作文档**：[docs/v1/onboarding.md](docs/v1/onboarding.md)（环境）、[docs/v1/api-contract.md](docs/v1/api-contract.md)（契约）、[docs/v1/eval/frontend-demo-path.md](docs/v1/eval/frontend-demo-path.md)（答辩路径）。
+
+---
+
 ## 范围与假设
 
-- 当前仓库以**项目说明与架构设想**为主；实现代码、环境与一键运行指南将随 MVP 迭代补充。
 - 论文 PDF 需具备**可解析文本**（扫描件需 OCR，可作为后续扩展）。
 - 抽取与巡检结论定位为**假设性线索**，须结合原文人工终审；共同体报告应标明范式、节点类型与图谱路径以便复核。
 - 跨范式语料库（同一库中 STEM 与 HSS 并存）时，共同体分析默认**先按范式分组**，再在组内或经对齐锚点做跨文推理。
+- V1 **不含**用户登录、MinerU 全量解析、Neo4j 生产部署；详见 [docs/v1/README.md](docs/v1/README.md)「V1 不做」。
 
 ---

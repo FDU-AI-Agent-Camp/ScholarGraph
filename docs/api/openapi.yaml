@@ -273,6 +273,7 @@ components:
       properties:
         data:
           type: object
+          required: [status, version, llm_mode, llm_connected, llm_note]
           properties:
             status:
               type: string
@@ -280,6 +281,16 @@ components:
             version:
               type: string
               example: 1.0.0
+            llm_mode:
+              type: string
+              enum: [mock, live]
+              example: mock
+            llm_connected:
+              type: boolean
+              example: false
+            llm_note:
+              type: string
+              example: Mock 模式：LLM 云服务尚未接入，问答/巡检返回本地模板。
         meta:
           $ref: "#/components/schemas/Meta"
 

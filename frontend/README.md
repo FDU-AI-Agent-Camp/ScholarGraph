@@ -5,7 +5,7 @@
 ```bash
 cd frontend
 npm install
-cp .env.development.example .env.development   # 可选
+cp .env.development.example .env.development   # 推荐留空 VITE_API_BASE_URL，走 Vite 代理
 npm run dev
 ```
 

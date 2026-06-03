@@ -133,7 +133,7 @@ npm run build
 
 ## 后端 · 图谱与问答（BE-3）
 
-- [ ] 主要修改 `backend/graph/store.py`、`query.py`、`backend/agents/qa.py`、`backend/prompts/qa.md`、`tests/graph/`
+- [ ] 主要修改 `backend/graph/store.py`、`query.py`、`backend/graph/qa.py`、`backend/prompts/qa.md`、`tests/graph/`
 - [ ] `uv run pytest tests/graph` 通过
 - [ ] `to_g6()` 输出与 [graph-hss.json](../api/fixtures/graph-hss.json) 结构一致
 - [ ] `qa_stream()` 事件含 `message` / `citation` / `done` / `error`
