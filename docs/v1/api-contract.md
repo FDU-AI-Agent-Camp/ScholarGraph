@@ -65,7 +65,7 @@
   "data": {
     "paper_id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
     "status": "pending",
-    "message": "任务已创建，请轮询 status 接口"
+    "message": "已接收 PDF，正在自动解构…"
   },
   "meta": { "request_id": "550e8400-e29b-41d4-a716-446655440000" }
 }
@@ -167,7 +167,26 @@
 ```
 
 **200（完成）**：`status=ready`，`stage=ready`，`percent=100`。  
-**200（失败）**：`status=failed`，`stage=failed`。
+
+**200（失败）**：`status=failed`，`stage=failed`；并返回 `error_code` 与 `failed_during`（失败时所在流水线步骤，不含 `ready`/`failed`）：
+
+```json
+{
+  "data": {
+    "paper_id": "hss-failed-001",
+    "status": "failed",
+    "percent": 40,
+    "stage": "failed",
+    "message": "分类阶段 LLM 返回无效 JSON",
+    "updated_at": "2026-05-19T10:15:00Z",
+    "error_code": "LLM_JSON_INVALID",
+    "failed_during": "classifying"
+  },
+  "meta": { "request_id": "…" }
+}
+```
+
+本地 Mock 论文 ID：`hss-failed-001`（fixture 见 `docs/api/fixtures/paper-status-hss-failed-001.json`）。
 
 ---
 

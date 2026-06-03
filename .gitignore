@@ -1,3 +1,8 @@
+# ── 个人进度（勿提交）──────────────────────────────────
+progress.md
+problems.md
+ui-design-progress.md
+
 # ── 密钥与环境（勿提交）────────────────────────────────
 .env
 .env.local
@@ -32,6 +37,8 @@ pip-wheel-metadata/
 # ── 运行时数据与产物（保留空目录占位）──────────────────
 data/*
 !data/.gitkeep
+!data/corpus/
+!data/corpus/.gitkeep
 data/corpus/*.pdf
 data/corpus/*.txt
 data/out/
@@ -49,11 +56,14 @@ chroma/
 frontend/node_modules/
 frontend/dist/
 frontend/.vite/
+frontend/.env.development
+frontend/.env.local
 
 # ── 编辑器与系统 ───────────────────────────────────────
 .idea/
 .vscode/
 !.vscode/extensions.json
+.cursor/
 *.swp
 *~
 .DS_Store

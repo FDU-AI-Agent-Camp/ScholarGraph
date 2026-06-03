@@ -1,0 +1,67 @@
+"""LangGraph workflow state for the single-paper pipeline."""
+
+from typing import Any, TypedDict
+
+from backend.schemas.paper import PaperStatus, PipelineStage
+
+# Node names (stable identifiers for the StateGraph).
+NODE_INGEST = "ingest"
+NODE_CLASSIFY = "classify"
+NODE_EXTRACT = "extract"
+NODE_STORE = "store"
+NODE_FAIL = "fail"
+
+PIPELINE_ORDER: tuple[str, ...] = (
+    NODE_INGEST,
+    NODE_CLASSIFY,
+    NODE_EXTRACT,
+    NODE_STORE,
+)
+
+# Suggested polling percents (api-contract / tech-stack).
+STAGE_PERCENT: dict[PipelineStage, int] = {
+    PipelineStage.INGESTING: 20,
+    PipelineStage.CLASSIFYING: 50,
+    PipelineStage.EXTRACTING: 80,
+    PipelineStage.STORING: 95,
+    PipelineStage.READY: 100,
+    PipelineStage.FAILED: 0,
+}
+
+
+class WorkflowState(TypedDict, total=False):
+    """State passed between LangGraph nodes; keys are merged incrementally."""
+
+    paper_id: str
+    pdf_path: str
+
+    status: PaperStatus
+    stage: PipelineStage | None
+    percent: int
+    message: str
+
+    error_code: str
+    error_message: str
+    failed_during: PipelineStage
+
+    full_text: str
+    classifier_input: str
+
+    classification: dict[str, Any]
+    paradigm: str
+
+    graph: dict[str, Any]
+
+    failed: bool
+
+
+def initial_workflow_state(*, paper_id: str, pdf_path: str) -> WorkflowState:
+    return WorkflowState(
+        paper_id=paper_id,
+        pdf_path=pdf_path,
+        status=PaperStatus.PROCESSING,
+        stage=PipelineStage.INGESTING,
+        percent=STAGE_PERCENT[PipelineStage.INGESTING],
+        message="流水线已启动，正在解析 PDF",
+        failed=False,
+    )

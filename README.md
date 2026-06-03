@@ -228,9 +228,30 @@ flowchart LR
 | Agent 编排 | LangGraph | 分流状态机、多步工具调用、检查点与可观测日志 |
 | 结构化抽取 | Pydantic + 范式分 Schema | STEM / HSS 分支禁止越界节点类型 |
 | 抽取与生成 | GPT-4o、Llama 3 等 + JSON Schema | 分类器、抽取器、问答均需强约束输出 |
-| 前端与演示 | Gradio / Streamlit | 上传、范式标签、问答与图谱可视化 |
+| 前端与演示 | **Vue 3 + Vite**（主路径）；Gradio / Streamlit 仅作答辩备用 | 见 [docs/v1/tech-stack.md](docs/v1/tech-stack.md) |
 
-具体版本与依赖以项目 `pyproject.toml` / `requirements.txt` 为准（随实现补充）。
+具体版本与依赖以仓库根目录 **`pyproject.toml`** 与 **`uv.lock`** 为准（由 [uv](https://docs.astral.sh/uv/) 管理）。
+
+### 本地运行（后端）
+
+在仓库根目录：
+
+```bash
+uv sync
+cp .env.example .env   # 默认 LLM_MODE=mock；接华为云时改为 live 并填 Key
+uv sync --group dev
+uv run python scripts/check_backend.py   # ruff lint + format-check + pytest（排除 red）
+uv run python scripts/run_d_gates.py     # D-01～D-10 代码基座（含 FE npm run check，可 --skip-frontend）
+uv run uvicorn backend.main:app --reload --host 127.0.0.1 --port 8000
+```
+
+合 **develop** / 答辩前可再跑：`uv run python scripts/run_v1_ac_gates.py`（`check:ci` + `run_qa`/`run_patrol` smoke）；E2E 见 `scripts/run_cp4_rehearsal.py`（24 步，需前后端已启动）。
+
+分步：`uv run ruff check backend tests scripts`、`uv run ruff format --check backend tests scripts`、`uv run pytest -q -m "not red"`。
+
+- 健康检查：`GET http://127.0.0.1:8000/api/v1/health`（含 `llm_mode` / `llm_connected`）
+- Swagger：`http://127.0.0.1:8000/docs`
+- 新成员详见 [docs/v1/onboarding.md](docs/v1/onboarding.md)
 
 ---
 

@@ -1,0 +1,11 @@
+{
+  "$schema": "https://unpkg.com/knip@5/schema.json",
+  "vite": {
+    "config": "vite.config.ts"
+  },
+  "vitest": {
+    "config": "vite.config.ts"
+  },
+  "ignoreBinaries": ["uv"],
+  "ignoreExportsUsedInFile": true
+}

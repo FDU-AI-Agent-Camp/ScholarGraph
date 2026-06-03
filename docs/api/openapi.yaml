@@ -129,7 +129,7 @@ paths:
         - $ref: "#/components/parameters/PaperId"
       responses:
         "200":
-          description: G6-ready graph
+          description: UnifiedPaperGraph (not G6-nested; FE converts via toG6GraphPayload)
           content:
             application/json:
               schema:
@@ -219,6 +219,11 @@ components:
     PipelineStage:
       type: string
       enum: [ingesting, classifying, extracting, storing, ready, failed]
+
+    FailedDuringStage:
+      type: string
+      description: Pipeline step active when status=failed (excludes terminal stage values).
+      enum: [ingesting, classifying, extracting, storing]
 
     ParadigmClassification:
       type: object
@@ -353,7 +358,7 @@ components:
 
     PaperStatusData:
       type: object
-      required: [paper_id, status, percent, stage, message, updated_at]
+      required: [paper_id, status, percent, message, updated_at]
       properties:
         paper_id:
           type: string
@@ -364,12 +369,24 @@ components:
           minimum: 0
           maximum: 100
         stage:
-          $ref: "#/components/schemas/PipelineStage"
+          allOf:
+            - $ref: "#/components/schemas/PipelineStage"
+          nullable: true
         message:
           type: string
         updated_at:
           type: string
           format: date-time
+        error_code:
+          type: string
+          nullable: true
+          description: Machine-readable code when status=failed.
+          example: LLM_JSON_INVALID
+        failed_during:
+          allOf:
+            - $ref: "#/components/schemas/FailedDuringStage"
+          nullable: true
+          description: Pipeline step that was running when failure occurred (ingesting–storing only).
 
     PaperStatusResponse:
       type: object
