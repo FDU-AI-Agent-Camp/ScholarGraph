@@ -191,6 +191,8 @@ def test_run_d_gates_help_exits_zero() -> None:
         cwd=REPO_ROOT,
         capture_output=True,
         text=True,
+        encoding="utf-8",
+        errors="replace",
         check=False,
     )
     assert result.returncode == 0
@@ -203,6 +205,8 @@ def test_run_v1_ac_gates_help_exits_zero() -> None:
         cwd=REPO_ROOT,
         capture_output=True,
         text=True,
+        encoding="utf-8",
+        errors="replace",
         check=False,
     )
     assert result.returncode == 0

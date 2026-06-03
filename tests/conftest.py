@@ -3,6 +3,10 @@
 from __future__ import annotations
 
 import importlib.util
+import os
+
+# Keep unit tests independent of developer ``.env`` (LLM_MODE=live, custom models, etc.).
+os.environ.setdefault("SCHOLARGRAPH_IGNORE_DOTENV", "1")
 from collections.abc import Iterator
 from contextlib import contextmanager
 from pathlib import Path

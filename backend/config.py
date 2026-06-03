@@ -1,5 +1,6 @@
 """Application settings loaded from environment variables."""
 
+import os
 from functools import lru_cache
 from typing import Literal
 
@@ -96,6 +97,21 @@ class Settings(BaseSettings):
         return key
 
 
+def _should_ignore_dotenv() -> bool:
+    """Whether ``get_settings()`` should skip loading repository ``.env``.
+
+    Under pytest, ``tests/conftest.py`` sets ``SCHOLARGRAPH_IGNORE_DOTENV=1`` so
+    defaults and ``monkeypatch.setenv`` stay deterministic. Opt in with ``0`` for
+    live probes that need a real ``.env``.
+    """
+    raw = os.environ.get("SCHOLARGRAPH_IGNORE_DOTENV")
+    if raw is not None:
+        return raw.lower() in ("1", "true", "yes")
+    return bool(os.environ.get("PYTEST_CURRENT_TEST"))
+
+
 @lru_cache
 def get_settings() -> Settings:
+    if _should_ignore_dotenv():
+        return Settings(_env_file=None)
     return Settings()
