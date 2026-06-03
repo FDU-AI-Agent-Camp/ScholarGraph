@@ -77,7 +77,6 @@ async def test_fe_be_upload_pipeline_reaches_ready(
     import asyncio
 
     from tests.api.test_papers_upload import VALID_PDF
-
     from tests.helpers.upload_pipeline_mock import mock_http_upload_pipeline_run
 
     with mock_http_upload_pipeline_run():

@@ -7,7 +7,6 @@ from pathlib import Path
 from unittest.mock import patch
 
 import pytest
-from backend.config import get_settings
 from backend.services.paper_service import MAX_UPLOAD_BYTES, UPLOAD_QUEUED_MESSAGE, get_paper_service
 from httpx import AsyncClient
 from tests.api.conftest import assert_error_envelope, assert_success_envelope

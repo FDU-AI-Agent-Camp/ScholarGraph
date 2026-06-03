@@ -5,7 +5,6 @@ import { createPinia, setActivePinia } from 'pinia'
 import { flushPromises, mount } from '@vue/test-utils'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-import * as papersApi from '@/api/papers'
 import { PAPERS_BASELINE_COPY } from '@/constants/papersCopy'
 import PaperUpload from '@/components/papers/PaperUpload.vue'
 import { elUploadStub } from '@/test/helpers/elUploadStub'

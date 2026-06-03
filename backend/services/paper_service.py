@@ -8,7 +8,6 @@ from uuid import uuid4
 
 from backend.api.exceptions import ApiError
 from backend.config import Settings, get_settings
-from backend.services.paper_pipeline_scheduler import schedule_paper_pipeline
 from backend.schemas.graph import UnifiedPaperGraph
 from backend.schemas.paper import (
     FailedDuringStage,
@@ -20,6 +19,7 @@ from backend.schemas.paper import (
     PipelineStage,
 )
 from backend.schemas.paradigm import Paradigm, ParadigmClassification
+from backend.services.paper_pipeline_scheduler import schedule_paper_pipeline
 
 FIXTURES_DIR = Path(__file__).resolve().parents[2] / "docs" / "api" / "fixtures"
 DEFAULT_GRAPH_DATA_DIR = Path("./data/graphs")

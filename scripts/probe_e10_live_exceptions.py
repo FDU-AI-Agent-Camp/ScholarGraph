@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """E-10 live 异常路径抽验：无效 Key + 超时（仓库根目录执行）.
 
-    uv run python scripts/probe_e10_live_exceptions.py
-    uv run python scripts/probe_e10_live_exceptions.py --skip-timeout  # 仅测无效 Key
+uv run python scripts/probe_e10_live_exceptions.py
+uv run python scripts/probe_e10_live_exceptions.py --skip-timeout  # 仅测无效 Key
 """
 
 from __future__ import annotations
@@ -23,7 +23,7 @@ if str(_REPO_ROOT) not in sys.path:
 from backend.config import get_settings  # noqa: E402
 from backend.graph.qa import qa_stream  # noqa: E402
 from backend.graph.qa_samples import seed_m2_qa_graph  # noqa: E402
-from backend.llm.client import LlmClient, reset_llm_client_cache  # noqa: E402
+from backend.llm.client import reset_llm_client_cache  # noqa: E402
 from backend.patrol.service import run_patrol  # noqa: E402
 from backend.schemas.patrol import PatrolMode  # noqa: E402
 from tests.helpers.patrol_graphs import seed_patrol_graphs  # noqa: E402
@@ -95,12 +95,7 @@ async def probe_qa_invalid_key(graph_dir: Path) -> bool:
     print(f"events={names}")
     if error:
         print(f"error_code={error.get('code')} message_head={str(error.get('message', ''))[:120]}")
-    ok = (
-        "error" in names
-        and error is not None
-        and error.get("code") == "QA_STREAM_ERROR"
-        and "done" in names
-    )
+    ok = "error" in names and error is not None and error.get("code") == "QA_STREAM_ERROR" and "done" in names
     print(f"result={'PASS' if ok else 'FAIL'}")
     return ok
 
@@ -169,10 +164,7 @@ async def probe_timeout_valid_key(graph_dir: Path, env_snapshot: dict[str, str |
     if error:
         msg = str(error.get("message", ""))
         print(f"error_code={error.get('code')} message_head={msg[:160]}")
-        timeout_like = any(
-            token in msg.lower()
-            for token in ("timeout", "timed out", "time out", "超时", "deadline")
-        )
+        timeout_like = any(token in msg.lower() for token in ("timeout", "timed out", "time out", "超时", "deadline"))
     else:
         timeout_like = False
         print("no error event (request may have finished under 1s)")
@@ -195,7 +187,11 @@ async def run_probes(*, skip_timeout: bool) -> int:
     graph_dir = Path(get_settings().graph_data_dir).resolve()
     graph_dir.mkdir(parents=True, exist_ok=True)
 
-    results = [probe_invalid_maas_key(), await probe_qa_invalid_key(graph_dir), await probe_patrol_invalid_key(graph_dir)]
+    results = [
+        probe_invalid_maas_key(),
+        await probe_qa_invalid_key(graph_dir),
+        await probe_patrol_invalid_key(graph_dir),
+    ]
     if not skip_timeout:
         results.append(await probe_timeout_valid_key(graph_dir, env_snapshot))
     _restore_env(env_snapshot)

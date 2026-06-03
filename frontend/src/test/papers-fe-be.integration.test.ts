@@ -244,9 +244,7 @@ describe('papers FE↔BE — upload flow (POST /papers)', () => {
       ...processingStatusResponse.data,
       paper_id: 'upload-new-001',
     })
-    mockGetPaperStatus
-      .mockResolvedValueOnce(pendingStatus)
-      .mockResolvedValue(processingForUpload)
+    mockGetPaperStatus.mockResolvedValueOnce(pendingStatus).mockResolvedValue(processingForUpload)
     mockGetPaper.mockResolvedValue({
       data: {
         paper_id: 'upload-new-001',
