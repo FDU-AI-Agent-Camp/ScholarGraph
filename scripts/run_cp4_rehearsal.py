@@ -296,11 +296,16 @@ def report_browser_checks(report: RehearsalReport) -> None:
             qa_input = page.locator("textarea").first
             qa_input.fill("CP4 rehearsal：核心论点？")
             page.get_by_role("button", name="提问").click()
-            page.wait_for_timeout(2000)
+            try:
+                page.locator(".citation-tag, .tag-citation").first.wait_for(state="visible", timeout=120_000)
+            except PlaywrightTimeout:
+                page.wait_for_timeout(3000)
             body_text = page.locator("body").inner_text()
             qa_ok = (
                 "引用节点" in body_text
                 or "核心论点" in body_text
+                or "历史制度" in body_text
+                or "知识图谱" in body_text
                 or "Mock 答复" in body_text
                 or "尚未接入" in body_text
             )

@@ -57,6 +57,7 @@ filterwarnings = [
 ]
 markers = [
     "red: 红灯用例，依赖尚未交付的 BE 模块；默认排除，使用 pytest -m red",
+    "live_e10: E-10 真云超时抽验，需有效 SCHOLARGRAPH_API_KEY；默认排除",
     "integration: 跨节点 / 编译后工作流集成测试",
     "three_branch: FE + platform + ingest 三分支联调（语料缺失时 skip）",
 ]
