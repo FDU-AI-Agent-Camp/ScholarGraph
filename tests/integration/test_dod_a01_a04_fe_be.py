@@ -118,7 +118,6 @@ async def test_a03_processing_paper_status_includes_stage(api_client: AsyncClien
     assert data["status"] == "processing"
     assert data.get("stage") or data.get("failed_during") is None
 
-
     @pytest.mark.asyncio
     async def test_a03_failed_paper_status_surfaces_error_code(api_client: AsyncClient) -> None:
         response = await api_client.get(f"/api/v1/papers/{FAILED_ID}/status")

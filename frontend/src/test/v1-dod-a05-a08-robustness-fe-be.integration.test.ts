@@ -3,20 +3,16 @@
  *
  * 与 tests/integration/test_dod_a05_a08_robustness_fe_be.py 成对。
  */
-import { createPinia, setActivePinia } from 'pinia'
 import { flushPromises, mount } from '@vue/test-utils'
-import { createMemoryHistory, createRouter } from 'vue-router'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { parseQaStreamEvent } from '@/api/qaStream'
 import type { PaperDetail, PaperStatusData, QaStreamCitationData, UnifiedPaperGraph } from '@/api/types'
 import { DETAIL_BASELINE_COPY } from '@/constants/detailCopy'
 import { PATROL_BASELINE_COPY } from '@/constants/patrolCopy'
-import { routes } from '@/router/index'
 import { RouteName } from '@/router/meta'
 import { resolvePatrolApiError, validatePatrolPaperIds, validatePatrolSelection } from '@/utils/patrolForm'
 import { isFailedStatus } from '@/utils/paperStatus'
-import { routerViewShell } from '@/test/helpers/routerViewShell'
 import failedStatusFixture from '../../../docs/api/fixtures/paper-status-hss-failed-001.json'
 
 const mockStreamPaperQa = vi.hoisted(() => vi.fn())
@@ -112,38 +108,6 @@ const detailStubs = {
     template: '<div class="detail-alert-stub" :data-title="title" />',
   },
   RouterLink: true,
-}
-
-const patrolStubs = {
-  'el-select': true,
-  'el-option': true,
-  'el-input': true,
-  'el-space': { template: '<div><slot /></div>' },
-  'el-icon': true,
-  'el-button': {
-    inheritAttrs: false,
-    template: '<button type="button" v-bind="$attrs" @click="$attrs.onClick?.()"><slot /></button>',
-  },
-  RouterLink: true,
-  InsightCard: { template: '<div class="patrol-insight-robust" />' },
-  'el-alert': {
-    inheritAttrs: false,
-    props: ['title', 'description'],
-    template: '<div class="patrol-alert-robust" :data-title="title" :data-description="description" />',
-  },
-  BadgeParadigm: true,
-}
-
-async function mountPatrolRoute() {
-  setActivePinia(createPinia())
-  const router = createRouter({ history: createMemoryHistory(), routes })
-  await router.push('/patrol')
-  await router.isReady()
-  const wrapper = mount(routerViewShell, {
-    global: { plugins: [router], stubs: patrolStubs },
-  })
-  await flushPromises()
-  return wrapper
 }
 
 describe('V1 DoD A-05～A-08 robustness FE↔BE', () => {
