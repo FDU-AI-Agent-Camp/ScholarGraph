@@ -34,7 +34,7 @@ FEATURE_BRANCH = re.compile(
     re.IGNORECASE,
 )
 
-INTEGRATION_BRANCHES = frozenset({"develop", "main", "master"})
+INTEGRATION_BRANCHES = frozenset({"develop", "main", "master", "feature/integration"})
 
 # handoff-to-platform.md §1 — BE-1～4 deliver services only; routes live under backend/api/.
 BE_HANDOFF_MODULE_DIRS = (

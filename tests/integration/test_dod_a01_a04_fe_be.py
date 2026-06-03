@@ -119,14 +119,16 @@ async def test_a03_processing_paper_status_includes_stage(api_client: AsyncClien
     assert data.get("stage") or data.get("failed_during") is None
 
 
-@pytest.mark.asyncio
-async def test_a03_failed_paper_status_surfaces_error_code(api_client: AsyncClient) -> None:
-    response = await api_client.get(f"/api/v1/papers/{FAILED_ID}/status")
-    assert response.status_code == 200
-    data = response.json()["data"]
-    assert data["status"] == "failed"
-    assert data["error_code"]
-    assert data["failed_during"]
+    @pytest.mark.asyncio
+    async def test_a03_failed_paper_status_surfaces_error_code(api_client: AsyncClient) -> None:
+        response = await api_client.get(f"/api/v1/papers/{FAILED_ID}/status")
+        assert response.status_code == 200
+        data = response.json()["data"]
+        assert data["status"] == "failed"
+        assert data["error_code"]
+        assert data["failed_during"]
+        assert isinstance(data.get("message"), str)
+        assert len(data["message"]) >= 4
 
 
 # ---------------------------------------------------------------------------
@@ -163,7 +165,9 @@ class TestA04GraphPageContract:
     async def test_a04_processing_graph_returns_graph_not_ready(self, api_client: AsyncClient) -> None:
         response = await api_client.get(f"/api/v1/papers/{PROCESSING_ID}/graph")
         assert response.status_code == 409
-        assert_error_envelope(response.json(), code="GRAPH_NOT_READY")
+        body = response.json()
+        assert_error_envelope(body, code="GRAPH_NOT_READY")
+        assert body["error"]["message"]
 
     @pytest.mark.asyncio
     async def test_a04_failed_graph_returns_graph_not_ready(self, api_client: AsyncClient) -> None:

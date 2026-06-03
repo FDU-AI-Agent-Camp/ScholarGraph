@@ -163,6 +163,18 @@ describe('V1 DoD A-04 FE↔BE — PaperGraphView UX', () => {
     expect(wrapper.find('.graph-view__error-panel').exists()).toBe(false)
   })
 
+  it('red: GRAPH_NOT_READY uses baseline title not raw API message', async () => {
+    mockGetPaperGraph.mockRejectedValue(
+      new ApiClientError({ code: BE_FE_A04.graphNotReady.code, message: '内部图谱未就绪' }, 409),
+    )
+
+    const { wrapper } = await mountGraphRoute('/papers/hss-002/graph')
+
+    const alert = wrapper.find('.graph-view__error-panel .el-alert-stub')
+    expect(alert.attributes('data-title')).toBe(GRAPH_BASELINE_COPY.graphNotReadyTitle)
+    expect(alert.attributes('data-description')).toBe(GRAPH_BASELINE_COPY.graphNotReadyDescription)
+  })
+
   it('red: non-409 graph error shows raw message without detail CTA', async () => {
     mockGetPaperGraph.mockRejectedValue(new ApiClientError({ code: 'SERVER', message: '服务不可用' }, 500))
 

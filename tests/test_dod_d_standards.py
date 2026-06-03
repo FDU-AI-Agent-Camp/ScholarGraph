@@ -54,6 +54,7 @@ def test_d05_conventional_commit_header(subject: str, expected: bool) -> None:
     [
         ("develop", True),
         ("main", True),
+        ("feature/integration", True),
         ("feature/frontend/scaffold-mock", True),
         ("feature/backend/graph-qa/multiscale-qa", True),
         ("feature/backend/be3-graph-qa-complete", True),

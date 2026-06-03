@@ -102,7 +102,7 @@ def check_d06_branch() -> GateStep:
     return GateStep(
         "D-06 branch naming",
         False,
-        f"{branch!r} — expect feature/frontend/… or feature/backend/…",
+        f"{branch!r} — expect develop/main/feature/integration or feature/frontend/… or feature/backend/…",
     )
 
 
