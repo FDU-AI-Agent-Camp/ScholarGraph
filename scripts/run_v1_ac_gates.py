@@ -19,6 +19,7 @@ V1 A～C 自动化门禁（C-09：合 develop / 答辩前复跑）。
 from __future__ import annotations
 
 import argparse
+import importlib.util
 import subprocess
 import sys
 from dataclasses import dataclass, field
@@ -26,6 +27,17 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 FRONTEND_DIR = REPO_ROOT / "frontend"
+
+
+def _npm_run_argv(script: str, *extra: str) -> list[str]:
+    spec = importlib.util.spec_from_file_location(
+        "d_gates_lib",
+        Path(__file__).with_name("d_gates_lib.py"),
+    )
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module.npm_run_argv(script, *extra)
 
 
 @dataclass
@@ -66,7 +78,7 @@ def run_gates(*, with_cp4_api: bool = False, skip_frontend: bool = False) -> Gat
     if not skip_frontend:
         fe = run_cmd(
             "B/C-02 frontend check:ci",
-            ["npm", "run", "check:ci"],
+            _npm_run_argv("check:ci"),
             cwd=FRONTEND_DIR,
         )
         report.steps.append(fe)

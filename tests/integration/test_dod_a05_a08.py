@@ -53,6 +53,13 @@ async def test_a05_qa_sse_mock_mode_end_to_end(api_client: AsyncClient, mock_llm
     citation = next(payload for name, payload in events if name == "citation")
     assert citation["paper_id"] == "hss-001"
     assert citation["node_id"] == "n1"
+    assert citation["label"]
+
+    store = GraphStore(base_dir=mock_llm_env)
+    graph = store.load("hss-001")
+    assert graph is not None
+    node_ids = {node.id for node in graph.nodes}
+    assert citation["node_id"] in node_ids
 
 
 @pytest.mark.asyncio

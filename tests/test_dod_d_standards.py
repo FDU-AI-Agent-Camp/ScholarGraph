@@ -16,6 +16,8 @@ from scripts.d_gates_lib import (
     git_sensitive_paths_must_not_be_tracked,
     lockfile_declares_npm_package,
     lockfile_declares_python_project,
+    npm_executable,
+    npm_run_argv,
     scan_handoff_modules_for_private_routes,
     validate_conventional_commit_subject,
     validate_feature_branch_name,
@@ -24,6 +26,7 @@ from scripts.d_gates_lib import (
 )
 
 RUN_D_GATES = REPO_ROOT / "scripts" / "run_d_gates.py"
+RUN_V1_AC_GATES = REPO_ROOT / "scripts" / "run_v1_ac_gates.py"
 CHECK_BACKEND = REPO_ROOT / "scripts" / "check_backend.py"
 BACKEND_WORKFLOW = REPO_ROOT / ".github" / "workflows" / "backend.yml"
 FRONTEND_WORKFLOW = REPO_ROOT / ".github" / "workflows" / "frontend.yml"
@@ -54,6 +57,7 @@ def test_d05_conventional_commit_header(subject: str, expected: bool) -> None:
     [
         ("develop", True),
         ("main", True),
+        ("feature/integration", True),
         ("feature/frontend/scaffold-mock", True),
         ("feature/backend/graph-qa/multiscale-qa", True),
         ("feature/backend/be3-graph-qa-complete", True),
@@ -118,6 +122,69 @@ def test_d05_recent_git_commits_follow_conventional_commits_if_history_exists() 
     assert not bad, f"non-conventional recent commits: {bad}"
 
 
+def test_npm_run_argv_builds_run_subcommand(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        "scripts.d_gates_lib.npm_executable",
+        lambda: r"C:\nodejs\npm.cmd",
+    )
+    assert npm_run_argv("check:ci") == [r"C:\nodejs\npm.cmd", "run", "check:ci"]
+    assert npm_run_argv("check", "--if-present") == [
+        r"C:\nodejs\npm.cmd",
+        "run",
+        "check",
+        "--if-present",
+    ]
+
+
+def test_npm_executable_win32_prefers_npm_cmd(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr("scripts.d_gates_lib.sys.platform", "win32")
+    seen: list[str] = []
+
+    def fake_which(name: str) -> str | None:
+        seen.append(name)
+        if name == "npm.cmd":
+            return r"D:\nodejs\npm.cmd"
+        return None
+
+    monkeypatch.setattr("scripts.d_gates_lib.shutil.which", fake_which)
+    assert npm_executable() == r"D:\nodejs\npm.cmd"
+    assert seen == ["npm.cmd"]
+
+
+def test_npm_executable_win32_falls_back_to_npm(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr("scripts.d_gates_lib.sys.platform", "win32")
+
+    def fake_which(name: str) -> str | None:
+        return r"D:\nodejs\npm" if name == "npm" else None
+
+    monkeypatch.setattr("scripts.d_gates_lib.shutil.which", fake_which)
+    assert npm_executable() == r"D:\nodejs\npm"
+
+
+def test_npm_executable_win32_defaults_to_npm_cmd(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr("scripts.d_gates_lib.sys.platform", "win32")
+    monkeypatch.setattr("scripts.d_gates_lib.shutil.which", lambda _name: None)
+    assert npm_executable() == "npm.cmd"
+
+
+def test_npm_executable_non_win32_uses_npm(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr("scripts.d_gates_lib.sys.platform", "linux")
+    monkeypatch.setattr(
+        "scripts.d_gates_lib.shutil.which",
+        lambda name: "/usr/bin/npm" if name == "npm" else None,
+    )
+    assert npm_executable() == "/usr/bin/npm"
+
+
+def test_gate_runners_invoke_npm_via_run_argv_helper() -> None:
+    d_gates = RUN_D_GATES.read_text(encoding="utf-8")
+    ac_gates = RUN_V1_AC_GATES.read_text(encoding="utf-8")
+    assert '["npm", "run", "check"]' not in d_gates
+    assert 'npm_run_argv("check")' in d_gates
+    assert '["npm", "run", "check:ci"]' not in ac_gates
+    assert '_npm_run_argv("check:ci")' in ac_gates
+
+
 def test_run_d_gates_help_exits_zero() -> None:
     result = subprocess.run(
         [sys.executable, str(RUN_D_GATES), "--help"],
@@ -128,6 +195,18 @@ def test_run_d_gates_help_exits_zero() -> None:
     )
     assert result.returncode == 0
     assert "D-01" in result.stdout or "check_backend" in result.stdout
+
+
+def test_run_v1_ac_gates_help_exits_zero() -> None:
+    result = subprocess.run(
+        [sys.executable, str(RUN_V1_AC_GATES), "--help"],
+        cwd=REPO_ROOT,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == 0
+    assert "check:ci" in result.stdout or "check_backend" in result.stdout
 
 
 def test_run_d_gates_commit_and_branch_checks_pass_on_repo() -> None:

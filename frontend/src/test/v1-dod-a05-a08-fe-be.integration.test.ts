@@ -127,6 +127,26 @@ describe('V1 DoD A-05～A-08 FE↔BE — SSE + patrol contracts', () => {
       expect(states.n1).toBe('active')
     })
 
+    it('maps citation node_id to graph deep-link query (A-05 ↔ A-04)', () => {
+      const citation = parseQaStreamEvent(
+        'citation',
+        JSON.stringify({ paper_id: 'hss-001', node_id: 'n_lens', label: '历史制度主义' }),
+      )
+      expect(citation?.type).toBe('citation')
+      if (citation?.type !== 'citation') {
+        return
+      }
+      expect(graphFixture.data.nodes.some((node) => node.id === citation.data.node_id)).toBe(true)
+      const router = createRouter({ history: createMemoryHistory(), routes })
+      const target = router.resolve({
+        name: RouteName.PaperGraph,
+        params: { paperId: citation.data.paper_id },
+        query: { node: citation.data.node_id },
+      })
+      expect(target.path).toBe('/papers/hss-001/graph')
+      expect(target.query.node).toBe('n_lens')
+    })
+
     it('ignores malformed SSE JSON without crashing parser', () => {
       expect(parseQaStreamEvent('message', '{not-json')).toBeNull()
       expect(parseQaStreamEvent('unknown_event', '{}')).toBeNull()

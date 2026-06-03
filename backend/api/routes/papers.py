@@ -54,7 +54,7 @@ async def create_paper(
     request_id: str = Depends(get_request_id),
     service: PaperService = Depends(get_paper_service_dep),
 ) -> dict:
-    """Upload a PDF; returns pending paper_id for status polling."""
+    """Upload a PDF; returns pending paper_id and schedules the ingest pipeline."""
     content = await file.read()
     result = await service.create_from_upload(
         filename=file.filename or "upload.pdf",

@@ -94,8 +94,12 @@ watch(
       失败阶段：{{ failedSnapshot.failed_during }}
     </p>
     <div class="status-panel__controls">
-      <el-button v-if="!polling" size="small" @click="start">重新轮询</el-button>
-      <el-button v-else size="small" @click="stop">停止轮询</el-button>
+      <el-button v-if="!polling" size="small" @click="start">
+        {{ DETAIL_BASELINE_COPY.resumeRefresh }}
+      </el-button>
+      <el-button v-else size="small" @click="stop">
+        {{ DETAIL_BASELINE_COPY.pauseRefresh }}
+      </el-button>
     </div>
   </section>
 </template>

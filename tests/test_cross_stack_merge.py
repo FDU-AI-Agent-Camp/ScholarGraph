@@ -191,6 +191,7 @@ async def test_merge_upload_valid_pdf_returns_pending(api_client: AsyncClient, t
     assert response.status_code == 201
     _assert_api_envelope(response.json())
     assert response.json()["data"]["status"] == "pending"
+    assert "自动解构" in response.json()["data"]["message"]
 
 
 @pytest.mark.asyncio

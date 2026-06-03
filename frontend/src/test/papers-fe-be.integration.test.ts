@@ -179,7 +179,7 @@ describe('papers FE↔BE — upload flow (POST /papers)', () => {
     expect(mockUploadPaper).toHaveBeenCalledTimes(1)
     const uploadedFile = mockUploadPaper.mock.calls[0]?.[0] as File
     expect(uploadedFile.name).toBe('sample.pdf')
-    expect(elMessageSuccess).toHaveBeenCalledWith('任务已创建，请轮询 status 接口')
+    expect(elMessageSuccess).toHaveBeenCalledWith(PAPERS_BASELINE_COPY.uploadSuccess)
     expect(pushSpy).toHaveBeenCalledWith({
       name: RouteName.PaperDetail,
       params: { paperId: 'upload-new-001' },
@@ -203,6 +203,70 @@ describe('papers FE↔BE — upload flow (POST /papers)', () => {
     expect(alert.attributes('data-title')).toBe('INGEST_FAILED')
     expect(alert.text()).toContain(ingestError.error.message)
     expect(alert.text()).toContain(PAPERS_BASELINE_COPY.uploadRetryHint)
+  })
+
+  it('refreshes paper list after upload before navigating to detail', async () => {
+    const { wrapper } = await mountRoute('/papers', undefined, true)
+    const listCallsAfterMount = mockListPapers.mock.calls.length
+
+    await wrapper.find('.do-upload').trigger('click')
+    await flushPromises()
+    await flushPromises()
+
+    expect(mockListPapers.mock.calls.length).toBeGreaterThan(listCallsAfterMount)
+  })
+
+  it('after upload navigates to detail route', async () => {
+    const { wrapper, router } = await mountRoute('/papers', undefined, true)
+    const pushSpy = vi.spyOn(router, 'push')
+
+    await wrapper.find('.do-upload').trigger('click')
+    await flushPromises()
+    await flushPromises()
+
+    expect(pushSpy).toHaveBeenCalledWith({
+      name: RouteName.PaperDetail,
+      params: { paperId: 'upload-new-001' },
+    })
+  })
+
+  it('uploaded paper detail polls from pending into processing status', async () => {
+    vi.useFakeTimers()
+    const pendingStatus = statusResponse({
+      paper_id: 'upload-new-001',
+      status: 'pending',
+      percent: 0,
+      stage: null,
+      message: '已接收 PDF，正在自动解构…',
+      updated_at: '2026-05-19T10:00:00Z',
+    })
+    const processingForUpload = statusResponse({
+      ...processingStatusResponse.data,
+      paper_id: 'upload-new-001',
+    })
+    mockGetPaperStatus.mockResolvedValueOnce(pendingStatus).mockResolvedValue(processingForUpload)
+    mockGetPaper.mockResolvedValue({
+      data: {
+        paper_id: 'upload-new-001',
+        title: 'sample',
+        status: 'pending',
+        paradigm: 'HSS',
+        created_at: '2026-05-19T10:00:00Z',
+      },
+      meta: { request_id: 'febe-detail-pending' },
+    })
+
+    const { wrapper } = await mountRoute('/papers/upload-new-001')
+    await flushPromises()
+
+    expect(wrapper.find('.detail-qa__alert').attributes('data-title')).toBe(DETAIL_BASELINE_COPY.notReadyAlert)
+
+    await vi.advanceTimersByTimeAsync(2000)
+    await flushPromises()
+
+    expect(mockGetPaperStatus.mock.calls.length).toBeGreaterThanOrEqual(2)
+    expect(wrapper.text()).toContain(processingForUpload.data.message)
+    vi.useRealTimers()
   })
 })
 

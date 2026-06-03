@@ -1,7 +1,7 @@
 """M0 eval — micro-corpus paradigm classification vs classifier_labels.csv gold.
 
 Green: harness / CSV contract (CI default).
-Red: end-to-end classify() vs gold (``pytest -m red`` until BE-2 delivers).
+Red: end-to-end classify() vs gold (``pytest -m red``; heuristic BE-2).
 """
 
 from __future__ import annotations
@@ -35,7 +35,6 @@ def test_m0_gold_labels_cover_three_corpus_papers() -> None:
     "paper_id",
     ["stem-001", "hss-001", "hss-002"],
 )
-@pytest.mark.xfail(strict=True, reason="BE-2: classify() 尚未实现 — M0 3/3 待交付")
 async def test_m0_classify_matches_gold_label(paper_id: str) -> None:
     """A-07 / M0: classify(classifier_input) paradigm == paradigm_gold."""
     pdf_path: Path = CORPUS_BY_PAPER_ID[paper_id]

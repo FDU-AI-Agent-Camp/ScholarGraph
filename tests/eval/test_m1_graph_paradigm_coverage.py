@@ -1,7 +1,7 @@
 """M1 eval — UnifiedPaperGraph schema coverage per paradigm (A-08).
 
 Green: fixture graphs validate + GraphStore round-trip (CI default).
-Red: extract() produces valid graphs from corpus (``pytest -m red`` until BE-2).
+Red: extract() produces valid graphs from corpus (``pytest -m red``; heuristic BE-2).
 """
 
 from __future__ import annotations
@@ -98,7 +98,6 @@ def test_m1_graph_store_persists_hss_and_stem(tmp_path: Path) -> None:
         ("hss-001", Paradigm.HSS),
     ],
 )
-@pytest.mark.xfail(strict=True, reason="BE-2: extract() 尚未实现 — M1 真图谱待交付")
 async def test_m1_extract_corpus_produces_valid_graph(paper_id: str, paradigm: Paradigm) -> None:
     """A-08 / M1: 各范式 ≥1 篇可解析 UnifiedPaperGraph。"""
     from tests.ingest.conftest import CORPUS_HSS, CORPUS_STEM

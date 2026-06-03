@@ -7,6 +7,7 @@ export const PAPERS_BASELINE_COPY = {
   uploadMain: '拖拽 PDF 到此处，或',
   uploadClick: '点击上传',
   uploadTip: '建议 ≤32MB · 上传后自动进入解构流水线',
+  uploadSuccess: '已提交解构，正在处理…',
   uploading: '上传中…',
   emptyTitle: '还没有论文',
   emptyBody: '上传 PDF 开始自动解构',

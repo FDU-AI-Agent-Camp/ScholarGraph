@@ -19,10 +19,12 @@ from backend.schemas.paper import (
     PipelineStage,
 )
 from backend.schemas.paradigm import Paradigm, ParadigmClassification
+from backend.services.paper_pipeline_scheduler import schedule_paper_pipeline
 
 FIXTURES_DIR = Path(__file__).resolve().parents[2] / "docs" / "api" / "fixtures"
 DEFAULT_GRAPH_DATA_DIR = Path("./data/graphs")
 MAX_UPLOAD_BYTES = 32 * 1024 * 1024
+UPLOAD_QUEUED_MESSAGE = "已接收 PDF，正在自动解构…"
 
 
 def _to_failed_during(stage: PipelineStage | None) -> FailedDuringStage | None:
@@ -309,13 +311,14 @@ class PaperService:
             status=PaperStatus.PENDING,
             percent=0,
             stage=None,
-            message="任务已创建，请轮询 status 接口",
+            message=UPLOAD_QUEUED_MESSAGE,
             updated_at=now,
         )
+        schedule_paper_pipeline(paper_id, dest)
         return PaperCreateResult(
             paper_id=paper_id,
             status=PaperStatus.PENDING,
-            message="任务已创建，请轮询 status 接口",
+            message=UPLOAD_QUEUED_MESSAGE,
         )
 
 

@@ -116,4 +116,23 @@ describe('PaperStatusPanel', () => {
     })
     expect(mockStart).toHaveBeenCalled()
   })
+
+  it('shows pause/resume refresh labels instead of polling jargon', () => {
+    mockStatus.value = processingStatus
+    mockPolling.value = true
+
+    const wrapper = mount(PaperStatusPanel, {
+      props: { paperId: 'paper-001', autoStart: false },
+    })
+
+    expect(wrapper.text()).toContain(DETAIL_BASELINE_COPY.pauseRefresh)
+    expect(wrapper.text()).not.toContain('轮询')
+
+    mockPolling.value = false
+    const paused = mount(PaperStatusPanel, {
+      props: { paperId: 'paper-001', autoStart: false },
+    })
+    expect(paused.text()).toContain(DETAIL_BASELINE_COPY.resumeRefresh)
+    expect(paused.text()).not.toContain('轮询')
+  })
 })

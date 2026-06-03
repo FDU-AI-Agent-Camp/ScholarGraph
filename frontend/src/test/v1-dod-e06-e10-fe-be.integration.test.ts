@@ -442,6 +442,48 @@ describe('V1 DoD E-10 — LLM failure / mock disclaimer (FE presentation)', () =
     expect(answer.length).toBeGreaterThan(0)
     expect(answer).toContain('模型调用超时')
   })
+
+  it('QA live auth failure surfaces QA_STREAM_ERROR message (E-10 invalid Key)', async () => {
+    mockGetPaper.mockResolvedValue({ data: readyDetail, meta: { request_id: 'e10-auth' } })
+    mockGetPaperStatus.mockResolvedValue(
+      statusResponse({
+        paper_id: 'hss-001',
+        status: 'ready',
+        percent: 100,
+        stage: 'ready',
+        message: '完成',
+        updated_at: '2026-05-19T11:00:00Z',
+      }),
+    )
+    mockGetPaperGraph.mockResolvedValue({ data: graphFixture.data, meta: { request_id: 'e10-auth-g' } })
+    mockStreamPaperQa.mockImplementation(
+      async (_id: string, _q: string, handlers: Parameters<typeof dispatchSseFrames>[1]) => {
+        dispatchSseFrames(
+          [
+            {
+              event: 'error',
+              data: {
+                code: 'QA_STREAM_ERROR',
+                message: 'Error code: 401 - Invalid authorization header.',
+              },
+            },
+          ],
+          handlers,
+        )
+        await Promise.resolve()
+      },
+    )
+
+    const wrapper = await mountAt('/papers/hss-001')
+    await wrapper.find('.detail-qa__input').setValue('鉴权失败测试')
+    const askButton = wrapper.findAll('button').find((button) => button.text() === '提问')
+    await askButton?.trigger('click')
+    await flushPromises()
+
+    const answer = wrapper.find('.detail-qa__answer-text').text()
+    expect(answer).toMatch(/错误:/)
+    expect(answer).toContain('401')
+  })
 })
 
 describe('V1 DoD E-01～E-05 — regression smoke (paired with e01-e05 files)', () => {

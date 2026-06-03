@@ -6,6 +6,8 @@ export const DETAIL_BASELINE_COPY = {
   showClassificationReason: '查看分类依据',
   pipelineTitle: '流水线进度',
   refreshCaption: '每 2 秒自动刷新',
+  resumeRefresh: '继续自动刷新',
+  pauseRefresh: '暂停自动刷新',
   notReadyAlert: '论文尚未 ready，问答与图谱预览将在流水线完成后可用。',
   qaSectionTitle: '多尺度问答',
   qaPlaceholder: '这篇论文的核心论点是什么？',

@@ -165,7 +165,7 @@ describe('PaperUpload', () => {
     await flushPromises()
 
     expect(wrapper.emitted('uploaded')).toEqual([['stem-001']])
-    expect(elMessageSuccess).toHaveBeenCalledWith('上传成功，已进入解构流水线')
+    expect(elMessageSuccess).toHaveBeenCalledWith(PAPERS_BASELINE_COPY.uploadSuccess)
   })
 
   it('warns when file is not PDF', async () => {

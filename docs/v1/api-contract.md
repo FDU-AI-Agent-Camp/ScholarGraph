@@ -65,7 +65,7 @@
   "data": {
     "paper_id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
     "status": "pending",
-    "message": "任务已创建，请轮询 status 接口"
+    "message": "已接收 PDF，正在自动解构…"
   },
   "meta": { "request_id": "550e8400-e29b-41d4-a716-446655440000" }
 }

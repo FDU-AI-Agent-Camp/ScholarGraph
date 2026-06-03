@@ -170,6 +170,27 @@ describe('PapersView', () => {
     })
   })
 
+  it('refreshes paper list after successful upload', async () => {
+    const wrapper = mount(PapersView, {
+      global: {
+        stubs: {
+          PaperUpload: {
+            template: '<button class="emit-upload" @click="$emit(\'uploaded\', \'new-paper\')">up</button>',
+          },
+          'el-table': true,
+          ...tableStubs,
+        },
+      },
+    })
+    await flushPromises()
+    const callsAfterMount = fetchList.mock.calls.length
+
+    await wrapper.find('.emit-upload').trigger('click')
+    await flushPromises()
+
+    expect(fetchList.mock.calls.length).toBeGreaterThan(callsAfterMount)
+  })
+
   it('binds PaperSummary[] to table data', () => {
     let tableRows: PaperSummary[] = []
 
