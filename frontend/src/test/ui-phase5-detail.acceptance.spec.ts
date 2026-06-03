@@ -195,6 +195,9 @@ describe('Phase 5 Detail acceptance (5.1–5.10)', () => {
     it('detailCopy and pipelineSteps align with ui-design-progress baseline table', () => {
       expect(detailCopySrc).toContain('论文尚未 ready，问答与图谱预览将在流水线完成后可用。')
       expect(detailCopySrc).toContain('每 2 秒自动刷新')
+      expect(detailCopySrc).toContain('暂停自动刷新')
+      expect(detailCopySrc).toContain('继续自动刷新')
+      expect(statusPanelSrc).not.toContain('轮询')
       for (const step of PIPELINE_STEPS) {
         expect(pipelineStepsSrc).toContain(step.label)
       }
