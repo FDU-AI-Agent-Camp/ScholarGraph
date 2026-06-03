@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from datetime import UTC, datetime
 
 import pytest
@@ -10,6 +11,7 @@ from backend.services.paper_service import get_paper_service
 from httpx import AsyncClient
 
 from tests.api.conftest import assert_error_envelope, assert_success_envelope
+from tests.helpers.upload_pipeline_mock import mock_http_upload_pipeline_run
 
 VALID_PDF = b"%PDF-1.4\n% integration route test"
 
@@ -49,11 +51,41 @@ async def test_upload_poll_status_then_graph_matrix(api_client, upload_dir) -> N
 
     status = await api_client.get(f"/api/v1/papers/{paper_id}/status")
     assert status.status_code == 200
-    assert status.json()["data"]["status"] == "pending"
+    assert status.json()["data"]["status"] in ("pending", "processing")
 
     graph = await api_client.get(f"/api/v1/papers/{paper_id}/graph")
     assert graph.status_code == 409
     assert_error_envelope(graph.json(), code="GRAPH_NOT_READY")
+
+
+@pytest.mark.asyncio
+async def test_upload_with_mock_pipeline_eventually_serves_graph(
+    api_client,
+    mock_upload_pipeline_env,
+) -> None:
+    """POST /papers 触发流水线后，轮询至 ready 可 GET graph。"""
+    from tests.api.test_papers_upload import VALID_PDF
+
+    with mock_http_upload_pipeline_run():
+        create = await api_client.post(
+            "/api/v1/papers",
+            files={"file": ("route-ready.pdf", VALID_PDF, "application/pdf")},
+        )
+        paper_id = create.json()["data"]["paper_id"]
+
+        final_status = "pending"
+        for _ in range(120):
+            await asyncio.sleep(0.05)
+            status = await api_client.get(f"/api/v1/papers/{paper_id}/status")
+            final_status = status.json()["data"]["status"]
+            if final_status in ("ready", "failed"):
+                break
+
+        assert final_status == "ready"
+
+    graph = await api_client.get(f"/api/v1/papers/{paper_id}/graph")
+    assert graph.status_code == 200
+    assert_success_envelope(graph.json())
 
 
 @pytest.mark.asyncio

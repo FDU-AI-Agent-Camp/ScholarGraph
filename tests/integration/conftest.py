@@ -115,6 +115,26 @@ def upload_dir(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
 
 
 @pytest.fixture
+def mock_upload_pipeline_env(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> tuple[Path, Path]:
+    """Isolated upload + graph dirs and LLM_MODE=mock for POST /papers → pipeline tests."""
+    upload_path = tmp_path / "uploads"
+    graph_path = tmp_path / "graphs"
+    upload_path.mkdir(parents=True, exist_ok=True)
+    graph_path.mkdir(parents=True, exist_ok=True)
+    monkeypatch.setenv("UPLOAD_DIR", str(upload_path))
+    monkeypatch.setenv("GRAPH_DATA_DIR", str(graph_path))
+    monkeypatch.setenv("LLM_MODE", "mock")
+    get_settings.cache_clear()
+    get_paper_service.cache_clear()
+    yield upload_path, graph_path
+    get_settings.cache_clear()
+    get_paper_service.cache_clear()
+
+
+@pytest.fixture
 async def api_client() -> AsyncIterator[AsyncClient]:
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:

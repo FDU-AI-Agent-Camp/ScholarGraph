@@ -65,7 +65,38 @@ async def test_fe_be_green_upload_returns_pending_with_poll_hint(
     assert_success_envelope(body)
     assert body["data"]["status"] == "pending"
     assert body["data"]["paper_id"]
-    assert "轮询" in body["data"]["message"]
+    assert "自动解构" in body["data"]["message"]
+
+
+@pytest.mark.asyncio
+async def test_fe_be_upload_pipeline_reaches_ready(
+    api_client: AsyncClient,
+    mock_upload_pipeline_env: tuple,
+) -> None:
+    """上传后自动流水线（mock）应到达 ready，供 FE 详情轮询联调。"""
+    import asyncio
+
+    from tests.api.test_papers_upload import VALID_PDF
+
+    from tests.helpers.upload_pipeline_mock import mock_http_upload_pipeline_run
+
+    with mock_http_upload_pipeline_run():
+        create = await api_client.post(
+            "/api/v1/papers",
+            files={"file": ("fe-be-pipeline.pdf", VALID_PDF, "application/pdf")},
+        )
+        assert create.status_code == 201
+        paper_id = create.json()["data"]["paper_id"]
+
+        final_status = "pending"
+        for _ in range(120):
+            await asyncio.sleep(0.05)
+            status = await api_client.get(f"/api/v1/papers/{paper_id}/status")
+            final_status = status.json()["data"]["status"]
+            if final_status in ("ready", "failed"):
+                break
+
+        assert final_status == "ready"
 
 
 @pytest.mark.asyncio

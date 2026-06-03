@@ -22,6 +22,7 @@ onMounted(() => {
 })
 
 function onUploaded(paperId: string) {
+  void paperStore.fetchList().catch(() => undefined)
   void router.push({ name: RouteName.PaperDetail, params: { paperId } })
 }
 

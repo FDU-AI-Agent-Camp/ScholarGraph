@@ -35,7 +35,7 @@ async function handleUpload(options: UploadRequestOptions) {
 
   try {
     const res = await papersApi.uploadPaper(file)
-    ElMessage.success(res.data.message)
+    ElMessage.success(PAPERS_BASELINE_COPY.uploadSuccess)
     emit('uploaded', res.data.paper_id)
     options.onSuccess?.(res)
   } catch (error: unknown) {

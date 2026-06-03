@@ -140,7 +140,9 @@ describe('Phase 4 Papers acceptance', () => {
       expect(PAPERS_BASELINE_COPY.uploadMain).toBe('拖拽 PDF 到此处，或')
       expect(PAPERS_BASELINE_COPY.uploadClick).toBe('点击上传')
       expect(PAPERS_BASELINE_COPY.uploadTip).toBe('建议 ≤32MB · 上传后自动进入解构流水线')
+      expect(PAPERS_BASELINE_COPY.uploadSuccess).toBe('已提交解构，正在处理…')
       expect(PAPERS_BASELINE_COPY.uploading).toBe('上传中…')
+      expect(paperUploadSrc).toContain('uploadSuccess')
       expect(paperUploadSrc).not.toContain('上传后轮询 status')
 
       const wrapper = mount(PaperUpload, {
