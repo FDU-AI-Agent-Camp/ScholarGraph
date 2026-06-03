@@ -48,6 +48,7 @@ git_current_branch = _dg.git_current_branch
 git_recent_commit_subjects = _dg.git_recent_commit_subjects
 scan_handoff_modules_for_private_routes = _dg.scan_handoff_modules_for_private_routes
 validate_conventional_commit_subject = _dg.validate_conventional_commit_subject
+npm_run_argv = _dg.npm_run_argv
 validate_feature_branch_name = _dg.validate_feature_branch_name
 validate_gitignore_sensitive_entries = _dg.validate_gitignore_sensitive_entries
 validate_lockfiles_present = _dg.validate_lockfiles_present
@@ -139,7 +140,7 @@ def run_gates(*, skip_frontend: bool = False, lint_only: bool = False, commit_sa
     report.steps.append(backend)
 
     if not skip_frontend:
-        fe = run_cmd("D-03/D-04 frontend check", ["npm", "run", "check"], cwd=FRONTEND_DIR)
+        fe = run_cmd("D-03/D-04 frontend check", npm_run_argv("check"), cwd=FRONTEND_DIR)
         report.steps.append(fe)
 
     report.steps.append(check_d05_commits(sample_size=commit_sample))

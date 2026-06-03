@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import re
+import shutil
 import subprocess
+import sys
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -278,3 +280,15 @@ def lockfile_declares_npm_package(package_name: str) -> bool:
         return False
     text = lock_path.read_text(encoding="utf-8")
     return f'"name": "{package_name}"' in text and '"lockfileVersion"' in text
+
+
+def npm_executable() -> str:
+    """Resolve npm launcher (Windows needs ``npm.cmd`` for subprocess without shell)."""
+    if sys.platform == "win32":
+        return shutil.which("npm.cmd") or shutil.which("npm") or "npm.cmd"
+    return shutil.which("npm") or "npm"
+
+
+def npm_run_argv(script: str, *extra: str) -> list[str]:
+    """Build argv for ``npm run <script>`` cross-platform."""
+    return [npm_executable(), "run", script, *extra]
