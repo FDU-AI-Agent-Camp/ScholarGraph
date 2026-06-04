@@ -1,0 +1,10 @@
+# GROBID CRF sidecar for long-PDF async head extraction (§2.1).
+# Usage: docker compose -f docker-compose.grobid.yml up -d
+
+services:
+  grobid:
+    image: grobid/grobid:0.9.0-crf
+    ports:
+      - "8070:8070"
+    mem_limit: 4g
+    restart: unless-stopped

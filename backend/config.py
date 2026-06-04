@@ -15,6 +15,7 @@ class Settings(BaseSettings):
         env_file=".env",
         env_file_encoding="utf-8",
         extra="ignore",
+        populate_by_name=True,
     )
 
     app_env: Literal["development", "staging", "production"] = "development"
@@ -51,6 +52,33 @@ class Settings(BaseSettings):
     cors_origins: str = Field(
         default="http://localhost:5173,http://127.0.0.1:5173",
         validation_alias="CORS_ORIGINS",
+    )
+
+    ingest_route: Literal["auto", "pymupdf_only"] = Field(
+        default="auto",
+        validation_alias="INGEST_ROUTE",
+    )
+    ingest_short_page_limit: int = Field(default=25, validation_alias="INGEST_SHORT_PAGE_LIMIT")
+    ingest_mineru_enabled: bool = Field(default=True, validation_alias="INGEST_MINERU_ENABLED")
+    ingest_mineru_lang: str = Field(default="auto", validation_alias="INGEST_MINERU_LANG")
+    ingest_mineru_model_source: str = Field(
+        default="modelscope",
+        validation_alias="INGEST_MINERU_MODEL_SOURCE",
+    )
+    ingest_mineru_timeout_seconds: int = Field(
+        default=600,
+        validation_alias="INGEST_MINERU_TIMEOUT_SECONDS",
+    )
+
+    grobid_url: str = Field(default="http://127.0.0.1:8070", validation_alias="GROBID_URL")
+    grobid_timeout_seconds: int = Field(default=300, validation_alias="GROBID_TIMEOUT_SECONDS")
+    grobid_fallback_pymupdf: bool = Field(default=True, validation_alias="GROBID_FALLBACK_PYMUPDF")
+
+    ingest_head_llm_enabled: bool = Field(default=True, validation_alias="INGEST_HEAD_LLM_ENABLED")
+    ingest_head_llm_model: str = Field(default="", validation_alias="INGEST_HEAD_LLM_MODEL")
+    ingest_head_llm_timeout_seconds: int = Field(
+        default=60,
+        validation_alias="INGEST_HEAD_LLM_TIMEOUT_SECONDS",
     )
 
     @field_validator("cors_origins", mode="before")

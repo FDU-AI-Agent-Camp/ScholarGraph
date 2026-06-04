@@ -18,6 +18,7 @@ from backend.schemas.paper import (
     PaperSummary,
     PipelineStage,
 )
+from backend.schemas.ingest_head import IngestHead
 from backend.schemas.paradigm import Paradigm, ParadigmClassification
 from backend.services.paper_pipeline_scheduler import schedule_paper_pipeline
 
@@ -40,6 +41,9 @@ class PaperService:
         self._settings = settings or get_settings()
         self._papers: dict[str, PaperDetail] = {}
         self._status: dict[str, PaperStatusData] = {}
+        self._refined_classifier_input: dict[str, str] = {}
+        self._refined_head: dict[str, IngestHead] = {}
+        self._head_refine_warnings: dict[str, list[str]] = {}
         self._seed_from_fixtures()
 
     def _seed_from_fixtures(self) -> None:
@@ -248,6 +252,31 @@ class PaperService:
             error_code=error_code,
             failed_during=failed_during,
         )
+
+    def apply_head_refine(
+        self,
+        paper_id: str,
+        *,
+        merged: IngestHead,
+        classifier_input: str,
+        warnings: list[str] | None = None,
+    ) -> None:
+        """Persist async head merge result; never changes pipeline failure state."""
+        self._refined_head[paper_id] = merged
+        if classifier_input.strip():
+            self._refined_classifier_input[paper_id] = classifier_input.strip()
+        if warnings:
+            self._head_refine_warnings[paper_id] = list(warnings)
+        if merged.title.strip() and paper_id in self._papers:
+            paper = self._papers[paper_id]
+            if paper.status == PaperStatus.PENDING:
+                paper.title = merged.title.strip()
+
+    def get_refined_classifier_input(self, paper_id: str) -> str | None:
+        return self._refined_classifier_input.get(paper_id)
+
+    def get_head_refine_warnings(self, paper_id: str) -> list[str]:
+        return list(self._head_refine_warnings.get(paper_id, ()))
 
     async def get_status(self, paper_id: str) -> PaperStatusData:
         paper = await self.get_paper(paper_id)

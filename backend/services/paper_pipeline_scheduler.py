@@ -18,6 +18,17 @@ async def _run_pipeline_safe(paper_id: str, pdf_path: Path) -> None:
         logger.exception("Paper pipeline failed for %s", paper_id)
 
 
+async def _refine_head_safe(paper_id: str, pdf_path: Path) -> None:
+    from backend.services.head_refine_service import refine_head_async
+
+    try:
+        await refine_head_async(paper_id, pdf_path.resolve())
+    except Exception:
+        logger.exception("Head refine failed for %s (pipeline continues)", paper_id)
+
+
 def schedule_paper_pipeline(paper_id: str, pdf_path: Path) -> asyncio.Task[None]:
-    """Enqueue pipeline on the current event loop (``asyncio.create_task``)."""
-    return asyncio.create_task(_run_pipeline_safe(paper_id, pdf_path))
+    """Enqueue LangGraph pipeline and async head refine (``asyncio.create_task``)."""
+    resolved = pdf_path.resolve()
+    asyncio.create_task(_refine_head_safe(paper_id, resolved))
+    return asyncio.create_task(_run_pipeline_safe(paper_id, resolved))

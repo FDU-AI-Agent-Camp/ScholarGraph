@@ -102,3 +102,21 @@ def multi_page_pdf(tmp_path: Path) -> Path:
         "Page two beta content.",
         "Page three gamma content.",
     )
+
+
+def _threshold_page_text(page_index: int) -> str:
+    return f"Threshold test page {page_index} with extractable text content."
+
+
+@pytest.fixture
+def pdf_25_pages(tmp_path: Path) -> Path:
+    """Exactly 25 pages — boundary for short-PDF MinerU route."""
+    pages = [_threshold_page_text(index) for index in range(1, 26)]
+    return write_text_pdf(tmp_path / "exactly-25-pages.pdf", *pages)
+
+
+@pytest.fixture
+def pdf_26_pages(tmp_path: Path) -> Path:
+    """Exactly 26 pages — first page over short-PDF threshold (GROBID route)."""
+    pages = [_threshold_page_text(index) for index in range(1, 27)]
+    return write_text_pdf(tmp_path / "exactly-26-pages.pdf", *pages)

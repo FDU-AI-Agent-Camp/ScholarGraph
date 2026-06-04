@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<TEI xmlns="http://www.tei-c.org/ns/1.0">
+  <teiHeader>
+    <fileDesc>
+      <titleStmt>
+        <title>Sample GROBID Title</title>
+      </titleStmt>
+      <profileDesc>
+        <abstract>
+          <p>This is a sample abstract from GROBID TEI.</p>
+        </abstract>
+        <textClass>
+          <keywords>
+            <term>graph</term>
+            <term>rag</term>
+          </keywords>
+        </textClass>
+      </profileDesc>
+    </fileDesc>
+  </teiHeader>
+  <text>
+    <body>
+      <div>
+        <head>Introduction</head>
+        <p>First introduction paragraph from TEI body.</p>
+        <p>Second introduction paragraph.</p>
+      </div>
+      <div>
+        <head>Methods</head>
+        <p>Should not be included in intro extraction.</p>
+      </div>
+    </body>
+  </text>
+</TEI>
