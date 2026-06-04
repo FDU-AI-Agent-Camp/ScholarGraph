@@ -46,7 +46,7 @@ def main(argv: list[str] | None = None) -> int:
         ("ruff format --check", ["ruff", "format", "--check", *RUFF_TARGETS]),
     ]
     if not args.lint_only:
-        steps.append(("pytest", ["pytest", "-q", "-m", "not red"]))
+        steps.append(("pytest", ["pytest", "-q", "-m", "not red and not live_mineru"]))
 
     for label, command in steps:
         if run_step(label, command) != EXIT_SUCCESS:

@@ -17,6 +17,7 @@ import pytest
 REPO_ROOT = Path(__file__).resolve().parents[1]
 RUN_PIPELINE_SCRIPT = REPO_ROOT / "scripts" / "run_pipeline.py"
 RUN_PATROL_SCRIPT = REPO_ROOT / "scripts" / "run_patrol.py"
+BENCHMARK_DUAL_ROUTE_SCRIPT = REPO_ROOT / "scripts" / "benchmark_dual_route.py"
 
 
 @pytest.fixture
@@ -35,6 +36,19 @@ def run_patrol_module():
     spec = importlib.util.spec_from_file_location("run_patrol", RUN_PATROL_SCRIPT)
     assert spec is not None and spec.loader is not None
     module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+@pytest.fixture
+def benchmark_dual_route_module():
+    """Load scripts/benchmark_dual_route.py as a module (not installed as package)."""
+    import sys
+
+    spec = importlib.util.spec_from_file_location("benchmark_dual_route", BENCHMARK_DUAL_ROUTE_SCRIPT)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module
     spec.loader.exec_module(module)
     return module
 

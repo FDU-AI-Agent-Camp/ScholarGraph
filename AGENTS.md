@@ -157,7 +157,7 @@ ScholarGraph 是面向科研阅读的 **AI Agent** 项目：编排（如 LangGra
 ### Python 与 Agent 运行时（uv）
 
 1. **安装 uv**：按官方文档安装后，确保终端中能执行 `uv --version`。
-2. **同步依赖**：在**仓库根目录**执行 `uv sync`（或 CI / 严格复现：`uv sync --frozen`），会创建/更新 `.venv` 并安装 `pyproject.toml` 中的依赖（LangGraph、HTTP 客户端、FastAPI 等）。若使用 MySQL 驱动，可额外执行 `uv sync --extra mysql`。
+2. **同步依赖**：在**仓库根目录**执行 `uv sync`（或 CI / 严格复现：`uv sync --frozen`），会创建/更新 `.venv` 并安装 `pyproject.toml` 中的依赖（LangGraph、HTTP 客户端、FastAPI 等）。若使用 MySQL 驱动，可额外执行 `uv sync --extra mysql`；**短 PDF ingest path B（MinerU）** 需 `uv sync --extra mineru`（不进默认依赖，体积较大）。
 3. **运行 Agent 与脚本**：优先使用 **`uv run`**，无需手动激活虚拟环境。示例：`uv run python -m backend.app` 或 `uv run uvicorn backend.main:app --reload`。**请在仓库根目录执行**，以便 `.env`、默认 SQLite 路径等与项目约定一致。
 4. **环境变量**：将 `.env.example` 复制为 `.env` 后配置大模型 API Key、数据库等（`.env` 已 gitignore，勿提交）。密钥勿写入源码或明文文件。
 5. **变更依赖后**：修改 `pyproject.toml` 后执行 `uv lock`（或 `uv lock --upgrade`），再 `uv sync`；提交时**同时**带上 `pyproject.toml` 与 `uv.lock`。
@@ -180,4 +180,4 @@ ScholarGraph 是面向科研阅读的 **AI Agent** 项目：编排（如 LangGra
 
 仅当前端排期严重不足时，可用 Gradio / Streamlit（uv 安装）做答辩备份；**产品主路径仍为 Vue 3 工作台**。
 
-在执行 **Python 脚本**、**安装或更新依赖**、**启动 Agent / API 服务** 前，请确认已在仓库根目录完成 `uv sync`（及按需 `--group dev` / `--extra mysql`），避免误用全局 Python 或未安装依赖的环境。
+在执行 **Python 脚本**、**安装或更新依赖**、**启动 Agent / API 服务** 前，请确认已在仓库根目录完成 `uv sync`（及按需 `--group dev` / `--extra mysql` / **`--extra mineru`**），避免误用全局 Python 或未安装依赖的环境。

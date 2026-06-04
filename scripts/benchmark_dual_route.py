@@ -9,6 +9,8 @@ Usage (repo root):
     uv run python scripts/benchmark_dual_route.py --with-llm
 """
 
+# ruff: noqa: E402
+
 from __future__ import annotations
 
 import argparse
@@ -26,7 +28,7 @@ if str(REPO_ROOT) not in sys.path:
 from backend.config import Settings, get_settings
 from backend.ingest.grobid_client import fetch_grobid_tei
 from backend.ingest.head_candidates import HeadCandidate, build_pymupdf_head_candidate
-from backend.ingest.head_merge import merge_with_rules, merge_with_llm
+from backend.ingest.head_merge import merge_with_llm, merge_with_rules
 from backend.ingest.mineru_backend import is_mineru_available, run_mineru_pipeline
 from backend.ingest.pdf import ingest_pdf
 from backend.ingest.router import get_pdf_page_count, is_short_pdf, resolve_ingest_route
@@ -256,7 +258,9 @@ def print_report(all_results: dict[str, dict[str, PathResult | None]]) -> None:
         "hss-002": {"pymupdf": "2/4", "mineru": "2/4", "grobid": "4/4"},
     }
     print("\n## Golden corpus — quality (classifier 四段 0–4)\n")
-    print("| 语料 | 页数 | 路由 | 历史 PyMuPDF | 现 PyMuPDF | 历史 path-B | 现 path-B | 现 dual(rules) | 现 dual(LLM) |")
+    print(
+        "| 语料 | 页数 | 路由 | 历史 PyMuPDF | 现 PyMuPDF | 历史 path-B | 现 path-B | 现 dual(rules) | 现 dual(LLM) |"
+    )
     print("|------|------|------|-------------|-----------|------------|----------|----------------|-------------|")
     totals: dict[str, int] = {
         "pymupdf_now": 0,
@@ -315,21 +319,76 @@ def print_report(all_results: dict[str, dict[str, PathResult | None]]) -> None:
     print("\n*上传感知 = 仅 PyMuPDF 同步 ingest；path-B 与 merge 为异步后台。")
 
 
-async def main(*, with_llm: bool) -> None:
-    settings = get_settings()
-    if with_llm:
-        settings = Settings(
-            _env_file=None,
-            llm_mode="live",
-            scholargraph_api_key=settings.scholargraph_api_key or get_settings().scholargraph_api_key,
-            llm_api_base_url=settings.llm_api_base_url,
-            ingest_head_llm_enabled=True,
-        )
-        from backend.llm.client import reset_llm_client_cache
+async def run_paper_comparison(
+    pdf_path: Path,
+    settings: Settings,
+    *,
+    with_llm: bool = False,
+) -> dict[str, PathResult | None]:
+    """
+    Run one PDF through all benchmark paths (§2.1 dual-route comparison set).
 
-        get_settings.cache_clear()
-        reset_llm_client_cache()
-        settings = get_settings()
+    Keys: ``pymupdf_sync``, ``grobid_crf``, ``mineru_pipeline``,
+    ``dual_route_rules``, ``dual_route_llm`` (None when LLM disabled or unavailable).
+    """
+    row: dict[str, PathResult | None] = {}
+    row["pymupdf_sync"] = await run_pymupdf_sync(pdf_path)
+    row["grobid_crf"] = await run_grobid_path(pdf_path, settings)
+    row["mineru_pipeline"] = run_mineru_path(pdf_path, settings)
+    row["dual_route_rules"] = await run_dual_route_rules(
+        pdf_path,
+        settings,
+        grobid=row["grobid_crf"],
+        mineru=row["mineru_pipeline"],
+    )
+    if with_llm:
+        row["dual_route_llm"] = await run_dual_route_llm(
+            pdf_path,
+            settings,
+            grobid=row["grobid_crf"],
+            mineru=row["mineru_pipeline"],
+        )
+    else:
+        row["dual_route_llm"] = None
+    return row
+
+
+def build_benchmark_settings(*, with_llm: bool) -> Settings:
+    """Settings for benchmark runs (mock LLM by default; live when ``with_llm``)."""
+    settings = get_settings()
+    if not with_llm:
+        return Settings(
+            _env_file=None,
+            llm_mode="mock",
+            ingest_head_llm_enabled=False,
+            ingest_mineru_enabled=True,
+            ingest_mineru_model_source=settings.ingest_mineru_model_source or "modelscope",
+            ingest_mineru_timeout_seconds=settings.ingest_mineru_timeout_seconds,
+            ingest_short_page_limit=settings.ingest_short_page_limit,
+            ingest_route=settings.ingest_route,
+            grobid_url=settings.grobid_url,
+        )
+    from backend.llm.client import reset_llm_client_cache
+
+    get_settings.cache_clear()
+    reset_llm_client_cache()
+    return Settings(
+        _env_file=None,
+        llm_mode="live",
+        scholargraph_api_key=settings.scholargraph_api_key or get_settings().scholargraph_api_key,
+        llm_api_base_url=settings.llm_api_base_url,
+        ingest_head_llm_enabled=True,
+        ingest_mineru_enabled=True,
+        ingest_mineru_model_source=settings.ingest_mineru_model_source or "modelscope",
+        ingest_mineru_timeout_seconds=settings.ingest_mineru_timeout_seconds,
+        ingest_short_page_limit=settings.ingest_short_page_limit,
+        ingest_route=settings.ingest_route,
+        grobid_url=settings.grobid_url,
+    )
+
+
+async def main(*, with_llm: bool) -> None:
+    settings = build_benchmark_settings(with_llm=with_llm)
 
     all_results: dict[str, dict[str, PathResult | None]] = {}
     for paper_id in CORPUS_IDS:
@@ -338,23 +397,11 @@ async def main(*, with_llm: bool) -> None:
             print(f"SKIP {paper_id}: missing PDF")
             continue
         print(f"Running {paper_id} ({get_pdf_page_count(pdf_path)} pages)...")
-        row: dict[str, PathResult | None] = {}
-        row["pymupdf_sync"] = await run_pymupdf_sync(pdf_path)
-        row["grobid_crf"] = await run_grobid_path(pdf_path, settings)
-        row["mineru_pipeline"] = run_mineru_path(pdf_path, settings)
-        row["dual_route_rules"] = await run_dual_route_rules(
+        all_results[paper_id] = await run_paper_comparison(
             pdf_path,
             settings,
-            grobid=row["grobid_crf"],
-            mineru=row["mineru_pipeline"],
+            with_llm=with_llm,
         )
-        row["dual_route_llm"] = await run_dual_route_llm(
-            pdf_path,
-            settings,
-            grobid=row["grobid_crf"],
-            mineru=row["mineru_pipeline"],
-        )
-        all_results[paper_id] = row
 
     print_report(all_results)
 

@@ -9,6 +9,7 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 from httpx import AsyncClient
+
 from tests.api.conftest import assert_success_envelope
 
 VALID_PDF = b"%PDF-1.4\n% ScholarGraph upload non-blocking test"

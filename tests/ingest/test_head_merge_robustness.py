@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import xml.etree.ElementTree as ET
 from pathlib import Path
 from unittest.mock import AsyncMock, patch
 
@@ -26,7 +27,7 @@ def test_merge_with_rules_empty_candidates_produces_empty_head() -> None:
 
 
 def test_parse_tei_malformed_xml_raises() -> None:
-    with pytest.raises(Exception):
+    with pytest.raises(ET.ParseError):
         parse_tei_to_head_candidate("<not-valid-tei>")
 
 

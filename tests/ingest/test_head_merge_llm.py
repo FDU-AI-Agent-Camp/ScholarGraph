@@ -184,8 +184,7 @@ async def test_merge_with_llm_live_cloud_returns_structured_head(
     path_b = HeadCandidate(
         title="Graph Neural Networks for Materials Science",
         abstract=(
-            "This paper presents graph neural network methods for crystal property prediction "
-            "using benchmark datasets."
+            "This paper presents graph neural network methods for crystal property prediction using benchmark datasets."
         ),
         keywords="graph neural networks, materials science",
         intro="Deep learning has transformed computational materials discovery in recent years.",

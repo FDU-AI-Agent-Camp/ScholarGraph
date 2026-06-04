@@ -9,6 +9,7 @@ from uuid import uuid4
 from backend.api.exceptions import ApiError
 from backend.config import Settings, get_settings
 from backend.schemas.graph import UnifiedPaperGraph
+from backend.schemas.ingest_head import IngestHead
 from backend.schemas.paper import (
     FailedDuringStage,
     PaperCreateResult,
@@ -18,7 +19,6 @@ from backend.schemas.paper import (
     PaperSummary,
     PipelineStage,
 )
-from backend.schemas.ingest_head import IngestHead
 from backend.schemas.paradigm import Paradigm, ParadigmClassification
 from backend.services.paper_pipeline_scheduler import schedule_paper_pipeline
 

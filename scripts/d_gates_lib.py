@@ -26,7 +26,7 @@ CONVENTIONAL_COMMIT_TYPES = (
 )
 
 CONVENTIONAL_COMMIT_HEADER = re.compile(
-    rf"^({'|'.join(CONVENTIONAL_COMMIT_TYPES)})(\([a-z0-9./_-]+\))?!?: .+",
+    rf"^({'|'.join(CONVENTIONAL_COMMIT_TYPES)})(\([a-z0-9./_,-]+\))?!?: .+",
     re.IGNORECASE,
 )
 

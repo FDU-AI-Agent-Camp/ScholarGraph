@@ -2,18 +2,16 @@
  * V1 DoD A-06 — 双文巡检：mode + node_refs + 409/422 错误映射。
  */
 import { createPinia, setActivePinia } from 'pinia'
-import { flushPromises, mount } from '@vue/test-utils'
-import { createMemoryHistory, createRouter } from 'vue-router'
+import { flushPromises } from '@vue/test-utils'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { ApiClientError } from '@/api/client'
 import patrolLensClashFixture from '../../../docs/api/fixtures/patrol-lens-clash.json'
 import type { PatrolReport } from '@/api/types'
 import { PATROL_BASELINE_COPY } from '@/constants/patrolCopy'
-import { routes } from '@/router/index'
 import { RouteName } from '@/router/meta'
+import { mountAppRoute } from '@/test/helpers/mountRoute'
 import { resolvePatrolApiError } from '@/utils/patrolForm'
-import { routerViewShell } from '@/test/helpers/routerViewShell'
 
 const mockListPapers = vi.hoisted(() => vi.fn())
 const mockRunPatrol = vi.hoisted(() => vi.fn())
@@ -62,15 +60,7 @@ const routeStubs = {
 
 async function mountPatrol() {
   setActivePinia(createPinia())
-  const router = createRouter({ history: createMemoryHistory(), routes })
-  await router.push('/patrol')
-  await router.isReady()
-
-  const wrapper = mount(routerViewShell, {
-    global: { plugins: [router], stubs: routeStubs },
-  })
-  await flushPromises()
-  return { wrapper, router }
+  return mountAppRoute('/patrol', routeStubs)
 }
 
 describe('V1 DoD A-06 — patrol mode, node_refs, and error mapping', () => {

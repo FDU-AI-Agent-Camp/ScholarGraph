@@ -7,6 +7,7 @@ import os
 import re
 import shutil
 import subprocess
+import sys
 import tempfile
 from pathlib import Path
 
@@ -19,9 +20,22 @@ MINERU_BINARY = "mineru"
 _CJK_RE = re.compile(r"[\u4e00-\u9fff]")
 
 
+def resolve_mineru_binary() -> str | None:
+    """Return ``mineru`` executable path (PATH or active ``.venv`` Scripts)."""
+    found = shutil.which(MINERU_BINARY)
+    if found:
+        return found
+    venv_scripts = Path(sys.executable).resolve().parent
+    for name in (f"{MINERU_BINARY}.exe", MINERU_BINARY):
+        candidate = venv_scripts / name
+        if candidate.is_file():
+            return str(candidate)
+    return None
+
+
 def is_mineru_available() -> bool:
-    """Return True when ``mineru`` CLI is on PATH."""
-    return shutil.which(MINERU_BINARY) is not None
+    """Return True when ``mineru`` CLI is installed (``uv sync --extra mineru``)."""
+    return resolve_mineru_binary() is not None
 
 
 def resolve_mineru_lang(pdf_path: Path, *, settings: Settings | None = None) -> str:
@@ -61,7 +75,8 @@ def run_mineru_pipeline(
 
     Returns None when MinerU is unavailable or subprocess fails.
     """
-    if not is_mineru_available():
+    mineru_bin = resolve_mineru_binary()
+    if mineru_bin is None:
         logger.info("MinerU CLI not found; skipping path B for %s", pdf_path.name)
         return None
 
@@ -75,7 +90,7 @@ def run_mineru_pipeline(
     with tempfile.TemporaryDirectory(prefix="scholargraph-mineru-") as tmp:
         output_dir = Path(tmp)
         command = [
-            MINERU_BINARY,
+            mineru_bin,
             "-b",
             "pipeline",
             "-m",
@@ -88,6 +103,7 @@ def run_mineru_pipeline(
             lang,
             "-o",
             str(output_dir),
+            "-p",
             str(resolved),
         ]
         try:

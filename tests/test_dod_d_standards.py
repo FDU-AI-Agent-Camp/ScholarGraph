@@ -41,6 +41,7 @@ AGENTS_MD = REPO_ROOT / "AGENTS.md"
         ("test(integration): E robustness FE↔BE", True),
         ("docs(README): 完善协作说明", True),
         ("fix: patch patrol 409 mapping", True),
+        ("fix(frontend,test): 升级 vitest 并修复上传 status 用例竞态", True),
         ("chore: bump lockfile", True),
         ("Merge branch 'develop' into feature/x", True),
         ("update stuff", False),
@@ -79,15 +80,18 @@ def test_d01_check_backend_script_exists_and_ruff_targets() -> None:
 
 def test_d02_pyproject_excludes_red_marker_by_default() -> None:
     text = PYPROJECT.read_text(encoding="utf-8")
-    assert "addopts = \"-m 'not red'\"" in text or 'addopts = "-m not red"' in text
+    assert "addopts" in text
+    assert "not red" in text
     assert "red:" in text
+    assert "live_mineru:" in text
+    assert "not live_mineru" in text
 
 
 def test_d01_d02_backend_ci_matches_check_backend_commands() -> None:
     workflow = BACKEND_WORKFLOW.read_text(encoding="utf-8")
     assert "uv run ruff check backend tests scripts" in workflow
     assert "uv run ruff format --check backend tests scripts" in workflow
-    assert 'pytest -q -m "not red"' in workflow
+    assert 'pytest -q -m "not red and not live_mineru"' in workflow
 
 
 def test_d03_d04_frontend_ci_runs_check_not_only_typecheck() -> None:
