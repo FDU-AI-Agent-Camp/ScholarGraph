@@ -38,6 +38,18 @@ from backend.schemas.ingest_head import IngestHead
 
 CORPUS_DIR = REPO_ROOT / "data" / "corpus"
 CORPUS_IDS = ("stem-001", "hss-001", "hss-002")
+REPORT_DIR = REPO_ROOT / "data" / "benchmark_reports"
+
+
+def list_corpus_paper_ids(*, all_corpus: bool = False) -> tuple[str, ...]:
+    """Return golden trio or all local PDF stems (excluding ``_probe*``)."""
+    if not all_corpus:
+        return CORPUS_IDS
+    ids = sorted(
+        path.stem for path in CORPUS_DIR.glob("*.pdf") if path.is_file() and not path.stem.startswith("_probe")
+    )
+    return tuple(ids)
+
 
 TITLE_POLLUTION = re.compile(
     r"(学号|密级|doi:|https?://|university of|received:|accepted:)",
@@ -319,11 +331,182 @@ def print_report(all_results: dict[str, dict[str, PathResult | None]]) -> None:
     print("\n*上传感知 = 仅 PyMuPDF 同步 ingest；path-B 与 merge 为异步后台。")
 
 
+def print_batch_report(all_results: dict[str, dict[str, PathResult | None]], paper_ids: tuple[str, ...]) -> None:
+    """Full-corpus quality + speed summary (§2.1 batch benchmark)."""
+    n = len(paper_ids)
+    max_total = n * 4
+    print(f"\n## Full corpus batch ({n} PDFs) — quality (classifier 四段 0–4)\n")
+    print("| 语料 | 页数 | 路由 | PyMuPDF | path-B | dual(rules) | dual(LLM) |")
+    print("|------|------|------|---------|--------|-------------|-----------|")
+
+    totals: dict[str, int] = {
+        "pymupdf_sync": 0,
+        "path_b": 0,
+        "dual_route_rules": 0,
+        "dual_route_llm": 0,
+    }
+    path_b_ok = 0
+    speed_totals: dict[str, float] = {
+        "pymupdf_sync": 0.0,
+        "path_b": 0.0,
+        "dual_route_rules": 0.0,
+        "dual_route_llm": 0.0,
+    }
+    speed_counts: dict[str, int] = {
+        "pymupdf_sync": 0,
+        "path_b": 0,
+        "dual_route_rules": 0,
+        "dual_route_llm": 0,
+    }
+
+    for paper_id in paper_ids:
+        pdf = CORPUS_DIR / f"{paper_id}.pdf"
+        if paper_id not in all_results:
+            print(f"| {paper_id} | — | — | SKIP | SKIP | SKIP | SKIP |")
+            continue
+        pages = get_pdf_page_count(pdf)
+        short = pages <= 25
+        route_label = "短" if short else "长"
+        row = all_results[paper_id]
+        pym = row.get("pymupdf_sync")
+        path_b_key = "mineru_pipeline" if short else "grobid_crf"
+        path_b = row.get(path_b_key)
+        dual_r = row.get("dual_route_rules")
+        dual_l = row.get("dual_route_llm")
+        if pym:
+            totals["pymupdf_sync"] += pym.quality.total
+            speed_totals["pymupdf_sync"] += pym.elapsed_seconds
+            speed_counts["pymupdf_sync"] += 1
+        if path_b:
+            totals["path_b"] += path_b.quality.total
+            speed_totals["path_b"] += path_b.elapsed_seconds
+            speed_counts["path_b"] += 1
+            path_b_ok += 1
+        if dual_r:
+            totals["dual_route_rules"] += dual_r.quality.total
+            speed_totals["dual_route_rules"] += dual_r.elapsed_seconds
+            speed_counts["dual_route_rules"] += 1
+        if dual_l:
+            totals["dual_route_llm"] += dual_l.quality.total
+            speed_totals["dual_route_llm"] += dual_l.elapsed_seconds
+            speed_counts["dual_route_llm"] += 1
+        print(
+            f"| {paper_id} | {pages} | {route_label} | {fmt_score(pym)} | "
+            f"{fmt_score(path_b)} | {fmt_score(dual_r)} | {fmt_score(dual_l)} |"
+        )
+
+    print(
+        f"\n**质量合计**：PyMuPDF {totals['pymupdf_sync']}/{max_total} · "
+        f"path-B {totals['path_b']}/{max_total} ({path_b_ok}/{n} 成功) · "
+        f"dual rules {totals['dual_route_rules']}/{max_total} · "
+        f"dual LLM {totals['dual_route_llm']}/{max_total}"
+    )
+
+    def _avg(label: str) -> str:
+        count = speed_counts[label]
+        if count == 0:
+            return "—"
+        return f"{speed_totals[label] / count:.2f}s"
+
+    print("\n## Speed summary (mean wall-clock per path)\n")
+    print("| 路径 | 均值 | 合计 |")
+    print("|------|------|------|")
+    for label, title in (
+        ("pymupdf_sync", "PyMuPDF 同步"),
+        ("path_b", "path-B (MinerU/GROBID)"),
+        ("dual_route_rules", "dual(rules)"),
+        ("dual_route_llm", "dual(LLM)"),
+    ):
+        count = speed_counts[label]
+        total = speed_totals[label]
+        print(f"| {title} | {_avg(label)} | {total:.1f}s ({count} ok) |")
+
+    # Head-to-head wins on quality total
+    dual_wins = pym_wins = path_b_wins = 0
+    ties = 0
+    for paper_id in paper_ids:
+        row = all_results.get(paper_id)
+        if not row:
+            continue
+        pdf = CORPUS_DIR / f"{paper_id}.pdf"
+        pages = get_pdf_page_count(pdf)
+        path_b_key = "mineru_pipeline" if pages <= 25 else "grobid_crf"
+        scores: dict[str, int] = {}
+        if row.get("pymupdf_sync"):
+            scores["pym"] = row["pymupdf_sync"].quality.total  # type: ignore[union-attr]
+        if row.get(path_b_key):
+            scores["path_b"] = row[path_b_key].quality.total  # type: ignore[union-attr]
+        if row.get("dual_route_rules"):
+            scores["dual"] = row["dual_route_rules"].quality.total  # type: ignore[union-attr]
+        if len(scores) < 2:
+            continue
+        best = max(scores.values())
+        winners = [k for k, v in scores.items() if v == best]
+        if len(winners) > 1:
+            ties += 1
+        elif winners[0] == "dual":
+            dual_wins += 1
+        elif winners[0] == "pym":
+            pym_wins += 1
+        else:
+            path_b_wins += 1
+
+    print(
+        f"\n**逐篇质量领先**（PyMuPDF vs path-B vs dual rules）："
+        f"dual {dual_wins} · path-B {path_b_wins} · PyMuPDF {pym_wins} · 并列 {ties}"
+    )
+    print("\n*path-B = 短档 MinerU / 长档 GROBID；上传感知 = PyMuPDF 同步耗时。")
+
+
+def save_batch_json(
+    all_results: dict[str, dict[str, PathResult | None]],
+    paper_ids: tuple[str, ...],
+    *,
+    output_path: Path,
+) -> None:
+    """Persist batch results for offline review."""
+    import json
+    from dataclasses import asdict
+
+    payload: dict[str, object] = {
+        "paper_ids": list(paper_ids),
+        "generated_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+        "results": {},
+    }
+    results_payload: dict[str, object] = {}
+    for paper_id in paper_ids:
+        row = all_results.get(paper_id)
+        if row is None:
+            continue
+        pdf = CORPUS_DIR / f"{paper_id}.pdf"
+        pages = get_pdf_page_count(pdf) if pdf.is_file() else None
+        entry: dict[str, object] = {"pages": pages}
+        for key, result in row.items():
+            if result is None:
+                entry[key] = None
+                continue
+            entry[key] = {
+                "elapsed_seconds": result.elapsed_seconds,
+                "quality": asdict(result.quality),
+                "sources": result.sources,
+                "title_len": len(result.sections.title.strip()),
+                "abstract_len": len(result.sections.abstract.strip()),
+                "keywords_len": len(result.sections.keywords.strip()),
+                "intro_len": len(result.sections.intro.strip()),
+            }
+        results_payload[paper_id] = entry
+    payload["results"] = results_payload
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    output_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+    print(f"\nJSON report: {output_path}")
+
+
 async def run_paper_comparison(
     pdf_path: Path,
     settings: Settings,
     *,
     with_llm: bool = False,
+    skip_mineru_on_long: bool = False,
 ) -> dict[str, PathResult | None]:
     """
     Run one PDF through all benchmark paths (§2.1 dual-route comparison set).
@@ -331,10 +514,15 @@ async def run_paper_comparison(
     Keys: ``pymupdf_sync``, ``grobid_crf``, ``mineru_pipeline``,
     ``dual_route_rules``, ``dual_route_llm`` (None when LLM disabled or unavailable).
     """
+    page_count = get_pdf_page_count(pdf_path)
+    short = is_short_pdf(page_count, settings=settings)
     row: dict[str, PathResult | None] = {}
     row["pymupdf_sync"] = await run_pymupdf_sync(pdf_path)
     row["grobid_crf"] = await run_grobid_path(pdf_path, settings)
-    row["mineru_pipeline"] = run_mineru_path(pdf_path, settings)
+    if short or not skip_mineru_on_long:
+        row["mineru_pipeline"] = run_mineru_path(pdf_path, settings)
+    else:
+        row["mineru_pipeline"] = None
     row["dual_route_rules"] = await run_dual_route_rules(
         pdf_path,
         settings,
@@ -387,27 +575,46 @@ def build_benchmark_settings(*, with_llm: bool) -> Settings:
     )
 
 
-async def main(*, with_llm: bool) -> None:
+async def main(*, with_llm: bool, all_corpus: bool) -> None:
     settings = build_benchmark_settings(with_llm=with_llm)
+    paper_ids = list_corpus_paper_ids(all_corpus=all_corpus)
+    if all_corpus and not paper_ids:
+        print("No PDFs in data/corpus (excluding _probe*).")
+        return
 
     all_results: dict[str, dict[str, PathResult | None]] = {}
-    for paper_id in CORPUS_IDS:
+    for index, paper_id in enumerate(paper_ids, start=1):
         pdf_path = CORPUS_DIR / f"{paper_id}.pdf"
         if not pdf_path.is_file():
             print(f"SKIP {paper_id}: missing PDF")
             continue
-        print(f"Running {paper_id} ({get_pdf_page_count(pdf_path)} pages)...")
+        print(f"[{index}/{len(paper_ids)}] Running {paper_id} ({get_pdf_page_count(pdf_path)} pages)...", flush=True)
         all_results[paper_id] = await run_paper_comparison(
             pdf_path,
             settings,
             with_llm=with_llm,
+            skip_mineru_on_long=all_corpus,
         )
 
-    print_report(all_results)
+    if all_corpus:
+        print_batch_report(all_results, paper_ids)
+        stamp = time.strftime("%Y%m%d-%H%M%S", time.gmtime())
+        save_batch_json(
+            all_results,
+            paper_ids,
+            output_path=REPORT_DIR / f"corpus-batch-{stamp}.json",
+        )
+    else:
+        print_report(all_results)
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--with-llm", action="store_true", help="Include live LLM merge (needs API key)")
+    parser.add_argument(
+        "--all-corpus",
+        action="store_true",
+        help="Run all data/corpus/*.pdf except _probe* (default: golden 3)",
+    )
     args = parser.parse_args()
-    asyncio.run(main(with_llm=args.with_llm))
+    asyncio.run(main(with_llm=args.with_llm, all_corpus=args.all_corpus))

@@ -85,13 +85,14 @@ def test_d02_pyproject_excludes_red_marker_by_default() -> None:
     assert "red:" in text
     assert "live_mineru:" in text
     assert "not live_mineru" in text
+    assert "not live_grobid" in text
 
 
 def test_d01_d02_backend_ci_matches_check_backend_commands() -> None:
     workflow = BACKEND_WORKFLOW.read_text(encoding="utf-8")
     assert "uv run ruff check backend tests scripts" in workflow
     assert "uv run ruff format --check backend tests scripts" in workflow
-    assert 'pytest -q -m "not red and not live_mineru"' in workflow
+    assert 'pytest -q -m "not red and not live_mineru and not live_grobid"' in workflow
 
 
 def test_d03_d04_frontend_ci_runs_check_not_only_typecheck() -> None:
