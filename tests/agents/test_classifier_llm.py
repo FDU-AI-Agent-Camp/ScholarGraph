@@ -13,6 +13,7 @@ from backend.agents.classifier_llm import (
 )
 from backend.llm.client import LlmClient
 from backend.schemas.paradigm import Paradigm, ParadigmClassification
+from pydantic import ValidationError
 
 STEM_SAMPLE = (
     "Title: Agent framework benchmark. We evaluate the model on datasets with accuracy, "
@@ -32,6 +33,34 @@ def test_validate_llm_classification_rejects_empty_reason() -> None:
     classification = ParadigmClassification(paradigm=Paradigm.STEM, confidence=0.9, reason="   ")
     with pytest.raises(ValueError, match="reason is empty"):
         _validate_llm_classification(classification)
+
+
+def test_paradigm_classification_pydantic_bounds() -> None:
+    with pytest.raises(ValidationError):
+        ParadigmClassification(paradigm=Paradigm.STEM, confidence=-0.01, reason="ok")
+    with pytest.raises(ValidationError):
+        ParadigmClassification(paradigm=Paradigm.HSS, confidence=1.01, reason="ok")
+
+
+@pytest.mark.asyncio
+async def test_classify_with_llm_raises_when_both_models_fail(live_classify_env: None) -> None:
+    _ = live_classify_env
+    primary_runnable = MagicMock()
+    primary_runnable.ainvoke = AsyncMock(side_effect=RuntimeError("primary failed"))
+    fallback_runnable = MagicMock()
+    fallback_runnable.ainvoke = AsyncMock(side_effect=RuntimeError("fallback failed"))
+
+    primary_chat = MagicMock()
+    primary_chat.with_structured_output.return_value = primary_runnable
+    fallback_chat = MagicMock()
+    fallback_chat.with_structured_output.return_value = fallback_runnable
+
+    client = LlmClient()
+    client._chat = primary_chat
+    client._fallback_chat = fallback_chat
+
+    with pytest.raises(RuntimeError, match="fallback failed"):
+        await classify_with_llm(STEM_SAMPLE, llm_client=client)
 
 
 @pytest.mark.asyncio

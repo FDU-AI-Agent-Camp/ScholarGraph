@@ -204,3 +204,65 @@ async def test_red_llm_failures_trigger_heuristic_fallback(
 
     assert CLASSIFIER_HEURISTIC_FALLBACK_CODE in result.warnings
     assert result.classification.reason.strip()
+
+
+@pytest.mark.asyncio
+async def test_red_classifier_llm_disabled_writes_fallback_warning(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("LLM_MODE", "live")
+    monkeypatch.setenv("SCHOLARGRAPH_API_KEY", "test-key")
+    monkeypatch.setenv("CLASSIFIER_LLM_ENABLED", "false")
+    monkeypatch.setenv("CLASSIFIER_HEURISTIC_FALLBACK", "true")
+    get_settings.cache_clear()
+    reset_llm_client_cache()
+
+    with patch("backend.agents.classifier.classify_with_llm", new=AsyncMock()) as llm_mock:
+        result = await classify(STEM_SAMPLE)
+
+    llm_mock.assert_not_awaited()
+    assert CLASSIFIER_HEURISTIC_FALLBACK_CODE in result.warnings
+
+
+@pytest.mark.asyncio
+async def test_red_classify_with_llm_rejects_whitespace_reason(live_classify_env: None) -> None:
+    """G2.1 red: structured output with blank reason fails validation."""
+    from unittest.mock import MagicMock
+
+    from backend.agents.classifier_llm import classify_with_llm
+    from backend.llm.client import LlmClient
+    from backend.schemas.paradigm import Paradigm, ParadigmClassification
+
+    _ = live_classify_env
+    bad = ParadigmClassification(paradigm=Paradigm.STEM, confidence=0.9, reason="   ")
+    structured_runnable = MagicMock()
+    structured_runnable.ainvoke = AsyncMock(return_value=bad)
+    chat = MagicMock()
+    chat.with_structured_output.return_value = structured_runnable
+    client = LlmClient()
+    client._chat = chat
+    client._fallback_chat = None
+
+    with pytest.raises(ValueError, match="reason is empty"):
+        await classify_with_llm(STEM_SAMPLE, llm_client=client)
+
+
+@pytest.mark.asyncio
+async def test_red_classify_with_llm_primary_fail_no_fallback_client_raises(live_classify_env: None) -> None:
+    """G2.2 red: no fallback_chat → primary failure propagates."""
+    from unittest.mock import MagicMock
+
+    from backend.agents.classifier_llm import classify_with_llm
+    from backend.llm.client import LlmClient
+
+    _ = live_classify_env
+    primary_runnable = MagicMock()
+    primary_runnable.ainvoke = AsyncMock(side_effect=RuntimeError("primary only"))
+    chat = MagicMock()
+    chat.with_structured_output.return_value = primary_runnable
+    client = LlmClient()
+    client._chat = chat
+    client._fallback_chat = None
+
+    with pytest.raises(RuntimeError, match="primary only"):
+        await classify_with_llm(STEM_SAMPLE, llm_client=client)
+
+    primary_runnable.ainvoke.assert_awaited_once()

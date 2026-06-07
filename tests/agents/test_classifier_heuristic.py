@@ -22,3 +22,12 @@ def test_heuristic_classifies_hss_theory_text() -> None:
     assert result.paradigm == Paradigm.HSS
     assert 0 <= result.confidence <= 1
     assert "HSS" in result.reason
+
+
+def test_heuristic_returns_valid_paradigm_classification_shape() -> None:
+    result = classify_heuristic(STEM_SAMPLE)
+    dumped = result.model_dump(mode="json")
+    assert set(dumped.keys()) == {"paradigm", "confidence", "reason"}
+    assert dumped["paradigm"] in ("STEM", "HSS")
+    assert isinstance(dumped["confidence"], float)
+    assert isinstance(dumped["reason"], str) and dumped["reason"].strip()

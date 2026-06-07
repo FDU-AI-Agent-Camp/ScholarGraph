@@ -6,6 +6,7 @@ from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+from backend.config import get_settings
 from backend.graph.state import STAGE_PERCENT, WorkflowState, initial_workflow_state
 from backend.graph.workflow import get_compiled_paper_pipeline
 from backend.schemas.graph import GraphEdge, GraphNode, UnifiedPaperGraph
@@ -14,6 +15,19 @@ from backend.schemas.paradigm import Paradigm, ParadigmClassification
 from backend.services.graph_persistence_service import GraphPersistenceService
 from backend.services.paper_service import get_paper_service
 from backend.services.pipeline_completion_service import PipelineCompletionService
+
+
+@pytest.fixture
+def live_classify_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Live classify path with LLM enabled and heuristic fallback (Phase G)."""
+    from backend.llm.client import reset_llm_client_cache
+
+    monkeypatch.setenv("LLM_MODE", "live")
+    monkeypatch.setenv("SCHOLARGRAPH_API_KEY", "test-key")
+    monkeypatch.setenv("CLASSIFIER_LLM_ENABLED", "true")
+    monkeypatch.setenv("CLASSIFIER_HEURISTIC_FALLBACK", "true")
+    get_settings.cache_clear()
+    reset_llm_client_cache()
 
 
 @pytest.fixture(autouse=True)

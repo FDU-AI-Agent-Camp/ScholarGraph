@@ -136,3 +136,37 @@ async def test_api_g16_classifying_stage_exposes_fallback_before_ready(api_clien
     data = response.json()["data"]
     assert data["stage"] == "classifying"
     assert data["classify_warnings"] == [CLASSIFIER_HEURISTIC_FALLBACK_CODE]
+
+
+@pytest.mark.asyncio
+async def test_api_g28_classification_unchanged_when_classify_warnings_present(api_client: AsyncClient) -> None:
+    """G2.8: ParadigmClassification contract on detail stays independent of warnings."""
+    from backend.schemas.paradigm import Paradigm, ParadigmClassification
+
+    paper_id = "api-g28-classification-001"
+    now = datetime.now(UTC)
+    classification = ParadigmClassification(
+        paradigm=Paradigm.HSS,
+        confidence=0.88,
+        reason="Theory-driven qualitative framing.",
+    )
+    get_paper_service()._papers[paper_id] = PaperDetail(
+        paper_id=paper_id,
+        title="g28 api test",
+        status=PaperStatus.READY,
+        created_at=now,
+        updated_at=now,
+        paradigm=Paradigm.HSS,
+        classification=classification,
+    )
+    get_pipeline_status_service().mark_ready(paper_id)
+    get_paper_service().record_classify_warnings(paper_id, [CLASSIFIER_HEURISTIC_FALLBACK_CODE])
+
+    response = await api_client.get(f"/api/v1/papers/{paper_id}")
+
+    assert response.status_code == 200
+    data = response.json()["data"]
+    assert data["classify_warnings"] == [CLASSIFIER_HEURISTIC_FALLBACK_CODE]
+    assert data["classification"]["paradigm"] == "HSS"
+    assert data["classification"]["confidence"] == 0.88
+    assert data["classification"]["reason"] == classification.reason

@@ -11,6 +11,7 @@ from backend.graph.state import WorkflowState
 from backend.schemas.graph import GraphNode, UnifiedPaperGraph
 from backend.schemas.paper import PaperStatus, PipelineStage
 from backend.schemas.paradigm import Paradigm, ParadigmClassification
+from backend.services.agent_service import AgentService
 from backend.services.errors import ServiceError
 from backend.services.graph_persistence_service import GraphPersistenceService
 from backend.services.paper_service import get_paper_service
@@ -207,6 +208,31 @@ async def test_classify_node_records_classify_warnings(
 
     record_warnings.assert_called_once_with(paper_id, [CLASSIFIER_HEURISTIC_FALLBACK_CODE])
     assert out["classify_warnings"] == [CLASSIFIER_HEURISTIC_FALLBACK_CODE]
+
+
+async def test_g23_classify_node_llm_failure_persists_warnings_without_failed(
+    post_ingest_state: WorkflowState,
+    live_classify_env: None,
+) -> None:
+    """G2.3: real AgentService + LLM fail → heuristic; pipeline state not failed."""
+    _ = live_classify_env
+    agent = AgentService()
+    paper_id = post_ingest_state["paper_id"]
+    paper_svc = get_paper_service()
+
+    with (
+        patch("backend.graph.nodes.get_agent_service", return_value=agent),
+        patch(
+            "backend.agents.classifier.classify_with_llm",
+            new=AsyncMock(side_effect=RuntimeError("structured output failed")),
+        ),
+    ):
+        out = await nodes.classify_node(post_ingest_state)
+
+    assert out.get("failed") is not True
+    assert CLASSIFIER_HEURISTIC_FALLBACK_CODE in out["classify_warnings"]
+    assert paper_svc.get_classify_warnings(paper_id) == [CLASSIFIER_HEURISTIC_FALLBACK_CODE]
+    assert out["paradigm"] in (Paradigm.STEM.value, Paradigm.HSS.value)
 
 
 async def test_classify_node_service_error_sets_llm_json_invalid(

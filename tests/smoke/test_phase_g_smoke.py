@@ -106,6 +106,28 @@ async def test_smoke_get_paper_detail_route_includes_classify_warnings() -> None
 
 
 @pytest.mark.smoke
+def test_smoke_classifier_heuristic_importable() -> None:
+    from backend.agents.classifier_heuristic import classify_heuristic
+
+    assert callable(classify_heuristic)
+
+
+@pytest.mark.smoke
+def test_smoke_classify_with_llm_exported() -> None:
+    from backend.agents.classifier_llm import classify_with_llm
+
+    assert callable(classify_with_llm)
+
+
+@pytest.mark.smoke
+def test_smoke_g24_classifier_llm_enabled_env_in_example() -> None:
+    env_example = Path(__file__).resolve().parents[2] / ".env.example"
+    text = env_example.read_text(encoding="utf-8")
+    assert "CLASSIFIER_LLM_ENABLED" in text
+    assert "CLASSIFIER_HEURISTIC_FALLBACK" in text
+
+
+@pytest.mark.smoke
 def test_smoke_papers_list_fixture_still_validates() -> None:
     payload = json.loads((FIXTURES_DIR / "papers-list.json").read_text(encoding="utf-8"))
     assert payload["data"]["items"]

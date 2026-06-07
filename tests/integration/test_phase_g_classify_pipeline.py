@@ -158,3 +158,42 @@ async def test_g18_pipeline_classify_failure_without_fallback_marks_failed(
     assert status.status == PaperStatus.FAILED
     assert status.failed_during == PipelineStage.CLASSIFYING
     assert status.classify_warnings == []
+
+
+@pytest.mark.asyncio
+async def test_g24_pipeline_llm_disabled_writes_classify_warnings(
+    integration_paper: tuple[str, Path],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    paper_id, pdf_path = integration_paper
+    monkeypatch.setenv("LLM_MODE", "live")
+    monkeypatch.setenv("SCHOLARGRAPH_API_KEY", "test-key")
+    monkeypatch.setenv("CLASSIFIER_LLM_ENABLED", "false")
+    monkeypatch.setenv("CLASSIFIER_HEURISTIC_FALLBACK", "true")
+    monkeypatch.setenv("EXTRACT_LLM_ENABLED", "false")
+    get_settings.cache_clear()
+    reset_llm_client_cache()
+
+    agent = AgentService()
+
+    with mock_pipeline_node_services(paper_id) as mocks:
+        mocks["ingest"].ingest = AsyncMock(
+            return_value={
+                "paper_id": paper_id,
+                "full_text": STEM_SNIPPET,
+                "classifier_input": STEM_SNIPPET,
+            },
+        )
+        with (
+            patch("backend.graph.nodes.get_agent_service", return_value=agent),
+            patch("backend.agents.classifier.classify_with_llm", new=AsyncMock()) as llm_mock,
+        ):
+            final = await run_paper_pipeline(paper_id, pdf_path)
+
+    llm_mock.assert_not_awaited()
+    assert final.get("failed") is not True
+    assert CLASSIFIER_HEURISTIC_FALLBACK_CODE in final.get("classify_warnings", [])
+
+    status = await get_paper_service().get_status(paper_id)
+    assert status.status == PaperStatus.READY
+    assert status.classify_warnings == [CLASSIFIER_HEURISTIC_FALLBACK_CODE]

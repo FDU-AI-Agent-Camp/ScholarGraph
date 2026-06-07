@@ -87,3 +87,22 @@ async def test_g8_no_fallback_raises_service_error(
         with pytest.raises(ServiceError) as err:
             await classify(STEM_SAMPLE)
     assert err.value.code == "PIPELINE_FAILED"
+
+
+@pytest.mark.asyncio
+async def test_g24_llm_disabled_symmetric_with_extract_disabled_path(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """G2.4: live + CLASSIFIER_LLM_ENABLED=false → heuristic + warning (mirror extract disabled)."""
+    monkeypatch.setenv("LLM_MODE", "live")
+    monkeypatch.setenv("SCHOLARGRAPH_API_KEY", "test-key")
+    monkeypatch.setenv("CLASSIFIER_LLM_ENABLED", "false")
+    monkeypatch.setenv("CLASSIFIER_HEURISTIC_FALLBACK", "true")
+    get_settings.cache_clear()
+    reset_llm_client_cache()
+
+    with patch("backend.agents.classifier.classify_with_llm", new=AsyncMock()) as llm_mock:
+        result = await classify(STEM_SAMPLE)
+
+    llm_mock.assert_not_awaited()
+    assert CLASSIFIER_HEURISTIC_FALLBACK_CODE in result.warnings
