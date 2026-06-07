@@ -14,9 +14,7 @@ from backend.schemas.graph import (
 from backend.schemas.paradigm import Paradigm
 
 # HSS-only node types forbidden in STEM graphs (Claim/Evidence are shared).
-F33_FORBIDDEN_HSS_NODE_TYPES = frozenset(
-    node_type.value for node_type in (HSS_NODE_TYPES - STEM_NODE_TYPES)
-)
+F33_FORBIDDEN_HSS_NODE_TYPES = frozenset(node_type.value for node_type in (HSS_NODE_TYPES - STEM_NODE_TYPES))
 
 F33_STEM_CORE_EDGE_TYPES = frozenset(
     {

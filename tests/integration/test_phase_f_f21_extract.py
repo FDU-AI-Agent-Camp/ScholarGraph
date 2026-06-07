@@ -6,6 +6,7 @@ from pathlib import Path
 from unittest.mock import AsyncMock, patch
 
 import pytest
+from backend.agents.classifier_types import ClassifyResult
 from backend.agents.extract_constants import EXTRACT_HEURISTIC_FALLBACK_CODE
 from backend.config import get_settings
 from backend.graph.workflow import run_paper_pipeline
@@ -47,7 +48,9 @@ async def _run_with_real_agent_service(
 
     agent = AgentService()
     if classification is not None:
-        agent.classify_paradigm = AsyncMock(return_value=classification)  # type: ignore[method-assign]
+        agent.classify_paradigm = AsyncMock(  # type: ignore[method-assign]
+            return_value=ClassifyResult(classification=classification, warnings=[]),
+        )
 
     with mock_pipeline_node_services(paper_id) as mocks:
         if ingest_full_text is not None:

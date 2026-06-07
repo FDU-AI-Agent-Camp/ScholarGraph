@@ -3,6 +3,7 @@
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
+from backend.agents.classifier_types import ClassifyResult
 from backend.agents.extract_types import ExtractResult
 from backend.graph import nodes
 from backend.graph.state import WorkflowState, initial_workflow_state
@@ -59,7 +60,7 @@ async def test_classify_node_reaches_be_only_via_agent_service(
         reason="r",
     )
     with patch("backend.services.agent_service.classify", new_callable=AsyncMock) as raw:
-        raw.return_value = classification
+        raw.return_value = ClassifyResult(classification=classification, warnings=[])
         out = await nodes.classify_node(post_ingest_state)
 
     raw.assert_awaited_once_with(post_ingest_state["classifier_input"])

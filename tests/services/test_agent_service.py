@@ -3,6 +3,7 @@
 from unittest.mock import AsyncMock, patch
 
 import pytest
+from backend.agents.classifier_types import ClassifyResult
 from backend.agents.extract_types import ExtractResult
 from backend.schemas.graph import GraphNode, UnifiedPaperGraph
 from backend.schemas.paradigm import Paradigm, ParadigmClassification
@@ -24,11 +25,20 @@ async def test_classify_paradigm_success() -> None:
     )
     service = AgentService()
     with patch("backend.services.agent_service.classify", new_callable=AsyncMock) as raw:
-        raw.return_value = expected
+        raw.return_value = ClassifyResult(classification=expected, warnings=[])
         result = await service.classify_paradigm("abstract text")
 
     raw.assert_awaited_once_with("abstract text")
-    assert result.paradigm == Paradigm.STEM
+    assert result.classification.paradigm == Paradigm.STEM
+
+
+async def test_classify_paradigm_propagates_service_error() -> None:
+    service = AgentService()
+    with patch("backend.services.agent_service.classify", new_callable=AsyncMock) as raw:
+        raw.side_effect = ServiceError("PIPELINE_FAILED", "范式 LLM 分类失败")
+        with pytest.raises(ServiceError) as err:
+            await service.classify_paradigm("x")
+    assert err.value.code == "PIPELINE_FAILED"
 
 
 @pytest.mark.parametrize(

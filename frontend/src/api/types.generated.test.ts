@@ -42,8 +42,11 @@ describe('types.ts vs generated OpenAPI schema', () => {
       updated_at: '2026-05-19T10:00:00Z',
       error_code: 'E',
       failed_during: 'ingesting',
+      extract_warnings: ['extract_heuristic_fallback'],
+      classify_warnings: ['classifier_heuristic_fallback'],
     }
     expect(_statusData.error_code).toBe('E')
+    expect(_statusData.classify_warnings).toEqual(['classifier_heuristic_fallback'])
   })
 
   it('PatrolReport accepts OpenAPI PatrolResponse data shape', () => {

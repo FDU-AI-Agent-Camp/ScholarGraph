@@ -30,6 +30,19 @@ def minimal_valid_llm_graph(
     )
 
 
+@pytest.fixture
+def live_classify_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Live classify path with LLM enabled and heuristic fallback (Phase G)."""
+    from backend.llm.client import reset_llm_client_cache
+
+    monkeypatch.setenv("LLM_MODE", "live")
+    monkeypatch.setenv("SCHOLARGRAPH_API_KEY", "test-key")
+    monkeypatch.setenv("CLASSIFIER_LLM_ENABLED", "true")
+    monkeypatch.setenv("CLASSIFIER_HEURISTIC_FALLBACK", "true")
+    get_settings.cache_clear()
+    reset_llm_client_cache()
+
+
 @pytest.fixture(autouse=True)
 def be2_heuristic_agents(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("LLM_MODE", "live")

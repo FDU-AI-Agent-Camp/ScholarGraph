@@ -6,6 +6,7 @@ from pathlib import Path
 from unittest.mock import AsyncMock, patch
 
 import pytest
+from backend.agents.classifier_types import ClassifyResult
 from backend.agents.extract_constants import EXTRACT_HEURISTIC_FALLBACK_CODE
 from backend.config import get_settings
 from backend.graph.workflow import run_paper_pipeline
@@ -51,7 +52,10 @@ async def test_x16_x17_pipeline_fallback_warnings_on_status_and_detail(
     paper_id, pdf_path = integration_paper
     agent = AgentService()
     agent.classify_paradigm = AsyncMock(  # type: ignore[method-assign]
-        return_value=ParadigmClassification(paradigm=Paradigm.HSS, confidence=0.9, reason="mock"),
+        return_value=ClassifyResult(
+            classification=ParadigmClassification(paradigm=Paradigm.HSS, confidence=0.9, reason="mock"),
+            warnings=[],
+        ),
     )
 
     with mock_pipeline_node_services(paper_id) as mocks:

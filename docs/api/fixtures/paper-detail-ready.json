@@ -11,7 +11,8 @@
       "confidence": 0.95,
       "reason": "本文使用了历史制度主义视角，考察近代中国通商口岸的制度演变，无显式数据集与量化指标，属于典型的人文社科规范。"
     },
-    "extract_warnings": []
+    "extract_warnings": [],
+    "classify_warnings": []
   },
   "meta": { "request_id": "mock-detail-001" }
 }

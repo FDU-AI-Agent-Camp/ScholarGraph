@@ -88,6 +88,12 @@ class Settings(BaseSettings):
         validation_alias="EXTRACT_HEURISTIC_FALLBACK",
     )
 
+    classifier_llm_enabled: bool = Field(default=True, validation_alias="CLASSIFIER_LLM_ENABLED")
+    classifier_heuristic_fallback: bool = Field(
+        default=True,
+        validation_alias="CLASSIFIER_HEURISTIC_FALLBACK",
+    )
+
     @field_validator("cors_origins", mode="before")
     @classmethod
     def split_cors_origins(cls, value: str | list[str]) -> str:

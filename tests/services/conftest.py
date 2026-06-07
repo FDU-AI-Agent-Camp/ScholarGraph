@@ -50,6 +50,7 @@ def registered_paper() -> str:
     )
     service._status.pop(paper_id, None)
     service._head_refine_warnings.pop(paper_id, None)
+    service._classify_warnings.pop(paper_id, None)
     service._extract_warnings.pop(paper_id, None)
     service._refined_classifier_input.pop(paper_id, None)
     service._refined_head.pop(paper_id, None)

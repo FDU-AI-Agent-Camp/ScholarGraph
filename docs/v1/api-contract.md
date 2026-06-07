@@ -25,6 +25,27 @@
 
 **V1 不设** `GET /papers/{id}/classification` 独立路由。
 
+### 1.1 降级警告字段（`classify_warnings` / `extract_warnings`）
+
+范式分类与图谱抽取为**独立 LLM 能力点**（各自 env 开关、各自 fallback）。`classification` **不含** warnings；降级信息在 **`PaperDetail` / `PaperStatusData` 的并列字段**：
+
+| 字段 | 出现位置 | 含义 |
+|------|----------|------|
+| `classify_warnings` | `GET /papers/{id}`、`GET .../status` | 范式分类降级机器码 |
+| `extract_warnings` | 同上 | 图谱抽取降级机器码 |
+| `head_refine_warnings` | 同上 | 文档头部精炼降级（ingest，Phase E） |
+
+**机器码（API 仅返回码，不含用户文案）**：
+
+| 机器码 | 前端冻结文案 |
+|--------|----------------|
+| `classifier_heuristic_fallback` | 触发分类启发式Fallback! |
+| `extract_heuristic_fallback` | 触发启发式Fallback! |
+
+Fixtures：[`paper-status-classify-fallback.json`](../api/fixtures/paper-status-classify-fallback.json)、[`paper-detail-classify-fallback.json`](../api/fixtures/paper-detail-classify-fallback.json)、[`paper-status-ready-fallback.json`](../api/fixtures/paper-status-ready-fallback.json)（extract fallback）。
+
+**运维**：根因写在服务端日志（非 API），例如 `classify_llm_fallback` / `extract_llm_fallback`（含 `reason`）、`extract_llm_success`（含 `elapsed_ms`）。分类 LLM 成功时抽取仍可能 fallback，属预期行为。
+
 ---
 
 ## 2. `status` 与 `stage` 区别
@@ -32,7 +53,7 @@
 | 字段 | 出现位置 | 枚举 | 含义 |
 |------|----------|------|------|
 | **`status`** | `POST /papers`、`GET /papers`、`GET /papers/{id}`、`GET .../status` | `pending` `processing` `ready` `failed` | 论文**业务生命周期** |
-| **`stage`** | 仅 `GET /papers/{id}/status` | `ingesting` `classifying` `extracting` `storing` `ready` `failed` | 流水线**当前步骤** |
+| **`stage`** | 仅 `GET /papers/{id}/status` | `ingesting` `head_refining` `classifying` `extracting` `storing` `ready` `failed` | 流水线**当前步骤** |
 
 - `status=processing` 时必有 `stage`（且 `stage` ≠ `ready`）。
 - `status=ready` 时 `stage=ready`，`percent=100`。
@@ -46,6 +67,7 @@
 | `stage` | `percent` |
 |---------|-----------|
 | `ingesting` | 20 |
+| `head_refining` | 35 |
 | `classifying` | 50 |
 | `extracting` | 80 |
 | `storing` | 95 |
@@ -177,13 +199,17 @@
       "paradigm": "HSS",
       "confidence": 0.95,
       "reason": "本文使用了历史制度主义视角，考察近代中国通商口岸的制度演变，无显式数据集与量化指标，属于典型的人文社科规范。"
-    }
+    },
+    "classify_warnings": [],
+    "extract_warnings": []
   },
   "meta": { "request_id": "…" }
 }
 ```
 
-处理中：`status` 为 `pending`/`processing` 时，`classification` 可为 `null`。
+处理中：`status` 为 `pending`/`processing` 时，`classification` 可为 `null`；`classify_warnings` / `extract_warnings` 默认为 `[]`，降级发生后在 `ready` 时可见。
+
+降级示例见 fixtures `paper-detail-classify-fallback.json`、`paper-detail-ready-fallback.json`（字段仅含机器码）。
 
 ---
 
@@ -205,7 +231,7 @@
 }
 ```
 
-**200（完成）**：`status=ready`，`stage=ready`，`percent=100`。  
+**200（完成）**：`status=ready`，`stage=ready`，`percent=100`；若发生过 LLM 降级，响应含 `classify_warnings` / `extract_warnings`（见 [§1.1](#11-降级警告字段classify_warnings--extract_warnings)）。  
 
 **200（失败）**：`status=failed`，`stage=failed`，`percent=0`；并返回 `error_code` 与 `failed_during`（失败时所在流水线步骤，不含 `ready`/`failed`）：
 

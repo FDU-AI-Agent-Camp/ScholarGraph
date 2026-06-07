@@ -6,6 +6,7 @@ from pathlib import Path
 from unittest.mock import AsyncMock, patch
 
 import pytest
+from backend.agents.classifier_types import ClassifyResult
 from backend.agents.extract_constants import EXTRACT_HEURISTIC_FALLBACK_CODE
 from backend.agents.extractor import extract
 from backend.config import get_settings
@@ -78,7 +79,10 @@ async def test_f33_pipeline_stores_hss_graph_with_f33_node_types(
 
     agent = AgentService()
     agent.classify_paradigm = AsyncMock(  # type: ignore[method-assign]
-        return_value=ParadigmClassification(paradigm=Paradigm.HSS, confidence=0.9, reason="mock"),
+        return_value=ClassifyResult(
+            classification=ParadigmClassification(paradigm=Paradigm.HSS, confidence=0.9, reason="mock"),
+            warnings=[],
+        ),
     )
 
     with mock_pipeline_node_services(paper_id) as mocks:

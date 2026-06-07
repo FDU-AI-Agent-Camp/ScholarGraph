@@ -53,6 +53,10 @@ class PaperDetail(PaperSummary):
         default_factory=list,
         description="Machine-readable graph-extract degrade codes (e.g. extract_heuristic_fallback).",
     )
+    classify_warnings: list[str] = Field(
+        default_factory=list,
+        description="Machine-readable paradigm-classifier degrade codes (e.g. classifier_heuristic_fallback).",
+    )
 
 
 class PaperCreateResult(BaseModel):
@@ -83,4 +87,8 @@ class PaperStatusData(BaseModel):
     extract_warnings: list[str] = Field(
         default_factory=list,
         description="Machine-readable graph-extract degrade codes (e.g. extract_heuristic_fallback).",
+    )
+    classify_warnings: list[str] = Field(
+        default_factory=list,
+        description="Machine-readable paradigm-classifier degrade codes (e.g. classifier_heuristic_fallback).",
     )

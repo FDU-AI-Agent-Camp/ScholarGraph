@@ -3,18 +3,21 @@
 from functools import lru_cache
 
 from backend.agents.classifier import classify
+from backend.agents.classifier_types import ClassifyResult
 from backend.agents.extract_types import ExtractResult
 from backend.agents.extractor import extract
-from backend.schemas.paradigm import Paradigm, ParadigmClassification
+from backend.schemas.paradigm import Paradigm
 from backend.services.errors import PIPELINE_FAILED_CODE, ServiceError
 
 
 class AgentService:
     """Paradigm classification and graph extraction."""
 
-    async def classify_paradigm(self, classifier_input: str) -> ParadigmClassification:
+    async def classify_paradigm(self, classifier_input: str) -> ClassifyResult:
         try:
             return await classify(classifier_input)
+        except ServiceError:
+            raise
         except NotImplementedError as exc:
             raise ServiceError(PIPELINE_FAILED_CODE, str(exc)) from exc
         except Exception as exc:

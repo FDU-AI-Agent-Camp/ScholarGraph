@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from unittest.mock import AsyncMock, patch
+from unittest.mock import patch
 
 import pytest
 from backend.agents.extract_heuristic import build_hss_graph
@@ -11,7 +11,6 @@ from backend.config import get_settings
 from backend.llm.client import reset_llm_client_cache
 from backend.schemas import NodeType
 from backend.schemas.paradigm import Paradigm
-
 from tests.helpers.f33_hss_graphs import (
     F33_FORBIDDEN_STEM_NODE_TYPES,
     F33_HSS_CORE_EDGE_TYPES,

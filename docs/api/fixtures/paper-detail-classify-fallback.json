@@ -1,0 +1,18 @@
+{
+  "data": {
+    "paper_id": "hss-classify-fallback-001",
+    "title": "分类启发式降级示例论文",
+    "status": "ready",
+    "paradigm": "STEM",
+    "created_at": "2026-05-19T10:00:00Z",
+    "updated_at": "2026-05-19T10:05:00Z",
+    "classification": {
+      "paradigm": "STEM",
+      "confidence": 0.82,
+      "reason": "Heuristic keyword match: benchmark and dataset cues."
+    },
+    "extract_warnings": [],
+    "classify_warnings": ["classifier_heuristic_fallback"]
+  },
+  "meta": { "request_id": "mock-detail-classify-fallback-001" }
+}

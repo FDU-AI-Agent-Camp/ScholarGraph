@@ -3,10 +3,12 @@ import { describe, expect, it } from 'vitest'
 import type { FailedDuringStage, PaperStatusData } from '@/api/types'
 import paperDetailReadyEnvelope from '../../../docs/api/fixtures/paper-detail-ready.json'
 import paperDetailFallbackEnvelope from '../../../docs/api/fixtures/paper-detail-ready-fallback.json'
+import paperDetailClassifyFallbackEnvelope from '../../../docs/api/fixtures/paper-detail-classify-fallback.json'
 import failedStatusEnvelope from '../../../docs/api/fixtures/paper-status-hss-failed-001.json'
 import hss002StatusEnvelope from '../../../docs/api/fixtures/paper-status-hss-002.json'
 import processingStatusEnvelope from '../../../docs/api/fixtures/paper-status-processing.json'
 import readyFallbackStatusEnvelope from '../../../docs/api/fixtures/paper-status-ready-fallback.json'
+import classifyFallbackStatusEnvelope from '../../../docs/api/fixtures/paper-status-classify-fallback.json'
 import { failedStatus, processingStatus } from '@/test/fixtures/paperStatus'
 import type { PaperDetail } from '@/api/types'
 
@@ -70,5 +72,18 @@ describe('API contract fixtures vs types.ts', () => {
     const fallback = paperDetailFallbackEnvelope.data as PaperDetail
     expect(clean.extract_warnings).toEqual([])
     expect(fallback.extract_warnings).toEqual(['extract_heuristic_fallback'])
+  })
+
+  it('ready classify fallback status fixture includes classify_warnings code', () => {
+    assertPaperStatusDataShape(classifyFallbackStatusEnvelope.data)
+    const data = classifyFallbackStatusEnvelope.data as PaperStatusData
+    expect(data.classify_warnings).toEqual(['classifier_heuristic_fallback'])
+  })
+
+  it('paper detail fixtures expose classify_warnings for G.3', () => {
+    const clean = paperDetailReadyEnvelope.data as PaperDetail
+    const classifyFallback = paperDetailClassifyFallbackEnvelope.data as PaperDetail
+    expect(clean.classify_warnings).toEqual([])
+    expect(classifyFallback.classify_warnings).toEqual(['classifier_heuristic_fallback'])
   })
 })

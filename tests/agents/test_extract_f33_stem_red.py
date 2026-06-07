@@ -16,7 +16,6 @@ from backend.llm.client import reset_llm_client_cache
 from backend.schemas.graph import GraphEdge, GraphNode, UnifiedPaperGraph
 from backend.schemas.paradigm import Paradigm
 from pydantic import ValidationError
-
 from tests.helpers.f33_stem_graphs import (
     F33_FORBIDDEN_HSS_NODE_TYPES,
     assert_stem_excludes_hss_only_node_types,

@@ -41,6 +41,18 @@ def test_paper_status_data_defaults_head_refine_warnings_to_empty_list() -> None
     assert status.head_refine_warnings == []
 
 
+def test_paper_status_data_defaults_classify_warnings_to_empty_list() -> None:
+    status = PaperStatusData(
+        paper_id="schema-default",
+        status=PaperStatus.PROCESSING,
+        percent=50,
+        stage=PipelineStage.CLASSIFYING,
+        message="正在范式分类",
+        updated_at=datetime.now(UTC),
+    )
+    assert status.classify_warnings == []
+
+
 def test_paper_status_data_defaults_extract_warnings_to_empty_list() -> None:
     status = PaperStatusData(
         paper_id="schema-default",

@@ -6,12 +6,16 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import PaperStatusPanel from '@/components/papers/PaperStatusPanel.vue'
 import { DETAIL_BASELINE_COPY } from '@/constants/detailCopy'
 import { EXTRACT_HEURISTIC_FALLBACK_MESSAGE, EXTRACT_HEURISTIC_FALLBACK_CODE } from '@/utils/extractWarnings'
+import { CLASSIFIER_HEURISTIC_FALLBACK_MESSAGE } from '@/utils/classifyWarnings'
 import {
   failedStatus,
   failedStatusWithoutCode,
   processingStatus,
   readyStatus,
+  readyStatusWithBothFallbacks,
+  readyStatusWithClassifyFallback,
   readyStatusWithExtractFallback,
+  classifyingStatusWithClassifyFallback,
 } from '@/test/fixtures/paperStatus'
 
 const mockStart = vi.fn()
@@ -172,6 +176,78 @@ describe('PaperStatusPanel', () => {
     expect(ElMessage.warning).toHaveBeenCalledTimes(1)
     expect(ElMessage.warning).toHaveBeenCalledWith(EXTRACT_HEURISTIC_FALLBACK_MESSAGE)
     expect(wrapper.emitted('ready')).toHaveLength(1)
+  })
+
+  it('renders classify fallback warning alert when classify_warnings present', () => {
+    mockStatus.value = readyStatusWithClassifyFallback
+
+    const wrapper = mount(PaperStatusPanel, {
+      props: { paperId: 'paper-001', autoStart: false },
+    })
+
+    const alerts = wrapper.findAll('.el-alert-stub')
+    const warning = alerts.find((node) => node.attributes('data-type') === 'warning')
+    expect(warning?.attributes('data-title')).toBe(CLASSIFIER_HEURISTIC_FALLBACK_MESSAGE)
+    expect(wrapper.find('.status-panel__classify-warning').exists()).toBe(true)
+  })
+
+  it('does not render classify warning alert when classify_warnings empty', () => {
+    mockStatus.value = readyStatus
+
+    const wrapper = mount(PaperStatusPanel, {
+      props: { paperId: 'paper-001', autoStart: false },
+    })
+
+    expect(wrapper.find('.status-panel__classify-warning').exists()).toBe(false)
+  })
+
+  it('shows ElMessage.warning once when polling reaches ready with classify fallback', async () => {
+    vi.mocked(ElMessage.warning).mockClear()
+    mockStatus.value = processingStatus
+    const wrapper = mount(PaperStatusPanel, {
+      props: { paperId: 'paper-001', autoStart: false },
+    })
+
+    mockStatus.value = readyStatusWithClassifyFallback
+    await flushPromises()
+
+    expect(ElMessage.warning).toHaveBeenCalledTimes(1)
+    expect(ElMessage.warning).toHaveBeenCalledWith(CLASSIFIER_HEURISTIC_FALLBACK_MESSAGE)
+    expect(wrapper.emitted('ready')).toHaveLength(1)
+  })
+
+  it('shows classify warning alert while polling during classifying stage', () => {
+    mockStatus.value = classifyingStatusWithClassifyFallback
+
+    const wrapper = mount(PaperStatusPanel, {
+      props: { paperId: 'paper-001', autoStart: false },
+    })
+
+    expect(wrapper.find('.status-panel__classify-warning').exists()).toBe(true)
+    const warning = wrapper
+      .findAll('.el-alert-stub')
+      .find((node) => node.attributes('data-type') === 'warning')
+    expect(warning?.attributes('data-title')).toBe(CLASSIFIER_HEURISTIC_FALLBACK_MESSAGE)
+    expect(ElMessage.warning).not.toHaveBeenCalled()
+  })
+
+  it('renders classify and extract fallback alerts together when both warnings present', () => {
+    mockStatus.value = readyStatusWithBothFallbacks
+
+    const wrapper = mount(PaperStatusPanel, {
+      props: { paperId: 'paper-001', autoStart: false },
+    })
+
+    expect(wrapper.find('.status-panel__classify-warning').exists()).toBe(true)
+    expect(wrapper.find('.status-panel__extract-warning').exists()).toBe(true)
+    const warnings = wrapper
+      .findAll('.el-alert-stub')
+      .filter((node) => node.attributes('data-type') === 'warning')
+    expect(warnings).toHaveLength(2)
+    expect(warnings.map((node) => node.attributes('data-title'))).toEqual([
+      CLASSIFIER_HEURISTIC_FALLBACK_MESSAGE,
+      EXTRACT_HEURISTIC_FALLBACK_MESSAGE,
+    ])
   })
 
   it('shows pause/resume refresh labels instead of polling jargon', () => {

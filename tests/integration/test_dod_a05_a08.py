@@ -223,15 +223,15 @@ async def test_a07_classify_live_heuristic_returns_stem(live_llm_env) -> None:
     result = await AgentService().classify_paradigm(
         "Title: benchmark. We evaluate the model on datasets with accuracy and baselines."
     )
-    assert result.paradigm == Paradigm.STEM
-    assert result.reason
+    assert result.classification.paradigm == Paradigm.STEM
+    assert result.classification.reason
 
 
 @pytest.mark.asyncio
 async def test_a07_classify_direct_live_heuristic(live_llm_env) -> None:
     _ = live_llm_env
     result = await classify("标题：平台零工经济。本文通过访谈材料和理论视角分析劳动者经验。")
-    assert result.paradigm == Paradigm.HSS
+    assert result.classification.paradigm == Paradigm.HSS
 
 
 def test_a07_gold_labels_three_papers_two_paradigms() -> None:

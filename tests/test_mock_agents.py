@@ -22,14 +22,14 @@ async def test_mock_classify_stem_from_ml_keywords() -> None:
     result = await classify(
         "Abstract: machine learning crystal property prediction with benchmark datasets.",
     )
-    assert result.paradigm == Paradigm.STEM
-    assert result.confidence >= 0.7
+    assert result.classification.paradigm == Paradigm.STEM
+    assert result.classification.confidence >= 0.7
 
 
 @pytest.mark.asyncio
 async def test_mock_classify_hss_from_chinese_keywords() -> None:
     result = await classify("夏尔巴人父系历史与分子考古民族史研究。")
-    assert result.paradigm == Paradigm.HSS
+    assert result.classification.paradigm == Paradigm.HSS
 
 
 @pytest.mark.asyncio
@@ -51,8 +51,8 @@ async def test_mock_extract_stem_returns_verification_chain() -> None:
 @pytest.mark.asyncio
 async def test_mock_classify_empty_input_defaults_hss() -> None:
     result = await classify("   ")
-    assert result.paradigm == Paradigm.HSS
-    assert result.reason.strip()
+    assert result.classification.paradigm == Paradigm.HSS
+    assert result.classification.reason.strip()
 
 
 @pytest.mark.asyncio

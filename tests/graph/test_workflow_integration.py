@@ -4,6 +4,7 @@ from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+from backend.agents.classifier_types import ClassifyResult
 from backend.api.exceptions import ApiError
 from backend.graph.state import NODE_CLASSIFY, NODE_EXTRACT, NODE_INGEST, NODE_STORE, NODE_WAIT_HEAD_REFINE
 from backend.graph.workflow import run_paper_pipeline
@@ -45,7 +46,7 @@ async def test_pipeline_invokes_services_in_order(
 
     async def track_classify(_text: str):
         call_order.append(NODE_CLASSIFY)
-        return classification
+        return ClassifyResult(classification=classification, warnings=[])
 
     from backend.agents.extract_types import ExtractResult
 
