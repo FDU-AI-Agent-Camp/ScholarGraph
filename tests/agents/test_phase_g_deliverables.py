@@ -173,3 +173,11 @@ def test_phase_g_g4_classifier_mock_path_short_circuits_before_live() -> None:
     source = inspect.getsource(classifier.classify)
     assert "if settings.is_llm_mock" in source
     assert "mock_classify" in source
+
+
+def test_phase_g_g5_fe_be_integration_module_exists() -> None:
+    path = REPO_ROOT / "tests" / "integration" / "test_phase_g_fe_be_integration.py"
+    assert path.is_file()
+    text = path.read_text(encoding="utf-8")
+    assert "phase-g-fe-be.integration.test.ts" in text
+    assert "CLASSIFIER_HEURISTIC_FALLBACK_CODE" in text

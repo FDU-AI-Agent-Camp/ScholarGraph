@@ -13,7 +13,7 @@ from pathlib import Path
 import pytest
 from backend.graph.state import STAGE_PERCENT  # noqa: F401 — import before pipeline helpers
 from backend.main import app
-from backend.schemas.paper import FailedDuringStage, PaperStatusData
+from backend.schemas.paper import FailedDuringStage, PaperDetail, PaperStatusData
 from backend.services.paper_service import get_paper_service
 from httpx import ASGITransport, AsyncClient
 
@@ -135,6 +135,31 @@ async def test_merge_ready_paper_detail_and_graph(api_client: AsyncClient) -> No
 
     expected_graph = _load_fixture("graph-hss.json")["data"]
     assert graph_body["data"]["paradigm"] == expected_graph["paradigm"]
+
+
+@pytest.mark.asyncio
+async def test_merge_ready_paper_detail_has_empty_classify_warnings(api_client: AsyncClient) -> None:
+    response = await api_client.get(f"/api/v1/papers/{READY_PAPER_ID}")
+    assert response.status_code == 200
+    data = response.json()["data"]
+    assert data.get("classify_warnings", []) == []
+
+
+@pytest.mark.asyncio
+async def test_merge_classify_fallback_fixtures_validate_for_fe(api_client: AsyncClient) -> None:
+    """Phase G: docs fixtures remain valid PaperStatusData / PaperDetail for FE consumers."""
+    from backend.agents.classifier_constants import CLASSIFIER_HEURISTIC_FALLBACK_CODE
+
+    status_payload = _load_fixture("paper-status-classify-fallback.json")
+    detail_payload = _load_fixture("paper-detail-classify-fallback.json")
+
+    status = PaperStatusData.model_validate(status_payload["data"])
+    detail = PaperDetail.model_validate(detail_payload["data"])
+
+    assert status.classify_warnings == [CLASSIFIER_HEURISTIC_FALLBACK_CODE]
+    assert detail.classify_warnings == [CLASSIFIER_HEURISTIC_FALLBACK_CODE]
+    assert detail.classification is not None
+    assert set(detail.classification.model_dump().keys()) == {"paradigm", "confidence", "reason"}
 
 
 @pytest.mark.asyncio
