@@ -10,6 +10,7 @@ from backend.agents.extract_llm import (
     _validate_llm_graph,
     build_user_payload,
     extract_with_llm,
+    load_extract_prompt,
     truncate_full_text,
 )
 from backend.schemas.graph import GraphNode, UnifiedPaperGraph
@@ -26,6 +27,27 @@ def test_truncate_full_text_zero_limit_keeps_full_text() -> None:
     text, truncated = truncate_full_text("abcdef", max_chars=0)
     assert text == "abcdef"
     assert truncated is False
+
+
+def test_load_extract_prompt_reads_hss_and_stem_files() -> None:
+    hss = load_extract_prompt(Paradigm.HSS)
+    stem = load_extract_prompt(Paradigm.STEM)
+    assert "Thesis" in hss
+    assert "Method" in stem or "ResearchQuestion" in stem
+
+
+def test_build_user_payload_omits_document_head_when_empty() -> None:
+    payload = json.loads(
+        build_user_payload(
+            full_text="body",
+            paradigm=Paradigm.HSS,
+            paper_id="p1",
+            title="T",
+            head_context="   ",
+            max_chars=100,
+        ),
+    )
+    assert "document_head" not in payload
 
 
 def test_build_user_payload_marks_truncated_flag() -> None:

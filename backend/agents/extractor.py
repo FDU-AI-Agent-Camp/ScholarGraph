@@ -18,9 +18,14 @@ logger = logging.getLogger(__name__)
 
 
 def _resolve_head_context(paper_id: str) -> str | None:
+    """Build optional document-head prefix from in-memory refine or ``HeadStore`` (X6)."""
+    from backend.graph.head_store import HeadStore
     from backend.services.paper_service import get_paper_service
 
     head = get_paper_service().get_refined_head(paper_id)
+    if head is None:
+        record = HeadStore().load(paper_id)
+        head = record.merged if record is not None else None
     if head is None:
         return None
     parts = [head.title.strip(), head.abstract.strip(), head.intro.strip()]

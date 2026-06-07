@@ -22,7 +22,8 @@ _PROMPT_FILES = {
 }
 
 
-def _load_extract_prompt(paradigm: Paradigm) -> str:
+def load_extract_prompt(paradigm: Paradigm) -> str:
+    """Load paradigm-specific system prompt from ``backend/prompts/extract_*.md``."""
     path = _PROMPT_FILES[paradigm]
     if path.is_file():
         return path.read_text(encoding="utf-8")
@@ -102,14 +103,27 @@ async def extract_with_llm(
     client = llm_client or get_llm_client()
     cfg.require_llm_key()
 
-    system_prompt = _load_extract_prompt(paradigm)
+    max_chars = cfg.extract_max_input_chars
+    _, was_truncated = truncate_full_text(full_text, max_chars=max_chars)
+    if was_truncated:
+        logger.warning(
+            "extract_input_truncated",
+            extra={
+                "paper_id": paper_id,
+                "paradigm": paradigm.value,
+                "original_chars": len(full_text),
+                "max_chars": max_chars,
+            },
+        )
+
+    system_prompt = load_extract_prompt(paradigm)
     user_content = build_user_payload(
         full_text=full_text,
         paradigm=paradigm,
         paper_id=paper_id,
         title=title,
         head_context=head_context,
-        max_chars=cfg.extract_max_input_chars,
+        max_chars=max_chars,
     )
 
     last_error: Exception | None = None

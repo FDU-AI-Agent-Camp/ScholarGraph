@@ -172,3 +172,96 @@ async def test_red_corpus_extract_produces_valid_graph_with_llm_or_fallback(
     assert result.graph.paper_id == paper_id
     assert result.graph.nodes
     assert result.graph.paradigm == paradigm
+
+
+@pytest.mark.red
+@pytest.mark.asyncio
+async def test_red_missing_llm_api_key_triggers_fallback(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("LLM_MODE", "live")
+    monkeypatch.delenv("SCHOLARGRAPH_API_KEY", raising=False)
+    monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+    monkeypatch.setenv("EXTRACT_LLM_ENABLED", "true")
+    monkeypatch.setenv("EXTRACT_HEURISTIC_FALLBACK", "true")
+    get_settings.cache_clear()
+    reset_llm_client_cache()
+
+    result = await extract("标题：测试\n本文认为……", Paradigm.HSS, paper_id="paper-no-key")
+
+    assert EXTRACT_HEURISTIC_FALLBACK_CODE in result.warnings
+    assert result.graph.nodes
+
+    get_settings.cache_clear()
+    reset_llm_client_cache()
+
+
+@pytest.mark.red
+@pytest.mark.asyncio
+async def test_red_missing_extract_prompt_triggers_fallback(live_extract_env) -> None:
+    _ = live_extract_env
+
+    with patch(
+        "backend.agents.extract_llm.load_extract_prompt",
+        side_effect=FileNotFoundError("Missing extract prompt"),
+    ):
+        result = await extract("标题：测试", Paradigm.HSS, paper_id="paper-no-prompt")
+
+    assert EXTRACT_HEURISTIC_FALLBACK_CODE in result.warnings
+
+
+@pytest.mark.red
+@pytest.mark.asyncio
+async def test_red_primary_and_fallback_llm_both_fail(live_extract_env) -> None:
+    _ = live_extract_env
+
+    with patch(
+        "backend.agents.extract_llm._invoke_structured",
+        new=AsyncMock(side_effect=RuntimeError("both models down")),
+    ):
+        result = await extract("标题：测试", Paradigm.STEM, paper_id="paper-both-fail")
+
+    assert EXTRACT_HEURISTIC_FALLBACK_CODE in result.warnings
+    assert result.graph.paradigm == Paradigm.STEM
+
+
+@pytest.mark.red
+@pytest.mark.asyncio
+async def test_red_extract_max_input_chars_zero_keeps_full_text(live_extract_env, monkeypatch) -> None:
+    _ = live_extract_env
+    monkeypatch.setenv("EXTRACT_MAX_INPUT_CHARS", "0")
+    get_settings.cache_clear()
+
+    long_text = "z" * 500
+    captured: dict[str, str] = {}
+
+    async def _capture_invoke(_client, *, system_prompt, user_content, use_fallback_model):
+        captured["user_content"] = user_content
+        return UnifiedPaperGraph(
+            paper_id="p",
+            paradigm=Paradigm.HSS,
+            nodes=[GraphNode(id="n1", label="t", type="Thesis")],
+            edges=[],
+        )
+
+    with patch("backend.agents.extract_llm._invoke_structured", side_effect=_capture_invoke):
+        result = await extract(long_text, Paradigm.HSS, paper_id="paper-no-trunc")
+
+    payload = __import__("json").loads(captured["user_content"])
+    assert payload["truncated"] is False
+    assert len(payload["full_text"]) == 500
+    assert result.warnings == []
+
+    get_settings.cache_clear()
+
+
+@pytest.mark.red
+@pytest.mark.asyncio
+async def test_red_hss_forbidden_stem_node_type_triggers_fallback(live_extract_env) -> None:
+    _ = live_extract_env
+
+    with patch(
+        "backend.agents.extract_llm._invoke_structured",
+        new=AsyncMock(side_effect=ValueError("HSS graph contains forbidden node types: ['Metric']")),
+    ):
+        result = await extract("标题：测试", Paradigm.HSS, paper_id="paper-forbidden-type")
+
+    assert EXTRACT_HEURISTIC_FALLBACK_CODE in result.warnings

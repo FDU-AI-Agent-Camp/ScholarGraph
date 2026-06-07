@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+import inspect
+
 import pytest
 from backend.agents.extract_constants import (
     EXTRACT_HEURISTIC_FALLBACK_CODE,
     EXTRACT_HEURISTIC_FALLBACK_MESSAGE,
 )
-from backend.agents.extract_llm import PROMPTS_DIR
+from backend.agents.extract_llm import PROMPTS_DIR, load_extract_prompt
 from backend.agents.extract_types import ExtractResult
 from backend.config import Settings
 from backend.main import app
@@ -19,6 +21,22 @@ from httpx import ASGITransport, AsyncClient
 def test_smoke_extract_prompt_files_exist() -> None:
     assert (PROMPTS_DIR / "extract_hss.md").is_file()
     assert (PROMPTS_DIR / "extract_stem.md").is_file()
+
+
+@pytest.mark.smoke
+def test_smoke_load_extract_prompt_returns_non_empty() -> None:
+    from backend.schemas.paradigm import Paradigm
+
+    assert len(load_extract_prompt(Paradigm.HSS).strip()) > 20
+    assert len(load_extract_prompt(Paradigm.STEM).strip()) > 20
+
+
+@pytest.mark.smoke
+def test_smoke_extract_llm_logs_truncation() -> None:
+    from backend.agents import extract_llm
+
+    source = inspect.getsource(extract_llm.extract_with_llm)
+    assert "extract_input_truncated" in source
 
 
 @pytest.mark.smoke

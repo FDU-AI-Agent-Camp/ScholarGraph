@@ -90,3 +90,23 @@ def test_phase_f_extractor_live_path_calls_extract_with_llm() -> None:
     assert "extract_with_llm" in source
     assert "build_heuristic_graph" in source
     assert EXTRACT_HEURISTIC_FALLBACK_CODE in inspect.getsource(extractor)
+
+
+def test_phase_f_f21_load_extract_prompt_exported() -> None:
+    from backend.agents.extract_llm import load_extract_prompt
+    from backend.schemas.paradigm import Paradigm
+
+    assert "Thesis" in load_extract_prompt(Paradigm.HSS)
+
+
+def test_phase_f_f21_head_store_fallback_in_extractor() -> None:
+    from backend.agents import extractor
+
+    source = inspect.getsource(extractor._resolve_head_context)
+    assert "HeadStore" in source
+
+
+def test_phase_f_f21_truncation_log_in_extract_llm() -> None:
+    from backend.agents import extract_llm
+
+    assert "extract_input_truncated" in inspect.getsource(extract_llm.extract_with_llm)
