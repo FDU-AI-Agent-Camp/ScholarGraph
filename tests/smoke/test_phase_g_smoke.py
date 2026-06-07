@@ -142,6 +142,29 @@ def test_smoke_g25_classifier_heuristic_fallback_default_true() -> None:
 
 
 @pytest.mark.smoke
+def test_smoke_fe_be_classifier_fallback_constants_parity() -> None:
+    import re
+    from pathlib import Path
+
+    fe_file = Path(__file__).resolve().parents[2] / "frontend" / "src" / "utils" / "classifyWarnings.ts"
+    text = fe_file.read_text(encoding="utf-8")
+    fe_code = re.search(r"CLASSIFIER_HEURISTIC_FALLBACK_CODE = '([^']+)'", text)
+    fe_message = re.search(r"CLASSIFIER_HEURISTIC_FALLBACK_MESSAGE = '([^']+)'", text)
+    assert fe_code is not None
+    assert fe_message is not None
+    assert fe_code.group(1) == CLASSIFIER_HEURISTIC_FALLBACK_CODE
+    assert fe_message.group(1) == CLASSIFIER_HEURISTIC_FALLBACK_MESSAGE
+
+
+@pytest.mark.smoke
+def test_smoke_classify_fallback_fixture_has_machine_code_not_user_copy() -> None:
+    detail_payload = json.loads((FIXTURES_DIR / "paper-detail-classify-fallback.json").read_text(encoding="utf-8"))
+    warnings = detail_payload["data"]["classify_warnings"]
+    assert warnings == [CLASSIFIER_HEURISTIC_FALLBACK_CODE]
+    assert CLASSIFIER_HEURISTIC_FALLBACK_MESSAGE not in warnings
+
+
+@pytest.mark.smoke
 def test_smoke_papers_list_fixture_still_validates() -> None:
     payload = json.loads((FIXTURES_DIR / "papers-list.json").read_text(encoding="utf-8"))
     assert payload["data"]["items"]

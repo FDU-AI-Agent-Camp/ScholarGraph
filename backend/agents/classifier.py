@@ -33,7 +33,10 @@ def _fallback_to_heuristic(
 
 async def _classify_live(classifier_input: str, *, settings: Settings) -> ClassifyResult:
     if not settings.classifier_llm_enabled:
-        logger.warning("classify_llm_disabled")
+        logger.warning(
+            "classify_llm_disabled",
+            extra={"reason": "classifier_llm_disabled"},
+        )
         return _fallback_to_heuristic(classifier_input, reason="classifier_llm_disabled")
 
     try:

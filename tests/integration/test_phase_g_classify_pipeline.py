@@ -197,3 +197,37 @@ async def test_g24_pipeline_llm_disabled_writes_classify_warnings(
     status = await get_paper_service().get_status(paper_id)
     assert status.status == PaperStatus.READY
     assert status.classify_warnings == [CLASSIFIER_HEURISTIC_FALLBACK_CODE]
+
+
+@pytest.mark.asyncio
+async def test_g27_status_api_polling_exposes_classify_warnings_after_pipeline(
+    integration_paper: tuple[str, Path],
+    live_classify_env: None,
+    api_client: AsyncClient,
+) -> None:
+    """G2.7 integration: repeated status polls after fallback pipeline keep classify_warnings."""
+    _ = live_classify_env
+    paper_id, pdf_path = integration_paper
+    agent = AgentService()
+
+    with mock_pipeline_node_services(paper_id) as mocks:
+        mocks["ingest"].ingest = AsyncMock(
+            return_value={
+                "paper_id": paper_id,
+                "full_text": STEM_SNIPPET,
+                "classifier_input": STEM_SNIPPET,
+            },
+        )
+        with (
+            patch("backend.graph.nodes.get_agent_service", return_value=agent),
+            patch(
+                "backend.agents.classifier.classify_with_llm",
+                new=AsyncMock(side_effect=RuntimeError("structured output failed")),
+            ),
+        ):
+            await run_paper_pipeline(paper_id, pdf_path)
+
+    for _ in range(3):
+        response = await api_client.get(f"/api/v1/papers/{paper_id}/status")
+        assert response.status_code == 200
+        assert response.json()["data"]["classify_warnings"] == [CLASSIFIER_HEURISTIC_FALLBACK_CODE]

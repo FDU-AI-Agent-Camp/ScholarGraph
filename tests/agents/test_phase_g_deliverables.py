@@ -135,3 +135,26 @@ def test_phase_g_fallback_helper_logs_classify_llm_fallback() -> None:
     source = inspect.getsource(classifier._fallback_to_heuristic)
     assert "classify_llm_fallback" in source
     assert "classify_heuristic" in source
+    assert '"reason"' in source or "'reason'" in source
+
+
+def test_phase_g_disabled_llm_logs_classify_llm_disabled_with_reason() -> None:
+    from backend.agents import classifier
+
+    source = inspect.getsource(classifier._classify_live)
+    assert "classify_llm_disabled" in source
+    assert '"reason"' in source or "'reason'" in source
+    assert "classifier_llm_disabled" in source
+
+
+def test_phase_g_fe_be_frozen_fallback_constants_parity() -> None:
+    import re
+
+    fe_file = REPO_ROOT / "frontend" / "src" / "utils" / "classifyWarnings.ts"
+    text = fe_file.read_text(encoding="utf-8")
+    fe_code = re.search(r"CLASSIFIER_HEURISTIC_FALLBACK_CODE = '([^']+)'", text)
+    fe_message = re.search(r"CLASSIFIER_HEURISTIC_FALLBACK_MESSAGE = '([^']+)'", text)
+    assert fe_code is not None
+    assert fe_message is not None
+    assert fe_code.group(1) == CLASSIFIER_HEURISTIC_FALLBACK_CODE
+    assert fe_message.group(1) == CLASSIFIER_HEURISTIC_FALLBACK_MESSAGE

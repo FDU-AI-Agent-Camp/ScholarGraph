@@ -170,3 +170,5 @@ async def test_api_g28_classification_unchanged_when_classify_warnings_present(a
     assert data["classification"]["paradigm"] == "HSS"
     assert data["classification"]["confidence"] == 0.88
     assert data["classification"]["reason"] == classification.reason
+    assert set(data["classification"].keys()) == {"paradigm", "confidence", "reason"}
+    assert "classify_warnings" not in data["classification"]

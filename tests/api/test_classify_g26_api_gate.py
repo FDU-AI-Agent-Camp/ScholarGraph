@@ -107,3 +107,53 @@ def test_g26_openapi_documents_classify_warnings_on_status_and_detail() -> None:
     assert "classify_warnings:" in text
     assert "PaperStatusData:" in text
     assert "PaperDetail:" in text
+
+
+@pytest.mark.asyncio
+async def test_g27_status_polling_simulation_while_classifying(api_client: AsyncClient) -> None:
+    """G2.7: repeated GET /status during classifying exposes classify_warnings each poll."""
+    paper_id = "g27-polling-classifying"
+    now = datetime.now(UTC)
+    get_paper_service()._papers[paper_id] = PaperDetail(
+        paper_id=paper_id,
+        title="g27 poll",
+        status=PaperStatus.PROCESSING,
+        created_at=now,
+        updated_at=now,
+    )
+    get_pipeline_status_service().advance_stage(
+        paper_id,
+        PipelineStage.CLASSIFYING,
+        message="正在范式分类",
+    )
+    get_paper_service().record_classify_warnings(paper_id, [CLASSIFIER_HEURISTIC_FALLBACK_CODE])
+
+    for _ in range(3):
+        response = await api_client.get(f"/api/v1/papers/{paper_id}/status")
+        assert response.status_code == 200
+        data = response.json()["data"]
+        assert data["stage"] == "classifying"
+        assert data["classify_warnings"] == [CLASSIFIER_HEURISTIC_FALLBACK_CODE]
+
+
+@pytest.mark.asyncio
+async def test_g27_status_polling_after_ready_still_exposes_warnings(api_client: AsyncClient) -> None:
+    """G2.7: classify_warnings remain visible on terminal status polls."""
+    paper_id = "g27-polling-ready"
+    now = datetime.now(UTC)
+    get_paper_service()._papers[paper_id] = PaperDetail(
+        paper_id=paper_id,
+        title="g27 ready poll",
+        status=PaperStatus.READY,
+        created_at=now,
+        updated_at=now,
+    )
+    get_pipeline_status_service().mark_ready(paper_id)
+    get_paper_service().record_classify_warnings(paper_id, [CLASSIFIER_HEURISTIC_FALLBACK_CODE])
+
+    for _ in range(3):
+        response = await api_client.get(f"/api/v1/papers/{paper_id}/status")
+        assert response.status_code == 200
+        data = response.json()["data"]
+        assert data["status"] == "ready"
+        assert data["classify_warnings"] == [CLASSIFIER_HEURISTIC_FALLBACK_CODE]

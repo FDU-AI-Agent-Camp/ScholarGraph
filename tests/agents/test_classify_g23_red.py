@@ -289,3 +289,54 @@ def test_red_g26_openapi_paper_status_data_lists_classify_warnings() -> None:
     text = openapi.read_text(encoding="utf-8")
     assert "PaperStatusData:" in text
     assert "classify_warnings:" in text
+
+
+def test_red_frozen_machine_code_exact_value() -> None:
+    assert CLASSIFIER_HEURISTIC_FALLBACK_CODE == "classifier_heuristic_fallback"
+
+
+@pytest.mark.parametrize(
+    "wrong_code",
+    [
+        "classifier_heuristic_fallback!",
+        "Classifier_Heuristic_Fallback",
+        "classifier_heuristic",
+        "extract_heuristic_fallback",
+        "",
+    ],
+)
+def test_red_wrong_codes_are_not_frozen_classifier_fallback(wrong_code: str) -> None:
+    assert wrong_code != CLASSIFIER_HEURISTIC_FALLBACK_CODE
+
+
+@pytest.mark.asyncio
+async def test_red_fallback_classification_reason_not_user_toast_message(live_classify_env: None) -> None:
+    from backend.agents.classifier_constants import CLASSIFIER_HEURISTIC_FALLBACK_MESSAGE
+
+    _ = live_classify_env
+    with patch(
+        "backend.agents.classifier.classify_with_llm",
+        new=AsyncMock(side_effect=RuntimeError("structured output failed")),
+    ):
+        result = await classify(STEM_SAMPLE)
+
+    assert CLASSIFIER_HEURISTIC_FALLBACK_CODE in result.warnings
+    assert result.classification.reason.strip()
+    assert result.classification.reason != CLASSIFIER_HEURISTIC_FALLBACK_MESSAGE
+    assert CLASSIFIER_HEURISTIC_FALLBACK_MESSAGE not in result.warnings
+
+
+@pytest.mark.asyncio
+async def test_red_recorded_warnings_never_store_user_message(registered_paper: str) -> None:
+    from backend.agents.classifier_constants import CLASSIFIER_HEURISTIC_FALLBACK_MESSAGE
+
+    service = get_paper_service()
+    service.record_classify_warnings(registered_paper, [CLASSIFIER_HEURISTIC_FALLBACK_CODE])
+
+    status = await service.get_status(registered_paper)
+    paper = await service.get_paper(registered_paper)
+
+    assert status.classify_warnings == [CLASSIFIER_HEURISTIC_FALLBACK_CODE]
+    assert paper.classify_warnings == [CLASSIFIER_HEURISTIC_FALLBACK_CODE]
+    assert CLASSIFIER_HEURISTIC_FALLBACK_MESSAGE not in status.classify_warnings
+    assert CLASSIFIER_HEURISTIC_FALLBACK_MESSAGE not in paper.classify_warnings

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import inspect
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -106,3 +107,11 @@ async def test_g24_llm_disabled_symmetric_with_extract_disabled_path(
 
     llm_mock.assert_not_awaited()
     assert CLASSIFIER_HEURISTIC_FALLBACK_CODE in result.warnings
+
+
+def test_g_frozen_warning_code_emitted_by_fallback_helper() -> None:
+    from backend.agents import classifier
+
+    source = inspect.getsource(classifier._fallback_to_heuristic)
+    assert "CLASSIFIER_HEURISTIC_FALLBACK_CODE" in source
+    assert "CLASSIFIER_HEURISTIC_FALLBACK_MESSAGE" not in source
