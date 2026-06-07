@@ -35,6 +35,13 @@ from backend.ingest.router import get_pdf_page_count, is_short_pdf, resolve_inge
 from backend.ingest.snippets import ClassifierSections, parse_classifier_sections
 from backend.ingest.tei_parser import parse_tei_to_head_candidate
 from backend.schemas.ingest_head import IngestHead
+from scripts.benchmark_regression import (  # noqa: E402
+    build_baseline_from_report,
+    compare_report_to_baseline,
+)
+from scripts.benchmark_regression import (
+    write_baseline as persist_baseline,
+)
 
 CORPUS_DIR = REPO_ROOT / "data" / "corpus"
 CORPUS_IDS = ("stem-001", "hss-001", "hss-002")
@@ -575,12 +582,18 @@ def build_benchmark_settings(*, with_llm: bool) -> Settings:
     )
 
 
-async def main(*, with_llm: bool, all_corpus: bool) -> None:
+async def main(
+    *,
+    with_llm: bool,
+    all_corpus: bool,
+    compare_baseline: bool = False,
+    write_baseline: bool = False,
+) -> int:
     settings = build_benchmark_settings(with_llm=with_llm)
     paper_ids = list_corpus_paper_ids(all_corpus=all_corpus)
     if all_corpus and not paper_ids:
         print("No PDFs in data/corpus (excluding _probe*).")
-        return
+        return 1
 
     all_results: dict[str, dict[str, PathResult | None]] = {}
     for index, paper_id in enumerate(paper_ids, start=1):
@@ -599,13 +612,33 @@ async def main(*, with_llm: bool, all_corpus: bool) -> None:
     if all_corpus:
         print_batch_report(all_results, paper_ids)
         stamp = time.strftime("%Y%m%d-%H%M%S", time.gmtime())
+        report_path = REPORT_DIR / f"corpus-batch-{stamp}.json"
         save_batch_json(
             all_results,
             paper_ids,
-            output_path=REPORT_DIR / f"corpus-batch-{stamp}.json",
+            output_path=report_path,
         )
+        import json
+
+        report_payload = json.loads(report_path.read_text(encoding="utf-8"))
+        if write_baseline:
+            baseline_payload = build_baseline_from_report(
+                report_payload,
+                baseline_id="phase-d-dual-rules",
+                source_report=report_path.name,
+            )
+            baseline_path = persist_baseline(baseline_payload)
+            print(f"Baseline written: {baseline_path}")
+        if compare_baseline:
+            result = compare_report_to_baseline(report_payload)
+            print("\n## Baseline regression\n")
+            print(result.format_message())
+            if not result.ok:
+                return 1
     else:
         print_report(all_results)
+
+    return 0
 
 
 if __name__ == "__main__":
@@ -616,5 +649,28 @@ if __name__ == "__main__":
         action="store_true",
         help="Run all data/corpus/*.pdf except _probe* (default: golden 3)",
     )
+    parser.add_argument(
+        "--compare-baseline",
+        action="store_true",
+        help="After --all-corpus, compare report to tests/fixtures/benchmark/dual_rules_baseline.json",
+    )
+    parser.add_argument(
+        "--write-baseline",
+        action="store_true",
+        help="After --all-corpus, refresh committed baseline JSON from this run",
+    )
     args = parser.parse_args()
-    asyncio.run(main(with_llm=args.with_llm, all_corpus=args.all_corpus))
+    if args.compare_baseline and not args.all_corpus:
+        parser.error("--compare-baseline requires --all-corpus")
+    if args.write_baseline and not args.all_corpus:
+        parser.error("--write-baseline requires --all-corpus")
+    raise SystemExit(
+        asyncio.run(
+            main(
+                with_llm=args.with_llm,
+                all_corpus=args.all_corpus,
+                compare_baseline=args.compare_baseline,
+                write_baseline=args.write_baseline,
+            )
+        )
+    )

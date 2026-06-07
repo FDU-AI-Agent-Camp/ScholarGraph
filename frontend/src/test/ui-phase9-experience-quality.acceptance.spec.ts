@@ -260,6 +260,7 @@ describe('§9 Experience quality × Phase checklist (full audit)', () => {
     it('§1.4.4: Step / Alert / QA placeholder baseline copy', () => {
       expect(PIPELINE_STEPS.map((step) => step.label)).toEqual([
         '正在解析 PDF',
+        '精炼文档头部',
         '范式分类',
         '抽取图谱',
         '写入存储',

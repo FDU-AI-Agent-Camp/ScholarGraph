@@ -12,7 +12,6 @@ from backend.schemas.paper import PaperDetail, PaperStatus, PipelineStage
 from backend.services.paper_service import get_paper_service
 from backend.services.pipeline_status_service import get_pipeline_status_service
 from httpx import ASGITransport, AsyncClient
-
 from tests.api.conftest import assert_success_envelope
 from tests.helpers.status_contract import assert_status_contract
 

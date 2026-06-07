@@ -187,6 +187,19 @@ def test_phase_b_benchmark_script_all_corpus_cli_flag() -> None:
     assert result.returncode == 0
     assert "--all-corpus" in result.stdout
     assert "--with-llm" in result.stdout
+    assert "--compare-baseline" in result.stdout
+    assert "--write-baseline" in result.stdout
+
+
+def test_phase_b_benchmark_regression_module_surface(benchmark_regression_module) -> None:
+    mod = benchmark_regression_module
+    for name in (
+        "load_baseline",
+        "compare_report_to_baseline",
+        "summarize_report",
+        "build_baseline_from_report",
+    ):
+        assert hasattr(mod, name), f"benchmark_regression missing {name}"
 
 
 def test_phase_b_pyproject_declares_mineru_optional_extra() -> None:
@@ -195,8 +208,8 @@ def test_phase_b_pyproject_declares_mineru_optional_extra() -> None:
     assert '"six>=' in text or "six>=" in text
 
 
-def test_phase_b3_batch_report_schema_when_present() -> None:
-    """B3: latest corpus-batch JSON (if present) matches expected schema."""
+def test_phase_b3_batch_report_schema_when_present(benchmark_regression_module) -> None:
+    """B3/T6: latest corpus-batch JSON (if present) matches baseline regression."""
     reports = sorted(BENCHMARK_REPORT_DIR.glob("corpus-batch-*.json"))
     if not reports:
         pytest.skip("无本地 benchmark 报告：先跑 scripts/benchmark_dual_route.py --all-corpus")
@@ -214,6 +227,11 @@ def test_phase_b3_batch_report_schema_when_present() -> None:
     assert pym is not None
     assert "quality" in pym
     assert "total" in pym["quality"]
+
+    baseline_path = REPO_ROOT / "tests" / "fixtures" / "benchmark" / "dual_rules_baseline.json"
+    if baseline_path.is_file():
+        result = benchmark_regression_module.compare_report_to_baseline(payload)
+        assert result.ok, result.format_message()
 
 
 def _load_benchmark_module():

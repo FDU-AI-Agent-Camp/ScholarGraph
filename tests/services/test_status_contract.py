@@ -14,7 +14,13 @@ from backend.services.pipeline_status_service import (
 
 @pytest.mark.parametrize(
     "stage",
-    [PipelineStage.INGESTING, PipelineStage.HEAD_REFINING, PipelineStage.CLASSIFYING, PipelineStage.EXTRACTING, PipelineStage.STORING],
+    [
+        PipelineStage.INGESTING,
+        PipelineStage.HEAD_REFINING,
+        PipelineStage.CLASSIFYING,
+        PipelineStage.EXTRACTING,
+        PipelineStage.STORING,
+    ],
 )
 def test_processing_stage_percent_must_match_stage_percent(stage: PipelineStage) -> None:
     validate_status_contract(

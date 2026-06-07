@@ -95,6 +95,21 @@ def test_phase_e_p11_paper_detail_supports_ingest_head_sources() -> None:
     assert detail.ingest_head.sources["title"] == "grobid"
 
 
+def test_phase_e_t6_committed_baseline_fixture_present() -> None:
+    baseline = REPO_ROOT / "tests" / "fixtures" / "benchmark" / "dual_rules_baseline.json"
+    assert baseline.is_file()
+    import json
+
+    payload = json.loads(baseline.read_text(encoding="utf-8"))
+    assert payload["baseline_id"] == "phase-d-dual-rules"
+    assert payload["totals"]["dual_route_rules"] == 46
+
+
+def test_phase_e_t6_regression_module_and_scripts_present() -> None:
+    assert (REPO_ROOT / "scripts" / "benchmark_regression.py").is_file()
+    assert (REPO_ROOT / "scripts" / "generate_benchmark_baseline.py").is_file()
+
+
 def test_phase_e_p11_openapi_documents_ingest_head_on_paper_detail() -> None:
     text = OPENAPI.read_text(encoding="utf-8")
     assert "IngestHead:" in text

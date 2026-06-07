@@ -16,6 +16,7 @@ import sys
 from collections.abc import Sequence
 
 RUFF_TARGETS = ("backend", "tests", "scripts")
+DEFAULT_PYTEST_MARKER = "not red and not live_mineru and not live_grobid and not live_benchmark"
 EXIT_SUCCESS = 0
 EXIT_FAILURE = 1
 
@@ -46,7 +47,7 @@ def main(argv: list[str] | None = None) -> int:
         ("ruff format --check", ["ruff", "format", "--check", *RUFF_TARGETS]),
     ]
     if not args.lint_only:
-        steps.append(("pytest", ["pytest", "-q", "-m", "not red and not live_mineru and not live_grobid"]))
+        steps.append(("pytest", ["pytest", "-q", "-m", DEFAULT_PYTEST_MARKER]))
 
     for label, command in steps:
         if run_step(label, command) != EXIT_SUCCESS:

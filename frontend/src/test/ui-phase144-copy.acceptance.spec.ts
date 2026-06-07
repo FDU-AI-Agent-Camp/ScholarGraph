@@ -79,6 +79,7 @@ describe('§1.4.4 Copy & typography discipline', () => {
       expect(DETAIL_BASELINE_COPY.notReadyAlert).toBe('论文尚未 ready，问答与图谱预览将在流水线完成后可用。')
       expect(PIPELINE_STEPS.map((step) => step.label)).toEqual([
         '正在解析 PDF',
+        '精炼文档头部',
         '范式分类',
         '抽取图谱',
         '写入存储',

@@ -56,7 +56,7 @@ describe('PaperStatusPanel', () => {
     const activeSteps = wrapper.findAll('.status-panel__step--active')
     expect(activeSteps).toHaveLength(1)
     expect(activeSteps[0]?.text()).toContain('范式分类')
-    expect(wrapper.findAll('.status-panel__step')).toHaveLength(5)
+    expect(wrapper.findAll('.status-panel__step')).toHaveLength(6)
   })
 
   it('marks all steps done when status is ready', () => {
@@ -66,7 +66,7 @@ describe('PaperStatusPanel', () => {
       props: { paperId: 'paper-001', autoStart: false },
     })
 
-    expect(wrapper.findAll('.status-panel__step--done')).toHaveLength(5)
+    expect(wrapper.findAll('.status-panel__step--done')).toHaveLength(6)
     expect(wrapper.find('.status-panel__step--active').exists()).toBe(false)
     expect(wrapper.find('.status-panel__check').exists()).toBe(true)
   })
