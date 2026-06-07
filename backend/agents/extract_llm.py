@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
+import time
 from pathlib import Path
 
 from langchain_core.messages import HumanMessage, SystemMessage
@@ -90,6 +91,28 @@ def _validate_llm_graph(graph: UnifiedPaperGraph, *, expected_paradigm: Paradigm
         raise ValueError(f"LLM graph paradigm {graph.paradigm} != expected {expected_paradigm}.")
 
 
+def _coerce_paradigm_to_expected(
+    graph: UnifiedPaperGraph,
+    *,
+    expected_paradigm: Paradigm,
+    paper_id: str,
+) -> UnifiedPaperGraph:
+    """Align LLM ``paradigm`` field with classify output; re-validate node/edge whitelist."""
+    if graph.paradigm == expected_paradigm:
+        return graph
+    logger.warning(
+        "extract_llm_paradigm_coerced",
+        extra={
+            "paper_id": paper_id,
+            "llm_paradigm": graph.paradigm.value,
+            "expected_paradigm": expected_paradigm.value,
+        },
+    )
+    payload = graph.model_dump(mode="python")
+    payload["paradigm"] = expected_paradigm
+    return UnifiedPaperGraph.model_validate(payload)
+
+
 async def extract_with_llm(
     full_text: str,
     paradigm: Paradigm,
@@ -132,6 +155,8 @@ async def extract_with_llm(
     for use_fallback in (False, True):
         if use_fallback and client.fallback_chat is None:
             continue
+        model_label = "fallback" if use_fallback else "primary"
+        started_at = time.perf_counter()
         try:
             graph = await _invoke_structured(
                 client,
@@ -139,16 +164,34 @@ async def extract_with_llm(
                 user_content=user_content,
                 use_fallback_model=use_fallback,
             )
+            graph = _coerce_paradigm_to_expected(graph, expected_paradigm=paradigm, paper_id=paper_id)
             _validate_llm_graph(graph, expected_paradigm=paradigm)
+            elapsed_ms = int((time.perf_counter() - started_at) * 1000)
+            logger.info(
+                "extract_llm_success",
+                extra={
+                    "paper_id": paper_id,
+                    "paradigm": paradigm.value,
+                    "model": model_label,
+                    "elapsed_ms": elapsed_ms,
+                    "node_count": len(graph.nodes),
+                    "edge_count": len(graph.edges),
+                },
+            )
             return graph.model_copy(update={"paper_id": paper_id, "paradigm": paradigm})
         except Exception as exc:
             last_error = exc
-            model_label = "fallback" if use_fallback else "primary"
+            elapsed_ms = int((time.perf_counter() - started_at) * 1000)
             logger.warning(
                 "extract_llm attempt failed (%s): %s",
                 model_label,
                 exc,
-                extra={"paper_id": paper_id, "paradigm": paradigm.value},
+                extra={
+                    "paper_id": paper_id,
+                    "paradigm": paradigm.value,
+                    "model": model_label,
+                    "elapsed_ms": elapsed_ms,
+                },
             )
 
     assert last_error is not None

@@ -7,6 +7,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from backend.agents.extract_llm import (
+    _coerce_paradigm_to_expected,
     _validate_llm_graph,
     build_user_payload,
     extract_with_llm,
@@ -83,15 +84,29 @@ def test_validate_llm_graph_rejects_empty_edges() -> None:
         _validate_llm_graph(graph, expected_paradigm=Paradigm.HSS)
 
 
-def test_validate_llm_graph_rejects_paradigm_mismatch() -> None:
-    graph = UnifiedPaperGraph(
+def test_coerce_paradigm_aligns_field_before_validation() -> None:
+    graph = UnifiedPaperGraph.model_construct(
+        paper_id="p",
+        paradigm=Paradigm.HSS,
+        nodes=[GraphNode(id="n1", label="m", type="Method")],
+        edges=[GraphEdge(id="e1", source="n1", target="n1", label="RELATES_TO", type="RELATES_TO")],
+    )
+    coerced = _coerce_paradigm_to_expected(graph, expected_paradigm=Paradigm.STEM, paper_id="p-coerce")
+    _validate_llm_graph(coerced, expected_paradigm=Paradigm.STEM)
+    assert coerced.paradigm == Paradigm.STEM
+
+
+def test_validate_llm_graph_still_rejects_wrong_node_types_after_coerce() -> None:
+    from pydantic import ValidationError
+
+    graph = UnifiedPaperGraph.model_construct(
         paper_id="p",
         paradigm=Paradigm.STEM,
         nodes=[GraphNode(id="n1", label="m", type="Method")],
         edges=[GraphEdge(id="e1", source="n1", target="n1", label="RELATES_TO", type="RELATES_TO")],
     )
-    with pytest.raises(ValueError, match="paradigm"):
-        _validate_llm_graph(graph, expected_paradigm=Paradigm.HSS)
+    with pytest.raises(ValidationError, match="forbidden node types"):
+        _coerce_paradigm_to_expected(graph, expected_paradigm=Paradigm.HSS, paper_id="p-mismatch")
 
 
 @pytest.mark.asyncio
