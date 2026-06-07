@@ -99,6 +99,52 @@ def test_smoke_f22_validate_llm_graph_checks_edges() -> None:
 
 
 @pytest.mark.smoke
+def test_smoke_f23_paper_detail_schema_has_extract_warnings() -> None:
+    from datetime import UTC, datetime
+
+    from backend.schemas.paper import PaperDetail, PaperStatus
+
+    now = datetime.now(UTC)
+    detail = PaperDetail(
+        paper_id="smoke-f23",
+        title="smoke",
+        status=PaperStatus.READY,
+        created_at=now,
+        updated_at=now,
+        extract_warnings=[EXTRACT_HEURISTIC_FALLBACK_CODE],
+    )
+    assert EXTRACT_HEURISTIC_FALLBACK_CODE in detail.extract_warnings
+
+
+@pytest.mark.smoke
+def test_smoke_f23_fixtures_on_disk() -> None:
+    from pathlib import Path
+
+    fixtures = Path(__file__).resolve().parents[2] / "docs" / "api" / "fixtures"
+    assert (fixtures / "paper-detail-ready-fallback.json").is_file()
+    assert (fixtures / "paper-status-ready-fallback.json").is_file()
+
+
+@pytest.mark.smoke
+def test_smoke_f23_paper_service_enrich_detail() -> None:
+    from backend.services.paper_service import PaperService
+
+    assert "_enrich_paper_detail" in inspect.getsource(PaperService.get_paper)
+
+
+@pytest.mark.smoke
+@pytest.mark.asyncio
+async def test_smoke_get_paper_route_includes_extract_warnings() -> None:
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        response = await client.get("/api/v1/papers/hss-001")
+        assert response.status_code == 200
+        data = response.json()["data"]
+        assert "extract_warnings" in data
+        assert isinstance(data["extract_warnings"], list)
+
+
+@pytest.mark.smoke
 @pytest.mark.asyncio
 async def test_smoke_status_route_includes_extract_warnings() -> None:
     transport = ASGITransport(app=app)

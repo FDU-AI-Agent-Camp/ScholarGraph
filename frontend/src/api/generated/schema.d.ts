@@ -216,6 +216,11 @@ export interface components {
             classification?: components["schemas"]["ParadigmClassification"];
             /** @description Async dual(rules) merged document head with per-field sources. */
             ingest_head?: components["schemas"]["IngestHead"] | null;
+            /**
+             * @description Machine-readable graph-extract degrade codes (e.g. extract_heuristic_fallback).
+             * @example []
+             */
+            extract_warnings?: string[];
         };
         PaperDetailResponse: {
             data?: components["schemas"]["PaperDetail"];
@@ -241,6 +246,11 @@ export interface components {
              * @example []
              */
             head_refine_warnings?: string[];
+            /**
+             * @description Machine-readable graph-extract degrade codes (e.g. extract_heuristic_fallback).
+             * @example []
+             */
+            extract_warnings?: string[];
         };
         PaperStatusResponse: {
             data?: components["schemas"]["PaperStatusData"];

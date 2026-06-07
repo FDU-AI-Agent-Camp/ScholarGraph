@@ -5,14 +5,7 @@ import { PIPELINE_STEPS, PIPELINE_REFRESH_CAPTION, resolvePipelineStepStates } f
 
 describe('resolvePipelineStepStates', () => {
   it('marks all steps done when status is ready', () => {
-    expect(resolvePipelineStepStates('ready', 'ready')).toEqual([
-      'done',
-      'done',
-      'done',
-      'done',
-      'done',
-      'done',
-    ])
+    expect(resolvePipelineStepStates('ready', 'ready')).toEqual(['done', 'done', 'done', 'done', 'done', 'done'])
   })
 
   it('marks prior steps done and current active while processing', () => {

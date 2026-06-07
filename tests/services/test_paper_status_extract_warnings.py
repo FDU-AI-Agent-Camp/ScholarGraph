@@ -71,3 +71,13 @@ async def test_status_api_returns_extract_warnings(
 
     assert response.status_code == 200
     assert response.json()["data"]["extract_warnings"] == [EXTRACT_HEURISTIC_FALLBACK_CODE]
+
+
+@pytest.mark.asyncio
+async def test_get_paper_includes_extract_warnings_on_detail(registered_paper: str) -> None:
+    service = get_paper_service()
+    service.record_extract_warnings(registered_paper, [EXTRACT_HEURISTIC_FALLBACK_CODE])
+
+    paper = await service.get_paper(registered_paper)
+
+    assert paper.extract_warnings == [EXTRACT_HEURISTIC_FALLBACK_CODE]

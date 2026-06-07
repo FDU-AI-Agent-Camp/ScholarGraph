@@ -1,10 +1,18 @@
+import { ElMessage } from 'element-plus'
 import { ref } from 'vue'
-import { mount, flushPromises } from '@vue/test-utils'
-import { describe, expect, it, vi } from 'vitest'
+import { enableAutoUnmount, flushPromises, mount } from '@vue/test-utils'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import PaperStatusPanel from '@/components/papers/PaperStatusPanel.vue'
 import { DETAIL_BASELINE_COPY } from '@/constants/detailCopy'
-import { failedStatus, failedStatusWithoutCode, processingStatus, readyStatus } from '@/test/fixtures/paperStatus'
+import { EXTRACT_HEURISTIC_FALLBACK_MESSAGE, EXTRACT_HEURISTIC_FALLBACK_CODE } from '@/utils/extractWarnings'
+import {
+  failedStatus,
+  failedStatusWithoutCode,
+  processingStatus,
+  readyStatus,
+  readyStatusWithExtractFallback,
+} from '@/test/fixtures/paperStatus'
 
 const mockStart = vi.fn()
 const mockStop = vi.fn()
@@ -21,7 +29,15 @@ vi.mock('@/composables/usePaperStatus', () => ({
   }),
 }))
 
+enableAutoUnmount(afterEach)
+
 describe('PaperStatusPanel', () => {
+  beforeEach(() => {
+    vi.mocked(ElMessage.warning).mockClear()
+    mockStatus.value = null
+    mockPolling.value = false
+  })
+
   it('renders stepper labels and refresh caption while processing', () => {
     mockStatus.value = processingStatus
     mockPolling.value = true
@@ -115,6 +131,47 @@ describe('PaperStatusPanel', () => {
       props: { paperId: 'paper-001', autoStart: true },
     })
     expect(mockStart).toHaveBeenCalled()
+  })
+
+  it('renders extract fallback warning alert when extract_warnings present', () => {
+    mockStatus.value = {
+      ...readyStatus,
+      extract_warnings: [EXTRACT_HEURISTIC_FALLBACK_CODE],
+    }
+
+    const wrapper = mount(PaperStatusPanel, {
+      props: { paperId: 'paper-001', autoStart: false },
+    })
+
+    const alerts = wrapper.findAll('.el-alert-stub')
+    const warning = alerts.find((node) => node.attributes('data-type') === 'warning')
+    expect(warning?.attributes('data-title')).toBe(EXTRACT_HEURISTIC_FALLBACK_MESSAGE)
+  })
+
+  it('does not render extract warning alert when extract_warnings empty', () => {
+    mockStatus.value = readyStatus
+
+    const wrapper = mount(PaperStatusPanel, {
+      props: { paperId: 'paper-001', autoStart: false },
+    })
+
+    const warning = wrapper.findAll('.el-alert-stub').find((node) => node.attributes('data-type') === 'warning')
+    expect(warning).toBeUndefined()
+  })
+
+  it('shows ElMessage.warning once when polling reaches ready with extract fallback', async () => {
+    vi.mocked(ElMessage.warning).mockClear()
+    mockStatus.value = processingStatus
+    const wrapper = mount(PaperStatusPanel, {
+      props: { paperId: 'paper-001', autoStart: false },
+    })
+
+    mockStatus.value = readyStatusWithExtractFallback
+    await flushPromises()
+
+    expect(ElMessage.warning).toHaveBeenCalledTimes(1)
+    expect(ElMessage.warning).toHaveBeenCalledWith(EXTRACT_HEURISTIC_FALLBACK_MESSAGE)
+    expect(wrapper.emitted('ready')).toHaveLength(1)
   })
 
   it('shows pause/resume refresh labels instead of polling jargon', () => {

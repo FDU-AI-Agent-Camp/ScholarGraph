@@ -39,5 +39,5 @@ config.global.stubs = {
 }
 
 vi.mock('element-plus', () => ({
-  ElMessage: { error: vi.fn(), success: vi.fn() },
+  ElMessage: { error: vi.fn(), success: vi.fn(), warning: vi.fn() },
 }))

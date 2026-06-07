@@ -380,6 +380,12 @@ components:
                 - $ref: "#/components/schemas/IngestHead"
               nullable: true
               description: Async dual(rules) merged document head with per-field sources.
+            extract_warnings:
+              type: array
+              items:
+                type: string
+              description: Machine-readable graph-extract degrade codes (e.g. extract_heuristic_fallback).
+              example: []
 
     PaperDetailResponse:
       type: object

@@ -20,14 +20,7 @@ export const PIPELINE_REFRESH_CAPTION = DETAIL_BASELINE_COPY.refreshCaption
 
 export type PipelineStepVisualState = 'pending' | 'active' | 'done' | 'failed'
 
-const WORKFLOW_STAGES: PipelineStage[] = [
-  'ingesting',
-  'head_refining',
-  'classifying',
-  'extracting',
-  'storing',
-  'ready',
-]
+const WORKFLOW_STAGES: PipelineStage[] = ['ingesting', 'head_refining', 'classifying', 'extracting', 'storing', 'ready']
 
 function stageIndex(stage: PipelineStage | null | undefined): number {
   if (!stage) {

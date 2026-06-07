@@ -49,6 +49,10 @@ class PaperDetail(PaperSummary):
         default=None,
         description="Async dual(rules) merged document head with per-field sources (P10/P11).",
     )
+    extract_warnings: list[str] = Field(
+        default_factory=list,
+        description="Machine-readable graph-extract degrade codes (e.g. extract_heuristic_fallback).",
+    )
 
 
 class PaperCreateResult(BaseModel):

@@ -68,3 +68,11 @@ def test_hss_002_per_paper_status_fixture() -> None:
     assert status.paper_id == "hss-002"
     assert status.status == PaperStatus.PROCESSING
     assert status.stage == PipelineStage.CLASSIFYING
+
+
+def test_ready_fallback_status_fixture_includes_extract_warnings() -> None:
+    from backend.agents.extract_constants import EXTRACT_HEURISTIC_FALLBACK_CODE
+
+    status = _load_status_data("paper-status-ready-fallback.json")
+    assert status.status == PaperStatus.READY
+    assert status.extract_warnings == [EXTRACT_HEURISTIC_FALLBACK_CODE]

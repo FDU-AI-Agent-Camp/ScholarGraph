@@ -145,11 +145,18 @@ class PaperService:
         paper = self._papers.get(paper_id)
         if paper is None:
             raise ApiError("PAPER_NOT_FOUND", f"论文不存在: {paper_id}", status_code=404)
+        return self._enrich_paper_detail(paper, paper_id)
+
+    def _enrich_paper_detail(self, paper: PaperDetail, paper_id: str) -> PaperDetail:
+        """Attach optional ingest head and extract degrade codes for detail API (X17)."""
         self._hydrate_head_refine_from_disk(paper_id)
         ingest_head = self._refined_head.get(paper_id)
-        if ingest_head is None:
-            return paper
-        return paper.model_copy(update={"ingest_head": ingest_head})
+        return paper.model_copy(
+            update={
+                "ingest_head": ingest_head,
+                "extract_warnings": self.get_extract_warnings(paper_id),
+            },
+        )
 
     def ensure_paper_exists(self, paper_id: str) -> None:
         if paper_id not in self._papers:

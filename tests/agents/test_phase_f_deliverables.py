@@ -22,6 +22,23 @@ AGENTS_DIR = REPO_ROOT / "backend" / "agents"
 ENV_EXAMPLE = REPO_ROOT / ".env.example"
 
 
+def test_phase_f_x17_paper_detail_exposes_extract_warnings() -> None:
+    from datetime import UTC, datetime
+
+    from backend.schemas.paper import PaperDetail, PaperStatus
+
+    now = datetime.now(UTC)
+    detail = PaperDetail(
+        paper_id="f-x17",
+        title="t",
+        status=PaperStatus.READY,
+        created_at=now,
+        updated_at=now,
+        extract_warnings=[EXTRACT_HEURISTIC_FALLBACK_CODE],
+    )
+    assert detail.extract_warnings == [EXTRACT_HEURISTIC_FALLBACK_CODE]
+
+
 def test_phase_f_x13_paper_status_data_exposes_extract_warnings() -> None:
     status = PaperStatusData.model_validate(
         {
@@ -46,6 +63,7 @@ def test_phase_f_x20_openapi_status_documents_extract_warnings() -> None:
     text = OPENAPI.read_text(encoding="utf-8")
     assert "extract_warnings:" in text
     assert "extract_heuristic_fallback" in text
+    assert "PaperDetail:" in text
 
 
 def test_phase_f_modules_exist() -> None:
