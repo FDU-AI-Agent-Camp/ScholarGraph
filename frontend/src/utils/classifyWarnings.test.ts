@@ -7,36 +7,32 @@ import {
   resolveClassifyWarningMessages,
 } from '@/utils/classifyWarnings'
 
-const FROZEN_CODE = 'classifier_heuristic_fallback'
-const FROZEN_MESSAGE = '触发分类启发式Fallback!'
-
 describe('classifyWarnings', () => {
-  it('freezes machine code constant', () => {
-    expect(CLASSIFIER_HEURISTIC_FALLBACK_CODE).toBe(FROZEN_CODE)
-  })
-
-  it('freezes user-visible message constant', () => {
-    expect(CLASSIFIER_HEURISTIC_FALLBACK_MESSAGE).toBe(FROZEN_MESSAGE)
-  })
-
   it('maps classifier_heuristic_fallback to frozen user message', () => {
     expect(resolveClassifyWarningMessages([CLASSIFIER_HEURISTIC_FALLBACK_CODE])).toEqual([
       CLASSIFIER_HEURISTIC_FALLBACK_MESSAGE,
     ])
   })
 
-  it('detects classifier heuristic fallback code', () => {
+  it('returns empty list when codes are absent', () => {
+    expect(resolveClassifyWarningMessages([])).toEqual([])
+    expect(resolveClassifyWarningMessages(undefined)).toEqual([])
+    expect(resolveClassifyWarningMessages(null)).toEqual([])
+  })
+
+  it('detects heuristic fallback code', () => {
     expect(hasClassifierHeuristicFallback([CLASSIFIER_HEURISTIC_FALLBACK_CODE])).toBe(true)
     expect(hasClassifierHeuristicFallback([])).toBe(false)
     expect(hasClassifierHeuristicFallback(undefined)).toBe(false)
     expect(hasClassifierHeuristicFallback(null)).toBe(false)
   })
 
-  it('passes through unknown codes unchanged', () => {
-    expect(resolveClassifyWarningMessages(['future_code'])).toEqual(['future_code'])
+  it('does not show warning UI when only unknown codes are present', () => {
+    expect(resolveClassifyWarningMessages(['other_code'])).toEqual(['other_code'])
+    expect(hasClassifierHeuristicFallback(['other_code'])).toBe(false)
   })
 
-  it('deduplicates resolved messages', () => {
+  it('deduplicates repeated machine codes in display messages', () => {
     expect(
       resolveClassifyWarningMessages([
         CLASSIFIER_HEURISTIC_FALLBACK_CODE,
@@ -45,15 +41,13 @@ describe('classifyWarnings', () => {
     ).toEqual([CLASSIFIER_HEURISTIC_FALLBACK_MESSAGE])
   })
 
+  it('frozen message matches progress.md copy exactly', () => {
+    expect(CLASSIFIER_HEURISTIC_FALLBACK_MESSAGE).toBe('触发分类启发式Fallback!')
+  })
+
   it('maps known code and passes unknown codes in mixed lists', () => {
     expect(
       resolveClassifyWarningMessages([CLASSIFIER_HEURISTIC_FALLBACK_CODE, 'future_code']),
     ).toEqual([CLASSIFIER_HEURISTIC_FALLBACK_MESSAGE, 'future_code'])
-  })
-
-  it('returns empty array for empty or missing input', () => {
-    expect(resolveClassifyWarningMessages([])).toEqual([])
-    expect(resolveClassifyWarningMessages(undefined)).toEqual([])
-    expect(resolveClassifyWarningMessages(null)).toEqual([])
   })
 })

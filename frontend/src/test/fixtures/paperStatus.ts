@@ -35,6 +35,19 @@ export const readyStatusWithClassifyFallback: PaperStatusData = {
   classify_warnings: ['classifier_heuristic_fallback'],
 }
 
+export const classifyingStatusWithClassifyFallback: PaperStatusData = {
+  ...processingStatus,
+  stage: 'classifying',
+  percent: 50,
+  classify_warnings: ['classifier_heuristic_fallback'],
+}
+
+export const readyStatusWithBothFallbacks: PaperStatusData = {
+  ...readyStatus,
+  extract_warnings: ['extract_heuristic_fallback'],
+  classify_warnings: ['classifier_heuristic_fallback'],
+}
+
 export const failedStatusWithoutCode: PaperStatusData = {
   paper_id: 'paper-002',
   status: 'failed',

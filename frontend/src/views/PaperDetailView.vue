@@ -376,6 +376,10 @@ function onGraphNodeClick(nodeId: string): void {
   min-width: 0;
 }
 
+.detail-graph__classify-warning {
+  margin-bottom: var(--spacing-12);
+}
+
 .detail-graph__extract-warning {
   margin-bottom: var(--spacing-12);
 }

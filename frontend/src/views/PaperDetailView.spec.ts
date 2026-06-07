@@ -256,6 +256,32 @@ describe('PaperDetailView', () => {
 
       expect(wrapper.find('.detail-graph__classify-warning').exists()).toBe(false)
     })
+
+    it('shows classify and extract fallback alerts together when both warnings present', async () => {
+      paperStoreState.currentPaper = {
+        ...paperStoreState.currentPaper,
+        extract_warnings: ['extract_heuristic_fallback'],
+        classify_warnings: ['classifier_heuristic_fallback'],
+      }
+
+      const wrapper = mount(PaperDetailView, {
+        props: { paperId: 'hss-001' },
+        global: { stubs: globalStubs },
+      })
+
+      await flushPromises()
+
+      expect(wrapper.find('.detail-graph__classify-warning').exists()).toBe(true)
+      expect(wrapper.find('.detail-graph__extract-warning').exists()).toBe(true)
+      const warnings = wrapper
+        .findAll('.el-alert-stub')
+        .filter((node) => node.attributes('data-type') === 'warning')
+      expect(warnings).toHaveLength(2)
+      expect(warnings.map((node) => node.attributes('data-title'))).toEqual([
+        CLASSIFIER_HEURISTIC_FALLBACK_MESSAGE,
+        EXTRACT_HEURISTIC_FALLBACK_MESSAGE,
+      ])
+    })
   })
 
   describe('§1.4.4 QA baseline copy and answer panel (5.6)', () => {

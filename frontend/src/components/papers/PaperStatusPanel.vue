@@ -282,6 +282,10 @@ watch(
   margin: var(--spacing-8) 0 0;
 }
 
+.status-panel__classify-warning {
+  margin-top: var(--spacing-12);
+}
+
 .status-panel__extract-warning {
   margin-top: var(--spacing-12);
 }

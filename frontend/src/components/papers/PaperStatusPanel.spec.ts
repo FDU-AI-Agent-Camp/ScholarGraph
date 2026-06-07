@@ -12,8 +12,10 @@ import {
   failedStatusWithoutCode,
   processingStatus,
   readyStatus,
+  readyStatusWithBothFallbacks,
   readyStatusWithClassifyFallback,
   readyStatusWithExtractFallback,
+  classifyingStatusWithClassifyFallback,
 } from '@/test/fixtures/paperStatus'
 
 const mockStart = vi.fn()
@@ -212,6 +214,40 @@ describe('PaperStatusPanel', () => {
     expect(ElMessage.warning).toHaveBeenCalledTimes(1)
     expect(ElMessage.warning).toHaveBeenCalledWith(CLASSIFIER_HEURISTIC_FALLBACK_MESSAGE)
     expect(wrapper.emitted('ready')).toHaveLength(1)
+  })
+
+  it('shows classify warning alert while polling during classifying stage', () => {
+    mockStatus.value = classifyingStatusWithClassifyFallback
+
+    const wrapper = mount(PaperStatusPanel, {
+      props: { paperId: 'paper-001', autoStart: false },
+    })
+
+    expect(wrapper.find('.status-panel__classify-warning').exists()).toBe(true)
+    const warning = wrapper
+      .findAll('.el-alert-stub')
+      .find((node) => node.attributes('data-type') === 'warning')
+    expect(warning?.attributes('data-title')).toBe(CLASSIFIER_HEURISTIC_FALLBACK_MESSAGE)
+    expect(ElMessage.warning).not.toHaveBeenCalled()
+  })
+
+  it('renders classify and extract fallback alerts together when both warnings present', () => {
+    mockStatus.value = readyStatusWithBothFallbacks
+
+    const wrapper = mount(PaperStatusPanel, {
+      props: { paperId: 'paper-001', autoStart: false },
+    })
+
+    expect(wrapper.find('.status-panel__classify-warning').exists()).toBe(true)
+    expect(wrapper.find('.status-panel__extract-warning').exists()).toBe(true)
+    const warnings = wrapper
+      .findAll('.el-alert-stub')
+      .filter((node) => node.attributes('data-type') === 'warning')
+    expect(warnings).toHaveLength(2)
+    expect(warnings.map((node) => node.attributes('data-title'))).toEqual([
+      CLASSIFIER_HEURISTIC_FALLBACK_MESSAGE,
+      EXTRACT_HEURISTIC_FALLBACK_MESSAGE,
+    ])
   })
 
   it('shows pause/resume refresh labels instead of polling jargon', () => {

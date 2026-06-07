@@ -158,3 +158,18 @@ def test_phase_g_fe_be_frozen_fallback_constants_parity() -> None:
     assert fe_message is not None
     assert fe_code.group(1) == CLASSIFIER_HEURISTIC_FALLBACK_CODE
     assert fe_message.group(1) == CLASSIFIER_HEURISTIC_FALLBACK_MESSAGE
+
+
+def test_phase_g_g4_env_example_classifier_comments() -> None:
+    text = ENV_EXAMPLE.read_text(encoding="utf-8")
+    assert "CLASSIFIER_LLM_ENABLED=true" in text
+    assert "classify_warnings" in text
+    assert "CLASSIFIER_HEURISTIC_FALLBACK=true" in text
+
+
+def test_phase_g_g4_classifier_mock_path_short_circuits_before_live() -> None:
+    from backend.agents import classifier
+
+    source = inspect.getsource(classifier.classify)
+    assert "if settings.is_llm_mock" in source
+    assert "mock_classify" in source
