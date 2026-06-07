@@ -59,8 +59,29 @@ def test_g23_openapi_fixture_paper_detail_has_classify_warnings_key() -> None:
 
 @pytest.mark.parametrize(
     "filename",
-    ("paper-detail-ready.json", "paper-detail-ready-fallback.json"),
+    ("paper-detail-ready.json", "paper-detail-ready-fallback.json", "paper-detail-classify-fallback.json"),
 )
 def test_g20_paper_detail_fixtures_include_classify_warnings_field(filename: str) -> None:
     payload = json.loads((FIXTURES_DIR / filename).read_text(encoding="utf-8"))
-    assert "classify_warnings" in payload["data"] or PaperDetail.model_validate(payload["data"]).classify_warnings == []
+    assert "classify_warnings" in payload["data"]
+    PaperDetail.model_validate(payload["data"])
+
+
+@pytest.mark.parametrize(
+    "filename",
+    (
+        "paper-status-processing.json",
+        "paper-status-ready-fallback.json",
+        "paper-status-classify-fallback.json",
+        "paper-status-hss-failed-001.json",
+    ),
+)
+def test_g26_paper_status_fixtures_include_classify_warnings_field(filename: str) -> None:
+    payload = json.loads((FIXTURES_DIR / filename).read_text(encoding="utf-8"))
+    assert "classify_warnings" in payload["data"]
+    PaperStatusData.model_validate(payload["data"])
+
+
+def test_g26_classify_fallback_fixture_carries_machine_code() -> None:
+    payload = json.loads((FIXTURES_DIR / "paper-detail-classify-fallback.json").read_text(encoding="utf-8"))
+    assert payload["data"]["classify_warnings"] == [CLASSIFIER_HEURISTIC_FALLBACK_CODE]

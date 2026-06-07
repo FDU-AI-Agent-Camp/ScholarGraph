@@ -6,7 +6,8 @@
     "stage": "ready",
     "message": "建图完成",
     "updated_at": "2026-05-19T10:05:00Z",
-    "extract_warnings": ["extract_heuristic_fallback"]
+    "extract_warnings": ["extract_heuristic_fallback"],
+    "classify_warnings": []
   },
   "meta": { "request_id": "mock-status-fallback-001" }
 }

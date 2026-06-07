@@ -1,0 +1,13 @@
+{
+  "data": {
+    "paper_id": "hss-classify-fallback-001",
+    "status": "ready",
+    "percent": 100,
+    "stage": "ready",
+    "message": "建图完成",
+    "updated_at": "2026-05-19T10:05:00Z",
+    "extract_warnings": [],
+    "classify_warnings": ["classifier_heuristic_fallback"]
+  },
+  "meta": { "request_id": "mock-status-classify-fallback-001" }
+}

@@ -101,8 +101,26 @@ def test_phase_g_classifier_live_path_calls_classify_with_llm() -> None:
 
     live_source = inspect.getsource(classifier._classify_live)
     assert "classify_with_llm" in live_source
+    assert "classifier_llm_enabled" in live_source
+    assert "classify_llm_disabled" in live_source
     assert "_fallback_to_heuristic" in live_source
     assert "CLASSIFIER_HEURISTIC_FALLBACK_CODE" in inspect.getsource(classifier._fallback_to_heuristic)
+
+
+def test_phase_g_g24_disabled_llm_symmetric_with_heuristic_fallback() -> None:
+    from backend.agents import classifier
+
+    source = inspect.getsource(classifier._classify_live)
+    assert "if not settings.classifier_llm_enabled" in source
+    assert '_fallback_to_heuristic(classifier_input, reason="classifier_llm_disabled")' in source
+
+
+def test_phase_g_g25_heuristic_fallback_guard_raises_service_error() -> None:
+    from backend.agents import classifier
+
+    source = inspect.getsource(classifier._classify_live)
+    assert "classifier_heuristic_fallback" in source
+    assert "PIPELINE_FAILED_CODE" in source
 
 
 def test_phase_g_load_classifier_prompt_exported() -> None:
