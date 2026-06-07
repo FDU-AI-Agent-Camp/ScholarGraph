@@ -13,6 +13,7 @@ from backend.graph.state import (
     NODE_FAIL,
     NODE_INGEST,
     NODE_STORE,
+    NODE_WAIT_HEAD_REFINE,
     PIPELINE_ORDER,
     WorkflowState,
     initial_workflow_state,
@@ -35,6 +36,7 @@ def build_paper_pipeline_graph() -> StateGraph:
     graph: StateGraph = StateGraph(WorkflowState)
 
     graph.add_node(NODE_INGEST, nodes.ingest_node)
+    graph.add_node(NODE_WAIT_HEAD_REFINE, nodes.wait_head_refine_node)
     graph.add_node(NODE_CLASSIFY, nodes.classify_node)
     graph.add_node(NODE_EXTRACT, nodes.extract_node)
     graph.add_node(NODE_STORE, nodes.store_node)
@@ -44,6 +46,11 @@ def build_paper_pipeline_graph() -> StateGraph:
 
     graph.add_conditional_edges(
         NODE_INGEST,
+        _route_after_step,
+        {"continue": NODE_WAIT_HEAD_REFINE, "fail": NODE_FAIL},
+    )
+    graph.add_conditional_edges(
+        NODE_WAIT_HEAD_REFINE,
         _route_after_step,
         {"continue": NODE_CLASSIFY, "fail": NODE_FAIL},
     )

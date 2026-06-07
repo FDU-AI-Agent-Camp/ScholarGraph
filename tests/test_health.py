@@ -16,4 +16,7 @@ async def test_health_returns_ok_envelope() -> None:
     assert body["data"]["llm_mode"] in {"mock", "live"}
     assert body["data"]["llm_connected"] == (body["data"]["llm_mode"] == "live")
     assert "llm_note" in body["data"]
+    assert "grobid_url" in body["data"]
+    assert isinstance(body["data"]["grobid_connected"], bool)
+    assert "grobid_note" in body["data"]
     assert "request_id" in body["meta"]

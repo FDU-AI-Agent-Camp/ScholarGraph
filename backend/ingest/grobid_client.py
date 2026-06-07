@@ -12,6 +12,24 @@ from backend.config import Settings, get_settings
 logger = logging.getLogger(__name__)
 
 PROCESS_FULLTEXT_PATH = "/api/processFulltextDocument"
+GROBID_ISALIVE_PATH = "/api/isalive"
+GROBID_HEALTH_PROBE_SECONDS = 3.0
+
+
+async def check_grobid_isalive(*, settings: Settings | None = None) -> bool:
+    """Return True when GROBID sidecar responds to ``/api/isalive``."""
+    cfg = settings or get_settings()
+    url = f"{cfg.grobid_url.rstrip('/')}{GROBID_ISALIVE_PATH}"
+    timeout = httpx.Timeout(GROBID_HEALTH_PROBE_SECONDS)
+    try:
+        async with httpx.AsyncClient(timeout=timeout) as client:
+            response = await client.get(url)
+        if response.status_code != 200:
+            return False
+        return "true" in response.text.lower()
+    except Exception:
+        logger.debug("GROBID isalive probe failed for %s", url, exc_info=True)
+        return False
 
 
 async def fetch_grobid_tei(

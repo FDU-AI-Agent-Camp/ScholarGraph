@@ -150,6 +150,11 @@ def mock_pipeline_dependencies() -> Iterator[dict[str, MagicMock]]:
             patch("backend.graph.nodes.get_ingest_service", return_value=ingest_svc),
             patch("backend.graph.nodes.get_agent_service", return_value=agent_svc),
             patch("backend.graph.nodes.get_pipeline_completion_service", return_value=completion_svc),
+            patch("backend.graph.nodes.ensure_head_refine_scheduled"),
+            patch(
+                "backend.graph.nodes.wait_for_refined_classifier_input",
+                new=AsyncMock(side_effect=lambda _pid, _path, fallback, **_: (fallback, [])),
+            ),
         ):
             yield {
                 "ingest": ingest_svc,

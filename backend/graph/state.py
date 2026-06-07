@@ -6,6 +6,7 @@ from backend.schemas.paper import PaperStatus, PipelineStage
 
 # Node names (stable identifiers for the StateGraph).
 NODE_INGEST = "ingest"
+NODE_WAIT_HEAD_REFINE = "wait_head_refine"
 NODE_CLASSIFY = "classify"
 NODE_EXTRACT = "extract"
 NODE_STORE = "store"
@@ -13,6 +14,7 @@ NODE_FAIL = "fail"
 
 PIPELINE_ORDER: tuple[str, ...] = (
     NODE_INGEST,
+    NODE_WAIT_HEAD_REFINE,
     NODE_CLASSIFY,
     NODE_EXTRACT,
     NODE_STORE,
@@ -51,6 +53,8 @@ class WorkflowState(TypedDict, total=False):
     paradigm: str
 
     graph: dict[str, Any]
+
+    head_refine_warnings: list[str]
 
     failed: bool
 

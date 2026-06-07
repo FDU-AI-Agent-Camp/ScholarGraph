@@ -71,6 +71,88 @@ async def test_ingest_node_ingest_failed_code_from_service(
     assert out["error_code"] == "INGEST_FAILED"
 
 
+# ── wait_head_refine_node ───────────────────────────────────────────────────
+
+
+async def test_wait_head_refine_node_replaces_classifier_input(
+    post_ingest_state: WorkflowState,
+) -> None:
+    with (
+        patch("backend.graph.nodes.ensure_head_refine_scheduled") as mock_schedule,
+        patch(
+            "backend.graph.nodes.wait_for_refined_classifier_input",
+            new=AsyncMock(return_value=("REFINED-INPUT", ["grobid_unavailable"])),
+        ),
+    ):
+        out = await nodes.wait_head_refine_node(post_ingest_state)
+
+    mock_schedule.assert_called_once_with(
+        post_ingest_state["paper_id"],
+        Path(post_ingest_state["pdf_path"]),
+    )
+    assert out["classifier_input"] == "REFINED-INPUT"
+    assert out["head_refine_warnings"] == ["grobid_unavailable"]
+    assert out.get("failed") is False
+
+
+async def test_wait_head_refine_node_marks_progress_message(
+    post_ingest_state: WorkflowState,
+    workflow_paper: tuple[str, Path],
+) -> None:
+    from backend.services.pipeline_status_service import get_pipeline_status_service
+
+    paper_id, _ = workflow_paper
+    get_pipeline_status_service().start_processing(paper_id)
+    with (
+        patch("backend.graph.nodes.ensure_head_refine_scheduled"),
+        patch(
+            "backend.graph.nodes.wait_for_refined_classifier_input",
+            new=AsyncMock(return_value=("REFINED", [])),
+        ),
+    ):
+        await nodes.wait_head_refine_node(post_ingest_state)
+
+    status = await get_paper_service().get_status(paper_id)
+    assert "精炼" in status.message
+
+
+async def test_wait_head_refine_node_preserves_full_text_in_state(
+    post_ingest_state: WorkflowState,
+) -> None:
+    post_ingest_state["full_text"] = "FULL-BODY-UNTOUCHED"
+    with (
+        patch("backend.graph.nodes.ensure_head_refine_scheduled"),
+        patch(
+            "backend.graph.nodes.wait_for_refined_classifier_input",
+            new=AsyncMock(return_value=("REFINED", [])),
+        ),
+    ):
+        out = await nodes.wait_head_refine_node(post_ingest_state)
+
+    assert post_ingest_state["full_text"] == "FULL-BODY-UNTOUCHED"
+    assert "full_text" not in out
+
+
+async def test_classify_node_receives_refined_classifier_input(
+    post_ingest_state: WorkflowState,
+) -> None:
+    classification = ParadigmClassification(
+        paradigm=Paradigm.HSS,
+        confidence=0.9,
+        reason="mock",
+    )
+    agent_svc = MagicMock()
+    agent_svc.classify_paradigm = AsyncMock(return_value=classification)
+
+    state = dict(post_ingest_state)
+    state["classifier_input"] = "REFINED-INPUT"
+
+    with patch("backend.graph.nodes.get_agent_service", return_value=agent_svc):
+        await nodes.classify_node(WorkflowState(**state))
+
+    agent_svc.classify_paradigm.assert_awaited_once_with("REFINED-INPUT")
+
+
 # ── classify_node ───────────────────────────────────────────────────────────
 
 
