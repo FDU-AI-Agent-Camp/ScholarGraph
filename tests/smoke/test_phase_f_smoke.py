@@ -154,3 +154,34 @@ async def test_smoke_status_route_includes_extract_warnings() -> None:
         data = response.json()["data"]
         assert "extract_warnings" in data
         assert isinstance(data["extract_warnings"], list)
+
+
+@pytest.mark.smoke
+def test_smoke_f33_extract_hss_prompt_has_operational_definitions() -> None:
+    from backend.schemas.paradigm import Paradigm
+
+    prompt = load_extract_prompt(Paradigm.HSS)
+    assert "F.3 Operational node definitions" in prompt
+    assert "Thesis" in prompt
+    assert "SUB_ARGUMENT_OF" in prompt
+    assert "Metric" in prompt
+
+
+@pytest.mark.smoke
+def test_smoke_f33_graph_hss_fixture_on_disk() -> None:
+    from pathlib import Path
+
+    fixtures = Path(__file__).resolve().parents[2] / "docs" / "api" / "fixtures"
+    assert (fixtures / "graph-hss.json").is_file()
+
+
+@pytest.mark.smoke
+@pytest.mark.asyncio
+async def test_smoke_f33_hss_graph_endpoint_returns_thesis() -> None:
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        response = await client.get("/api/v1/papers/hss-001/graph")
+    assert response.status_code == 200
+    node_types = {node["type"] for node in response.json()["data"]["nodes"]}
+    assert "Thesis" in node_types
+    assert "SubArgument" in node_types
