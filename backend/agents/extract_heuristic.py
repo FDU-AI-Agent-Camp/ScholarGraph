@@ -211,3 +211,8 @@ def build_heuristic_graph(full_text: str, paradigm: Paradigm, *, title: str | No
     if paradigm == Paradigm.HSS:
         return build_hss_graph(full_text, resolved_title)
     return build_stem_graph(full_text, resolved_title)
+
+
+# Legacy aliases referenced in Phase F docs (F.2.2 X10).
+_build_hss_graph = build_hss_graph
+_build_stem_graph = build_stem_graph

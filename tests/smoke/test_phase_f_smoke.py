@@ -75,6 +75,30 @@ def test_smoke_paper_status_data_accepts_extract_warnings() -> None:
 
 
 @pytest.mark.smoke
+def test_smoke_f22_fallback_helper_wired() -> None:
+    from backend.agents import extractor
+
+    source = inspect.getsource(extractor._fallback_to_heuristic)
+    assert "extract_llm_fallback" in source
+    assert "build_heuristic_graph" in source
+
+
+@pytest.mark.smoke
+def test_smoke_f22_heuristic_legacy_aliases_importable() -> None:
+    from backend.agents import extract_heuristic
+
+    assert callable(extract_heuristic._build_hss_graph)
+    assert callable(extract_heuristic._build_stem_graph)
+
+
+@pytest.mark.smoke
+def test_smoke_f22_validate_llm_graph_checks_edges() -> None:
+    from backend.agents.extract_llm import _validate_llm_graph
+
+    assert "no edges" in inspect.getsource(_validate_llm_graph)
+
+
+@pytest.mark.smoke
 @pytest.mark.asyncio
 async def test_smoke_status_route_includes_extract_warnings() -> None:
     transport = ASGITransport(app=app)

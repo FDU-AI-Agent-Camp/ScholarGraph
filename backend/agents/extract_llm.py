@@ -84,6 +84,8 @@ async def _invoke_structured(
 def _validate_llm_graph(graph: UnifiedPaperGraph, *, expected_paradigm: Paradigm) -> None:
     if not graph.nodes:
         raise ValueError("LLM graph has no nodes.")
+    if not graph.edges:
+        raise ValueError("LLM graph has no edges.")
     if graph.paradigm != expected_paradigm:
         raise ValueError(f"LLM graph paradigm {graph.paradigm} != expected {expected_paradigm}.")
 

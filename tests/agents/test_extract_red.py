@@ -16,7 +16,7 @@ from backend.agents.extractor import extract
 from backend.config import get_settings
 from backend.graph.workflow import run_paper_pipeline
 from backend.llm.client import reset_llm_client_cache
-from backend.schemas.graph import GraphNode, UnifiedPaperGraph
+from backend.schemas.graph import GraphEdge, GraphNode, UnifiedPaperGraph
 from backend.schemas.paper import PaperStatus, PipelineStage
 from backend.schemas.paradigm import Paradigm
 from backend.services.agent_service import AgentService
@@ -239,7 +239,7 @@ async def test_red_extract_max_input_chars_zero_keeps_full_text(live_extract_env
             paper_id="p",
             paradigm=Paradigm.HSS,
             nodes=[GraphNode(id="n1", label="t", type="Thesis")],
-            edges=[],
+            edges=[GraphEdge(id="e1", source="n1", target="n1", label="REF", type="REF")],
         )
 
     with patch("backend.agents.extract_llm._invoke_structured", side_effect=_capture_invoke):
@@ -249,6 +249,57 @@ async def test_red_extract_max_input_chars_zero_keeps_full_text(live_extract_env
     assert payload["truncated"] is False
     assert len(payload["full_text"]) == 500
     assert result.warnings == []
+
+    get_settings.cache_clear()
+
+
+@pytest.mark.red
+@pytest.mark.asyncio
+async def test_red_empty_edges_triggers_fallback(live_extract_env) -> None:
+    _ = live_extract_env
+    no_edges = UnifiedPaperGraph(
+        paper_id="p",
+        paradigm=Paradigm.HSS,
+        nodes=[GraphNode(id="n1", label="论点", type="Thesis")],
+        edges=[],
+    )
+    with patch(
+        "backend.agents.extract_llm._invoke_structured",
+        new=AsyncMock(return_value=no_edges),
+    ):
+        result = await extract("标题：测试", Paradigm.HSS, paper_id="paper-red-empty-edges")
+
+    assert EXTRACT_HEURISTIC_FALLBACK_CODE in result.warnings
+    assert result.graph.edges
+
+
+@pytest.mark.red
+@pytest.mark.asyncio
+async def test_red_pydantic_validation_error_triggers_fallback(live_extract_env) -> None:
+    _ = live_extract_env
+
+    with patch(
+        "backend.agents.extract_llm._invoke_structured",
+        new=AsyncMock(return_value={"paper_id": "", "paradigm": "STEM", "nodes": []}),
+    ):
+        result = await extract("标题：测试", Paradigm.STEM, paper_id="paper-red-pydantic")
+
+    assert EXTRACT_HEURISTIC_FALLBACK_CODE in result.warnings
+    assert result.graph.paradigm == Paradigm.STEM
+
+
+@pytest.mark.red
+@pytest.mark.asyncio
+async def test_red_extract_llm_disabled_uses_heuristic_warning(live_extract_env, monkeypatch) -> None:
+    _ = live_extract_env
+    monkeypatch.setenv("EXTRACT_LLM_ENABLED", "false")
+    get_settings.cache_clear()
+
+    with patch("backend.agents.extractor.extract_with_llm", new=AsyncMock()) as llm_mock:
+        result = await extract("标题：测试", Paradigm.HSS, paper_id="paper-red-llm-off")
+
+    llm_mock.assert_not_awaited()
+    assert EXTRACT_HEURISTIC_FALLBACK_CODE in result.warnings
 
     get_settings.cache_clear()
 

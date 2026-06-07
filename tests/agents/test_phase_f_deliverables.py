@@ -86,10 +86,10 @@ def test_phase_f_extract_result_dataclass() -> None:
 def test_phase_f_extractor_live_path_calls_extract_with_llm() -> None:
     from backend.agents import extractor
 
-    source = inspect.getsource(extractor._extract_live)
-    assert "extract_with_llm" in source
-    assert "build_heuristic_graph" in source
-    assert EXTRACT_HEURISTIC_FALLBACK_CODE in inspect.getsource(extractor)
+    live_source = inspect.getsource(extractor._extract_live)
+    assert "extract_with_llm" in live_source
+    assert "_fallback_to_heuristic" in live_source
+    assert "EXTRACT_HEURISTIC_FALLBACK_CODE" in inspect.getsource(extractor._fallback_to_heuristic)
 
 
 def test_phase_f_f21_load_extract_prompt_exported() -> None:
@@ -110,3 +110,39 @@ def test_phase_f_f21_truncation_log_in_extract_llm() -> None:
     from backend.agents import extract_llm
 
     assert "extract_input_truncated" in inspect.getsource(extract_llm.extract_with_llm)
+
+
+def test_phase_f_f22_fallback_helper_and_log() -> None:
+    from backend.agents import extractor
+
+    source = inspect.getsource(extractor._fallback_to_heuristic)
+    assert "extract_llm_fallback" in source
+    assert "build_heuristic_graph" in source
+    assert "EXTRACT_HEURISTIC_FALLBACK_CODE" in source
+
+
+def test_phase_f_f22_heuristic_legacy_aliases() -> None:
+    from backend.agents import extract_heuristic
+
+    assert extract_heuristic._build_hss_graph is extract_heuristic.build_hss_graph
+    assert extract_heuristic._build_stem_graph is extract_heuristic.build_stem_graph
+
+
+def test_phase_f_f22_validate_llm_graph_rejects_empty_edges() -> None:
+    from backend.agents.extract_llm import _validate_llm_graph
+    from backend.schemas.graph import GraphNode, UnifiedPaperGraph
+    from backend.schemas.paradigm import Paradigm
+
+    graph = UnifiedPaperGraph(
+        paper_id="p",
+        paradigm=Paradigm.HSS,
+        nodes=[GraphNode(id="n1", label="t", type="Thesis")],
+        edges=[],
+    )
+    try:
+        _validate_llm_graph(graph, expected_paradigm=Paradigm.HSS)
+        raised = False
+    except ValueError as exc:
+        raised = True
+        assert "no edges" in str(exc)
+    assert raised

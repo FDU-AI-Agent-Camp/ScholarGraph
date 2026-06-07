@@ -11,8 +11,8 @@ from backend.agents.extract_types import ExtractResult
 from backend.agents.extractor import extract
 from backend.config import get_settings
 from backend.llm.client import reset_llm_client_cache
-from backend.schemas.graph import GraphNode, UnifiedPaperGraph
 from backend.schemas.paradigm import Paradigm
+from tests.agents.conftest import minimal_valid_llm_graph
 
 
 @pytest.fixture
@@ -47,13 +47,7 @@ def test_build_user_payload_includes_document_head() -> None:
 @pytest.mark.asyncio
 async def test_live_llm_success_returns_graph_without_warnings(live_extract_env) -> None:
     _ = live_extract_env
-    llm_graph = UnifiedPaperGraph(
-        paper_id="ignored",
-        paradigm=Paradigm.HSS,
-        nodes=[GraphNode(id="n1", label="核心论点", type="Thesis")],
-        edges=[],
-        summary="llm",
-    )
+    llm_graph = minimal_valid_llm_graph(summary="llm")
 
     with patch("backend.agents.extractor.extract_with_llm", new=AsyncMock(return_value=llm_graph)):
         result = await extract("标题：测试\n本文认为……", Paradigm.HSS, paper_id="paper-1")
@@ -61,7 +55,7 @@ async def test_live_llm_success_returns_graph_without_warnings(live_extract_env)
     assert isinstance(result, ExtractResult)
     assert result.warnings == []
     assert result.graph.paper_id == "paper-1"
-    assert result.graph.nodes[0].label == "核心论点"
+    assert result.graph.nodes[0].label == "core"
 
 
 @pytest.mark.asyncio

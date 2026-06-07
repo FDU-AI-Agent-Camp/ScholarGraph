@@ -17,6 +17,25 @@ from backend.services.errors import PIPELINE_FAILED_CODE, ServiceError
 logger = logging.getLogger(__name__)
 
 
+def _fallback_to_heuristic(
+    full_text: str,
+    paradigm: Paradigm,
+    *,
+    paper_id: str,
+    title: str,
+    reason: Exception | str,
+) -> ExtractResult:
+    """Degrade to ``build_heuristic_graph`` and record fallback warning (F.2.2 X10/X12)."""
+    logger.warning(
+        "extract_llm_fallback",
+        extra={"paper_id": paper_id, "reason": str(reason)},
+    )
+    graph = build_heuristic_graph(full_text, paradigm, title=title).model_copy(
+        update={"paper_id": paper_id, "paradigm": paradigm},
+    )
+    return ExtractResult(graph=graph, warnings=[EXTRACT_HEURISTIC_FALLBACK_CODE])
+
+
 def _resolve_head_context(paper_id: str) -> str | None:
     """Build optional document-head prefix from in-memory refine or ``HeadStore`` (X6)."""
     from backend.graph.head_store import HeadStore
@@ -48,11 +67,12 @@ async def _extract_live(
             "extract_llm_disabled",
             extra={"paper_id": paper_id, "paradigm": paradigm.value},
         )
-        return ExtractResult(
-            graph=build_heuristic_graph(full_text, paradigm, title=title).model_copy(
-                update={"paper_id": paper_id, "paradigm": paradigm},
-            ),
-            warnings=[EXTRACT_HEURISTIC_FALLBACK_CODE],
+        return _fallback_to_heuristic(
+            full_text,
+            paradigm,
+            paper_id=paper_id,
+            title=title,
+            reason="extract_llm_disabled",
         )
 
     try:
@@ -72,14 +92,13 @@ async def _extract_live(
         if not settings.extract_heuristic_fallback:
             raise ServiceError(PIPELINE_FAILED_CODE, f"图谱 LLM 抽取失败: {exc}") from exc
 
-        logger.warning(
-            "extract_llm_fallback",
-            extra={"paper_id": paper_id, "paradigm": paradigm.value, "reason": str(exc)},
+        return _fallback_to_heuristic(
+            full_text,
+            paradigm,
+            paper_id=paper_id,
+            title=title,
+            reason=exc,
         )
-        graph = build_heuristic_graph(full_text, paradigm, title=title).model_copy(
-            update={"paper_id": paper_id, "paradigm": paradigm},
-        )
-        return ExtractResult(graph=graph, warnings=[EXTRACT_HEURISTIC_FALLBACK_CODE])
 
 
 async def extract(

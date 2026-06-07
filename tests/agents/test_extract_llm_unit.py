@@ -13,7 +13,7 @@ from backend.agents.extract_llm import (
     load_extract_prompt,
     truncate_full_text,
 )
-from backend.schemas.graph import GraphNode, UnifiedPaperGraph
+from backend.schemas.graph import GraphEdge, GraphNode, UnifiedPaperGraph
 from backend.schemas.paradigm import Paradigm
 
 
@@ -72,12 +72,23 @@ def test_validate_llm_graph_rejects_empty_nodes() -> None:
         _validate_llm_graph(graph, expected_paradigm=Paradigm.HSS)
 
 
+def test_validate_llm_graph_rejects_empty_edges() -> None:
+    graph = UnifiedPaperGraph(
+        paper_id="p",
+        paradigm=Paradigm.HSS,
+        nodes=[GraphNode(id="n1", label="t", type="Thesis")],
+        edges=[],
+    )
+    with pytest.raises(ValueError, match="no edges"):
+        _validate_llm_graph(graph, expected_paradigm=Paradigm.HSS)
+
+
 def test_validate_llm_graph_rejects_paradigm_mismatch() -> None:
     graph = UnifiedPaperGraph(
         paper_id="p",
         paradigm=Paradigm.STEM,
         nodes=[GraphNode(id="n1", label="m", type="Method")],
-        edges=[],
+        edges=[GraphEdge(id="e1", source="n1", target="n1", label="RELATES_TO", type="RELATES_TO")],
     )
     with pytest.raises(ValueError, match="paradigm"):
         _validate_llm_graph(graph, expected_paradigm=Paradigm.HSS)
@@ -97,7 +108,7 @@ async def test_extract_with_llm_retries_fallback_chat(monkeypatch: pytest.Monkey
         paper_id="p1",
         paradigm=Paradigm.HSS,
         nodes=[GraphNode(id="n1", label="论点", type="Thesis")],
-        edges=[],
+        edges=[GraphEdge(id="e1", source="n1", target="n1", label="REF", type="REF")],
     )
 
     primary_runnable = MagicMock()

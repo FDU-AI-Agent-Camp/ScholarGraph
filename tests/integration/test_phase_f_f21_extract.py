@@ -10,11 +10,11 @@ from backend.agents.extract_constants import EXTRACT_HEURISTIC_FALLBACK_CODE
 from backend.config import get_settings
 from backend.graph.workflow import run_paper_pipeline
 from backend.llm.client import reset_llm_client_cache
-from backend.schemas.graph import GraphNode, UnifiedPaperGraph
 from backend.schemas.paper import PaperStatus
 from backend.schemas.paradigm import Paradigm, ParadigmClassification
 from backend.services.paper_service import get_paper_service
 
+from tests.agents.conftest import minimal_valid_llm_graph
 from tests.conftest import mock_pipeline_node_services
 
 pytestmark = pytest.mark.integration
@@ -31,15 +31,8 @@ def live_extract_env(monkeypatch: pytest.MonkeyPatch) -> None:
     reset_llm_client_cache()
 
 
-def _llm_graph(paper_id: str, paradigm: Paradigm) -> UnifiedPaperGraph:
-    node_type = "Thesis" if paradigm == Paradigm.HSS else "Method"
-    return UnifiedPaperGraph(
-        paper_id=paper_id,
-        paradigm=paradigm,
-        nodes=[GraphNode(id="n1", label="core", type=node_type)],
-        edges=[],
-        summary="llm",
-    )
+def _llm_graph(paper_id: str, paradigm: Paradigm):
+    return minimal_valid_llm_graph(paper_id=paper_id, paradigm=paradigm, summary="llm")
 
 
 async def _run_with_real_agent_service(

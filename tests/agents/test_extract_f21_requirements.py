@@ -17,9 +17,10 @@ from backend.agents.extract_types import ExtractResult
 from backend.agents.extractor import extract
 from backend.config import get_settings
 from backend.llm.client import LlmClient, reset_llm_client_cache
-from backend.schemas.graph import GraphNode, UnifiedPaperGraph
+from backend.schemas.graph import UnifiedPaperGraph
 from backend.schemas.ingest_head import IngestHead
 from backend.schemas.paradigm import Paradigm
+from tests.agents.conftest import minimal_valid_llm_graph
 
 
 @pytest.fixture
@@ -40,12 +41,7 @@ def live_extract_env(monkeypatch: pytest.MonkeyPatch) -> None:
 @pytest.mark.asyncio
 async def test_x1_live_extract_invokes_with_structured_output(live_extract_env) -> None:
     _ = live_extract_env
-    llm_graph = UnifiedPaperGraph(
-        paper_id="ignored",
-        paradigm=Paradigm.HSS,
-        nodes=[GraphNode(id="n1", label="论点", type="Thesis")],
-        edges=[],
-    )
+    llm_graph = minimal_valid_llm_graph()
     structured_runnable = MagicMock()
     structured_runnable.ainvoke = AsyncMock(return_value=llm_graph)
     chat = MagicMock()
@@ -93,12 +89,7 @@ async def test_x2_extract_with_llm_uses_paradigm_prompt(live_extract_env) -> Non
     async def _capture_invoke(_client, *, system_prompt, user_content, use_fallback_model):
         captured["system_prompt"] = system_prompt
         captured["use_fallback"] = str(use_fallback_model)
-        return UnifiedPaperGraph(
-            paper_id="p",
-            paradigm=Paradigm.STEM,
-            nodes=[GraphNode(id="n1", label="m", type="Method")],
-            edges=[],
-        )
+        return minimal_valid_llm_graph(paper_id="p", paradigm=Paradigm.STEM)
 
     with patch("backend.agents.extract_llm._invoke_structured", side_effect=_capture_invoke):
         await extract_with_llm("body", Paradigm.STEM, paper_id="p-stem")
@@ -145,12 +136,7 @@ async def test_x3_forbidden_node_type_triggers_fallback(live_extract_env) -> Non
 @pytest.mark.asyncio
 async def test_x4_service_overrides_llm_paper_id_and_paradigm(live_extract_env) -> None:
     _ = live_extract_env
-    llm_graph = UnifiedPaperGraph(
-        paper_id="llm-wrong-id",
-        paradigm=Paradigm.HSS,
-        nodes=[GraphNode(id="n1", label="论点", type="Thesis")],
-        edges=[],
-    )
+    llm_graph = minimal_valid_llm_graph(paper_id="llm-wrong-id")
 
     with patch("backend.agents.extractor.extract_with_llm", new=AsyncMock(return_value=llm_graph)):
         result = await extract("标题：测试", Paradigm.HSS, paper_id="canonical-id")
@@ -185,12 +171,7 @@ async def test_x5_truncation_respects_extract_max_input_chars(live_extract_env) 
 @pytest.mark.asyncio
 async def test_x5_truncation_emits_warning_log(live_extract_env, caplog: pytest.LogCaptureFixture) -> None:
     _ = live_extract_env
-    llm_graph = UnifiedPaperGraph(
-        paper_id="p",
-        paradigm=Paradigm.HSS,
-        nodes=[GraphNode(id="n1", label="t", type="Thesis")],
-        edges=[],
-    )
+    llm_graph = minimal_valid_llm_graph(paper_id="p")
 
     with (
         patch("backend.agents.extract_llm._invoke_structured", new=AsyncMock(return_value=llm_graph)),
@@ -267,12 +248,7 @@ async def test_x6_extractor_resolves_head_from_head_store(live_extract_env, tmp_
 @pytest.mark.asyncio
 async def test_x7_primary_failure_retries_fallback_chat(live_extract_env) -> None:
     _ = live_extract_env
-    valid_graph = UnifiedPaperGraph(
-        paper_id="p7",
-        paradigm=Paradigm.HSS,
-        nodes=[GraphNode(id="n1", label="t", type="Thesis")],
-        edges=[],
-    )
+    valid_graph = minimal_valid_llm_graph(paper_id="p7")
 
     primary_runnable = MagicMock()
     primary_runnable.ainvoke = AsyncMock(side_effect=RuntimeError("primary down"))
