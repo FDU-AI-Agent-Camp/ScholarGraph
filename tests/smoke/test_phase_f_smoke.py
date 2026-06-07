@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import inspect
+import json
+from pathlib import Path
 
 import pytest
 from backend.agents.extract_constants import (
@@ -15,6 +17,34 @@ from backend.config import Settings
 from backend.main import app
 from backend.schemas.paper import PaperStatusData
 from httpx import ASGITransport, AsyncClient
+
+FIXTURES_DIR = Path(__file__).resolve().parents[2] / "docs" / "api" / "fixtures"
+
+
+def _seed_isolated_hss_graph_env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Reset services and persist hss-001 graph under an isolated GRAPH_DATA_DIR."""
+    from backend.config import get_settings
+    from backend.graph.store import GraphStore
+    from backend.schemas.graph import UnifiedPaperGraph
+    from backend.services.paper_service import get_paper_service
+
+    graphs_dir = tmp_path / "graphs"
+    graphs_dir.mkdir()
+    monkeypatch.setenv("GRAPH_DATA_DIR", str(graphs_dir))
+    get_settings.cache_clear()
+    get_paper_service.cache_clear()
+
+    payload = json.loads((FIXTURES_DIR / "graph-hss.json").read_text(encoding="utf-8"))
+    graph = UnifiedPaperGraph.model_validate(payload["data"]).model_copy(update={"paper_id": "hss-001"})
+    GraphStore(base_dir=graphs_dir).save(graph)
+
+
+def _clear_graph_env() -> None:
+    from backend.config import get_settings
+    from backend.services.paper_service import get_paper_service
+
+    get_settings.cache_clear()
+    get_paper_service.cache_clear()
 
 
 @pytest.mark.smoke
@@ -190,14 +220,21 @@ def test_smoke_f33_graph_hss_fixture_on_disk() -> None:
 
 @pytest.mark.smoke
 @pytest.mark.asyncio
-async def test_smoke_f33_hss_graph_endpoint_returns_thesis() -> None:
-    transport = ASGITransport(app=app)
-    async with AsyncClient(transport=transport, base_url="http://test") as client:
-        response = await client.get("/api/v1/papers/hss-001/graph")
-    assert response.status_code == 200
-    node_types = {node["type"] for node in response.json()["data"]["nodes"]}
-    assert "Thesis" in node_types
-    assert "SubArgument" in node_types
+async def test_smoke_f33_hss_graph_endpoint_returns_thesis(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _seed_isolated_hss_graph_env(tmp_path, monkeypatch)
+    try:
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            response = await client.get("/api/v1/papers/hss-001/graph")
+        assert response.status_code == 200
+        node_types = {node["type"] for node in response.json()["data"]["nodes"]}
+        assert "Thesis" in node_types
+        assert "SubArgument" in node_types
+    finally:
+        _clear_graph_env()
 
 
 @pytest.mark.smoke
@@ -215,15 +252,22 @@ def test_smoke_f33_hss_prompt_forbids_metric_baseline_dataset() -> None:
 
 @pytest.mark.smoke
 @pytest.mark.asyncio
-async def test_smoke_f33_hss_graph_endpoint_excludes_stem_only_types() -> None:
+async def test_smoke_f33_hss_graph_endpoint_excludes_stem_only_types(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     from tests.helpers.f33_hss_graphs import F33_FORBIDDEN_STEM_NODE_TYPES
 
-    transport = ASGITransport(app=app)
-    async with AsyncClient(transport=transport, base_url="http://test") as client:
-        response = await client.get("/api/v1/papers/hss-001/graph")
-    assert response.status_code == 200
-    node_types = {node["type"] for node in response.json()["data"]["nodes"]}
-    assert not (node_types & F33_FORBIDDEN_STEM_NODE_TYPES)
+    _seed_isolated_hss_graph_env(tmp_path, monkeypatch)
+    try:
+        transport = ASGITransport(app=app)
+        async with AsyncClient(transport=transport, base_url="http://test") as client:
+            response = await client.get("/api/v1/papers/hss-001/graph")
+        assert response.status_code == 200
+        node_types = {node["type"] for node in response.json()["data"]["nodes"]}
+        assert not (node_types & F33_FORBIDDEN_STEM_NODE_TYPES)
+    finally:
+        _clear_graph_env()
 
 
 @pytest.mark.smoke

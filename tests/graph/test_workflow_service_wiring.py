@@ -3,6 +3,7 @@
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
+from backend.agents.extract_types import ExtractResult
 from backend.graph import nodes
 from backend.graph.state import WorkflowState, initial_workflow_state
 from backend.schemas.graph import GraphNode, UnifiedPaperGraph
@@ -74,13 +75,16 @@ async def test_extract_node_reaches_be_only_via_agent_service(
         nodes=[GraphNode(id="n1", label="n", type="Thesis")],
         edges=[],
     )
-    with patch("backend.services.agent_service.extract", new_callable=AsyncMock) as raw:
-        raw.return_value = graph
+    with patch("backend.graph.nodes.get_agent_service") as get_svc:
+        agent = MagicMock()
+        agent.extract_graph = AsyncMock(return_value=ExtractResult(graph=graph, warnings=[]))
+        get_svc.return_value = agent
         out = await nodes.extract_node(post_classify_state)
 
-    raw.assert_awaited_once_with(
+    agent.extract_graph.assert_awaited_once_with(
         post_classify_state["full_text"],
         Paradigm.HSS,
+        paper_id=post_classify_state["paper_id"],
     )
     assert out["graph"]["paper_id"] == post_classify_state["paper_id"]
 
