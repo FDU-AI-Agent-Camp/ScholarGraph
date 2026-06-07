@@ -5,6 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
+from backend.agents.extract_types import ExtractResult
 from backend.graph.state import NODE_CLASSIFY, NODE_EXTRACT, NODE_INGEST, NODE_STORE
 from backend.graph.workflow import run_paper_pipeline
 from backend.schemas.graph import GraphNode, UnifiedPaperGraph
@@ -35,7 +36,7 @@ async def test_handoff_ingest_output_feeds_classify_input(integration_paper: tup
             return classification
 
         mocks["agent"].classify_paradigm.side_effect = capture_classify
-        mocks["agent"].extract_graph.return_value = graph
+        mocks["agent"].extract_graph.return_value = ExtractResult(graph=graph, warnings=[])
 
         await run_paper_pipeline(paper_id, pdf_path)
 
@@ -68,7 +69,7 @@ async def test_handoff_classify_output_feeds_extract(integration_paper: tuple[st
             captured["full_text"] = full_text
             captured["paradigm"] = paradigm
             captured["paper_id"] = paper_id
-            return graph
+            return ExtractResult(graph=graph, warnings=[])
 
         mocks["agent"].extract_graph.side_effect = capture_extract
         await run_paper_pipeline(paper_id, pdf_path)
@@ -90,7 +91,7 @@ async def test_handoff_extract_output_feeds_store_finalize(integration_paper: tu
 
     with mock_pipeline_node_services(paper_id) as mocks:
         mocks["agent"].classify_paradigm.return_value = classification
-        mocks["agent"].extract_graph.return_value = graph
+        mocks["agent"].extract_graph.return_value = ExtractResult(graph=graph, warnings=[])
 
         await run_paper_pipeline(paper_id, pdf_path)
 

@@ -41,6 +41,18 @@ def test_paper_status_data_defaults_head_refine_warnings_to_empty_list() -> None
     assert status.head_refine_warnings == []
 
 
+def test_paper_status_data_defaults_extract_warnings_to_empty_list() -> None:
+    status = PaperStatusData(
+        paper_id="schema-default",
+        status=PaperStatus.PROCESSING,
+        percent=80,
+        stage=PipelineStage.EXTRACTING,
+        message="正在抽取逻辑图谱",
+        updated_at=datetime.now(UTC),
+    )
+    assert status.extract_warnings == []
+
+
 def test_head_refining_stage_validates_with_contract_percent() -> None:
     from backend.services.pipeline_status_service import validate_status_contract
 

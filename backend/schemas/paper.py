@@ -76,3 +76,7 @@ class PaperStatusData(BaseModel):
         default_factory=list,
         description="Machine-readable async head-refine degrade codes (e.g. mineru_unavailable, head_refine_timeout).",
     )
+    extract_warnings: list[str] = Field(
+        default_factory=list,
+        description="Machine-readable graph-extract degrade codes (e.g. extract_heuristic_fallback).",
+    )

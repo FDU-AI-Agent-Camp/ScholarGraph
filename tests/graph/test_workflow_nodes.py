@@ -203,8 +203,10 @@ async def test_extract_node_delegates_to_agent_service(
         nodes=[GraphNode(id="n1", label="L", type="Thesis")],
         edges=[],
     )
+    from backend.agents.extract_types import ExtractResult
+
     agent_svc = MagicMock()
-    agent_svc.extract_graph = AsyncMock(return_value=graph)
+    agent_svc.extract_graph = AsyncMock(return_value=ExtractResult(graph=graph, warnings=[]))
     with patch("backend.graph.nodes.get_agent_service", return_value=agent_svc):
         out = await nodes.extract_node(post_classify_state)
 
@@ -215,6 +217,37 @@ async def test_extract_node_delegates_to_agent_service(
     )
     assert out["graph"]["paper_id"] == post_classify_state["paper_id"]
     assert out.get("failed") is False
+
+
+async def test_extract_node_records_extract_warnings(
+    post_classify_state: WorkflowState,
+) -> None:
+    from backend.agents.extract_constants import EXTRACT_HEURISTIC_FALLBACK_CODE
+    from backend.agents.extract_types import ExtractResult
+
+    graph = UnifiedPaperGraph(
+        paper_id=post_classify_state["paper_id"],
+        paradigm=Paradigm.HSS,
+        nodes=[GraphNode(id="n1", label="L", type="Thesis")],
+        edges=[],
+    )
+    agent_svc = MagicMock()
+    agent_svc.extract_graph = AsyncMock(
+        return_value=ExtractResult(graph=graph, warnings=[EXTRACT_HEURISTIC_FALLBACK_CODE]),
+    )
+    paper_svc = MagicMock()
+
+    with (
+        patch("backend.graph.nodes.get_agent_service", return_value=agent_svc),
+        patch("backend.graph.nodes.get_paper_service", return_value=paper_svc),
+    ):
+        out = await nodes.extract_node(post_classify_state)
+
+    paper_svc.record_extract_warnings.assert_called_once_with(
+        post_classify_state["paper_id"],
+        [EXTRACT_HEURISTIC_FALLBACK_CODE],
+    )
+    assert out["extract_warnings"] == [EXTRACT_HEURISTIC_FALLBACK_CODE]
 
 
 # ── store_node ──────────────────────────────────────────────────────────────

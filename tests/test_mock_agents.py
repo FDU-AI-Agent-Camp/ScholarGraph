@@ -34,14 +34,14 @@ async def test_mock_classify_hss_from_chinese_keywords() -> None:
 
 @pytest.mark.asyncio
 async def test_mock_extract_hss_returns_fixture_graph() -> None:
-    graph = await extract("任意全文", Paradigm.HSS)
+    graph = (await extract("任意全文", Paradigm.HSS)).graph
     assert graph.paradigm == Paradigm.HSS
     assert any(node.type == "Thesis" for node in graph.nodes)
 
 
 @pytest.mark.asyncio
 async def test_mock_extract_stem_returns_verification_chain() -> None:
-    graph = await extract("任意全文", Paradigm.STEM)
+    graph = (await extract("任意全文", Paradigm.STEM)).graph
     assert graph.paradigm == Paradigm.STEM
     types = {node.type for node in graph.nodes}
     assert "Method" in types
@@ -57,6 +57,6 @@ async def test_mock_classify_empty_input_defaults_hss() -> None:
 
 @pytest.mark.asyncio
 async def test_mock_extract_unknown_paradigm_still_returns_nodes() -> None:
-    graph = await extract("text", Paradigm.HSS)
+    graph = (await extract("text", Paradigm.HSS)).graph
     assert graph.nodes
     assert graph.edges is not None

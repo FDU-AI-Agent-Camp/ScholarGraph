@@ -36,7 +36,7 @@ async def test_classify_returns_stem_or_hss_for_snippet() -> None:
 @pytest.mark.xfail(strict=True, reason="BE-2: extract 尚未实现")
 async def test_extract_returns_valid_graph_for_hss_text() -> None:
     text = "本文采用历史制度主义分析近代通商口岸的制度变迁。"
-    graph = await extract(text, Paradigm.HSS)
+    graph = (await extract(text, Paradigm.HSS)).graph
     assert graph.nodes
     assert graph.paper_id or graph.paradigm == Paradigm.HSS
 

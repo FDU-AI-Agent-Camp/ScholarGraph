@@ -1,0 +1,68 @@
+"""Phase F smoke: extract modules, settings, status field sanity."""
+
+from __future__ import annotations
+
+import pytest
+from backend.agents.extract_constants import (
+    EXTRACT_HEURISTIC_FALLBACK_CODE,
+    EXTRACT_HEURISTIC_FALLBACK_MESSAGE,
+)
+from backend.agents.extract_llm import PROMPTS_DIR
+from backend.agents.extract_types import ExtractResult
+from backend.config import Settings
+from backend.main import app
+from backend.schemas.paper import PaperStatusData
+from httpx import ASGITransport, AsyncClient
+
+
+@pytest.mark.smoke
+def test_smoke_extract_prompt_files_exist() -> None:
+    assert (PROMPTS_DIR / "extract_hss.md").is_file()
+    assert (PROMPTS_DIR / "extract_stem.md").is_file()
+
+
+@pytest.mark.smoke
+def test_smoke_extract_settings_registered() -> None:
+    settings = Settings(_env_file=None)
+    assert hasattr(settings, "extract_llm_enabled")
+    assert hasattr(settings, "extract_max_input_chars")
+    assert hasattr(settings, "extract_heuristic_fallback")
+
+
+@pytest.mark.smoke
+def test_smoke_extract_warning_constants_frozen() -> None:
+    assert EXTRACT_HEURISTIC_FALLBACK_CODE == "extract_heuristic_fallback"
+    assert EXTRACT_HEURISTIC_FALLBACK_MESSAGE == "触发启发式Fallback!"
+
+
+@pytest.mark.smoke
+def test_smoke_extract_result_importable() -> None:
+    assert ExtractResult.__name__ == "ExtractResult"
+
+
+@pytest.mark.smoke
+def test_smoke_paper_status_data_accepts_extract_warnings() -> None:
+    status = PaperStatusData.model_validate(
+        {
+            "paper_id": "smoke-f",
+            "status": "ready",
+            "percent": 100,
+            "stage": "ready",
+            "message": "建图完成",
+            "updated_at": "2026-06-07T00:00:00Z",
+            "extract_warnings": [EXTRACT_HEURISTIC_FALLBACK_CODE],
+        },
+    )
+    assert status.extract_warnings == [EXTRACT_HEURISTIC_FALLBACK_CODE]
+
+
+@pytest.mark.smoke
+@pytest.mark.asyncio
+async def test_smoke_status_route_includes_extract_warnings() -> None:
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        response = await client.get("/api/v1/papers/hss-001/status")
+        assert response.status_code == 200
+        data = response.json()["data"]
+        assert "extract_warnings" in data
+        assert isinstance(data["extract_warnings"], list)

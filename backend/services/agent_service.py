@@ -3,8 +3,8 @@
 from functools import lru_cache
 
 from backend.agents.classifier import classify
+from backend.agents.extract_types import ExtractResult
 from backend.agents.extractor import extract
-from backend.schemas.graph import UnifiedPaperGraph
 from backend.schemas.paradigm import Paradigm, ParadigmClassification
 from backend.services.errors import PIPELINE_FAILED_CODE, ServiceError
 
@@ -26,14 +26,15 @@ class AgentService:
         paradigm: Paradigm,
         *,
         paper_id: str,
-    ) -> UnifiedPaperGraph:
+    ) -> ExtractResult:
         try:
-            graph = await extract(full_text, paradigm)
+            return await extract(full_text, paradigm, paper_id=paper_id)
+        except ServiceError:
+            raise
         except NotImplementedError as exc:
             raise ServiceError(PIPELINE_FAILED_CODE, str(exc)) from exc
         except Exception as exc:
             raise ServiceError("LLM_JSON_INVALID", f"图谱抽取失败: {exc}") from exc
-        return graph.model_copy(update={"paper_id": paper_id, "paradigm": paradigm})
 
 
 @lru_cache

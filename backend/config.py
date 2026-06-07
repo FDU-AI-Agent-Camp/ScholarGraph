@@ -81,6 +81,13 @@ class Settings(BaseSettings):
         validation_alias="INGEST_HEAD_LLM_TIMEOUT_SECONDS",
     )
 
+    extract_llm_enabled: bool = Field(default=True, validation_alias="EXTRACT_LLM_ENABLED")
+    extract_max_input_chars: int = Field(default=20_000, validation_alias="EXTRACT_MAX_INPUT_CHARS")
+    extract_heuristic_fallback: bool = Field(
+        default=True,
+        validation_alias="EXTRACT_HEURISTIC_FALLBACK",
+    )
+
     @field_validator("cors_origins", mode="before")
     @classmethod
     def split_cors_origins(cls, value: str | list[str]) -> str:

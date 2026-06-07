@@ -122,9 +122,11 @@ async def test_run_paper_pipeline_startup_then_stage_order(
             call_order.append(NODE_CLASSIFY)
             return classification
 
+        from backend.agents.extract_types import ExtractResult
+
         async def track_extract(_text: str, _paradigm: Paradigm, *, paper_id: str):
             call_order.append(NODE_EXTRACT)
-            return graph
+            return ExtractResult(graph=graph, warnings=[])
 
         mocks["ingest"].ingest = AsyncMock(side_effect=track_ingest)
         mocks["agent"].classify_paradigm = AsyncMock(side_effect=track_classify)

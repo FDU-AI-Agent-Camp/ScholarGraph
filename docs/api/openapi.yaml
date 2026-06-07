@@ -426,6 +426,12 @@ components:
             type: string
           description: Machine-readable async head-refine degrade codes (e.g. mineru_unavailable, head_refine_timeout).
           example: []
+        extract_warnings:
+          type: array
+          items:
+            type: string
+          description: Machine-readable graph-extract degrade codes (e.g. extract_heuristic_fallback).
+          example: []
 
     PaperStatusResponse:
       type: object

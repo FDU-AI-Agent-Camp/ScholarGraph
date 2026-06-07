@@ -44,6 +44,7 @@ class PaperService:
         self._refined_classifier_input: dict[str, str] = {}
         self._refined_head: dict[str, IngestHead] = {}
         self._head_refine_warnings: dict[str, list[str]] = {}
+        self._extract_warnings: dict[str, list[str]] = {}
         self._seed_from_fixtures()
 
     def _seed_from_fixtures(self) -> None:
@@ -189,6 +190,7 @@ class PaperService:
             error_code=error_code,
             failed_during=_to_failed_during(failed_during),
             head_refine_warnings=self.get_head_refine_warnings(paper_id),
+            extract_warnings=self.get_extract_warnings(paper_id),
         )
         self._status[paper_id] = snapshot
         paper = self._papers[paper_id]
@@ -356,12 +358,51 @@ class PaperService:
     def get_head_refine_warnings(self, paper_id: str) -> list[str]:
         return list(self._head_refine_warnings.get(paper_id, ()))
 
+    def record_extract_warnings(self, paper_id: str, warnings: list[str]) -> None:
+        """Merge extract degrade codes and reflect them on the status snapshot."""
+        if not warnings:
+            return
+        existing = self._extract_warnings.get(paper_id, [])
+        merged: list[str] = list(existing)
+        for code in warnings:
+            if code not in merged:
+                merged.append(code)
+        self._extract_warnings[paper_id] = merged
+        self._sync_extract_warnings_to_status(paper_id)
+
+    def _sync_extract_warnings_to_status(self, paper_id: str) -> None:
+        if paper_id not in self._status:
+            return
+        snapshot = self._status[paper_id]
+        warnings = self.get_extract_warnings(paper_id)
+        if snapshot.extract_warnings != warnings:
+            self._status[paper_id] = snapshot.model_copy(update={"extract_warnings": warnings})
+
+    def _enrich_status_with_extract_warnings(
+        self,
+        snapshot: PaperStatusData,
+        paper_id: str,
+    ) -> PaperStatusData:
+        warnings = self.get_extract_warnings(paper_id)
+        if snapshot.extract_warnings == warnings:
+            return snapshot
+        return snapshot.model_copy(update={"extract_warnings": warnings})
+
+    def get_extract_warnings(self, paper_id: str) -> list[str]:
+        return list(self._extract_warnings.get(paper_id, ()))
+
+    def _enrich_status_snapshot(self, snapshot: PaperStatusData, paper_id: str) -> PaperStatusData:
+        return self._enrich_status_with_extract_warnings(
+            self._enrich_status_with_head_refine_warnings(snapshot, paper_id),
+            paper_id,
+        )
+
     async def get_status(self, paper_id: str) -> PaperStatusData:
         paper = await self.get_paper(paper_id)
         if paper_id in self._status:
-            return self._enrich_status_with_head_refine_warnings(self._status[paper_id], paper_id)
+            return self._enrich_status_snapshot(self._status[paper_id], paper_id)
         if paper.status == PaperStatus.PENDING:
-            return self._enrich_status_with_head_refine_warnings(
+            return self._enrich_status_snapshot(
                 PaperStatusData(
                     paper_id=paper_id,
                     status=PaperStatus.PENDING,

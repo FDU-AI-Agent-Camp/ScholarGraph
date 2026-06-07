@@ -139,7 +139,9 @@ def mock_pipeline_dependencies() -> Iterator[dict[str, MagicMock]]:
 
     agent_svc = MagicMock()
     agent_svc.classify_paradigm = AsyncMock(return_value=classification)
-    agent_svc.extract_graph = AsyncMock(return_value=graph)
+    from backend.agents.extract_types import ExtractResult
+
+    agent_svc.extract_graph = AsyncMock(return_value=ExtractResult(graph=graph, warnings=[]))
 
     with patch("backend.services.graph_persistence_service.GraphStore") as store_cls:
         store_cls.return_value.save = MagicMock()

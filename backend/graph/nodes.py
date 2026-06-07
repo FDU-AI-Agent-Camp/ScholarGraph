@@ -119,19 +119,24 @@ async def classify_node(state: WorkflowState) -> WorkflowState:
 
 async def extract_node(state: WorkflowState) -> WorkflowState:
     _mark_progress(state, stage=PipelineStage.EXTRACTING, message="正在抽取逻辑图谱")
+    paper_id = state["paper_id"]
     try:
-        graph = await get_agent_service().extract_graph(
+        result = await get_agent_service().extract_graph(
             state["full_text"],
             Paradigm(state["paradigm"]),
-            paper_id=state["paper_id"],
+            paper_id=paper_id,
         )
     except ServiceError as exc:
         return _failure_patch(exc, stage=PipelineStage.EXTRACTING)
 
+    if result.warnings:
+        get_paper_service().record_extract_warnings(paper_id, result.warnings)
+
     return _success_patch(
         stage=PipelineStage.EXTRACTING,
         message="图谱抽取完成",
-        graph=graph.model_dump(mode="json"),
+        graph=result.graph.model_dump(mode="json"),
+        extract_warnings=result.warnings,
     )
 
 

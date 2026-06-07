@@ -56,6 +56,7 @@ class WorkflowState(TypedDict, total=False):
     graph: dict[str, Any]
 
     head_refine_warnings: list[str]
+    extract_warnings: list[str]
 
     failed: bool
 

@@ -79,6 +79,7 @@ def mock_pipeline_node_services(
     paper_id: str,
 ) -> Iterator[dict[str, MagicMock]]:
     """Patch workflow node services with successful mocks for a given paper_id."""
+    from backend.agents.extract_types import ExtractResult
     from backend.schemas.graph import GraphEdge, GraphNode, UnifiedPaperGraph
     from backend.schemas.paradigm import Paradigm, ParadigmClassification
     from backend.services.graph_persistence_service import GraphPersistenceService
@@ -103,6 +104,7 @@ def mock_pipeline_node_services(
             ),
         ],
     )
+    extract_result = ExtractResult(graph=graph, warnings=[])
 
     ingest_svc = MagicMock()
     ingest_svc.ingest = AsyncMock(
@@ -115,7 +117,7 @@ def mock_pipeline_node_services(
 
     agent_svc = MagicMock()
     agent_svc.classify_paradigm = AsyncMock(return_value=classification)
-    agent_svc.extract_graph = AsyncMock(return_value=graph)
+    agent_svc.extract_graph = AsyncMock(return_value=extract_result)
 
     with patch("backend.services.graph_persistence_service.GraphStore") as store_cls:
         store_cls.return_value.save = MagicMock()
@@ -160,6 +162,7 @@ def mock_agent_services_only(
     paper_id: str,
 ) -> Iterator[dict[str, MagicMock]]:
     """Patch agent + store only; ingest runs real ``IngestService`` (BE-1 + platform)."""
+    from backend.agents.extract_types import ExtractResult
     from backend.schemas.graph import GraphEdge, GraphNode, UnifiedPaperGraph
     from backend.schemas.paradigm import Paradigm, ParadigmClassification
     from backend.services.graph_persistence_service import GraphPersistenceService
@@ -184,10 +187,11 @@ def mock_agent_services_only(
             ),
         ],
     )
+    extract_result = ExtractResult(graph=graph, warnings=[])
 
     agent_svc = MagicMock()
     agent_svc.classify_paradigm = AsyncMock(return_value=classification)
-    agent_svc.extract_graph = AsyncMock(return_value=graph)
+    agent_svc.extract_graph = AsyncMock(return_value=extract_result)
 
     with patch("backend.services.graph_persistence_service.GraphStore") as store_cls:
         store_cls.return_value.save = MagicMock()
