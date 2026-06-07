@@ -85,3 +85,14 @@ def test_g26_paper_status_fixtures_include_classify_warnings_field(filename: str
 def test_g26_classify_fallback_fixture_carries_machine_code() -> None:
     payload = json.loads((FIXTURES_DIR / "paper-detail-classify-fallback.json").read_text(encoding="utf-8"))
     assert payload["data"]["classify_warnings"] == [CLASSIFIER_HEURISTIC_FALLBACK_CODE]
+
+
+def test_g26_classify_fallback_fixtures_round_trip() -> None:
+    status_payload = json.loads((FIXTURES_DIR / "paper-status-classify-fallback.json").read_text(encoding="utf-8"))
+    detail_payload = json.loads((FIXTURES_DIR / "paper-detail-classify-fallback.json").read_text(encoding="utf-8"))
+
+    status = PaperStatusData.model_validate(status_payload["data"])
+    detail = PaperDetail.model_validate(detail_payload["data"])
+
+    assert status.classify_warnings == [CLASSIFIER_HEURISTIC_FALLBACK_CODE]
+    assert detail.classify_warnings == [CLASSIFIER_HEURISTIC_FALLBACK_CODE]

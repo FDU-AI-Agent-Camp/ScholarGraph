@@ -81,3 +81,23 @@ async def test_get_paper_includes_classify_warnings_on_detail(registered_paper: 
     paper = await service.get_paper(registered_paper)
 
     assert paper.classify_warnings == [CLASSIFIER_HEURISTIC_FALLBACK_CODE]
+
+
+@pytest.mark.asyncio
+async def test_g26_set_status_snapshot_includes_classify_warnings_same_as_extract(
+    registered_paper: str,
+) -> None:
+    service = get_paper_service()
+    service.record_classify_warnings(registered_paper, [CLASSIFIER_HEURISTIC_FALLBACK_CODE])
+    service.record_extract_warnings(registered_paper, ["extract_heuristic_fallback"])
+
+    snapshot = service.set_status_snapshot(
+        registered_paper,
+        status=PaperStatus.READY,
+        stage=PipelineStage.READY,
+        percent=100,
+        message="建图完成",
+    )
+
+    assert snapshot.classify_warnings == [CLASSIFIER_HEURISTIC_FALLBACK_CODE]
+    assert snapshot.extract_warnings == ["extract_heuristic_fallback"]

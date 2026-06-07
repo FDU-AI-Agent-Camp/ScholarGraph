@@ -266,3 +266,26 @@ async def test_red_classify_with_llm_primary_fail_no_fallback_client_raises(live
         await classify_with_llm(STEM_SAMPLE, llm_client=client)
 
     primary_runnable.ainvoke.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_red_g25_agent_service_no_fallback_surfaces_pipeline_failed() -> None:
+    from backend.services.agent_service import AgentService
+
+    service = AgentService()
+    with patch(
+        "backend.services.agent_service.classify",
+        new=AsyncMock(side_effect=ServiceError("PIPELINE_FAILED", "范式 LLM 分类失败")),
+    ):
+        with pytest.raises(ServiceError) as err:
+            await service.classify_paradigm(STEM_SAMPLE)
+    assert err.value.code == "PIPELINE_FAILED"
+
+
+def test_red_g26_openapi_paper_status_data_lists_classify_warnings() -> None:
+    from pathlib import Path
+
+    openapi = Path(__file__).resolve().parents[2] / "docs" / "api" / "openapi.yaml"
+    text = openapi.read_text(encoding="utf-8")
+    assert "PaperStatusData:" in text
+    assert "classify_warnings:" in text

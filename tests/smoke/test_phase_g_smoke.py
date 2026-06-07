@@ -128,6 +128,20 @@ def test_smoke_g24_classifier_llm_enabled_env_in_example() -> None:
 
 
 @pytest.mark.smoke
+def test_smoke_classify_fallback_fixtures_validate() -> None:
+    status_payload = json.loads((FIXTURES_DIR / "paper-status-classify-fallback.json").read_text(encoding="utf-8"))
+    detail_payload = json.loads((FIXTURES_DIR / "paper-detail-classify-fallback.json").read_text(encoding="utf-8"))
+    assert status_payload["data"]["classify_warnings"] == [CLASSIFIER_HEURISTIC_FALLBACK_CODE]
+    assert detail_payload["data"]["classify_warnings"] == [CLASSIFIER_HEURISTIC_FALLBACK_CODE]
+
+
+@pytest.mark.smoke
+def test_smoke_g25_classifier_heuristic_fallback_default_true() -> None:
+    settings = Settings(_env_file=None)
+    assert settings.classifier_heuristic_fallback is True
+
+
+@pytest.mark.smoke
 def test_smoke_papers_list_fixture_still_validates() -> None:
     payload = json.loads((FIXTURES_DIR / "papers-list.json").read_text(encoding="utf-8"))
     assert payload["data"]["items"]
