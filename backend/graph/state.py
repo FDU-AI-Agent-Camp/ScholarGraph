@@ -23,6 +23,7 @@ PIPELINE_ORDER: tuple[str, ...] = (
 # Suggested polling percents (api-contract / tech-stack).
 STAGE_PERCENT: dict[PipelineStage, int] = {
     PipelineStage.INGESTING: 20,
+    PipelineStage.HEAD_REFINING: 35,
     PipelineStage.CLASSIFYING: 50,
     PipelineStage.EXTRACTING: 80,
     PipelineStage.STORING: 95,

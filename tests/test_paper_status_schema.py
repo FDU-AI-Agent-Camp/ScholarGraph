@@ -1,6 +1,7 @@
 """PaperStatusData schema and fixture contract tests."""
 
 import json
+from datetime import UTC, datetime
 from pathlib import Path
 
 from backend.schemas.paper import FailedDuringStage, PaperStatus, PaperStatusData, PipelineStage
@@ -26,6 +27,28 @@ def test_processing_fixture_has_no_failure_fields() -> None:
     assert status.status == PaperStatus.PROCESSING
     assert status.error_code is None
     assert status.failed_during is None
+
+
+def test_paper_status_data_defaults_head_refine_warnings_to_empty_list() -> None:
+    status = PaperStatusData(
+        paper_id="schema-default",
+        status=PaperStatus.PROCESSING,
+        percent=35,
+        stage=PipelineStage.HEAD_REFINING,
+        message="正在精炼文档头部…",
+        updated_at=datetime.now(UTC),
+    )
+    assert status.head_refine_warnings == []
+
+
+def test_head_refining_stage_validates_with_contract_percent() -> None:
+    from backend.services.pipeline_status_service import validate_status_contract
+
+    validate_status_contract(
+        status=PaperStatus.PROCESSING,
+        stage=PipelineStage.HEAD_REFINING,
+        percent=35,
+    )
 
 
 def test_hss_002_per_paper_status_fixture() -> None:

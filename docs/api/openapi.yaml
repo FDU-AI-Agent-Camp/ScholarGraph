@@ -218,12 +218,29 @@ components:
 
     PipelineStage:
       type: string
-      enum: [ingesting, classifying, extracting, storing, ready, failed]
+      enum: [ingesting, head_refining, classifying, extracting, storing, ready, failed]
 
     FailedDuringStage:
       type: string
       description: Pipeline step active when status=failed (excludes terminal stage values).
-      enum: [ingesting, classifying, extracting, storing]
+      enum: [ingesting, head_refining, classifying, extracting, storing]
+
+    IngestHead:
+      type: object
+      properties:
+        title:
+          type: string
+        abstract:
+          type: string
+        keywords:
+          type: string
+        intro:
+          type: string
+        sources:
+          type: object
+          additionalProperties:
+            type: string
+          description: Per-field provenance tag (pymupdf, mineru, grobid, llm, empty).
 
     ParadigmClassification:
       type: object
@@ -358,6 +375,11 @@ components:
             classification:
               $ref: "#/components/schemas/ParadigmClassification"
               nullable: true
+            ingest_head:
+              allOf:
+                - $ref: "#/components/schemas/IngestHead"
+              nullable: true
+              description: Async dual(rules) merged document head with per-field sources.
 
     PaperDetailResponse:
       type: object
@@ -398,6 +420,12 @@ components:
             - $ref: "#/components/schemas/FailedDuringStage"
           nullable: true
           description: Pipeline step that was running when failure occurred (ingesting–storing only).
+        head_refine_warnings:
+          type: array
+          items:
+            type: string
+          description: Machine-readable async head-refine degrade codes (e.g. mineru_unavailable, head_refine_timeout).
+          example: []
 
     PaperStatusResponse:
       type: object

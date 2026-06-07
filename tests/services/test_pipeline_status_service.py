@@ -16,6 +16,7 @@ from tests.helpers.status_contract import assert_snapshot_matches_contract
     [
         (PaperStatus.PENDING, None, 0),
         (PaperStatus.PROCESSING, PipelineStage.INGESTING, 20),
+        (PaperStatus.PROCESSING, PipelineStage.HEAD_REFINING, 35),
         (PaperStatus.PROCESSING, PipelineStage.CLASSIFYING, 50),
         (PaperStatus.PROCESSING, PipelineStage.EXTRACTING, 80),
         (PaperStatus.PROCESSING, PipelineStage.STORING, 95),
@@ -55,6 +56,17 @@ def test_start_processing_sets_ingesting_percent(registered_paper: str) -> None:
     assert snapshot.status == PaperStatus.PROCESSING
     assert snapshot.stage == PipelineStage.INGESTING
     assert snapshot.percent == STAGE_PERCENT[PipelineStage.INGESTING]
+    assert_snapshot_matches_contract(snapshot)
+
+
+def test_advance_head_refining_stage_visible_in_status(registered_paper: str) -> None:
+    svc = PipelineStatusService()
+    svc.start_processing(registered_paper)
+    snapshot = svc.advance_stage(registered_paper, PipelineStage.HEAD_REFINING)
+
+    assert snapshot.stage == PipelineStage.HEAD_REFINING
+    assert snapshot.percent == STAGE_PERCENT[PipelineStage.HEAD_REFINING]
+    assert "精炼" in snapshot.message
     assert_snapshot_matches_contract(snapshot)
 
 

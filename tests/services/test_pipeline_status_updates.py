@@ -9,6 +9,7 @@ from tests.helpers.status_contract import assert_snapshot_matches_contract
 
 PROCESSING_SEQUENCE: tuple[PipelineStage, ...] = (
     PipelineStage.INGESTING,
+    PipelineStage.HEAD_REFINING,
     PipelineStage.CLASSIFYING,
     PipelineStage.EXTRACTING,
     PipelineStage.STORING,

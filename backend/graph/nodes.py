@@ -10,6 +10,7 @@ from backend.services.errors import PIPELINE_FAILED_CODE, ServiceError
 from backend.services.head_refine_wait import wait_for_refined_classifier_input
 from backend.services.ingest_service import get_ingest_service
 from backend.services.paper_pipeline_scheduler import ensure_head_refine_scheduled
+from backend.services.paper_service import get_paper_service
 from backend.services.pipeline_completion_service import get_pipeline_completion_service
 from backend.services.pipeline_status_service import get_pipeline_status_service
 
@@ -77,7 +78,7 @@ async def ingest_node(state: WorkflowState) -> WorkflowState:
 
 async def wait_head_refine_node(state: WorkflowState) -> WorkflowState:
     """Wait for async path-B + rules merge, then replace ``classifier_input`` (P4)."""
-    _mark_progress(state, stage=PipelineStage.INGESTING, message="正在精炼文档头部…")
+    _mark_progress(state, stage=PipelineStage.HEAD_REFINING, message="正在精炼文档头部…")
     paper_id = state["paper_id"]
     pdf_path = Path(state["pdf_path"])
     fallback = state.get("classifier_input", "")
@@ -88,17 +89,17 @@ async def wait_head_refine_node(state: WorkflowState) -> WorkflowState:
         pdf_path,
         fallback,
     )
+    if warnings:
+        get_paper_service().record_head_refine_warnings(paper_id, warnings)
 
-    patch: WorkflowState = {
-        "status": PaperStatus.PROCESSING,
-        "stage": PipelineStage.INGESTING,
-        "percent": STAGE_PERCENT[PipelineStage.INGESTING],
-        "message": "文档头部精炼完成",
-        "classifier_input": refined,
-        "head_refine_warnings": warnings,
-        "failed": False,
-    }
-    return patch
+    _mark_progress(state, stage=PipelineStage.HEAD_REFINING, message="文档头部精炼完成")
+
+    return _success_patch(
+        stage=PipelineStage.HEAD_REFINING,
+        message="文档头部精炼完成",
+        classifier_input=refined,
+        head_refine_warnings=warnings,
+    )
 
 
 async def classify_node(state: WorkflowState) -> WorkflowState:

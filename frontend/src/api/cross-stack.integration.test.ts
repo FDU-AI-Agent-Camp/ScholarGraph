@@ -152,7 +152,7 @@ describe('cross-stack merge (fixture parity for BE HTTP tests)', () => {
     expect(data.status).toBe('failed')
     expect(data.error_code).toBe('LLM_JSON_INVALID')
     expect(data.failed_during).toBe('classifying')
-    expect(['ingesting', 'classifying', 'extracting', 'storing']).toContain(data.failed_during)
+    expect(['ingesting', 'head_refining', 'classifying', 'extracting', 'storing']).toContain(data.failed_during)
   })
 
   it('processing per-paper fixture aligns with hss-002 backend seed path', () => {

@@ -125,12 +125,22 @@ export interface components {
         /** @enum {string} */
         PaperStatus: "pending" | "processing" | "ready" | "failed";
         /** @enum {string} */
-        PipelineStage: "ingesting" | "classifying" | "extracting" | "storing" | "ready" | "failed";
+        PipelineStage: "ingesting" | "head_refining" | "classifying" | "extracting" | "storing" | "ready" | "failed";
         /**
          * @description Pipeline step active when status=failed (excludes terminal stage values).
          * @enum {string}
          */
-        FailedDuringStage: "ingesting" | "classifying" | "extracting" | "storing";
+        FailedDuringStage: "ingesting" | "head_refining" | "classifying" | "extracting" | "storing";
+        IngestHead: {
+            title?: string;
+            abstract?: string;
+            keywords?: string;
+            intro?: string;
+            /** @description Per-field provenance tag (pymupdf, mineru, grobid, llm, empty). */
+            sources?: {
+                [key: string]: string;
+            };
+        };
         /**
          * @example {
          *       "paradigm": "HSS",
@@ -160,9 +170,18 @@ export interface components {
         HealthResponse: {
             data?: {
                 /** @example ok */
-                status?: string;
+                status: string;
                 /** @example 1.0.0 */
-                version?: string;
+                version: string;
+                /**
+                 * @example mock
+                 * @enum {string}
+                 */
+                llm_mode: "mock" | "live";
+                /** @example false */
+                llm_connected: boolean;
+                /** @example Mock 模式：LLM 云服务尚未接入，问答/巡检返回本地模板。 */
+                llm_note: string;
             };
             meta?: components["schemas"]["Meta"];
         };
@@ -195,6 +214,8 @@ export interface components {
         };
         PaperDetail: components["schemas"]["PaperSummary"] & {
             classification?: components["schemas"]["ParadigmClassification"];
+            /** @description Async dual(rules) merged document head with per-field sources. */
+            ingest_head?: components["schemas"]["IngestHead"] | null;
         };
         PaperDetailResponse: {
             data?: components["schemas"]["PaperDetail"];
@@ -212,9 +233,14 @@ export interface components {
              * @description Machine-readable code when status=failed.
              * @example LLM_JSON_INVALID
              */
-            error_code?: string;
-            /** @description Pipeline step that was running when failure occurred. */
+            error_code?: string | null;
+            /** @description Pipeline step that was running when failure occurred (ingesting–storing only). */
             failed_during?: components["schemas"]["FailedDuringStage"] | null;
+            /**
+             * @description Machine-readable async head-refine degrade codes (e.g. mineru_unavailable, head_refine_timeout).
+             * @example []
+             */
+            head_refine_warnings?: string[];
         };
         PaperStatusResponse: {
             data?: components["schemas"]["PaperStatusData"];
@@ -437,7 +463,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description G6-ready graph */
+            /** @description UnifiedPaperGraph (not G6-nested; FE converts via toG6GraphPayload) */
             200: {
                 headers: {
                     [name: string]: unknown;

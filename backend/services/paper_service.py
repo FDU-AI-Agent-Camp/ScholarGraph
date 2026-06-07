@@ -144,7 +144,11 @@ class PaperService:
         paper = self._papers.get(paper_id)
         if paper is None:
             raise ApiError("PAPER_NOT_FOUND", f"论文不存在: {paper_id}", status_code=404)
-        return paper
+        self._hydrate_head_refine_from_disk(paper_id)
+        ingest_head = self._refined_head.get(paper_id)
+        if ingest_head is None:
+            return paper
+        return paper.model_copy(update={"ingest_head": ingest_head})
 
     def ensure_paper_exists(self, paper_id: str) -> None:
         if paper_id not in self._papers:
@@ -184,6 +188,7 @@ class PaperService:
             updated_at=now,
             error_code=error_code,
             failed_during=_to_failed_during(failed_during),
+            head_refine_warnings=self.get_head_refine_warnings(paper_id),
         )
         self._status[paper_id] = snapshot
         paper = self._papers[paper_id]
@@ -266,14 +271,87 @@ class PaperService:
         if classifier_input.strip():
             self._refined_classifier_input[paper_id] = classifier_input.strip()
         if warnings:
-            self._head_refine_warnings[paper_id] = list(warnings)
+            self.record_head_refine_warnings(paper_id, warnings)
         if merged.title.strip() and paper_id in self._papers:
             paper = self._papers[paper_id]
             if paper.status == PaperStatus.PENDING:
                 paper.title = merged.title.strip()
+        self._persist_head_refine(
+            paper_id,
+            merged=merged,
+            classifier_input=classifier_input,
+            warnings=warnings,
+        )
+
+    def _persist_head_refine(
+        self,
+        paper_id: str,
+        *,
+        merged: IngestHead,
+        classifier_input: str,
+        warnings: list[str] | None,
+    ) -> None:
+        from backend.graph.head_store import HeadStore
+
+        HeadStore().save(
+            paper_id,
+            merged=merged,
+            classifier_input=classifier_input,
+            warnings=warnings,
+        )
+
+    def _hydrate_head_refine_from_disk(self, paper_id: str) -> None:
+        if paper_id in self._refined_head:
+            return
+        from backend.graph.head_store import HeadStore
+
+        record = HeadStore().load(paper_id)
+        if record is None:
+            return
+        self._refined_head[paper_id] = record.merged
+        if record.classifier_input.strip():
+            self._refined_classifier_input[paper_id] = record.classifier_input.strip()
+        if record.warnings and paper_id not in self._head_refine_warnings:
+            self._head_refine_warnings[paper_id] = list(record.warnings)
+            self._sync_head_refine_warnings_to_status(paper_id)
+
+    def record_head_refine_warnings(self, paper_id: str, warnings: list[str]) -> None:
+        """Merge head-refine warning codes and reflect them on the status snapshot."""
+        if not warnings:
+            return
+        existing = self._head_refine_warnings.get(paper_id, [])
+        merged: list[str] = list(existing)
+        for code in warnings:
+            if code not in merged:
+                merged.append(code)
+        self._head_refine_warnings[paper_id] = merged
+        self._sync_head_refine_warnings_to_status(paper_id)
+
+    def _sync_head_refine_warnings_to_status(self, paper_id: str) -> None:
+        if paper_id not in self._status:
+            return
+        snapshot = self._status[paper_id]
+        warnings = self.get_head_refine_warnings(paper_id)
+        if snapshot.head_refine_warnings != warnings:
+            self._status[paper_id] = snapshot.model_copy(update={"head_refine_warnings": warnings})
+
+    def _enrich_status_with_head_refine_warnings(
+        self,
+        snapshot: PaperStatusData,
+        paper_id: str,
+    ) -> PaperStatusData:
+        warnings = self.get_head_refine_warnings(paper_id)
+        if snapshot.head_refine_warnings == warnings:
+            return snapshot
+        return snapshot.model_copy(update={"head_refine_warnings": warnings})
 
     def get_refined_classifier_input(self, paper_id: str) -> str | None:
+        self._hydrate_head_refine_from_disk(paper_id)
         return self._refined_classifier_input.get(paper_id)
+
+    def get_refined_head(self, paper_id: str) -> IngestHead | None:
+        self._hydrate_head_refine_from_disk(paper_id)
+        return self._refined_head.get(paper_id)
 
     def get_head_refine_warnings(self, paper_id: str) -> list[str]:
         return list(self._head_refine_warnings.get(paper_id, ()))
@@ -281,15 +359,18 @@ class PaperService:
     async def get_status(self, paper_id: str) -> PaperStatusData:
         paper = await self.get_paper(paper_id)
         if paper_id in self._status:
-            return self._status[paper_id]
+            return self._enrich_status_with_head_refine_warnings(self._status[paper_id], paper_id)
         if paper.status == PaperStatus.PENDING:
-            return PaperStatusData(
-                paper_id=paper_id,
-                status=PaperStatus.PENDING,
-                percent=0,
-                stage=None,
-                message="任务已创建，请轮询 status 接口",
-                updated_at=paper.updated_at or paper.created_at,
+            return self._enrich_status_with_head_refine_warnings(
+                PaperStatusData(
+                    paper_id=paper_id,
+                    status=PaperStatus.PENDING,
+                    percent=0,
+                    stage=None,
+                    message="任务已创建，请轮询 status 接口",
+                    updated_at=paper.updated_at or paper.created_at,
+                ),
+                paper_id,
             )
         raise ApiError(
             "PIPELINE_STATUS_UNAVAILABLE",

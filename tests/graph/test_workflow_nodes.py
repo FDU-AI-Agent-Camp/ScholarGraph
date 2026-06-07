@@ -92,6 +92,7 @@ async def test_wait_head_refine_node_replaces_classifier_input(
     )
     assert out["classifier_input"] == "REFINED-INPUT"
     assert out["head_refine_warnings"] == ["grobid_unavailable"]
+    assert out["stage"] == PipelineStage.HEAD_REFINING
     assert out.get("failed") is False
 
 
@@ -113,6 +114,7 @@ async def test_wait_head_refine_node_marks_progress_message(
         await nodes.wait_head_refine_node(post_ingest_state)
 
     status = await get_paper_service().get_status(paper_id)
+    assert status.stage == PipelineStage.HEAD_REFINING
     assert "精炼" in status.message
 
 

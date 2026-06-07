@@ -49,4 +49,10 @@ def registered_paper() -> str:
         updated_at=now,
     )
     service._status.pop(paper_id, None)
+    service._head_refine_warnings.pop(paper_id, None)
+    service._refined_classifier_input.pop(paper_id, None)
+    service._refined_head.pop(paper_id, None)
+    from backend.graph.head_store import HeadStore
+
+    HeadStore()._path(paper_id).unlink(missing_ok=True)
     return paper_id

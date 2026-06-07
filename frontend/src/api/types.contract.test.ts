@@ -6,7 +6,13 @@ import hss002StatusEnvelope from '../../../docs/api/fixtures/paper-status-hss-00
 import processingStatusEnvelope from '../../../docs/api/fixtures/paper-status-processing.json'
 import { failedStatus, processingStatus } from '@/test/fixtures/paperStatus'
 
-const FAILED_DURING_VALUES: FailedDuringStage[] = ['ingesting', 'classifying', 'extracting', 'storing']
+const FAILED_DURING_VALUES: FailedDuringStage[] = [
+  'ingesting',
+  'head_refining',
+  'classifying',
+  'extracting',
+  'storing',
+]
 
 function assertPaperStatusDataShape(data: unknown): asserts data is PaperStatusData {
   const body = data as PaperStatusData
