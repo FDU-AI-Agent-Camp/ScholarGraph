@@ -181,3 +181,11 @@ def test_phase_g_g5_fe_be_integration_module_exists() -> None:
     text = path.read_text(encoding="utf-8")
     assert "phase-g-fe-be.integration.test.ts" in text
     assert "CLASSIFIER_HEURISTIC_FALLBACK_CODE" in text
+
+
+def test_phase_g_g0_g6_checklist_gate_module_exists() -> None:
+    assert (REPO_ROOT / "tests" / "test_phase_g_g0_g6_checklist_gate.py").is_file()
+
+
+def test_phase_g_g0_g6_red_module_exists() -> None:
+    assert (REPO_ROOT / "tests" / "test_phase_g_g0_g6_red.py").is_file()

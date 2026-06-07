@@ -26,9 +26,7 @@ from httpx import ASGITransport, AsyncClient
 pytestmark = pytest.mark.integration
 
 FIXTURES_DIR = Path(__file__).resolve().parents[2] / "docs" / "api" / "fixtures"
-FE_CLASSIFY_WARNINGS = (
-    Path(__file__).resolve().parents[2] / "frontend" / "src" / "utils" / "classifyWarnings.ts"
-)
+FE_CLASSIFY_WARNINGS = Path(__file__).resolve().parents[2] / "frontend" / "src" / "utils" / "classifyWarnings.ts"
 CLASSIFY_FALLBACK_PAPER_ID = "hss-classify-fallback-001"
 FROZEN_MESSAGE = "触发分类启发式Fallback!"
 
@@ -85,9 +83,7 @@ def test_g5_openapi_fixtures_use_machine_code_not_user_copy() -> None:
 
 @pytest.mark.asyncio
 async def test_g5_be_api_status_matches_fixture_for_fe_polling(api_client: AsyncClient) -> None:
-    expected = json.loads((FIXTURES_DIR / "paper-status-classify-fallback.json").read_text(encoding="utf-8"))[
-        "data"
-    ]
+    expected = json.loads((FIXTURES_DIR / "paper-status-classify-fallback.json").read_text(encoding="utf-8"))["data"]
     _register_classify_fallback_paper()
 
     response = await api_client.get(f"/api/v1/papers/{CLASSIFY_FALLBACK_PAPER_ID}/status")
@@ -101,9 +97,7 @@ async def test_g5_be_api_status_matches_fixture_for_fe_polling(api_client: Async
 
 @pytest.mark.asyncio
 async def test_g5_be_api_detail_matches_fixture_for_fe_detail_alert(api_client: AsyncClient) -> None:
-    expected = json.loads((FIXTURES_DIR / "paper-detail-classify-fallback.json").read_text(encoding="utf-8"))[
-        "data"
-    ]
+    expected = json.loads((FIXTURES_DIR / "paper-detail-classify-fallback.json").read_text(encoding="utf-8"))["data"]
     _register_classify_fallback_paper()
 
     response = await api_client.get(f"/api/v1/papers/{CLASSIFY_FALLBACK_PAPER_ID}")
