@@ -17,7 +17,11 @@ from backend.services.agent_service import AgentService
 from backend.services.paper_service import get_paper_service
 
 from tests.conftest import mock_pipeline_node_services
-from tests.helpers.f33_hss_graphs import assert_f33_core_structure, assert_hss_schema_whitelist
+from tests.helpers.f33_hss_graphs import (
+    assert_f33_core_structure,
+    assert_hss_excludes_stem_only_node_types,
+    assert_hss_schema_whitelist,
+)
 
 pytestmark = pytest.mark.integration
 
@@ -54,6 +58,7 @@ async def test_f33_hss_extract_fallback_graph_matches_core_structure(live_extrac
 
     assert EXTRACT_HEURISTIC_FALLBACK_CODE in result.warnings
     assert_hss_schema_whitelist(result.graph)
+    assert_hss_excludes_stem_only_node_types(result.graph)
     assert_f33_core_structure(result.graph, min_sub_arguments=2)
     assert any(edge.type == "CHALLENGES" for edge in result.graph.edges)
     assert any(edge.type == "EXAMINES_THROUGH" for edge in result.graph.edges)
@@ -100,6 +105,7 @@ async def test_f33_pipeline_stores_hss_graph_with_f33_node_types(
     assert stored is not None
     assert stored.paradigm == Paradigm.HSS
     assert_hss_schema_whitelist(stored)
+    assert_hss_excludes_stem_only_node_types(stored)
     assert_f33_core_structure(stored, min_sub_arguments=2)
 
     status = await get_paper_service().get_status(paper_id)

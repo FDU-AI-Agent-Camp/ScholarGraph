@@ -5,12 +5,18 @@ from __future__ import annotations
 from backend.schemas.graph import (
     HSS_EDGE_TYPES,
     HSS_NODE_TYPES,
+    STEM_NODE_TYPES,
     GraphEdge,
     GraphNode,
     NodeType,
     UnifiedPaperGraph,
 )
 from backend.schemas.paradigm import Paradigm
+
+# STEM-only node types forbidden in HSS graphs (Claim/Evidence are shared).
+F33_FORBIDDEN_STEM_NODE_TYPES = frozenset(
+    node_type.value for node_type in (STEM_NODE_TYPES - HSS_NODE_TYPES)
+)
 
 F33_HSS_CORE_EDGE_TYPES = frozenset(
     {
@@ -91,6 +97,14 @@ def assert_hss_schema_whitelist(graph: UnifiedPaperGraph) -> None:
     edge_types = {edge.type for edge in graph.edges}
     assert node_types <= {t.value for t in HSS_NODE_TYPES}
     assert edge_types <= HSS_EDGE_TYPES
+    assert_hss_excludes_stem_only_node_types(graph)
+
+
+def assert_hss_excludes_stem_only_node_types(graph: UnifiedPaperGraph) -> None:
+    """F.3: HSS graphs must not contain Metric, Baseline, Dataset, etc."""
+    node_types = {node.type for node in graph.nodes}
+    forbidden = node_types & F33_FORBIDDEN_STEM_NODE_TYPES
+    assert not forbidden, f"HSS graph contains forbidden STEM-only types: {sorted(forbidden)}"
 
 
 def assert_f33_core_structure(graph: UnifiedPaperGraph, *, min_sub_arguments: int = 3) -> None:

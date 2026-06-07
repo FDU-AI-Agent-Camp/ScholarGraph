@@ -164,7 +164,19 @@ def test_smoke_f33_extract_hss_prompt_has_operational_definitions() -> None:
     assert "F.3 Operational node definitions" in prompt
     assert "Thesis" in prompt
     assert "SUB_ARGUMENT_OF" in prompt
+    assert "分论点支撑核心论点" in prompt
     assert "Metric" in prompt
+
+
+@pytest.mark.smoke
+def test_smoke_f33_extract_stem_prompt_has_operational_definitions() -> None:
+    from backend.schemas.paradigm import Paradigm
+
+    prompt = load_extract_prompt(Paradigm.STEM)
+    assert "F.3 Operational node definitions" in prompt
+    assert "ResearchQuestion" in prompt
+    assert "ADDRESSES" in prompt
+    assert "AnalyticalLens" in prompt
 
 
 @pytest.mark.smoke
@@ -185,3 +197,29 @@ async def test_smoke_f33_hss_graph_endpoint_returns_thesis() -> None:
     node_types = {node["type"] for node in response.json()["data"]["nodes"]}
     assert "Thesis" in node_types
     assert "SubArgument" in node_types
+
+
+@pytest.mark.smoke
+def test_smoke_f33_hss_prompt_forbids_metric_baseline_dataset() -> None:
+    from backend.schemas.paradigm import Paradigm
+
+    from tests.helpers.f33_hss_graphs import F33_FORBIDDEN_STEM_NODE_TYPES
+
+    prompt = load_extract_prompt(Paradigm.HSS)
+    assert "Forbidden node types" in prompt
+    for stem_type in ("Metric", "Baseline", "Dataset"):
+        assert stem_type in prompt
+    assert {"Metric", "Baseline", "Dataset"} <= F33_FORBIDDEN_STEM_NODE_TYPES
+
+
+@pytest.mark.smoke
+@pytest.mark.asyncio
+async def test_smoke_f33_hss_graph_endpoint_excludes_stem_only_types() -> None:
+    from tests.helpers.f33_hss_graphs import F33_FORBIDDEN_STEM_NODE_TYPES
+
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        response = await client.get("/api/v1/papers/hss-001/graph")
+    assert response.status_code == 200
+    node_types = {node["type"] for node in response.json()["data"]["nodes"]}
+    assert not (node_types & F33_FORBIDDEN_STEM_NODE_TYPES)

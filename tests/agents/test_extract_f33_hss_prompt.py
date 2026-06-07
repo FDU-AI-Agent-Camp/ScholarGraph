@@ -13,8 +13,10 @@ from backend.schemas import NodeType
 from backend.schemas.paradigm import Paradigm
 
 from tests.helpers.f33_hss_graphs import (
+    F33_FORBIDDEN_STEM_NODE_TYPES,
     F33_HSS_CORE_EDGE_TYPES,
     assert_f33_core_structure,
+    assert_hss_excludes_stem_only_node_types,
     assert_hss_schema_whitelist,
     minimal_f33_hss_graph,
 )
@@ -51,6 +53,12 @@ def test_f33_hss_prompt_lists_core_edge_types() -> None:
         assert edge_type in prompt, f"missing HSS edge type {edge_type}"
 
 
+def test_f33_hss_prompt_documents_edge_semantics_in_chinese() -> None:
+    prompt = load_extract_prompt(Paradigm.HSS)
+    for phrase in ("分论点支撑核心论点", "本文论点挑战既有解释", "以某理论审视对象/材料"):
+        assert phrase in prompt, f"missing HSS edge semantics: {phrase}"
+
+
 def test_f33_hss_prompt_specifies_node_counts() -> None:
     prompt = load_extract_prompt(Paradigm.HSS)
     assert "Exactly 1" in prompt or "exactly 1" in prompt.lower()
@@ -60,8 +68,16 @@ def test_f33_hss_prompt_specifies_node_counts() -> None:
 
 def test_f33_hss_prompt_forbids_stem_node_types() -> None:
     prompt = load_extract_prompt(Paradigm.HSS)
-    for forbidden in ("Metric", "Baseline", "Dataset", "ResearchQuestion"):
-        assert forbidden in prompt
+    assert "Forbidden node types" in prompt or "Do not use" in prompt
+    for forbidden in F33_FORBIDDEN_STEM_NODE_TYPES:
+        assert forbidden in prompt, f"prompt must forbid STEM-only type {forbidden}"
+
+
+def test_f33_hss_prompt_explicitly_lists_metric_baseline_dataset_as_forbidden() -> None:
+    prompt = load_extract_prompt(Paradigm.HSS)
+    forbidden_section = prompt.split("Forbidden node types", 1)[-1]
+    for stem_type in ("Metric", "Baseline", "Dataset"):
+        assert stem_type in forbidden_section
 
 
 def test_f33_hss_prompt_documents_argumentation_tree() -> None:
@@ -91,6 +107,7 @@ def test_f33_build_hss_heuristic_matches_core_f33_shape() -> None:
         "测试",
     )
     assert_hss_schema_whitelist(graph)
+    assert_hss_excludes_stem_only_node_types(graph)
     assert_f33_core_structure(graph, min_sub_arguments=2)
     node_types = {node.type for node in graph.nodes}
     assert NodeType.INTELLECTUAL_CONTEXT in node_types

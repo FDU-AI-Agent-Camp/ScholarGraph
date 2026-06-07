@@ -13,6 +13,7 @@ from backend.schemas.graph import GraphEdge, GraphNode, HSS_EDGE_TYPES, HSS_NODE
 from backend.schemas.paradigm import Paradigm
 from httpx import ASGITransport, AsyncClient
 from tests.api.conftest import assert_success_envelope
+from tests.helpers.f33_hss_graphs import F33_FORBIDDEN_STEM_NODE_TYPES, assert_hss_excludes_stem_only_node_types
 
 pytestmark = pytest.mark.integration
 
@@ -33,6 +34,7 @@ def test_api_f33_graph_hss_fixture_passes_unified_schema() -> None:
     assert graph.paradigm.value == "HSS"
     assert {node.type for node in graph.nodes} <= HSS_WHITELIST_NODE_VALUES
     assert {edge.type for edge in graph.edges} <= HSS_EDGE_TYPES
+    assert_hss_excludes_stem_only_node_types(graph)
 
 
 @pytest.mark.asyncio
@@ -66,6 +68,18 @@ async def test_api_f33_get_hss_graph_contains_argumentation_types(api_client: As
     assert "Thesis" in node_types
     assert "SubArgument" in node_types
     assert "SUB_ARGUMENT_OF" in edge_types
+
+
+@pytest.mark.asyncio
+async def test_api_f33_get_hss_graph_excludes_stem_only_node_types(api_client: AsyncClient) -> None:
+    response = await api_client.get("/api/v1/papers/hss-001/graph")
+
+    assert response.status_code == 200
+    node_types = {node["type"] for node in response.json()["data"]["nodes"]}
+    forbidden = node_types & F33_FORBIDDEN_STEM_NODE_TYPES
+    assert not forbidden, f"HSS API graph must not expose STEM-only types: {sorted(forbidden)}"
+    for stem_type in ("Metric", "Baseline", "Dataset"):
+        assert stem_type not in node_types
 
 
 @pytest.mark.asyncio

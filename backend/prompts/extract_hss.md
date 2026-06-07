@@ -53,12 +53,12 @@ Only these `type` values are valid for HSS graphs:
 
 | type | Semantics | source → target |
 |------|-----------|-----------------|
-| `SUB_ARGUMENT_OF` | A sub-argument supports the central thesis | `SubArgument` → `Thesis` |
-| `CHALLENGES` | This paper's thesis challenges or revises prior scholarship | `Thesis` → `IntellectualContext` |
-| `EXAMINES_THROUGH` | Material or case is analyzed via a theoretical lens | `ObjectOrData` → `AnalyticalLens` |
-| `LENS_OF` | Analytical lens frames or shapes the central thesis | `AnalyticalLens` → `Thesis` |
-| `INFORMS` | Analytical lens supports a specific sub-argument | `AnalyticalLens` → `SubArgument` |
-| `SUPPORTS` | Evidence or reasoning backs a claim or thesis | `Evidence` → `Claim` or `Evidence` → `Thesis` |
+| `SUB_ARGUMENT_OF` | 分论点支撑核心论点 — sub-argument supports the central thesis | `SubArgument` → `Thesis` |
+| `CHALLENGES` | 本文论点挑战既有解释 — this paper's thesis challenges existing scholarship | `Thesis` → `IntellectualContext` |
+| `EXAMINES_THROUGH` | 以某理论审视对象/材料 — object or material is examined through a theoretical lens | `ObjectOrData` → `AnalyticalLens` |
+| `LENS_OF` | 理论视角作用于核心论点 — analytical lens frames the central thesis | `AnalyticalLens` → `Thesis` |
+| `INFORMS` | 理论视角支撑分论点 — analytical lens informs a sub-argument | `AnalyticalLens` → `SubArgument` |
+| `SUPPORTS` | 证据支撑主张 — evidence supports a claim or the thesis | `Evidence` → `Claim` or `Evidence` → `Thesis` |
 
 ### Secondary edges (use sparingly)
 
