@@ -4,8 +4,8 @@ V1 对外接口已冻结，以本目录与协作文档为准。
 
 | 资源 | 说明 |
 |------|------|
-| [openapi.yaml](./openapi.yaml) | OpenAPI 3.1，供 `openapi-typescript` / Swagger |
-| [fixtures/](./fixtures/) | 标准 Mock JSON；FE 可选经 [`frontend/src/mocks/`](../../frontend/src/mocks/) 再导出 |
+| [openapi.yaml](./openapi.yaml) | OpenAPI 3.1，含 `classify_warnings` / `extract_warnings` / `head_refine_warnings` |
+| [fixtures/](./fixtures/) | 标准 Mock JSON；含 `paper-*-classify-fallback.json`、`paper-*-ready-fallback.json` |
 | 运行时文档 | 实现后 `http://localhost:8000/docs`（须与 `openapi.yaml` 同步） |
 
 人文档：

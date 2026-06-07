@@ -51,7 +51,20 @@ cp .env.example .env
 # 默认 LLM_MODE=mock，无需 Key 即可联调
 # 接华为云 ModelArts MaaS：LLM_MODE=live，填 SCHOLARGRAPH_API_KEY + LLM_API_BASE_URL
 # 模型名见 .env.example（默认 DeepSeek-V3-64K / Qwen3-32B-64K，与 backend/config.py 一致）
-```
+
+**LLM 能力点开关**（live 模式下独立生效；`LLM_MODE=mock` 时不调云端）：
+
+| 变量 | 默认 | 说明 |
+|------|------|------|
+| `CLASSIFIER_LLM_ENABLED` | `true` | 范式分类 LLM；`false` → 启发式 + `classifier_heuristic_fallback` |
+| `CLASSIFIER_HEURISTIC_FALLBACK` | `true` | 分类 LLM 失败是否降级（`false` 可致流水线 failed） |
+| `EXTRACT_LLM_ENABLED` | `true` | 图谱抽取 LLM；`false` → 启发式 + `extract_heuristic_fallback` |
+| `EXTRACT_HEURISTIC_FALLBACK` | `true` | 抽取 LLM 失败是否降级 |
+| `EXTRACT_MAX_INPUT_CHARS` | `20000` | 送入抽取 LLM 的全文上限 |
+
+分类与抽取**互不影响**：分类准确仍可能出现抽取 fallback。排查：后端日志 `extract_llm attempt failed` / `extract_llm_fallback`（含 `reason`、`elapsed_ms`）。
+
+**pytest 与本地 `.env`**：CI 默认 `tests/conftest.py` 设 `SCHOLARGRAPH_IGNORE_DOTENV=1`；本地全量门禁可 `$env:SCHOLARGRAPH_IGNORE_DOTENV="1"` 避免 `.env` 中 `LLM_MODE=live` 污染默认单测。
 
 **冒烟测试**（P0 完成后）：
 

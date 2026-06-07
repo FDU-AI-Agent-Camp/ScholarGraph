@@ -41,7 +41,7 @@
 | 语言 | **Python 3.11+** | |
 | 包管理 | **uv** | `uv sync`、`uv run`；见 [AGENTS.md](../../AGENTS.md) |
 | Web 框架 | **FastAPI** | 异步路由、Pydantic 校验、自动 OpenAPI |
-| Agent 编排 | **LangGraph** | 分类 → 抽取 → 存储流水线 |
+| Agent 编排 | **LangGraph** | ingest → head refine → **LLM 分类** → **LLM 抽取** → 存储 |
 | 图算法（原型） | **NetworkX** | 复杂持久化前够用 |
 | 图谱存储 V1 | JSON 文件 / SQLite | 见 `GRAPH_DATA_DIR`、`DATABASE_URL` |
 | LLM | OpenAI 兼容 API | 统一 `backend/llm/client.py` |
@@ -86,13 +86,15 @@
      | `stage` | `percent` | 典型 `message` |
      |---------|-----------|----------------|
      | `ingesting` | 20 | 正在解析 PDF |
-     | `classifying` | 50 | 正在识别范式与理论视角… |
+     | `head_refining` | 35 | 文档头部精炼 |
+     | `classifying` | 50 | 正在范式分类 |
      | `extracting` | 80 | 正在抽取逻辑图谱 |
      | `storing` | 95 | 正在写入图谱存储 |
      | `ready` | 100 | 建图完成 |
      | `failed` | 0 | 流水线失败（含 `error_code` / `failed_during`） |
 
-  3. `status=ready` 后 `GET /papers/{id}/graph` 拉取 G6 数据
+  3. `status=ready` 后 `GET /papers/{id}/graph` 拉取 G6 数据  
+  4. 若 LLM 降级，轮询响应含 **`classify_warnings`** / **`extract_warnings`**（机器码）；前端映射为 toast / alert（见 [api-contract.md §1.1](./api-contract.md#11-降级警告字段classify_warnings--extract_warnings)）
 - **WebSocket**：人力充裕时可由 L 增加 `WS /papers/{id}/progress`；V1 不强制。
 
 ```mermaid
