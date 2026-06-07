@@ -3,6 +3,9 @@
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
+from backend.agents.classifier_constants import CLASSIFIER_HEURISTIC_FALLBACK_CODE
+from backend.agents.classifier_types import ClassifyResult
+from backend.agents.extract_constants import EXTRACT_HEURISTIC_FALLBACK_CODE
 from backend.graph import nodes
 from backend.graph.state import WorkflowState
 from backend.schemas.graph import GraphNode, UnifiedPaperGraph
@@ -144,7 +147,7 @@ async def test_classify_node_receives_refined_classifier_input(
         reason="mock",
     )
     agent_svc = MagicMock()
-    agent_svc.classify_paradigm = AsyncMock(return_value=classification)
+    agent_svc.classify_paradigm = AsyncMock(return_value=ClassifyResult(classification=classification, warnings=[]))
 
     state = dict(post_ingest_state)
     state["classifier_input"] = "REFINED-INPUT"
@@ -167,7 +170,7 @@ async def test_classify_node_maps_classification_to_state(
         reason="含实验与指标",
     )
     agent_svc = MagicMock()
-    agent_svc.classify_paradigm = AsyncMock(return_value=classification)
+    agent_svc.classify_paradigm = AsyncMock(return_value=ClassifyResult(classification=classification, warnings=[]))
     with patch("backend.graph.nodes.get_agent_service", return_value=agent_svc):
         out = await nodes.classify_node(post_ingest_state)
 
@@ -175,6 +178,35 @@ async def test_classify_node_maps_classification_to_state(
     assert out["paradigm"] == Paradigm.STEM.value
     assert out["classification"]["paradigm"] == "STEM"
     assert out.get("failed") is False
+
+
+async def test_classify_node_records_classify_warnings(
+    post_ingest_state: WorkflowState,
+) -> None:
+    classification = ParadigmClassification(
+        paradigm=Paradigm.HSS,
+        confidence=0.9,
+        reason="mock",
+    )
+    agent_svc = MagicMock()
+    agent_svc.classify_paradigm = AsyncMock(
+        return_value=ClassifyResult(
+            classification=classification,
+            warnings=[CLASSIFIER_HEURISTIC_FALLBACK_CODE],
+        ),
+    )
+    paper_id = post_ingest_state["paper_id"]
+    paper_svc = get_paper_service()
+    with (
+        patch("backend.graph.nodes.get_agent_service", return_value=agent_svc),
+        patch.object(
+            paper_svc, "record_classify_warnings", wraps=paper_svc.record_classify_warnings
+        ) as record_warnings,
+    ):
+        out = await nodes.classify_node(post_ingest_state)
+
+    record_warnings.assert_called_once_with(paper_id, [CLASSIFIER_HEURISTIC_FALLBACK_CODE])
+    assert out["classify_warnings"] == [CLASSIFIER_HEURISTIC_FALLBACK_CODE]
 
 
 async def test_classify_node_service_error_sets_llm_json_invalid(
@@ -222,7 +254,6 @@ async def test_extract_node_delegates_to_agent_service(
 async def test_extract_node_records_extract_warnings(
     post_classify_state: WorkflowState,
 ) -> None:
-    from backend.agents.extract_constants import EXTRACT_HEURISTIC_FALLBACK_CODE
     from backend.agents.extract_types import ExtractResult
 
     graph = UnifiedPaperGraph(

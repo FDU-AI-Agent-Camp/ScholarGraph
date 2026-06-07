@@ -27,9 +27,9 @@ from backend.services.paper_service import get_paper_service
 async def test_classify_returns_stem_or_hss_for_snippet() -> None:
     snippet = "We evaluate our agent framework on benchmark datasets with accuracy metrics."
     result = await classify(snippet)
-    assert result.paradigm in (Paradigm.STEM, Paradigm.HSS)
-    assert 0.0 <= result.confidence <= 1.0
-    assert result.reason.strip()
+    assert result.classification.paradigm in (Paradigm.STEM, Paradigm.HSS)
+    assert 0.0 <= result.classification.confidence <= 1.0
+    assert result.classification.reason.strip()
 
 
 @pytest.mark.red

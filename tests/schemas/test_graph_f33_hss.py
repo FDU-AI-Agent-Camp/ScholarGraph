@@ -6,7 +6,6 @@ import pytest
 from backend.schemas.graph import GraphEdge, GraphNode, NodeType, UnifiedPaperGraph
 from backend.schemas.paradigm import Paradigm
 from pydantic import ValidationError
-
 from tests.helpers.f33_hss_graphs import (
     F33_FORBIDDEN_STEM_NODE_TYPES,
     assert_hss_excludes_stem_only_node_types,

@@ -104,16 +104,22 @@ async def wait_head_refine_node(state: WorkflowState) -> WorkflowState:
 
 async def classify_node(state: WorkflowState) -> WorkflowState:
     _mark_progress(state, stage=PipelineStage.CLASSIFYING, message="正在范式分类")
+    paper_id = state["paper_id"]
     try:
-        classification = await get_agent_service().classify_paradigm(state["classifier_input"])
+        result = await get_agent_service().classify_paradigm(state["classifier_input"])
     except ServiceError as exc:
         return _failure_patch(exc, stage=PipelineStage.CLASSIFYING)
 
+    if result.warnings:
+        get_paper_service().record_classify_warnings(paper_id, result.warnings)
+
+    classification = result.classification
     return _success_patch(
         stage=PipelineStage.CLASSIFYING,
         message="范式分类完成",
         classification=classification.model_dump(mode="json"),
         paradigm=classification.paradigm.value,
+        classify_warnings=result.warnings,
     )
 
 

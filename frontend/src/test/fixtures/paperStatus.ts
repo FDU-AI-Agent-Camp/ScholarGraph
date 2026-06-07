@@ -22,11 +22,17 @@ export const readyStatus: PaperStatusData = {
   message: '处理完成',
   updated_at: '2026-05-19T10:05:00Z',
   extract_warnings: [],
+  classify_warnings: [],
 }
 
 export const readyStatusWithExtractFallback: PaperStatusData = {
   ...readyStatus,
   extract_warnings: ['extract_heuristic_fallback'],
+}
+
+export const readyStatusWithClassifyFallback: PaperStatusData = {
+  ...readyStatus,
+  classify_warnings: ['classifier_heuristic_fallback'],
 }
 
 export const failedStatusWithoutCode: PaperStatusData = {

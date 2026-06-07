@@ -9,7 +9,7 @@ import pytest
 from backend.config import get_settings
 from backend.graph.store import GraphStore
 from backend.main import app
-from backend.schemas.graph import GraphEdge, GraphNode, HSS_EDGE_TYPES, HSS_NODE_TYPES, UnifiedPaperGraph
+from backend.schemas.graph import HSS_EDGE_TYPES, HSS_NODE_TYPES, GraphEdge, GraphNode, UnifiedPaperGraph
 from backend.schemas.paradigm import Paradigm
 from httpx import ASGITransport, AsyncClient
 from tests.api.conftest import assert_success_envelope

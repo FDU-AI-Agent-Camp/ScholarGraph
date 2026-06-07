@@ -5,6 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
+from backend.agents.classifier_types import ClassifyResult
 from backend.agents.extract_types import ExtractResult
 from backend.graph.state import NODE_CLASSIFY, NODE_EXTRACT, NODE_INGEST, NODE_STORE
 from backend.graph.workflow import run_paper_pipeline
@@ -31,9 +32,9 @@ async def test_handoff_ingest_output_feeds_classify_input(integration_paper: tup
 
     with mock_pipeline_node_services(paper_id) as mocks:
 
-        async def capture_classify(text: str) -> ParadigmClassification:
+        async def capture_classify(text: str) -> ClassifyResult:
             captured_classify_input.append(text)
-            return classification
+            return ClassifyResult(classification=classification, warnings=[])
 
         mocks["agent"].classify_paradigm.side_effect = capture_classify
         mocks["agent"].extract_graph.return_value = ExtractResult(graph=graph, warnings=[])
@@ -63,7 +64,7 @@ async def test_handoff_classify_output_feeds_extract(integration_paper: tuple[st
     )
 
     with mock_pipeline_node_services(paper_id) as mocks:
-        mocks["agent"].classify_paradigm.return_value = classification
+        mocks["agent"].classify_paradigm.return_value = ClassifyResult(classification=classification, warnings=[])
 
         async def capture_extract(full_text: str, paradigm: Paradigm, *, paper_id: str):
             captured["full_text"] = full_text
@@ -90,7 +91,7 @@ async def test_handoff_extract_output_feeds_store_finalize(integration_paper: tu
     )
 
     with mock_pipeline_node_services(paper_id) as mocks:
-        mocks["agent"].classify_paradigm.return_value = classification
+        mocks["agent"].classify_paradigm.return_value = ClassifyResult(classification=classification, warnings=[])
         mocks["agent"].extract_graph.return_value = ExtractResult(graph=graph, warnings=[])
 
         await run_paper_pipeline(paper_id, pdf_path)

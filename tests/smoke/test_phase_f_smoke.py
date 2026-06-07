@@ -240,7 +240,6 @@ async def test_smoke_f33_hss_graph_endpoint_returns_thesis(
 @pytest.mark.smoke
 def test_smoke_f33_hss_prompt_forbids_metric_baseline_dataset() -> None:
     from backend.schemas.paradigm import Paradigm
-
     from tests.helpers.f33_hss_graphs import F33_FORBIDDEN_STEM_NODE_TYPES
 
     prompt = load_extract_prompt(Paradigm.HSS)
@@ -273,7 +272,6 @@ async def test_smoke_f33_hss_graph_endpoint_excludes_stem_only_types(
 @pytest.mark.smoke
 def test_smoke_f33_stem_prompt_forbids_analytical_lens_intellectual_context_object_or_data() -> None:
     from backend.schemas.paradigm import Paradigm
-
     from tests.helpers.f33_stem_graphs import F33_FORBIDDEN_HSS_NODE_TYPES
 
     prompt = load_extract_prompt(Paradigm.STEM)
@@ -293,7 +291,6 @@ async def test_smoke_f33_stem_graph_endpoint_excludes_hss_only_types(
     from backend.graph.store import GraphStore
     from backend.schemas.graph import GraphEdge, GraphNode, UnifiedPaperGraph
     from backend.schemas.paradigm import Paradigm
-
     from tests.helpers.f33_stem_graphs import F33_FORBIDDEN_HSS_NODE_TYPES
 
     graphs_dir = tmp_path / "graphs"

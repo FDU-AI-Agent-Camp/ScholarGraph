@@ -386,6 +386,12 @@ components:
                 type: string
               description: Machine-readable graph-extract degrade codes (e.g. extract_heuristic_fallback).
               example: []
+            classify_warnings:
+              type: array
+              items:
+                type: string
+              description: Machine-readable paradigm-classifier degrade codes (e.g. classifier_heuristic_fallback).
+              example: []
 
     PaperDetailResponse:
       type: object
@@ -437,6 +443,12 @@ components:
           items:
             type: string
           description: Machine-readable graph-extract degrade codes (e.g. extract_heuristic_fallback).
+          example: []
+        classify_warnings:
+          type: array
+          items:
+            type: string
+          description: Machine-readable paradigm-classifier degrade codes (e.g. classifier_heuristic_fallback).
           example: []
 
     PaperStatusResponse:

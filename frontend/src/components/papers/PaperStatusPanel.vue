@@ -5,6 +5,11 @@ import { computed, ref, watch } from 'vue'
 import { usePaperStatus } from '@/composables/usePaperStatus'
 import { DETAIL_BASELINE_COPY } from '@/constants/detailCopy'
 import {
+  CLASSIFIER_HEURISTIC_FALLBACK_MESSAGE,
+  hasClassifierHeuristicFallback,
+  resolveClassifyWarningMessages,
+} from '@/utils/classifyWarnings'
+import {
   EXTRACT_HEURISTIC_FALLBACK_MESSAGE,
   hasExtractHeuristicFallback,
   resolveExtractWarningMessages,
@@ -28,6 +33,7 @@ const emit = defineEmits<{
 
 const { status, polling, start, stop } = usePaperStatus(props.paperId)
 const extractFallbackToastShown = ref(false)
+const classifyFallbackToastShown = ref(false)
 
 const failedSnapshot = computed(() => {
   const snapshot = status.value
@@ -43,11 +49,13 @@ const stepStates = computed((): PipelineStepVisualState[] => {
 })
 
 const extractWarningMessages = computed(() => resolveExtractWarningMessages(status.value?.extract_warnings))
+const classifyWarningMessages = computed(() => resolveClassifyWarningMessages(status.value?.classify_warnings))
 
 watch(
   () => props.paperId,
   () => {
     extractFallbackToastShown.value = false
+    classifyFallbackToastShown.value = false
     if (props.autoStart) {
       start()
     }
@@ -80,6 +88,23 @@ watch(
     ElMessage.warning(EXTRACT_HEURISTIC_FALLBACK_MESSAGE)
   },
 )
+
+watch(
+  () => status.value,
+  (snapshot, previous) => {
+    if (!snapshot || snapshot.status !== 'ready' || classifyFallbackToastShown.value) {
+      return
+    }
+    if (previous?.status === 'ready') {
+      return
+    }
+    if (!hasClassifierHeuristicFallback(snapshot.classify_warnings)) {
+      return
+    }
+    classifyFallbackToastShown.value = true
+    ElMessage.warning(CLASSIFIER_HEURISTIC_FALLBACK_MESSAGE)
+  },
+)
 </script>
 
 <template>
@@ -108,6 +133,14 @@ watch(
     </ol>
     <p v-if="status.message" class="text-body status-panel__message">{{ status.message }}</p>
     <p class="text-caption status-panel__caption">{{ PIPELINE_REFRESH_CAPTION }}</p>
+    <el-alert
+      v-if="classifyWarningMessages.length"
+      type="warning"
+      :title="classifyWarningMessages[0]"
+      show-icon
+      :closable="false"
+      class="status-panel__classify-warning"
+    />
     <el-alert
       v-if="extractWarningMessages.length"
       type="warning"

@@ -221,6 +221,11 @@ export interface components {
              * @example []
              */
             extract_warnings?: string[];
+            /**
+             * @description Machine-readable paradigm-classifier degrade codes (e.g. classifier_heuristic_fallback).
+             * @example []
+             */
+            classify_warnings?: string[];
         };
         PaperDetailResponse: {
             data?: components["schemas"]["PaperDetail"];
@@ -251,6 +256,11 @@ export interface components {
              * @example []
              */
             extract_warnings?: string[];
+            /**
+             * @description Machine-readable paradigm-classifier degrade codes (e.g. classifier_heuristic_fallback).
+             * @example []
+             */
+            classify_warnings?: string[];
         };
         PaperStatusResponse: {
             data?: components["schemas"]["PaperStatusData"];

@@ -6,11 +6,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import PaperStatusPanel from '@/components/papers/PaperStatusPanel.vue'
 import { DETAIL_BASELINE_COPY } from '@/constants/detailCopy'
 import { EXTRACT_HEURISTIC_FALLBACK_MESSAGE, EXTRACT_HEURISTIC_FALLBACK_CODE } from '@/utils/extractWarnings'
+import { CLASSIFIER_HEURISTIC_FALLBACK_MESSAGE } from '@/utils/classifyWarnings'
 import {
   failedStatus,
   failedStatusWithoutCode,
   processingStatus,
   readyStatus,
+  readyStatusWithClassifyFallback,
   readyStatusWithExtractFallback,
 } from '@/test/fixtures/paperStatus'
 
@@ -171,6 +173,44 @@ describe('PaperStatusPanel', () => {
 
     expect(ElMessage.warning).toHaveBeenCalledTimes(1)
     expect(ElMessage.warning).toHaveBeenCalledWith(EXTRACT_HEURISTIC_FALLBACK_MESSAGE)
+    expect(wrapper.emitted('ready')).toHaveLength(1)
+  })
+
+  it('renders classify fallback warning alert when classify_warnings present', () => {
+    mockStatus.value = readyStatusWithClassifyFallback
+
+    const wrapper = mount(PaperStatusPanel, {
+      props: { paperId: 'paper-001', autoStart: false },
+    })
+
+    const alerts = wrapper.findAll('.el-alert-stub')
+    const warning = alerts.find((node) => node.attributes('data-type') === 'warning')
+    expect(warning?.attributes('data-title')).toBe(CLASSIFIER_HEURISTIC_FALLBACK_MESSAGE)
+    expect(wrapper.find('.status-panel__classify-warning').exists()).toBe(true)
+  })
+
+  it('does not render classify warning alert when classify_warnings empty', () => {
+    mockStatus.value = readyStatus
+
+    const wrapper = mount(PaperStatusPanel, {
+      props: { paperId: 'paper-001', autoStart: false },
+    })
+
+    expect(wrapper.find('.status-panel__classify-warning').exists()).toBe(false)
+  })
+
+  it('shows ElMessage.warning once when polling reaches ready with classify fallback', async () => {
+    vi.mocked(ElMessage.warning).mockClear()
+    mockStatus.value = processingStatus
+    const wrapper = mount(PaperStatusPanel, {
+      props: { paperId: 'paper-001', autoStart: false },
+    })
+
+    mockStatus.value = readyStatusWithClassifyFallback
+    await flushPromises()
+
+    expect(ElMessage.warning).toHaveBeenCalledTimes(1)
+    expect(ElMessage.warning).toHaveBeenCalledWith(CLASSIFIER_HEURISTIC_FALLBACK_MESSAGE)
     expect(wrapper.emitted('ready')).toHaveLength(1)
   })
 

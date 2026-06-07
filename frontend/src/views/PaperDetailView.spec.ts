@@ -5,6 +5,7 @@ import type { PaperDetail, QaStreamCitationData, UnifiedPaperGraph } from '@/api
 import { ApiClientError } from '@/api/client'
 import { DETAIL_BASELINE_COPY } from '@/constants/detailCopy'
 import { EXTRACT_HEURISTIC_FALLBACK_MESSAGE } from '@/utils/extractWarnings'
+import { CLASSIFIER_HEURISTIC_FALLBACK_MESSAGE } from '@/utils/classifyWarnings'
 import { RouteName } from '@/router/meta'
 import { loadDesignTokenMap, readFrontendSource } from '@/test/helpers/designTokens'
 import { answerPanelTypographyMatchesBaseline, citationTagMixedLayout } from '@/test/helpers/copyDiscipline'
@@ -218,6 +219,42 @@ describe('PaperDetailView', () => {
 
       const warning = wrapper.findAll('.el-alert-stub').find((node) => node.attributes('data-type') === 'warning')
       expect(warning).toBeUndefined()
+    })
+  })
+
+  describe('G.2.3 classify fallback warning', () => {
+    it('shows graph-area warning alert when paper detail has classifier_heuristic_fallback', async () => {
+      paperStoreState.currentPaper = {
+        ...paperStoreState.currentPaper,
+        classify_warnings: ['classifier_heuristic_fallback'],
+      }
+
+      const wrapper = mount(PaperDetailView, {
+        props: { paperId: 'hss-001' },
+        global: { stubs: globalStubs },
+      })
+
+      await flushPromises()
+
+      const warning = wrapper.findAll('.el-alert-stub').find((node) => node.attributes('data-type') === 'warning')
+      expect(warning?.attributes('data-title')).toBe(CLASSIFIER_HEURISTIC_FALLBACK_MESSAGE)
+      expect(wrapper.find('.detail-graph__classify-warning').exists()).toBe(true)
+    })
+
+    it('does not show classify fallback alert when classify_warnings empty', async () => {
+      paperStoreState.currentPaper = {
+        ...paperStoreState.currentPaper,
+        classify_warnings: [],
+      }
+
+      const wrapper = mount(PaperDetailView, {
+        props: { paperId: 'hss-001' },
+        global: { stubs: globalStubs },
+      })
+
+      await flushPromises()
+
+      expect(wrapper.find('.detail-graph__classify-warning').exists()).toBe(false)
     })
   })
 
