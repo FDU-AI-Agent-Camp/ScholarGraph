@@ -7,7 +7,12 @@ from backend.schemas.graph import GraphEdge, GraphNode, NodeType, UnifiedPaperGr
 from backend.schemas.paradigm import Paradigm
 from pydantic import ValidationError
 
-from tests.helpers.f33_stem_graphs import assert_stem_schema_whitelist, minimal_f33_stem_graph
+from tests.helpers.f33_stem_graphs import (
+    F33_FORBIDDEN_HSS_NODE_TYPES,
+    assert_stem_excludes_hss_only_node_types,
+    assert_stem_schema_whitelist,
+    minimal_f33_stem_graph,
+)
 
 
 def test_f33_minimal_stem_graph_passes_schema() -> None:
@@ -17,19 +22,24 @@ def test_f33_minimal_stem_graph_passes_schema() -> None:
     assert len(graph.edges) >= 5
 
 
-def test_f33_stem_graph_rejects_hss_node_type() -> None:
+@pytest.mark.parametrize("hss_only_type", sorted(F33_FORBIDDEN_HSS_NODE_TYPES))
+def test_f33_stem_graph_rejects_each_hss_only_node_type(hss_only_type: str) -> None:
     with pytest.raises(ValidationError, match="forbidden node types"):
         UnifiedPaperGraph(
-            paper_id="bad-stem",
+            paper_id=f"bad-stem-{hss_only_type}",
             paradigm=Paradigm.STEM,
             nodes=[
-                GraphNode(id="n_lens", label="理论视角", type=NodeType.ANALYTICAL_LENS),
+                GraphNode(id="n_hss", label="hss node", type=hss_only_type),
                 GraphNode(id="n_method", label="方法", type=NodeType.METHOD),
             ],
             edges=[
-                GraphEdge(id="e1", source="n_method", target="n_lens", label="RELATES_TO", type="RELATES_TO"),
+                GraphEdge(id="e1", source="n_method", target="n_hss", label="RELATES_TO", type="RELATES_TO"),
             ],
         )
+
+
+def test_f33_minimal_stem_graph_excludes_hss_only_node_types() -> None:
+    assert_stem_excludes_hss_only_node_types(minimal_f33_stem_graph())
 
 
 def test_f33_stem_graph_rejects_hss_edge_type() -> None:

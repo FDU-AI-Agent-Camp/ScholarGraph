@@ -176,6 +176,7 @@ def test_smoke_f33_extract_stem_prompt_has_operational_definitions() -> None:
     assert "F.3 Operational node definitions" in prompt
     assert "ResearchQuestion" in prompt
     assert "ADDRESSES" in prompt
+    assert "方法针对问题" in prompt
     assert "AnalyticalLens" in prompt
 
 
@@ -223,3 +224,58 @@ async def test_smoke_f33_hss_graph_endpoint_excludes_stem_only_types() -> None:
     assert response.status_code == 200
     node_types = {node["type"] for node in response.json()["data"]["nodes"]}
     assert not (node_types & F33_FORBIDDEN_STEM_NODE_TYPES)
+
+
+@pytest.mark.smoke
+def test_smoke_f33_stem_prompt_forbids_analytical_lens_intellectual_context_object_or_data() -> None:
+    from backend.schemas.paradigm import Paradigm
+
+    from tests.helpers.f33_stem_graphs import F33_FORBIDDEN_HSS_NODE_TYPES
+
+    prompt = load_extract_prompt(Paradigm.STEM)
+    assert "Forbidden node types" in prompt
+    for hss_type in ("AnalyticalLens", "IntellectualContext", "ObjectOrData"):
+        assert hss_type in prompt
+    assert {"AnalyticalLens", "IntellectualContext", "ObjectOrData"} <= F33_FORBIDDEN_HSS_NODE_TYPES
+
+
+@pytest.mark.smoke
+@pytest.mark.asyncio
+async def test_smoke_f33_stem_graph_endpoint_excludes_hss_only_types(
+    tmp_path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from backend.config import get_settings
+    from backend.graph.store import GraphStore
+    from backend.schemas.graph import GraphEdge, GraphNode, UnifiedPaperGraph
+    from backend.schemas.paradigm import Paradigm
+
+    from tests.helpers.f33_stem_graphs import F33_FORBIDDEN_HSS_NODE_TYPES
+
+    graphs_dir = tmp_path / "graphs"
+    graphs_dir.mkdir()
+    monkeypatch.setenv("GRAPH_DATA_DIR", str(graphs_dir))
+    get_settings.cache_clear()
+
+    GraphStore(base_dir=graphs_dir).save(
+        UnifiedPaperGraph(
+            paper_id="stem-001",
+            paradigm=Paradigm.STEM,
+            nodes=[
+                GraphNode(id="n_method", label="方法", type="Method"),
+                GraphNode(id="n_claim", label="声称", type="Claim"),
+            ],
+            edges=[
+                GraphEdge(id="e1", source="n_method", target="n_claim", label="SUPPORTS", type="SUPPORTS"),
+            ],
+        ),
+    )
+
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        response = await client.get("/api/v1/papers/stem-001/graph")
+    assert response.status_code == 200
+    node_types = {node["type"] for node in response.json()["data"]["nodes"]}
+    assert not (node_types & F33_FORBIDDEN_HSS_NODE_TYPES)
+
+    get_settings.cache_clear()

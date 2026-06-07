@@ -14,6 +14,7 @@ from backend.schemas.paradigm import Paradigm
 from httpx import ASGITransport, AsyncClient
 from tests.api.conftest import assert_success_envelope
 from tests.helpers.f33_hss_graphs import F33_FORBIDDEN_STEM_NODE_TYPES, assert_hss_excludes_stem_only_node_types
+from tests.helpers.f33_stem_graphs import F33_FORBIDDEN_HSS_NODE_TYPES
 
 pytestmark = pytest.mark.integration
 
@@ -118,8 +119,39 @@ async def test_api_f33_get_stem_graph_does_not_expose_hss_only_types(
     assert response.status_code == 200
     data = response.json()["data"]
     node_types = {node["type"] for node in data["nodes"]}
-    assert "AnalyticalLens" not in node_types
-    assert "IntellectualContext" not in node_types
-    assert "ObjectOrData" not in node_types
+    forbidden = node_types & F33_FORBIDDEN_HSS_NODE_TYPES
+    assert not forbidden, f"STEM API graph must not expose HSS-only types: {sorted(forbidden)}"
+    for hss_type in ("AnalyticalLens", "IntellectualContext", "ObjectOrData"):
+        assert hss_type not in node_types
+
+    get_settings.cache_clear()
+
+
+@pytest.mark.asyncio
+async def test_api_f33_get_stem_graph_contains_verification_chain_types(
+    api_client: AsyncClient,
+    tmp_path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    graphs_dir = tmp_path / "graphs"
+    graphs_dir.mkdir()
+    monkeypatch.setenv("GRAPH_DATA_DIR", str(graphs_dir))
+    get_settings.cache_clear()
+
+    from tests.helpers.f33_stem_graphs import minimal_f33_stem_graph
+
+    GraphStore(base_dir=graphs_dir).save(minimal_f33_stem_graph(paper_id="stem-001"))
+
+    response = await api_client.get("/api/v1/papers/stem-001/graph")
+
+    assert response.status_code == 200
+    data = response.json()["data"]
+    node_types = {node["type"] for node in data["nodes"]}
+    edge_types = {edge["type"] for edge in data["edges"]}
+    assert "ResearchQuestion" in node_types
+    assert "Method" in node_types
+    assert "ADDRESSES" in edge_types
+    assert "SUPPORTS" in edge_types
+    assert not (node_types & F33_FORBIDDEN_HSS_NODE_TYPES)
 
     get_settings.cache_clear()

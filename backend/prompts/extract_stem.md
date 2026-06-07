@@ -35,15 +35,14 @@ Only these `type` values are valid for STEM graphs:
 
 | type | Definition | Count |
 |------|------------|-------|
-| `ResearchQuestion` | The **research problem or task** the paper addresses—the core scientific or engineering question (e.g. classification accuracy, system throughput, theorem proof target). Usually stated in abstract, introduction, or problem section. | **Exactly 1** |
-| `Method` | The **proposed approach**: algorithm, model architecture, system design, or experimental protocol. Include the main technical contribution named in the paper. | **1+** |
-| `Dataset` | **Benchmark or dataset** used for evaluation (e.g. ImageNet, GLUE, a custom corpus). Use when the paper reports experiments on named data. | **0–2** |
-| `Metric` | **Evaluation metric** used to judge results (e.g. accuracy, F1, BLEU, latency, AUROC). Extract metrics explicitly reported in experiments. | **1+** |
-| `Baseline` | **Comparison baseline**—prior method, ablation, or SOTA system the authors compare against. | **0–2** |
-| `Claim` | A **performance or capability assertion** (e.g.「优于 SOTA」「提升 3.2%」「达到新的 state of the art」). Must be a stated conclusion, not raw numbers alone. | **1+** |
-| `Evidence` | **Experimental results** supporting a Claim—table entries, ablation outcomes, figure conclusions, statistical tests. Link to the claim it substantiates. | **1+** |
-| `Experiment` | Optional **experimental setup or run** node when the paper distinguishes multiple experiments, ablations, or settings worth isolating. | **As needed** |
-| `Finding` | Optional **summarized experimental finding** when distinct from a single Claim/Evidence pair (e.g. qualitative analysis of failure cases). | **As needed** |
+| `ResearchQuestion` | 研究问题 / 任务定义 — the core problem or task the paper sets out to solve (e.g. image classification, property prediction, system latency). Usually in abstract, introduction, or task section. | **Exactly 1** |
+| `Method` | 方法、模型、系统 — the proposed algorithm, model architecture, system, or experimental protocol that constitutes the technical contribution. | **1+** |
+| `Dataset` | 数据集 / benchmark — named evaluation data (e.g. ImageNet, GLUE, MoleculeNet). Add only when the paper reports experiments on specific data. | **0–2** |
+| `Metric` | 评测指标 — metrics used to judge results (e.g. accuracy, F1, BLEU, AUROC, RMSE). Extract only metrics explicitly used in experiments. | **1+** |
+| `Baseline` | 对比基线 — prior methods, ablations, or SOTA systems compared against (e.g. BERT, ResNet-50, vanilla GNN). | **0–2** |
+| `Claim` | 性能声称（优于 SOTA 等）— stated performance conclusions (e.g.「优于 SOTA」「提升 3.2%」「达到新的 state of the art」), not raw table cells alone. | **1+** |
+| `Evidence` | 实验结果、表格结论 — experimental outcomes, table rows, figure results, or ablation summaries that substantiate a Claim. | **1+** |
+| `Experiment` / `Finding` | 可选细化 — use `Experiment` for distinct experimental runs/settings; use `Finding` for summarized insights beyond a single Claim/Evidence pair. | **As needed** |
 
 ### Identification cues
 
@@ -57,11 +56,11 @@ Only these `type` values are valid for STEM graphs:
 
 | type | Semantics | source → target |
 |------|-----------|-----------------|
-| `ADDRESSES` | Method targets the research problem / task | `Method` → `ResearchQuestion` |
-| `EVALUATED_ON` | Method is evaluated on a dataset or benchmark | `Method` → `Dataset` |
-| `MEASURED_BY` | Claim is quantified by a metric | `Claim` → `Metric` |
-| `COMPARES_TO` | Claim is stated relative to a baseline | `Claim` → `Baseline` |
-| `SUPPORTS` | Experimental evidence backs a claim | `Evidence` → `Claim` |
+| `ADDRESSES` | 方法针对问题 — method addresses the research question / task | `Method` → `ResearchQuestion` |
+| `EVALUATED_ON` | 方法在某数据上评测 — method is evaluated on a dataset or benchmark | `Method` → `Dataset` |
+| `MEASURED_BY` | 声称由某指标度量 — claim is quantified by a metric | `Claim` → `Metric` |
+| `COMPARES_TO` | 声称与基线对比 — claim is stated relative to a baseline | `Claim` → `Baseline` |
+| `SUPPORTS` | 实验支撑声称 — experimental evidence backs a claim | `Evidence` → `Claim` |
 
 ### Secondary edges (use sparingly)
 

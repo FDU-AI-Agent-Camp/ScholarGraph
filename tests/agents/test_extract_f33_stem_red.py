@@ -17,17 +17,13 @@ from backend.schemas.graph import GraphEdge, GraphNode, UnifiedPaperGraph
 from backend.schemas.paradigm import Paradigm
 from pydantic import ValidationError
 
-from tests.helpers.f33_stem_graphs import minimal_f33_stem_graph
+from tests.helpers.f33_stem_graphs import (
+    F33_FORBIDDEN_HSS_NODE_TYPES,
+    assert_stem_excludes_hss_only_node_types,
+    minimal_f33_stem_graph,
+)
 
 pytestmark = pytest.mark.red
-
-HSS_ONLY_NODE_TYPES = (
-    "Thesis",
-    "SubArgument",
-    "AnalyticalLens",
-    "IntellectualContext",
-    "ObjectOrData",
-)
 
 
 @pytest.fixture
@@ -41,7 +37,7 @@ def live_extract_env(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 @pytest.mark.red
-@pytest.mark.parametrize("hss_only_type", HSS_ONLY_NODE_TYPES)
+@pytest.mark.parametrize("hss_only_type", sorted(F33_FORBIDDEN_HSS_NODE_TYPES))
 def test_red_f33_stem_schema_rejects_hss_only_node_type(hss_only_type: str) -> None:
     base = minimal_f33_stem_graph()
     with pytest.raises(ValidationError, match="forbidden node types"):
@@ -78,15 +74,40 @@ def test_red_f33_stem_schema_rejects_sub_argument_of_edge() -> None:
 
 
 @pytest.mark.red
+@pytest.mark.parametrize("hss_only_type", sorted(F33_FORBIDDEN_HSS_NODE_TYPES))
 @pytest.mark.asyncio
-async def test_red_f33_stem_llm_thesis_node_triggers_fallback(live_extract_env: None) -> None:
+async def test_red_f33_stem_llm_hss_only_node_triggers_fallback(
+    live_extract_env: None,
+    hss_only_type: str,
+) -> None:
     _ = live_extract_env
 
     with patch(
         "backend.agents.extract_llm._invoke_structured",
-        new=AsyncMock(side_effect=ValueError("STEM graph contains forbidden node types: ['Thesis']")),
+        new=AsyncMock(
+            side_effect=ValueError(f"STEM graph contains forbidden node types: ['{hss_only_type}']"),
+        ),
     ):
-        result = await extract("Title: test\nMethod and benchmark.", Paradigm.STEM, paper_id="f33-red-stem-thesis")
+        result = await extract(
+            "Title: test\nMethod and benchmark.",
+            Paradigm.STEM,
+            paper_id=f"f33-red-hss-node-{hss_only_type.lower()}",
+        )
 
     assert EXTRACT_HEURISTIC_FALLBACK_CODE in result.warnings
-    assert all(node.type != "Thesis" for node in result.graph.nodes)
+    assert_stem_excludes_hss_only_node_types(result.graph)
+
+
+@pytest.mark.red
+@pytest.mark.asyncio
+async def test_red_f33_stem_llm_challenges_edge_triggers_fallback(live_extract_env: None) -> None:
+    _ = live_extract_env
+
+    with patch(
+        "backend.agents.extract_llm._invoke_structured",
+        new=AsyncMock(side_effect=ValueError("STEM graph contains forbidden edge types: ['CHALLENGES']")),
+    ):
+        result = await extract("Title: test\nMethod and benchmark.", Paradigm.STEM, paper_id="f33-red-stem-edge")
+
+    assert EXTRACT_HEURISTIC_FALLBACK_CODE in result.warnings
+    assert_stem_excludes_hss_only_node_types(result.graph)
