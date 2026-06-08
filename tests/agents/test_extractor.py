@@ -14,7 +14,7 @@ def run_async(coro):
 
 
 def test_extracts_valid_hss_graph_without_stem_only_nodes() -> None:
-    graph = run_async(
+    result = run_async(
         extract(
             """
             标题：近代通商口岸制度演变研究
@@ -26,6 +26,7 @@ def test_extracts_valid_hss_graph_without_stem_only_nodes() -> None:
             Paradigm.HSS,
         )
     )
+    graph = result.graph
 
     node_types = {node.type for node in graph.nodes}
     assert graph.paradigm == Paradigm.HSS.value
@@ -36,7 +37,7 @@ def test_extracts_valid_hss_graph_without_stem_only_nodes() -> None:
 
 
 def test_extracts_valid_stem_graph_without_hss_only_nodes() -> None:
-    graph = run_async(
+    result = run_async(
         extract(
             """
             Title: Agent Framework Benchmark
@@ -47,6 +48,7 @@ def test_extracts_valid_stem_graph_without_hss_only_nodes() -> None:
             Paradigm.STEM,
         )
     )
+    graph = result.graph
 
     node_types = {node.type for node in graph.nodes}
     assert graph.paradigm == Paradigm.STEM.value

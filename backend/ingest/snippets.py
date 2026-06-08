@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+from dataclasses import dataclass
 
 # collaboration §4.1 / README: 标题、摘要、关键词、引言前几段
 MAX_CLASSIFIER_INPUT_CHARS = 12_000
@@ -182,15 +183,52 @@ def _trim_intro_paragraphs(body: str, *, max_paragraphs: int = 3) -> str:
     return joined[:MAX_INTRO_BODY_CHARS]
 
 
-def build_classifier_input(full_text: str) -> str:
-    """
-    Compose title + abstract + keywords + introduction opening for paradigm classification.
+@dataclass(frozen=True)
+class ClassifierSections:
+    """Structured title / abstract / keywords / intro for head merge."""
 
-    Falls back to the document head when section markers are missing (e.g. cover pages).
-    """
+    title: str = ""
+    abstract: str = ""
+    keywords: str = ""
+    intro: str = ""
+
+
+_TITLE_SECTION_RE = re.compile(
+    r"(?is)\ATitle:\s*(.+?)(?=\n\nAbstract:|\n\nKeywords:|\n\nIntroduction:|\Z)",
+)
+_ABSTRACT_SECTION_RE = re.compile(
+    r"(?is)\n\nAbstract:\s*(.+?)(?=\n\nKeywords:|\n\nIntroduction:|\Z)",
+)
+_KEYWORDS_SECTION_RE = re.compile(
+    r"(?is)\n\nKeywords:\s*(.+?)(?=\n\nIntroduction:|\Z)",
+)
+_INTRO_SECTION_RE = re.compile(r"(?is)\n\nIntroduction:\s*(.+)\Z")
+
+
+def parse_classifier_sections(classifier_input: str) -> ClassifierSections:
+    """Parse labeled classifier text produced by ``format_classifier_input``."""
+    text = classifier_input.strip()
+    if not text:
+        return ClassifierSections()
+    title_match = _TITLE_SECTION_RE.search(text)
+    abstract_match = _ABSTRACT_SECTION_RE.search(text)
+    keywords_match = _KEYWORDS_SECTION_RE.search(text)
+    intro_match = _INTRO_SECTION_RE.search(text)
+    if not any((title_match, abstract_match, keywords_match, intro_match)):
+        return ClassifierSections()
+    return ClassifierSections(
+        title=normalize_whitespace(title_match.group(1)) if title_match else "",
+        abstract=normalize_whitespace(abstract_match.group(1)) if abstract_match else "",
+        keywords=normalize_whitespace(keywords_match.group(1)) if keywords_match else "",
+        intro=intro_match.group(1).strip() if intro_match else "",
+    )
+
+
+def extract_sections_from_text(full_text: str) -> ClassifierSections:
+    """Extract header sections from plain PDF text using snippet heuristics."""
     text = normalize_for_sections(full_text)
     if not text:
-        return ""
+        return ClassifierSections()
 
     abstract = _first_match(_ABSTRACT_PATTERNS, text) or _infer_lead_abstract(text)
     keywords = _first_match(_KEYWORDS_PATTERNS, text)
@@ -198,24 +236,55 @@ def build_classifier_input(full_text: str) -> str:
     if intro_raw is None and abstract:
         intro_raw = _infer_intro_after_abstract(text, abstract)
 
-    if not any((abstract, keywords, intro_raw)):
-        return text[:MAX_CLASSIFIER_INPUT_CHARS].strip()
+    intro = _trim_intro_paragraphs(intro_raw) if intro_raw else ""
+    return ClassifierSections(
+        title=_extract_title(text),
+        abstract=abstract or "",
+        keywords=keywords or "",
+        intro=intro,
+    )
 
+
+def format_classifier_input(
+    *,
+    title: str = "",
+    abstract: str = "",
+    keywords: str = "",
+    intro: str = "",
+) -> str:
+    """Compose labeled classifier input aligned with paradigm classification prompts."""
     parts: list[str] = []
-    title = _extract_title(text)
-    if title:
-        parts.append(f"Title: {title}")
-
-    if abstract:
-        parts.append(f"Abstract: {abstract}")
-
-    if keywords:
-        parts.append(f"Keywords: {keywords}")
-
-    if intro_raw:
-        parts.append(f"Introduction:\n{_trim_intro_paragraphs(intro_raw)}")
+    if title.strip():
+        parts.append(f"Title: {title.strip()}")
+    if abstract.strip():
+        parts.append(f"Abstract: {abstract.strip()}")
+    if keywords.strip():
+        parts.append(f"Keywords: {keywords.strip()}")
+    if intro.strip():
+        parts.append(f"Introduction:\n{intro.strip()}")
 
     combined = "\n\n".join(parts).strip()
+    if not combined:
+        return ""
     if len(combined) > MAX_CLASSIFIER_INPUT_CHARS:
         return combined[:MAX_CLASSIFIER_INPUT_CHARS].rstrip()
     return combined
+
+
+def build_classifier_input(full_text: str) -> str:
+    """
+    Compose title + abstract + keywords + introduction opening for paradigm classification.
+
+    Falls back to the document head when section markers are missing (e.g. cover pages).
+    """
+    sections = extract_sections_from_text(full_text)
+    if not any((sections.abstract, sections.keywords, sections.intro)):
+        text = normalize_for_sections(full_text)
+        return text[:MAX_CLASSIFIER_INPUT_CHARS].strip() if text else ""
+
+    return format_classifier_input(
+        title=sections.title,
+        abstract=sections.abstract,
+        keywords=sections.keywords,
+        intro=sections.intro,
+    )

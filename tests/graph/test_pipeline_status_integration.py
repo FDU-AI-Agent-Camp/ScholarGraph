@@ -46,6 +46,7 @@ async def test_successful_pipeline_emits_monotonic_processing_stages(
     processing_writes = [s for s in record_status_writes if s.status == PaperStatus.PROCESSING]
     stages_seen = [s.stage for s in processing_writes]
     assert PipelineStage.INGESTING in stages_seen
+    assert PipelineStage.HEAD_REFINING in stages_seen
     assert PipelineStage.CLASSIFYING in stages_seen
     assert PipelineStage.EXTRACTING in stages_seen
     assert PipelineStage.STORING in stages_seen

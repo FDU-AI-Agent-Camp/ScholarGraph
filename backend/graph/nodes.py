@@ -7,7 +7,10 @@ from backend.schemas.paper import PaperStatus, PaperStatusData, PipelineStage
 from backend.schemas.paradigm import Paradigm
 from backend.services.agent_service import get_agent_service
 from backend.services.errors import PIPELINE_FAILED_CODE, ServiceError
+from backend.services.head_refine_wait import wait_for_refined_classifier_input
 from backend.services.ingest_service import get_ingest_service
+from backend.services.paper_pipeline_scheduler import ensure_head_refine_scheduled
+from backend.services.paper_service import get_paper_service
 from backend.services.pipeline_completion_service import get_pipeline_completion_service
 from backend.services.pipeline_status_service import get_pipeline_status_service
 
@@ -73,36 +76,73 @@ async def ingest_node(state: WorkflowState) -> WorkflowState:
     )
 
 
+async def wait_head_refine_node(state: WorkflowState) -> WorkflowState:
+    """Wait for async path-B + rules merge, then replace ``classifier_input`` (P4)."""
+    _mark_progress(state, stage=PipelineStage.HEAD_REFINING, message="正在精炼文档头部…")
+    paper_id = state["paper_id"]
+    pdf_path = Path(state["pdf_path"])
+    fallback = state.get("classifier_input", "")
+
+    ensure_head_refine_scheduled(paper_id, pdf_path)
+    refined, warnings = await wait_for_refined_classifier_input(
+        paper_id,
+        pdf_path,
+        fallback,
+    )
+    if warnings:
+        get_paper_service().record_head_refine_warnings(paper_id, warnings)
+
+    _mark_progress(state, stage=PipelineStage.HEAD_REFINING, message="文档头部精炼完成")
+
+    return _success_patch(
+        stage=PipelineStage.HEAD_REFINING,
+        message="文档头部精炼完成",
+        classifier_input=refined,
+        head_refine_warnings=warnings,
+    )
+
+
 async def classify_node(state: WorkflowState) -> WorkflowState:
     _mark_progress(state, stage=PipelineStage.CLASSIFYING, message="正在范式分类")
+    paper_id = state["paper_id"]
     try:
-        classification = await get_agent_service().classify_paradigm(state["classifier_input"])
+        result = await get_agent_service().classify_paradigm(state["classifier_input"])
     except ServiceError as exc:
         return _failure_patch(exc, stage=PipelineStage.CLASSIFYING)
 
+    if result.warnings:
+        get_paper_service().record_classify_warnings(paper_id, result.warnings)
+
+    classification = result.classification
     return _success_patch(
         stage=PipelineStage.CLASSIFYING,
         message="范式分类完成",
         classification=classification.model_dump(mode="json"),
         paradigm=classification.paradigm.value,
+        classify_warnings=result.warnings,
     )
 
 
 async def extract_node(state: WorkflowState) -> WorkflowState:
     _mark_progress(state, stage=PipelineStage.EXTRACTING, message="正在抽取逻辑图谱")
+    paper_id = state["paper_id"]
     try:
-        graph = await get_agent_service().extract_graph(
+        result = await get_agent_service().extract_graph(
             state["full_text"],
             Paradigm(state["paradigm"]),
-            paper_id=state["paper_id"],
+            paper_id=paper_id,
         )
     except ServiceError as exc:
         return _failure_patch(exc, stage=PipelineStage.EXTRACTING)
 
+    if result.warnings:
+        get_paper_service().record_extract_warnings(paper_id, result.warnings)
+
     return _success_patch(
         stage=PipelineStage.EXTRACTING,
         message="图谱抽取完成",
-        graph=graph.model_dump(mode="json"),
+        graph=result.graph.model_dump(mode="json"),
+        extract_warnings=result.warnings,
     )
 
 

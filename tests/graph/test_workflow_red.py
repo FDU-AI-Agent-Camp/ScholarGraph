@@ -27,16 +27,16 @@ from backend.services.paper_service import get_paper_service
 async def test_classify_returns_stem_or_hss_for_snippet() -> None:
     snippet = "We evaluate our agent framework on benchmark datasets with accuracy metrics."
     result = await classify(snippet)
-    assert result.paradigm in (Paradigm.STEM, Paradigm.HSS)
-    assert 0.0 <= result.confidence <= 1.0
-    assert result.reason.strip()
+    assert result.classification.paradigm in (Paradigm.STEM, Paradigm.HSS)
+    assert 0.0 <= result.classification.confidence <= 1.0
+    assert result.classification.reason.strip()
 
 
 @pytest.mark.red
 @pytest.mark.xfail(strict=True, reason="BE-2: extract 尚未实现")
 async def test_extract_returns_valid_graph_for_hss_text() -> None:
     text = "本文采用历史制度主义分析近代通商口岸的制度变迁。"
-    graph = await extract(text, Paradigm.HSS)
+    graph = (await extract(text, Paradigm.HSS)).graph
     assert graph.nodes
     assert graph.paper_id or graph.paradigm == Paradigm.HSS
 

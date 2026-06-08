@@ -5,6 +5,7 @@ from enum import StrEnum
 
 from pydantic import BaseModel, Field
 
+from backend.schemas.ingest_head import IngestHead
 from backend.schemas.paradigm import Paradigm, ParadigmClassification
 
 
@@ -17,6 +18,7 @@ class PaperStatus(StrEnum):
 
 class PipelineStage(StrEnum):
     INGESTING = "ingesting"
+    HEAD_REFINING = "head_refining"
     CLASSIFYING = "classifying"
     EXTRACTING = "extracting"
     STORING = "storing"
@@ -26,6 +28,7 @@ class PipelineStage(StrEnum):
 
 class FailedDuringStage(StrEnum):
     INGESTING = "ingesting"
+    HEAD_REFINING = "head_refining"
     CLASSIFYING = "classifying"
     EXTRACTING = "extracting"
     STORING = "storing"
@@ -42,6 +45,18 @@ class PaperSummary(BaseModel):
 
 class PaperDetail(PaperSummary):
     classification: ParadigmClassification | None = None
+    ingest_head: IngestHead | None = Field(
+        default=None,
+        description="Async dual(rules) merged document head with per-field sources (P10/P11).",
+    )
+    extract_warnings: list[str] = Field(
+        default_factory=list,
+        description="Machine-readable graph-extract degrade codes (e.g. extract_heuristic_fallback).",
+    )
+    classify_warnings: list[str] = Field(
+        default_factory=list,
+        description="Machine-readable paradigm-classifier degrade codes (e.g. classifier_heuristic_fallback).",
+    )
 
 
 class PaperCreateResult(BaseModel):
@@ -64,4 +79,16 @@ class PaperStatusData(BaseModel):
     failed_during: FailedDuringStage | None = Field(
         default=None,
         description="Pipeline step that was running when failure occurred (ingesting–storing only).",
+    )
+    head_refine_warnings: list[str] = Field(
+        default_factory=list,
+        description="Machine-readable async head-refine degrade codes (e.g. mineru_unavailable, head_refine_timeout).",
+    )
+    extract_warnings: list[str] = Field(
+        default_factory=list,
+        description="Machine-readable graph-extract degrade codes (e.g. extract_heuristic_fallback).",
+    )
+    classify_warnings: list[str] = Field(
+        default_factory=list,
+        description="Machine-readable paradigm-classifier degrade codes (e.g. classifier_heuristic_fallback).",
     )

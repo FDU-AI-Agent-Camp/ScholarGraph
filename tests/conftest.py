@@ -17,6 +17,8 @@ import pytest
 REPO_ROOT = Path(__file__).resolve().parents[1]
 RUN_PIPELINE_SCRIPT = REPO_ROOT / "scripts" / "run_pipeline.py"
 RUN_PATROL_SCRIPT = REPO_ROOT / "scripts" / "run_patrol.py"
+BENCHMARK_DUAL_ROUTE_SCRIPT = REPO_ROOT / "scripts" / "benchmark_dual_route.py"
+BENCHMARK_REGRESSION_SCRIPT = REPO_ROOT / "scripts" / "benchmark_regression.py"
 
 
 @pytest.fixture
@@ -40,6 +42,32 @@ def run_patrol_module():
 
 
 @pytest.fixture
+def benchmark_regression_module():
+    """Load scripts/benchmark_regression.py as a module (not installed as package)."""
+    import sys
+
+    spec = importlib.util.spec_from_file_location("benchmark_regression", BENCHMARK_REGRESSION_SCRIPT)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+@pytest.fixture
+def benchmark_dual_route_module():
+    """Load scripts/benchmark_dual_route.py as a module (not installed as package)."""
+    import sys
+
+    spec = importlib.util.spec_from_file_location("benchmark_dual_route", BENCHMARK_DUAL_ROUTE_SCRIPT)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+@pytest.fixture
 def minimal_pdf(tmp_path: Path) -> Path:
     path = tmp_path / "minimal.pdf"
     path.write_bytes(b"%PDF-1.4\n% minimal test pdf")
@@ -51,6 +79,8 @@ def mock_pipeline_node_services(
     paper_id: str,
 ) -> Iterator[dict[str, MagicMock]]:
     """Patch workflow node services with successful mocks for a given paper_id."""
+    from backend.agents.classifier_types import ClassifyResult
+    from backend.agents.extract_types import ExtractResult
     from backend.schemas.graph import GraphEdge, GraphNode, UnifiedPaperGraph
     from backend.schemas.paradigm import Paradigm, ParadigmClassification
     from backend.services.graph_persistence_service import GraphPersistenceService
@@ -75,6 +105,7 @@ def mock_pipeline_node_services(
             ),
         ],
     )
+    extract_result = ExtractResult(graph=graph, warnings=[])
 
     ingest_svc = MagicMock()
     ingest_svc.ingest = AsyncMock(
@@ -86,8 +117,8 @@ def mock_pipeline_node_services(
     )
 
     agent_svc = MagicMock()
-    agent_svc.classify_paradigm = AsyncMock(return_value=classification)
-    agent_svc.extract_graph = AsyncMock(return_value=graph)
+    agent_svc.classify_paradigm = AsyncMock(return_value=ClassifyResult(classification=classification, warnings=[]))
+    agent_svc.extract_graph = AsyncMock(return_value=extract_result)
 
     with patch("backend.services.graph_persistence_service.GraphStore") as store_cls:
         store_cls.return_value.save = MagicMock()
@@ -100,6 +131,11 @@ def mock_pipeline_node_services(
             patch(
                 "backend.graph.nodes.get_pipeline_completion_service",
                 return_value=completion_svc,
+            ),
+            patch("backend.graph.nodes.ensure_head_refine_scheduled"),
+            patch(
+                "backend.graph.nodes.wait_for_refined_classifier_input",
+                new=AsyncMock(side_effect=lambda _pid, _path, fallback, **_: (fallback, [])),
             ),
         ):
             yield {
@@ -127,6 +163,8 @@ def mock_agent_services_only(
     paper_id: str,
 ) -> Iterator[dict[str, MagicMock]]:
     """Patch agent + store only; ingest runs real ``IngestService`` (BE-1 + platform)."""
+    from backend.agents.classifier_types import ClassifyResult
+    from backend.agents.extract_types import ExtractResult
     from backend.schemas.graph import GraphEdge, GraphNode, UnifiedPaperGraph
     from backend.schemas.paradigm import Paradigm, ParadigmClassification
     from backend.services.graph_persistence_service import GraphPersistenceService
@@ -151,10 +189,11 @@ def mock_agent_services_only(
             ),
         ],
     )
+    extract_result = ExtractResult(graph=graph, warnings=[])
 
     agent_svc = MagicMock()
-    agent_svc.classify_paradigm = AsyncMock(return_value=classification)
-    agent_svc.extract_graph = AsyncMock(return_value=graph)
+    agent_svc.classify_paradigm = AsyncMock(return_value=ClassifyResult(classification=classification, warnings=[]))
+    agent_svc.extract_graph = AsyncMock(return_value=extract_result)
 
     with patch("backend.services.graph_persistence_service.GraphStore") as store_cls:
         store_cls.return_value.save = MagicMock()
@@ -166,6 +205,11 @@ def mock_agent_services_only(
             patch(
                 "backend.graph.nodes.get_pipeline_completion_service",
                 return_value=completion_svc,
+            ),
+            patch("backend.graph.nodes.ensure_head_refine_scheduled"),
+            patch(
+                "backend.graph.nodes.wait_for_refined_classifier_input",
+                new=AsyncMock(side_effect=lambda _pid, _path, fallback, **_: (fallback, [])),
             ),
         ):
             yield {

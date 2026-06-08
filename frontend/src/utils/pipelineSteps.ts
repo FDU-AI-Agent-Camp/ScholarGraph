@@ -9,6 +9,7 @@ export interface PipelineStepDefinition {
 
 export const PIPELINE_STEPS: PipelineStepDefinition[] = [
   { stage: 'ingesting', label: '正在解析 PDF' },
+  { stage: 'head_refining', label: '精炼文档头部' },
   { stage: 'classifying', label: '范式分类' },
   { stage: 'extracting', label: '抽取图谱' },
   { stage: 'storing', label: '写入存储' },
@@ -19,7 +20,7 @@ export const PIPELINE_REFRESH_CAPTION = DETAIL_BASELINE_COPY.refreshCaption
 
 export type PipelineStepVisualState = 'pending' | 'active' | 'done' | 'failed'
 
-const WORKFLOW_STAGES: PipelineStage[] = ['ingesting', 'classifying', 'extracting', 'storing', 'ready']
+const WORKFLOW_STAGES: PipelineStage[] = ['ingesting', 'head_refining', 'classifying', 'extracting', 'storing', 'ready']
 
 function stageIndex(stage: PipelineStage | null | undefined): number {
   if (!stage) {

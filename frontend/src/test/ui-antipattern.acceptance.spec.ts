@@ -9,6 +9,7 @@ import { mount } from '@vue/test-utils'
 import { describe, expect, it } from 'vitest'
 
 import BadgeParadigm from '@/components/ui/BadgeParadigm.vue'
+import { PARADIGM_LABELS } from '@/utils/paradigmLabels'
 import packageJson from '../../package.json'
 import { loadDesignTokenMap, readFrontendSource } from '@/test/helpers/designTokens'
 
@@ -135,13 +136,11 @@ describe('§1.3 Anti-pattern checklist (full audit)', () => {
       }
     })
 
-    it('HSS/STEM Badge 除颜色外必有文字标签', () => {
+    it('HSS/STEM Badge 除颜色外必有中文文字标签', () => {
       const badgeSrc = readFrontendSource('components/ui/BadgeParadigm.vue')
-      expect(badgeSrc).toContain("return 'HSS'")
-      expect(badgeSrc).toContain("return 'STEM'")
-      expect(badgeSrc).toContain("return '未知'")
-      expect(mount(BadgeParadigm, { props: { paradigm: 'HSS' } }).text()).toBe('HSS')
-      expect(mount(BadgeParadigm, { props: { paradigm: 'STEM' } }).text()).toBe('STEM')
+      expect(badgeSrc).toContain('getParadigmLabel')
+      expect(mount(BadgeParadigm, { props: { paradigm: 'HSS' } }).text()).toBe(PARADIGM_LABELS.HSS)
+      expect(mount(BadgeParadigm, { props: { paradigm: 'STEM' } }).text()).toBe(PARADIGM_LABELS.STEM)
       expect(mount(BadgeParadigm, { props: { paradigm: null } }).text()).toBe('未知')
     })
 

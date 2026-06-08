@@ -3,11 +3,15 @@
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
+from backend.agents.classifier_constants import CLASSIFIER_HEURISTIC_FALLBACK_CODE
+from backend.agents.classifier_types import ClassifyResult
+from backend.agents.extract_constants import EXTRACT_HEURISTIC_FALLBACK_CODE
 from backend.graph import nodes
 from backend.graph.state import WorkflowState
 from backend.schemas.graph import GraphNode, UnifiedPaperGraph
 from backend.schemas.paper import PaperStatus, PipelineStage
 from backend.schemas.paradigm import Paradigm, ParadigmClassification
+from backend.services.agent_service import AgentService
 from backend.services.errors import ServiceError
 from backend.services.graph_persistence_service import GraphPersistenceService
 from backend.services.paper_service import get_paper_service
@@ -71,6 +75,90 @@ async def test_ingest_node_ingest_failed_code_from_service(
     assert out["error_code"] == "INGEST_FAILED"
 
 
+# ── wait_head_refine_node ───────────────────────────────────────────────────
+
+
+async def test_wait_head_refine_node_replaces_classifier_input(
+    post_ingest_state: WorkflowState,
+) -> None:
+    with (
+        patch("backend.graph.nodes.ensure_head_refine_scheduled") as mock_schedule,
+        patch(
+            "backend.graph.nodes.wait_for_refined_classifier_input",
+            new=AsyncMock(return_value=("REFINED-INPUT", ["grobid_unavailable"])),
+        ),
+    ):
+        out = await nodes.wait_head_refine_node(post_ingest_state)
+
+    mock_schedule.assert_called_once_with(
+        post_ingest_state["paper_id"],
+        Path(post_ingest_state["pdf_path"]),
+    )
+    assert out["classifier_input"] == "REFINED-INPUT"
+    assert out["head_refine_warnings"] == ["grobid_unavailable"]
+    assert out["stage"] == PipelineStage.HEAD_REFINING
+    assert out.get("failed") is False
+
+
+async def test_wait_head_refine_node_marks_progress_message(
+    post_ingest_state: WorkflowState,
+    workflow_paper: tuple[str, Path],
+) -> None:
+    from backend.services.pipeline_status_service import get_pipeline_status_service
+
+    paper_id, _ = workflow_paper
+    get_pipeline_status_service().start_processing(paper_id)
+    with (
+        patch("backend.graph.nodes.ensure_head_refine_scheduled"),
+        patch(
+            "backend.graph.nodes.wait_for_refined_classifier_input",
+            new=AsyncMock(return_value=("REFINED", [])),
+        ),
+    ):
+        await nodes.wait_head_refine_node(post_ingest_state)
+
+    status = await get_paper_service().get_status(paper_id)
+    assert status.stage == PipelineStage.HEAD_REFINING
+    assert "精炼" in status.message
+
+
+async def test_wait_head_refine_node_preserves_full_text_in_state(
+    post_ingest_state: WorkflowState,
+) -> None:
+    post_ingest_state["full_text"] = "FULL-BODY-UNTOUCHED"
+    with (
+        patch("backend.graph.nodes.ensure_head_refine_scheduled"),
+        patch(
+            "backend.graph.nodes.wait_for_refined_classifier_input",
+            new=AsyncMock(return_value=("REFINED", [])),
+        ),
+    ):
+        out = await nodes.wait_head_refine_node(post_ingest_state)
+
+    assert post_ingest_state["full_text"] == "FULL-BODY-UNTOUCHED"
+    assert "full_text" not in out
+
+
+async def test_classify_node_receives_refined_classifier_input(
+    post_ingest_state: WorkflowState,
+) -> None:
+    classification = ParadigmClassification(
+        paradigm=Paradigm.HSS,
+        confidence=0.9,
+        reason="mock",
+    )
+    agent_svc = MagicMock()
+    agent_svc.classify_paradigm = AsyncMock(return_value=ClassifyResult(classification=classification, warnings=[]))
+
+    state = dict(post_ingest_state)
+    state["classifier_input"] = "REFINED-INPUT"
+
+    with patch("backend.graph.nodes.get_agent_service", return_value=agent_svc):
+        await nodes.classify_node(WorkflowState(**state))
+
+    agent_svc.classify_paradigm.assert_awaited_once_with("REFINED-INPUT")
+
+
 # ── classify_node ───────────────────────────────────────────────────────────
 
 
@@ -83,7 +171,7 @@ async def test_classify_node_maps_classification_to_state(
         reason="含实验与指标",
     )
     agent_svc = MagicMock()
-    agent_svc.classify_paradigm = AsyncMock(return_value=classification)
+    agent_svc.classify_paradigm = AsyncMock(return_value=ClassifyResult(classification=classification, warnings=[]))
     with patch("backend.graph.nodes.get_agent_service", return_value=agent_svc):
         out = await nodes.classify_node(post_ingest_state)
 
@@ -91,6 +179,60 @@ async def test_classify_node_maps_classification_to_state(
     assert out["paradigm"] == Paradigm.STEM.value
     assert out["classification"]["paradigm"] == "STEM"
     assert out.get("failed") is False
+
+
+async def test_classify_node_records_classify_warnings(
+    post_ingest_state: WorkflowState,
+) -> None:
+    classification = ParadigmClassification(
+        paradigm=Paradigm.HSS,
+        confidence=0.9,
+        reason="mock",
+    )
+    agent_svc = MagicMock()
+    agent_svc.classify_paradigm = AsyncMock(
+        return_value=ClassifyResult(
+            classification=classification,
+            warnings=[CLASSIFIER_HEURISTIC_FALLBACK_CODE],
+        ),
+    )
+    paper_id = post_ingest_state["paper_id"]
+    paper_svc = get_paper_service()
+    with (
+        patch("backend.graph.nodes.get_agent_service", return_value=agent_svc),
+        patch.object(
+            paper_svc, "record_classify_warnings", wraps=paper_svc.record_classify_warnings
+        ) as record_warnings,
+    ):
+        out = await nodes.classify_node(post_ingest_state)
+
+    record_warnings.assert_called_once_with(paper_id, [CLASSIFIER_HEURISTIC_FALLBACK_CODE])
+    assert out["classify_warnings"] == [CLASSIFIER_HEURISTIC_FALLBACK_CODE]
+
+
+async def test_g23_classify_node_llm_failure_persists_warnings_without_failed(
+    post_ingest_state: WorkflowState,
+    live_classify_env: None,
+) -> None:
+    """G2.3: real AgentService + LLM fail → heuristic; pipeline state not failed."""
+    _ = live_classify_env
+    agent = AgentService()
+    paper_id = post_ingest_state["paper_id"]
+    paper_svc = get_paper_service()
+
+    with (
+        patch("backend.graph.nodes.get_agent_service", return_value=agent),
+        patch(
+            "backend.agents.classifier.classify_with_llm",
+            new=AsyncMock(side_effect=RuntimeError("structured output failed")),
+        ),
+    ):
+        out = await nodes.classify_node(post_ingest_state)
+
+    assert out.get("failed") is not True
+    assert CLASSIFIER_HEURISTIC_FALLBACK_CODE in out["classify_warnings"]
+    assert paper_svc.get_classify_warnings(paper_id) == [CLASSIFIER_HEURISTIC_FALLBACK_CODE]
+    assert out["paradigm"] in (Paradigm.STEM.value, Paradigm.HSS.value)
 
 
 async def test_classify_node_service_error_sets_llm_json_invalid(
@@ -119,8 +261,10 @@ async def test_extract_node_delegates_to_agent_service(
         nodes=[GraphNode(id="n1", label="L", type="Thesis")],
         edges=[],
     )
+    from backend.agents.extract_types import ExtractResult
+
     agent_svc = MagicMock()
-    agent_svc.extract_graph = AsyncMock(return_value=graph)
+    agent_svc.extract_graph = AsyncMock(return_value=ExtractResult(graph=graph, warnings=[]))
     with patch("backend.graph.nodes.get_agent_service", return_value=agent_svc):
         out = await nodes.extract_node(post_classify_state)
 
@@ -131,6 +275,36 @@ async def test_extract_node_delegates_to_agent_service(
     )
     assert out["graph"]["paper_id"] == post_classify_state["paper_id"]
     assert out.get("failed") is False
+
+
+async def test_extract_node_records_extract_warnings(
+    post_classify_state: WorkflowState,
+) -> None:
+    from backend.agents.extract_types import ExtractResult
+
+    graph = UnifiedPaperGraph(
+        paper_id=post_classify_state["paper_id"],
+        paradigm=Paradigm.HSS,
+        nodes=[GraphNode(id="n1", label="L", type="Thesis")],
+        edges=[],
+    )
+    agent_svc = MagicMock()
+    agent_svc.extract_graph = AsyncMock(
+        return_value=ExtractResult(graph=graph, warnings=[EXTRACT_HEURISTIC_FALLBACK_CODE]),
+    )
+    paper_svc = MagicMock()
+
+    with (
+        patch("backend.graph.nodes.get_agent_service", return_value=agent_svc),
+        patch("backend.graph.nodes.get_paper_service", return_value=paper_svc),
+    ):
+        out = await nodes.extract_node(post_classify_state)
+
+    paper_svc.record_extract_warnings.assert_called_once_with(
+        post_classify_state["paper_id"],
+        [EXTRACT_HEURISTIC_FALLBACK_CODE],
+    )
+    assert out["extract_warnings"] == [EXTRACT_HEURISTIC_FALLBACK_CODE]
 
 
 # ── store_node ──────────────────────────────────────────────────────────────

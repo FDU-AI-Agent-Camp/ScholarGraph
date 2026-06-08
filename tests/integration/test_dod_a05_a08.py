@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from unittest.mock import AsyncMock, patch
 
 import pytest
 from backend.agents.classifier import classify
@@ -222,15 +223,15 @@ async def test_a07_classify_live_heuristic_returns_stem(live_llm_env) -> None:
     result = await AgentService().classify_paradigm(
         "Title: benchmark. We evaluate the model on datasets with accuracy and baselines."
     )
-    assert result.paradigm == Paradigm.STEM
-    assert result.reason
+    assert result.classification.paradigm == Paradigm.STEM
+    assert result.classification.reason
 
 
 @pytest.mark.asyncio
 async def test_a07_classify_direct_live_heuristic(live_llm_env) -> None:
     _ = live_llm_env
     result = await classify("标题：平台零工经济。本文通过访谈材料和理论视角分析劳动者经验。")
-    assert result.paradigm == Paradigm.HSS
+    assert result.classification.paradigm == Paradigm.HSS
 
 
 def test_a07_gold_labels_three_papers_two_paradigms() -> None:
@@ -241,25 +242,34 @@ def test_a07_gold_labels_three_papers_two_paradigms() -> None:
 @pytest.mark.asyncio
 async def test_a08_extract_live_heuristic_returns_valid_graph(live_llm_env) -> None:
     _ = live_llm_env
-    graph = await AgentService().extract_graph(
-        "标题：实验方法\nWe report benchmark accuracy on datasets.",
-        Paradigm.STEM,
-        paper_id="hss-001",
-    )
-    assert graph.paper_id == "hss-001"
-    assert graph.paradigm == Paradigm.STEM
-    assert graph.nodes
+    with patch(
+        "backend.agents.extractor.extract_with_llm",
+        new=AsyncMock(side_effect=RuntimeError("no live llm in ci")),
+    ):
+        result = await AgentService().extract_graph(
+            "标题：实验方法\nWe report benchmark accuracy on datasets.",
+            Paradigm.STEM,
+            paper_id="hss-001",
+        )
+    assert result.graph.paper_id == "hss-001"
+    assert result.graph.paradigm == Paradigm.STEM
+    assert result.graph.nodes
 
 
 @pytest.mark.asyncio
 async def test_a08_extract_direct_live_heuristic(live_llm_env) -> None:
     _ = live_llm_env
-    graph = await extract(
-        "标题：近代口岸研究\n本文认为通商口岸体现制度路径依赖。",
-        Paradigm.HSS,
-    )
-    assert graph.paradigm == Paradigm.HSS
-    assert any(str(node.type) == "Thesis" for node in graph.nodes)
+    with patch(
+        "backend.agents.extractor.extract_with_llm",
+        new=AsyncMock(side_effect=RuntimeError("no live llm in ci")),
+    ):
+        result = await extract(
+            "标题：近代口岸研究\n本文认为通商口岸体现制度路径依赖。",
+            Paradigm.HSS,
+            paper_id="hss-001",
+        )
+    assert result.graph.paradigm == Paradigm.HSS
+    assert any(str(node.type) == "Thesis" for node in result.graph.nodes)
 
 
 @pytest.mark.asyncio

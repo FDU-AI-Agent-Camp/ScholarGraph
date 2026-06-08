@@ -9,6 +9,7 @@ from backend.services.paper_service import get_paper_service
 PROCESSING_STAGES: frozenset[PipelineStage] = frozenset(
     {
         PipelineStage.INGESTING,
+        PipelineStage.HEAD_REFINING,
         PipelineStage.CLASSIFYING,
         PipelineStage.EXTRACTING,
         PipelineStage.STORING,
@@ -17,6 +18,7 @@ PROCESSING_STAGES: frozenset[PipelineStage] = frozenset(
 
 DEFAULT_STAGE_MESSAGES: dict[PipelineStage, str] = {
     PipelineStage.INGESTING: "正在解析 PDF",
+    PipelineStage.HEAD_REFINING: "正在精炼文档头部…",
     PipelineStage.CLASSIFYING: "正在识别范式与理论视角…",
     PipelineStage.EXTRACTING: "正在抽取逻辑图谱",
     PipelineStage.STORING: "正在写入图谱存储",

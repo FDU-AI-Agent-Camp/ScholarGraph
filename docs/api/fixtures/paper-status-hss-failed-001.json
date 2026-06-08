@@ -7,7 +7,8 @@
     "message": "分类阶段 LLM 返回无效 JSON",
     "updated_at": "2026-05-19T10:15:00Z",
     "error_code": "LLM_JSON_INVALID",
-    "failed_during": "classifying"
+    "failed_during": "classifying",
+    "classify_warnings": []
   },
   "meta": { "request_id": "mock-status-failed-001" }
 }

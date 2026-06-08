@@ -61,7 +61,9 @@ ScholarGraph 的目标是用**结构化图谱 + 可规划 Agent**，把「读一
 
 ### 1. 范式分类器（Paradigm Classifier）
 
-PDF 转为文本后，**首先**进入分类节点。大模型扮演学术期刊编辑，基于**标题、摘要、关键词及引言前三段**，输出固定 JSON 分流标识：
+PDF 转为文本并完成 head refine 后，流水线进入分类节点。Live 模式下 **单次 LLM structured output**（`backend/prompts/classifier.md` → `ParadigmClassification`）；失败时降级 **关键词启发式**（`classifier_heuristic.py`），写入 `classify_warnings` 机器码 `classifier_heuristic_fallback`，流水线**不 failed**。
+
+输出 JSON（内嵌于 `GET /papers/{id}` 的 `classification`，warnings 在并列字段 `classify_warnings`）：
 
 ```json
 {
@@ -71,13 +73,13 @@ PDF 转为文本后，**首先**进入分类节点。大模型扮演学术期刊
 }
 ```
 
-`paradigm` 取值为 `"HSS"` 或 `"STEM"`；`reason` 便于调试与答辩时展示分类依据。
+`paradigm` 取值为 `"HSS"` 或 `"STEM"`；`reason` 为 LLM 或规则层解释（与前端 fallback toast 文案分离）。
 
 ### 2. 特化抽取图谱（Specialized Extraction）
 
-根据分流标识，状态机进入不同分支：
+根据分类结果，状态机进入 STEM / HSS 分支。Live 模式下 **单次 LLM structured output**（`extract_stem.md` / `extract_hss.md` → `UnifiedPaperGraph`）；失败时降级 **启发式建图**（`extract_heuristic.py`），写入 `extract_warnings` 机器码 `extract_heuristic_fallback`。**分类与抽取独立**：分类 LLM 成功时抽取仍可能 fallback（schema 更大、耗时更长）。
 
-- 挂载**不同的 Pydantic Schema**（如统一的 `UnifiedPaperGraph` 外壳，内部分 STEM / HSS 子结构）；
+- 挂载**不同的 Pydantic Schema**（统一的 `UnifiedPaperGraph` 外壳，内部分 STEM / HSS 子结构）；
 - 注入**特化 Prompt 模板**；
 - **Schema 约束**：若范式为 HSS，图谱中**不允许**出现 `Metric`、`Baseline` 等 STEM 专用节点类型，仅允许 `Analytical_Lens`、`Intellectual_Context` 等 HSS 类型（反之亦然，在 STEM 分支禁用 HSS 专有类型）。
 
@@ -277,8 +279,9 @@ npm run dev
 
 ### 2. 编写分类器 Prompt（第一步可今晚完成）
 
-- 用简单 Python 脚本调用大模型，**只做一件事**：阅读上述 2–3 篇的摘要，稳定输出 `STEM` 或 `HSS` 及 `reason`。
-- 验收标准：微语料集上分类结果与人工标注一致。
+- Live 主路径：`backend/prompts/classifier.md` + `classifier_llm.py`（structured output）。
+- 本地 / CI 无 Key：`LLM_MODE=mock` → `mock_classify`。
+- 验收：微语料集上分类结果与人工标注一致；`pytest tests/eval/test_m0_classifier_gold.py -m red`（需 corpus PDF）。
 
 ### 3. 手工固化 Schema 与边类型
 
@@ -313,12 +316,12 @@ npm run dev
 |------|----------|------|
 | HTTP 基座 | `backend/api/routes/` | REST + SSE；前缀 `/api/v1` |
 | PDF 摄入 | `backend/ingest/` | PyMuPDF 解析；`ingest_pdf()` 供 workflow 调用 |
-| 范式分类 / 抽取 | `backend/agents/` | STEM / HSS 双轨；Pydantic Schema 约束 |
+| 范式分类 / 抽取 | `backend/agents/` | **LLM 主路径** + 启发式 fallback；`classifier_*` / `extract_*` 分层；`classify_warnings` / `extract_warnings` |
 | 图谱存储 / 问答 | `backend/graph/` | JSON 持久化；`qa_stream()` SSE 事件 |
 | 共同体巡检 | `backend/patrol/` | `lens_clash` / `contradiction` |
-| LangGraph 流水线 | `backend/graph/workflow.py` | 上传后 `asyncio.create_task` 异步跑通 ingest → store |
-| 前端工作台 | `frontend/` | 文献库、上传、详情轮询、G6 图谱、SSE 问答、巡检 |
-| LLM | `backend/llm/` | `LLM_MODE=mock`（默认）或 `live`（华为云 MaaS 等 OpenAI 兼容网关） |
+| LangGraph 流水线 | `backend/graph/workflow.py` | ingest → head refine → classify → extract → store |
+| 前端工作台 | `frontend/` | 文献库、上传、详情轮询、G6 图谱、SSE 问答、巡检；fallback toast/alert |
+| LLM | `backend/llm/` | `LLM_MODE=mock`（默认）或 `live`；`CLASSIFIER_*` / `EXTRACT_*` 独立开关 |
 
 **操作文档**：[docs/v1/onboarding.md](docs/v1/onboarding.md)（环境）、[docs/v1/api-contract.md](docs/v1/api-contract.md)（契约）、[docs/v1/eval/frontend-demo-path.md](docs/v1/eval/frontend-demo-path.md)（答辩路径）。
 

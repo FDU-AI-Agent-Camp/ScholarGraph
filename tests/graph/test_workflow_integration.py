@@ -4,8 +4,9 @@ from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+from backend.agents.classifier_types import ClassifyResult
 from backend.api.exceptions import ApiError
-from backend.graph.state import NODE_CLASSIFY, NODE_EXTRACT, NODE_INGEST, NODE_STORE
+from backend.graph.state import NODE_CLASSIFY, NODE_EXTRACT, NODE_INGEST, NODE_STORE, NODE_WAIT_HEAD_REFINE
 from backend.graph.workflow import run_paper_pipeline
 from backend.schemas.graph import GraphNode, UnifiedPaperGraph
 from backend.schemas.paper import PaperStatus, PipelineStage
@@ -45,20 +46,31 @@ async def test_pipeline_invokes_services_in_order(
 
     async def track_classify(_text: str):
         call_order.append(NODE_CLASSIFY)
-        return classification
+        return ClassifyResult(classification=classification, warnings=[])
+
+    from backend.agents.extract_types import ExtractResult
 
     async def track_extract(_text: str, _paradigm: Paradigm, *, paper_id: str):
         call_order.append(NODE_EXTRACT)
-        return graph
+        return ExtractResult(graph=graph, warnings=[])
 
     mocks["ingest"].ingest = AsyncMock(side_effect=track_ingest)
     mocks["agent"].classify_paradigm = AsyncMock(side_effect=track_classify)
     mocks["agent"].extract_graph = AsyncMock(side_effect=track_extract)
     mocks["store_save"].side_effect = lambda _g: call_order.append(NODE_STORE)
 
-    await run_paper_pipeline(paper_id, pdf_path)
+    from backend.graph import nodes
 
-    assert call_order == [NODE_INGEST, NODE_CLASSIFY, NODE_EXTRACT, NODE_STORE]
+    original_wait = nodes.wait_head_refine_node
+
+    async def track_wait(state):  # noqa: ANN001
+        call_order.append(NODE_WAIT_HEAD_REFINE)
+        return await original_wait(state)
+
+    with patch.object(nodes, "wait_head_refine_node", side_effect=track_wait):
+        await run_paper_pipeline(paper_id, pdf_path)
+
+    assert call_order == [NODE_INGEST, NODE_WAIT_HEAD_REFINE, NODE_CLASSIFY, NODE_EXTRACT, NODE_STORE]
 
 
 async def test_pipeline_stops_at_classify_when_classify_fails(

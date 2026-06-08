@@ -5,6 +5,7 @@ from backend.graph.state import (
     NODE_EXTRACT,
     NODE_INGEST,
     NODE_STORE,
+    NODE_WAIT_HEAD_REFINE,
     PIPELINE_ORDER,
 )
 from backend.graph.workflow import build_paper_pipeline_graph, pipeline_node_names
@@ -12,10 +13,23 @@ from backend.graph.workflow import build_paper_pipeline_graph, pipeline_node_nam
 
 def test_pipeline_node_order() -> None:
     assert pipeline_node_names() == PIPELINE_ORDER
-    assert PIPELINE_ORDER == (NODE_INGEST, NODE_CLASSIFY, NODE_EXTRACT, NODE_STORE)
+    assert PIPELINE_ORDER == (
+        NODE_INGEST,
+        NODE_WAIT_HEAD_REFINE,
+        NODE_CLASSIFY,
+        NODE_EXTRACT,
+        NODE_STORE,
+    )
 
 
 def test_graph_topology_includes_fail_path() -> None:
     graph = build_paper_pipeline_graph()
     node_names = set(graph.nodes.keys())
-    assert {NODE_INGEST, NODE_CLASSIFY, NODE_EXTRACT, NODE_STORE, "fail"}.issubset(node_names)
+    assert {
+        NODE_INGEST,
+        NODE_WAIT_HEAD_REFINE,
+        NODE_CLASSIFY,
+        NODE_EXTRACT,
+        NODE_STORE,
+        "fail",
+    }.issubset(node_names)

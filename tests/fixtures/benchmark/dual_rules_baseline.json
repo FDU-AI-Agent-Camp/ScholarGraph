@@ -1,0 +1,190 @@
+{
+  "schema_version": 1,
+  "baseline_id": "phase-d-dual-rules",
+  "source_report": "corpus-batch-20260604-162832.json",
+  "recorded_at": "2026-06-04T16:28:32Z",
+  "paper_ids": [
+    "hss-001",
+    "hss-002",
+    "hss-003",
+    "hss-004",
+    "hss-005",
+    "hss-006",
+    "hss-007",
+    "hss-008",
+    "hss-009",
+    "stem-001",
+    "stem-002",
+    "stem-003",
+    "stem-004",
+    "stem-005",
+    "stem-006",
+    "stem-007",
+    "stem-008"
+  ],
+  "totals": {
+    "pymupdf_sync": 33,
+    "path_b": 42,
+    "dual_route_rules": 46,
+    "max": 68
+  },
+  "constraints": {
+    "dual_gte_pymupdf": true,
+    "dual_gte_path_b": true
+  },
+  "papers": {
+    "hss-001": {
+      "pages": 8,
+      "route": "short",
+      "quality": {
+        "pymupdf_sync": 4,
+        "path_b": 4,
+        "dual_route_rules": 4
+      }
+    },
+    "hss-002": {
+      "pages": 412,
+      "route": "long",
+      "quality": {
+        "pymupdf_sync": 3,
+        "path_b": 4,
+        "dual_route_rules": 4
+      }
+    },
+    "hss-003": {
+      "pages": 5,
+      "route": "short",
+      "quality": {
+        "pymupdf_sync": 0,
+        "path_b": 2,
+        "dual_route_rules": 2
+      }
+    },
+    "hss-004": {
+      "pages": 7,
+      "route": "short",
+      "quality": {
+        "pymupdf_sync": 0,
+        "path_b": 1,
+        "dual_route_rules": 1
+      }
+    },
+    "hss-005": {
+      "pages": 9,
+      "route": "short",
+      "quality": {
+        "pymupdf_sync": 3,
+        "path_b": 4,
+        "dual_route_rules": 4
+      }
+    },
+    "hss-006": {
+      "pages": 2,
+      "route": "short",
+      "quality": {
+        "pymupdf_sync": 0,
+        "path_b": 2,
+        "dual_route_rules": 2
+      }
+    },
+    "hss-007": {
+      "pages": 7,
+      "route": "short",
+      "quality": {
+        "pymupdf_sync": 0,
+        "path_b": 2,
+        "dual_route_rules": 2
+      }
+    },
+    "hss-008": {
+      "pages": 9,
+      "route": "short",
+      "quality": {
+        "pymupdf_sync": 0,
+        "path_b": 2,
+        "dual_route_rules": 2
+      }
+    },
+    "hss-009": {
+      "pages": 3,
+      "route": "short",
+      "quality": {
+        "pymupdf_sync": 0,
+        "path_b": 2,
+        "dual_route_rules": 2
+      }
+    },
+    "stem-001": {
+      "pages": 11,
+      "route": "short",
+      "quality": {
+        "pymupdf_sync": 3,
+        "path_b": 1,
+        "dual_route_rules": 3
+      }
+    },
+    "stem-002": {
+      "pages": 15,
+      "route": "short",
+      "quality": {
+        "pymupdf_sync": 3,
+        "path_b": 3,
+        "dual_route_rules": 3
+      }
+    },
+    "stem-003": {
+      "pages": 26,
+      "route": "long",
+      "quality": {
+        "pymupdf_sync": 3,
+        "path_b": 3,
+        "dual_route_rules": 3
+      }
+    },
+    "stem-004": {
+      "pages": 88,
+      "route": "long",
+      "quality": {
+        "pymupdf_sync": 3,
+        "path_b": 3,
+        "dual_route_rules": 3
+      }
+    },
+    "stem-005": {
+      "pages": 16,
+      "route": "short",
+      "quality": {
+        "pymupdf_sync": 4,
+        "path_b": 3,
+        "dual_route_rules": 4
+      }
+    },
+    "stem-006": {
+      "pages": 125,
+      "route": "long",
+      "quality": {
+        "pymupdf_sync": 1,
+        "path_b": 0,
+        "dual_route_rules": 1
+      }
+    },
+    "stem-007": {
+      "pages": 20,
+      "route": "short",
+      "quality": {
+        "pymupdf_sync": 3,
+        "path_b": 3,
+        "dual_route_rules": 3
+      }
+    },
+    "stem-008": {
+      "pages": 16,
+      "route": "short",
+      "quality": {
+        "pymupdf_sync": 3,
+        "path_b": 3,
+        "dual_route_rules": 3
+      }
+    }
+  }
+}

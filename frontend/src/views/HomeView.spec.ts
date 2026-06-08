@@ -33,8 +33,8 @@ describe('HomeView', () => {
     expect(wrapper.find('.home-eyebrow').text()).toBe('AI AGENT · GRAPH RAG')
     expect(wrapper.find('.home-title').classes()).toContain('text-display')
     expect(wrapper.findAll('.home-title-line').map((node) => node.text())).toEqual(['解构论文逻辑，', '发现学术共同体'])
-    expect(wrapper.find('.home-subtitle').text()).toContain('HSS')
-    expect(wrapper.find('.home-subtitle').text()).toContain('STEM')
+    expect(wrapper.find('.home-subtitle').text()).toContain('人文社科')
+    expect(wrapper.find('.home-subtitle').text()).toContain('理工科')
     expect(wrapper.find('.home-subtitle').classes()).toContain('text-body-lg')
   })
 
@@ -67,8 +67,8 @@ describe('HomeView', () => {
 
     const badges = wrapper.findAll('.badge-paradigm-stub')
     expect(badges.map((badge) => badge.attributes('data-paradigm'))).toEqual(['HSS', 'STEM'])
-    expect(wrapper.find('.home-paradigms-caption').text()).toContain('HSS')
-    expect(wrapper.find('.home-paradigms-caption').text()).toContain('STEM')
+    expect(wrapper.find('.home-paradigms-caption').text()).toContain('人文社科')
+    expect(wrapper.find('.home-paradigms-caption').text()).toContain('理工科')
   })
 
   it('embeds graph mock in the hero visual column', () => {

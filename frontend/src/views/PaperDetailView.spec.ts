@@ -4,6 +4,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { PaperDetail, QaStreamCitationData, UnifiedPaperGraph } from '@/api/types'
 import { ApiClientError } from '@/api/client'
 import { DETAIL_BASELINE_COPY } from '@/constants/detailCopy'
+import { EXTRACT_HEURISTIC_FALLBACK_MESSAGE } from '@/utils/extractWarnings'
+import { CLASSIFIER_HEURISTIC_FALLBACK_MESSAGE } from '@/utils/classifyWarnings'
 import { RouteName } from '@/router/meta'
 import { loadDesignTokenMap, readFrontendSource } from '@/test/helpers/designTokens'
 import { answerPanelTypographyMatchesBaseline, citationTagMixedLayout } from '@/test/helpers/copyDiscipline'
@@ -91,8 +93,8 @@ const globalStubs = {
       '<button class="citation-tag tag-citation" :class="{ \'tag-citation--active\': active }" @click="$emit(\'click\')">{{ label }} ({{ nodeId }})</button>',
   },
   'el-alert': {
-    props: ['title'],
-    template: '<div class="detail-qa__alert" :data-title="title" />',
+    props: ['title', 'type'],
+    template: '<div class="el-alert-stub" :data-type="type" :data-title="title" />',
   },
 }
 
@@ -180,6 +182,103 @@ describe('PaperDetailView', () => {
       await flushPromises()
 
       expect(wrapper.find('.paper-metadata-stub').exists()).toBe(true)
+    })
+  })
+
+  describe('F.2.3 extract fallback warning (X15/X18/X19)', () => {
+    it('shows graph-area warning alert when paper detail has extract_heuristic_fallback', async () => {
+      paperStoreState.currentPaper = {
+        ...paperStoreState.currentPaper,
+        extract_warnings: ['extract_heuristic_fallback'],
+      }
+
+      const wrapper = mount(PaperDetailView, {
+        props: { paperId: 'hss-001' },
+        global: { stubs: globalStubs },
+      })
+
+      await flushPromises()
+
+      const warning = wrapper.findAll('.el-alert-stub').find((node) => node.attributes('data-type') === 'warning')
+      expect(warning?.attributes('data-title')).toBe(EXTRACT_HEURISTIC_FALLBACK_MESSAGE)
+      expect(wrapper.find('.detail-graph__extract-warning').exists()).toBe(true)
+    })
+
+    it('does not show extract fallback alert when extract_warnings empty', async () => {
+      paperStoreState.currentPaper = {
+        ...paperStoreState.currentPaper,
+        extract_warnings: [],
+      }
+
+      const wrapper = mount(PaperDetailView, {
+        props: { paperId: 'hss-001' },
+        global: { stubs: globalStubs },
+      })
+
+      await flushPromises()
+
+      const warning = wrapper.findAll('.el-alert-stub').find((node) => node.attributes('data-type') === 'warning')
+      expect(warning).toBeUndefined()
+    })
+  })
+
+  describe('G.2.3 classify fallback warning', () => {
+    it('shows graph-area warning alert when paper detail has classifier_heuristic_fallback', async () => {
+      paperStoreState.currentPaper = {
+        ...paperStoreState.currentPaper,
+        classify_warnings: ['classifier_heuristic_fallback'],
+      }
+
+      const wrapper = mount(PaperDetailView, {
+        props: { paperId: 'hss-001' },
+        global: { stubs: globalStubs },
+      })
+
+      await flushPromises()
+
+      const warning = wrapper.findAll('.el-alert-stub').find((node) => node.attributes('data-type') === 'warning')
+      expect(warning?.attributes('data-title')).toBe(CLASSIFIER_HEURISTIC_FALLBACK_MESSAGE)
+      expect(wrapper.find('.detail-graph__classify-warning').exists()).toBe(true)
+    })
+
+    it('does not show classify fallback alert when classify_warnings empty', async () => {
+      paperStoreState.currentPaper = {
+        ...paperStoreState.currentPaper,
+        classify_warnings: [],
+      }
+
+      const wrapper = mount(PaperDetailView, {
+        props: { paperId: 'hss-001' },
+        global: { stubs: globalStubs },
+      })
+
+      await flushPromises()
+
+      expect(wrapper.find('.detail-graph__classify-warning').exists()).toBe(false)
+    })
+
+    it('shows classify and extract fallback alerts together when both warnings present', async () => {
+      paperStoreState.currentPaper = {
+        ...paperStoreState.currentPaper,
+        extract_warnings: ['extract_heuristic_fallback'],
+        classify_warnings: ['classifier_heuristic_fallback'],
+      }
+
+      const wrapper = mount(PaperDetailView, {
+        props: { paperId: 'hss-001' },
+        global: { stubs: globalStubs },
+      })
+
+      await flushPromises()
+
+      expect(wrapper.find('.detail-graph__classify-warning').exists()).toBe(true)
+      expect(wrapper.find('.detail-graph__extract-warning').exists()).toBe(true)
+      const warnings = wrapper.findAll('.el-alert-stub').filter((node) => node.attributes('data-type') === 'warning')
+      expect(warnings).toHaveLength(2)
+      expect(warnings.map((node) => node.attributes('data-title'))).toEqual([
+        CLASSIFIER_HEURISTIC_FALLBACK_MESSAGE,
+        EXTRACT_HEURISTIC_FALLBACK_MESSAGE,
+      ])
     })
   })
 

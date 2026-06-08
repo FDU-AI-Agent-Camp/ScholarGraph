@@ -4,6 +4,6 @@ import { RouterView } from 'vue-router'
 /** Minimal shell that renders the active route component. */
 export const routerViewShell = defineComponent({
   setup() {
-    return () => h(RouterView)
+    return () => h('div', { id: 'router-view-shell' }, [h(RouterView)])
   },
 })

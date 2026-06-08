@@ -1,8 +1,19 @@
 <script setup lang="ts">
-import { computed, watch } from 'vue'
+import { ElMessage } from 'element-plus'
+import { computed, ref, watch } from 'vue'
 
 import { usePaperStatus } from '@/composables/usePaperStatus'
 import { DETAIL_BASELINE_COPY } from '@/constants/detailCopy'
+import {
+  CLASSIFIER_HEURISTIC_FALLBACK_MESSAGE,
+  hasClassifierHeuristicFallback,
+  resolveClassifyWarningMessages,
+} from '@/utils/classifyWarnings'
+import {
+  EXTRACT_HEURISTIC_FALLBACK_MESSAGE,
+  hasExtractHeuristicFallback,
+  resolveExtractWarningMessages,
+} from '@/utils/extractWarnings'
 import { isFailedStatus } from '@/utils/paperStatus'
 import {
   PIPELINE_REFRESH_CAPTION,
@@ -21,6 +32,8 @@ const emit = defineEmits<{
 }>()
 
 const { status, polling, start, stop } = usePaperStatus(props.paperId)
+const extractFallbackToastShown = ref(false)
+const classifyFallbackToastShown = ref(false)
 
 const failedSnapshot = computed(() => {
   const snapshot = status.value
@@ -35,9 +48,14 @@ const stepStates = computed((): PipelineStepVisualState[] => {
   return resolvePipelineStepStates(snapshot.stage, snapshot.status, failedSnapshot.value?.failed_during)
 })
 
+const extractWarningMessages = computed(() => resolveExtractWarningMessages(status.value?.extract_warnings))
+const classifyWarningMessages = computed(() => resolveClassifyWarningMessages(status.value?.classify_warnings))
+
 watch(
   () => props.paperId,
   () => {
+    extractFallbackToastShown.value = false
+    classifyFallbackToastShown.value = false
     if (props.autoStart) {
       start()
     }
@@ -51,6 +69,40 @@ watch(
     if (value === 'ready') {
       emit('ready')
     }
+  },
+)
+
+watch(
+  () => status.value,
+  (snapshot, previous) => {
+    if (!snapshot || snapshot.status !== 'ready' || extractFallbackToastShown.value) {
+      return
+    }
+    if (previous?.status === 'ready') {
+      return
+    }
+    if (!hasExtractHeuristicFallback(snapshot.extract_warnings)) {
+      return
+    }
+    extractFallbackToastShown.value = true
+    ElMessage.warning(EXTRACT_HEURISTIC_FALLBACK_MESSAGE)
+  },
+)
+
+watch(
+  () => status.value,
+  (snapshot, previous) => {
+    if (!snapshot || snapshot.status !== 'ready' || classifyFallbackToastShown.value) {
+      return
+    }
+    if (previous?.status === 'ready') {
+      return
+    }
+    if (!hasClassifierHeuristicFallback(snapshot.classify_warnings)) {
+      return
+    }
+    classifyFallbackToastShown.value = true
+    ElMessage.warning(CLASSIFIER_HEURISTIC_FALLBACK_MESSAGE)
   },
 )
 </script>
@@ -81,6 +133,22 @@ watch(
     </ol>
     <p v-if="status.message" class="text-body status-panel__message">{{ status.message }}</p>
     <p class="text-caption status-panel__caption">{{ PIPELINE_REFRESH_CAPTION }}</p>
+    <el-alert
+      v-if="classifyWarningMessages.length"
+      type="warning"
+      :title="classifyWarningMessages[0]"
+      show-icon
+      :closable="false"
+      class="status-panel__classify-warning"
+    />
+    <el-alert
+      v-if="extractWarningMessages.length"
+      type="warning"
+      :title="extractWarningMessages[0]"
+      show-icon
+      :closable="false"
+      class="status-panel__extract-warning"
+    />
     <el-alert
       v-if="failedSnapshot"
       type="error"
@@ -212,6 +280,14 @@ watch(
 
 .status-panel__caption {
   margin: var(--spacing-8) 0 0;
+}
+
+.status-panel__classify-warning {
+  margin-top: var(--spacing-12);
+}
+
+.status-panel__extract-warning {
+  margin-top: var(--spacing-12);
 }
 
 .status-panel__failure {

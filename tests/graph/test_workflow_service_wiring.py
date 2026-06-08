@@ -3,12 +3,33 @@
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
+from backend.agents.classifier_types import ClassifyResult
+from backend.agents.extract_types import ExtractResult
 from backend.graph import nodes
 from backend.graph.state import WorkflowState, initial_workflow_state
 from backend.schemas.graph import GraphNode, UnifiedPaperGraph
 from backend.schemas.paradigm import Paradigm, ParadigmClassification
 from backend.services.graph_persistence_service import GraphPersistenceService
 from backend.services.pipeline_completion_service import PipelineCompletionService
+
+
+async def test_wait_head_refine_node_reaches_be_via_head_refine_wait(
+    post_ingest_state: WorkflowState,
+) -> None:
+    with (
+        patch("backend.graph.nodes.ensure_head_refine_scheduled") as schedule,
+        patch(
+            "backend.graph.nodes.wait_for_refined_classifier_input",
+            new_callable=AsyncMock,
+            return_value=("REFINED", ["mineru_unavailable"]),
+        ) as wait_fn,
+    ):
+        out = await nodes.wait_head_refine_node(post_ingest_state)
+
+    schedule.assert_called_once()
+    wait_fn.assert_awaited_once()
+    assert out["classifier_input"] == "REFINED"
+    assert out["head_refine_warnings"] == ["mineru_unavailable"]
 
 
 async def test_ingest_node_reaches_be_only_via_ingest_service(
@@ -39,7 +60,7 @@ async def test_classify_node_reaches_be_only_via_agent_service(
         reason="r",
     )
     with patch("backend.services.agent_service.classify", new_callable=AsyncMock) as raw:
-        raw.return_value = classification
+        raw.return_value = ClassifyResult(classification=classification, warnings=[])
         out = await nodes.classify_node(post_ingest_state)
 
     raw.assert_awaited_once_with(post_ingest_state["classifier_input"])
@@ -55,13 +76,16 @@ async def test_extract_node_reaches_be_only_via_agent_service(
         nodes=[GraphNode(id="n1", label="n", type="Thesis")],
         edges=[],
     )
-    with patch("backend.services.agent_service.extract", new_callable=AsyncMock) as raw:
-        raw.return_value = graph
+    with patch("backend.graph.nodes.get_agent_service") as get_svc:
+        agent = MagicMock()
+        agent.extract_graph = AsyncMock(return_value=ExtractResult(graph=graph, warnings=[]))
+        get_svc.return_value = agent
         out = await nodes.extract_node(post_classify_state)
 
-    raw.assert_awaited_once_with(
+    agent.extract_graph.assert_awaited_once_with(
         post_classify_state["full_text"],
         Paradigm.HSS,
+        paper_id=post_classify_state["paper_id"],
     )
     assert out["graph"]["paper_id"] == post_classify_state["paper_id"]
 

@@ -57,13 +57,14 @@ async def test_create_paper_then_get_status_returns_pending(
     upload_dir: Path,
 ) -> None:
     """Immediate status read may still be pending before the scheduled task starts."""
-    create = await api_client.post(
-        "/api/v1/papers",
-        files={"file": ("poll-me.pdf", VALID_PDF, "application/pdf")},
-    )
-    paper_id = create.json()["data"]["paper_id"]
+    with patch("backend.services.paper_service.schedule_paper_pipeline"):
+        create = await api_client.post(
+            "/api/v1/papers",
+            files={"file": ("poll-me.pdf", VALID_PDF, "application/pdf")},
+        )
+        paper_id = create.json()["data"]["paper_id"]
 
-    status = await api_client.get(f"/api/v1/papers/{paper_id}/status")
+        status = await api_client.get(f"/api/v1/papers/{paper_id}/status")
     assert status.status_code == 200
     assert_success_envelope(status.json())
     data = status.json()["data"]

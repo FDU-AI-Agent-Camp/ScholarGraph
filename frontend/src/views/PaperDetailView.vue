@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { defineAsyncComponent, onMounted, ref, watch } from 'vue'
+import { computed, defineAsyncComponent, onMounted, ref, watch } from 'vue'
 import { RouterLink, useRouter } from 'vue-router'
 
 import { streamPaperQa } from '@/api/qaStream'
@@ -12,6 +12,8 @@ import TagCitation from '@/components/ui/TagCitation.vue'
 import { DETAIL_BASELINE_COPY } from '@/constants/detailCopy'
 import { RouteName } from '@/router/meta'
 import { usePaperStore } from '@/stores/paper'
+import { resolveClassifyWarningMessages } from '@/utils/classifyWarnings'
+import { resolveExtractWarningMessages } from '@/utils/extractWarnings'
 import { appendUniqueCitation, citationKey } from '@/utils/qaCitations'
 
 const PaperGraph = defineAsyncComponent(() => import('@/components/graph/PaperGraph.vue'))
@@ -29,6 +31,11 @@ const graphLoading = ref(false)
 let abort: AbortController | null = null
 
 const isReady = () => paperStore.currentPaper?.status === 'ready'
+
+const extractWarningMessages = computed(() => resolveExtractWarningMessages(paperStore.currentPaper?.extract_warnings))
+const classifyWarningMessages = computed(() =>
+  resolveClassifyWarningMessages(paperStore.currentPaper?.classify_warnings),
+)
 
 function formatDetailTime(iso: string | undefined): string {
   if (!iso) {
@@ -207,6 +214,22 @@ function onGraphNodeClick(nodeId: string): void {
         </div>
 
         <aside class="detail-graph">
+          <el-alert
+            v-if="classifyWarningMessages.length"
+            type="warning"
+            :title="classifyWarningMessages[0]"
+            show-icon
+            :closable="false"
+            class="detail-graph__classify-warning"
+          />
+          <el-alert
+            v-if="extractWarningMessages.length"
+            type="warning"
+            :title="extractWarningMessages[0]"
+            show-icon
+            :closable="false"
+            class="detail-graph__extract-warning"
+          />
           <div class="detail-graph__header">
             <h2 class="text-h2 detail-graph__title">{{ DETAIL_BASELINE_COPY.graphPreviewTitle }}</h2>
             <el-button v-if="isReady()" link type="primary" @click="openFullGraph">
@@ -351,6 +374,14 @@ function onGraphNodeClick(nodeId: string): void {
 
 .detail-graph {
   min-width: 0;
+}
+
+.detail-graph__classify-warning {
+  margin-bottom: var(--spacing-12);
+}
+
+.detail-graph__extract-warning {
+  margin-bottom: var(--spacing-12);
 }
 
 .detail-graph__header {

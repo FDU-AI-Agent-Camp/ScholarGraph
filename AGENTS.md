@@ -143,6 +143,54 @@ docs(README.md): 完善 README.md
 
 ---
 
+## 9. 点分式产品版本号命名 (Dotted Version Numbering)
+
+对外发布的产品版本号采用**点分式**命名，格式为：
+
+```text
+M.S.F.B([SP][C])
+```
+
+方括号 `[]` 表示可选部分；`SP` 与 `C` 仅在发布补丁包或补丁时追加。
+
+### 9.1 各段含义
+
+| 段 | 名称 | 说明 |
+|----|------|------|
+| **M** | 主版本号 | 标识产品平台或整体架构的重大演进 |
+| **S** | 次版本号 | 标识局部架构调整、重大特性，或**无法向前兼容**的接口变更 |
+| **F** | 特性版本号 | 标识规划中的新特性版本 |
+| **B** | 编译版本号 | 标识一次编译构建的版本号 |
+| **SP** | 补丁包版本号（可选） | 标识累计一段时间的补丁打包版本 |
+| **C** | 补丁版本号（可选） | 标识补丁包内的单次补丁 |
+
+### 9.2 递增原则
+
+* **M**：平台或整体架构重构、不兼容的重大方向调整时递增，低位段归零。
+* **S**：局部架构或重大特性发布、对外接口发生不兼容变更时递增，**F**、**B** 及可选段归零。
+* **F**：按产品规划交付新特性时递增，**B** 及可选段归零。
+* **B**：每次正式编译构建递增；日常开发构建可与发布流程约定是否对外暴露。
+* **SP**：将一段时间内累计的补丁合并为补丁包发布时递增，**C** 归零。
+* **C**：在已有补丁包（或基线版本）上发布单个补丁时递增。
+
+### 9.3 示例
+
+```text
+1.0.0.1          # 首个正式构建
+1.1.0.12         # 次版本升级后的第 12 次构建
+2.0.3.100        # 主版本 2，特性版本 3，构建号 100
+1.2.1.5.SP1      # 在 1.2.1.5 基线上发布第 1 个补丁包
+1.2.1.5.SP1.C2   # 上述补丁包内的第 2 个补丁
+```
+
+### 9.4 使用约定
+
+* 版本号各段均为**非负整数**，不使用前导零（写作 `1.2.3.4`，而非 `01.02.03.04`）。
+* 发布说明、变更日志、安装包文件名、API 文档与运行时对外暴露的版本标识应**保持一致**。
+* 未发布补丁时省略 **SP**、**C**；仅发单补丁而无补丁包概念时，按团队约定决定是否使用 **C** 段，并在发布流程中统一。
+
+---
+
 ## 本项目特有补充规范（AI Agent + uv）
 
 ScholarGraph 是面向科研阅读的 **AI Agent** 项目：编排（如 LangGraph）、大模型 API 调用、结构化抽取（Pydantic）、图谱与 GraphRAG 等。**不包含深度学习训练、微调或 GPU 算力栈**（无 PyTorch / TensorFlow / CUDA 等依赖预期），因此以 **[uv](https://docs.astral.sh/uv/)** 管理 Python 与依赖即可，无需 conda 或多环境 CUDA 工具链。
@@ -157,7 +205,7 @@ ScholarGraph 是面向科研阅读的 **AI Agent** 项目：编排（如 LangGra
 ### Python 与 Agent 运行时（uv）
 
 1. **安装 uv**：按官方文档安装后，确保终端中能执行 `uv --version`。
-2. **同步依赖**：在**仓库根目录**执行 `uv sync`（或 CI / 严格复现：`uv sync --frozen`），会创建/更新 `.venv` 并安装 `pyproject.toml` 中的依赖（LangGraph、HTTP 客户端、FastAPI 等）。若使用 MySQL 驱动，可额外执行 `uv sync --extra mysql`。
+2. **同步依赖**：在**仓库根目录**执行 `uv sync`（或 CI / 严格复现：`uv sync --frozen`），会创建/更新 `.venv` 并安装 `pyproject.toml` 中的依赖（LangGraph、HTTP 客户端、FastAPI 等）。若使用 MySQL 驱动，可额外执行 `uv sync --extra mysql`；**短 PDF ingest path B（MinerU）** 需 `uv sync --extra mineru`（不进默认依赖，体积较大）。
 3. **运行 Agent 与脚本**：优先使用 **`uv run`**，无需手动激活虚拟环境。示例：`uv run python -m backend.app` 或 `uv run uvicorn backend.main:app --reload`。**请在仓库根目录执行**，以便 `.env`、默认 SQLite 路径等与项目约定一致。
 4. **环境变量**：将 `.env.example` 复制为 `.env` 后配置大模型 API Key、数据库等（`.env` 已 gitignore，勿提交）。密钥勿写入源码或明文文件。
 5. **变更依赖后**：修改 `pyproject.toml` 后执行 `uv lock`（或 `uv lock --upgrade`），再 `uv sync`；提交时**同时**带上 `pyproject.toml` 与 `uv.lock`。
@@ -180,4 +228,4 @@ ScholarGraph 是面向科研阅读的 **AI Agent** 项目：编排（如 LangGra
 
 仅当前端排期严重不足时，可用 Gradio / Streamlit（uv 安装）做答辩备份；**产品主路径仍为 Vue 3 工作台**。
 
-在执行 **Python 脚本**、**安装或更新依赖**、**启动 Agent / API 服务** 前，请确认已在仓库根目录完成 `uv sync`（及按需 `--group dev` / `--extra mysql`），避免误用全局 Python 或未安装依赖的环境。
+在执行 **Python 脚本**、**安装或更新依赖**、**启动 Agent / API 服务** 前，请确认已在仓库根目录完成 `uv sync`（及按需 `--group dev` / `--extra mysql` / **`--extra mineru`**），避免误用全局 Python 或未安装依赖的环境。

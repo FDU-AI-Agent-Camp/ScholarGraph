@@ -92,7 +92,7 @@ describe('V1 DoD D-01/D-02 — backend CI gate wiring', () => {
   it('backend workflow runs ruff check/format and pytest not red', () => {
     expect(backendWorkflow).toContain('uv run ruff check backend tests scripts')
     expect(backendWorkflow).toContain('uv run ruff format --check backend tests scripts')
-    expect(backendWorkflow).toContain('pytest -q -m "not red"')
+    expect(backendWorkflow).toContain('pytest -q -m "not red and not live_mineru and not live_grobid"')
   })
 })
 

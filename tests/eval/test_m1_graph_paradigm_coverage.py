@@ -107,7 +107,7 @@ async def test_m1_extract_corpus_produces_valid_graph(paper_id: str, paradigm: P
         pytest.skip(f"微语料 PDF 未就位: {pdf_path}")
 
     full_text = (await ingest_pdf(pdf_path, paper_id=paper_id))["full_text"]
-    graph = await extract(full_text, paradigm)
+    graph = (await extract(full_text, paradigm)).graph
 
     assert graph.paradigm == paradigm
     assert graph.nodes

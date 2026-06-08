@@ -5,11 +5,12 @@ import { PIPELINE_STEPS, PIPELINE_REFRESH_CAPTION, resolvePipelineStepStates } f
 
 describe('resolvePipelineStepStates', () => {
   it('marks all steps done when status is ready', () => {
-    expect(resolvePipelineStepStates('ready', 'ready')).toEqual(['done', 'done', 'done', 'done', 'done'])
+    expect(resolvePipelineStepStates('ready', 'ready')).toEqual(['done', 'done', 'done', 'done', 'done', 'done'])
   })
 
   it('marks prior steps done and current active while processing', () => {
     expect(resolvePipelineStepStates('classifying', 'processing')).toEqual([
+      'done',
       'done',
       'active',
       'pending',
@@ -18,8 +19,20 @@ describe('resolvePipelineStepStates', () => {
     ])
   })
 
+  it('marks head_refining as active between ingest and classify', () => {
+    expect(resolvePipelineStepStates('head_refining', 'processing')).toEqual([
+      'done',
+      'active',
+      'pending',
+      'pending',
+      'pending',
+      'pending',
+    ])
+  })
+
   it('marks failed step when pipeline fails during a stage', () => {
     expect(resolvePipelineStepStates('failed', 'failed', 'classifying')).toEqual([
+      'done',
       'done',
       'failed',
       'pending',
@@ -31,6 +44,7 @@ describe('resolvePipelineStepStates', () => {
   it('exposes baseline step labels in pipeline order', () => {
     expect(PIPELINE_STEPS.map((step) => step.label)).toEqual([
       '正在解析 PDF',
+      '精炼文档头部',
       '范式分类',
       '抽取图谱',
       '写入存储',

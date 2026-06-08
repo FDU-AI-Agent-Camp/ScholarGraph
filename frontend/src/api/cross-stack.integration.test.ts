@@ -17,6 +17,13 @@ import papersListFixture from '../../../docs/api/fixtures/papers-list.json'
 import graphFixture from '../../../docs/api/fixtures/graph-hss.json'
 import patrolFixture from '../../../docs/api/fixtures/patrol-lens-clash.json'
 import paperDetailReadyFixture from '../../../docs/api/fixtures/paper-detail-ready.json'
+import classifyFallbackStatusFixture from '../../../docs/api/fixtures/paper-status-classify-fallback.json'
+import classifyFallbackDetailFixture from '../../../docs/api/fixtures/paper-detail-classify-fallback.json'
+import {
+  CLASSIFIER_HEURISTIC_FALLBACK_CODE,
+  CLASSIFIER_HEURISTIC_FALLBACK_MESSAGE,
+  resolveClassifyWarningMessages,
+} from '@/utils/classifyWarnings'
 
 const failedStatusResponse = failedStatusFixture as DataResponse<PaperStatusData>
 const processingStatusResponse = processingStatusFixture as DataResponse<PaperStatusData>
@@ -71,6 +78,28 @@ describe('cross-stack merge (FE papers API ↔ fixture envelopes)', () => {
 
     expect(result.data.paper_id).toBe('hss-001')
     expect(result.data.status).toBe('ready')
+    expect(result.data.classify_warnings).toEqual([])
+  })
+
+  it('getPaperStatus parses classify-fallback fixture for Phase G polling UX', async () => {
+    vi.spyOn(client, 'getData').mockResolvedValue(classifyFallbackStatusFixture)
+
+    const result = await papersApi.getPaperStatus('hss-classify-fallback-001')
+
+    expect(result.data.classify_warnings).toEqual([CLASSIFIER_HEURISTIC_FALLBACK_CODE])
+    expect(resolveClassifyWarningMessages(result.data.classify_warnings)).toEqual([
+      CLASSIFIER_HEURISTIC_FALLBACK_MESSAGE,
+    ])
+  })
+
+  it('getPaper parses classify-fallback detail fixture for DetailView alert', async () => {
+    vi.spyOn(client, 'getData').mockResolvedValue(classifyFallbackDetailFixture)
+
+    const result = await papersApi.getPaper('hss-classify-fallback-001')
+
+    expect(result.data.classify_warnings).toEqual([CLASSIFIER_HEURISTIC_FALLBACK_CODE])
+    expect(result.data.classification?.reason).toBeTruthy()
+    expect(result.data.classification?.reason).not.toBe(CLASSIFIER_HEURISTIC_FALLBACK_MESSAGE)
   })
 
   it('getPaperGraph parses graph-hss fixture shape', async () => {
@@ -152,7 +181,7 @@ describe('cross-stack merge (fixture parity for BE HTTP tests)', () => {
     expect(data.status).toBe('failed')
     expect(data.error_code).toBe('LLM_JSON_INVALID')
     expect(data.failed_during).toBe('classifying')
-    expect(['ingesting', 'classifying', 'extracting', 'storing']).toContain(data.failed_during)
+    expect(['ingesting', 'head_refining', 'classifying', 'extracting', 'storing']).toContain(data.failed_during)
   })
 
   it('processing per-paper fixture aligns with hss-002 backend seed path', () => {
@@ -171,5 +200,13 @@ describe('cross-stack merge (fixture parity for BE HTTP tests)', () => {
     const lens = graph.nodes.find((node) => node.type === 'AnalyticalLens')
     expect(thesis?.id).toBe('n1')
     expect(lens?.id).toBe('n_lens')
+  })
+
+  it('classify-fallback fixtures align with BE Phase G OpenAPI examples', () => {
+    const status = classifyFallbackStatusFixture.data as PaperStatusData
+    const detail = classifyFallbackDetailFixture.data as import('@/api/types').PaperDetail
+    expect(status.classify_warnings).toEqual([CLASSIFIER_HEURISTIC_FALLBACK_CODE])
+    expect(detail.classify_warnings).toEqual([CLASSIFIER_HEURISTIC_FALLBACK_CODE])
+    expect(resolveClassifyWarningMessages(status.classify_warnings)).toEqual([CLASSIFIER_HEURISTIC_FALLBACK_MESSAGE])
   })
 })

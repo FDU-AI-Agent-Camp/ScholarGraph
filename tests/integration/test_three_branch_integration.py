@@ -9,6 +9,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
+from backend.agents.classifier_types import ClassifyResult
 from backend.graph.workflow import run_paper_pipeline
 from backend.main import app
 from backend.schemas.paper import PaperStatus, PaperStatusData, PipelineStage
@@ -55,9 +56,9 @@ async def test_three_branch_real_ingest_feeds_classifier_input_to_platform() -> 
 
     with mock_agent_services_only(STEM_PAPER_ID) as mocks:
 
-        async def capture_classify(text: str) -> ParadigmClassification:
+        async def capture_classify(text: str) -> ClassifyResult:
             captured_inputs.append(text)
-            return classification
+            return ClassifyResult(classification=classification, warnings=[])
 
         mocks["agent"].classify_paradigm.side_effect = capture_classify
         final = await run_paper_pipeline(STEM_PAPER_ID, pdf_path)

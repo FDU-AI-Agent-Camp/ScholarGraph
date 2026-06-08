@@ -25,6 +25,10 @@ mysql = [
     "pymysql>=1.1.0",
     "cryptography>=43.0.0",
 ]
+mineru = [
+    "mineru[pipeline]>=3.2.3",
+    "six>=1.16.0",
+]
 
 [dependency-groups]
 dev = [
@@ -58,10 +62,15 @@ filterwarnings = [
 markers = [
     "red: 红灯用例，依赖尚未交付的 BE 模块；默认排除，使用 pytest -m red",
     "live_e10: E-10 真云超时抽验，需有效 SCHOLARGRAPH_API_KEY；默认排除",
+    "live_head_merge: head merge 真云 LLM 抽验，需 SCHOLARGRAPH_API_KEY；默认排除",
+    "live_mineru: MinerU path-B 真机对比实验，需 uv sync --extra mineru 与语料 PDF；默认排除",
+    "live_grobid: GROBID sidecar isalive 抽验，需 docker compose up；默认排除",
+    "live_benchmark: 全量 17 篇 benchmark 与 committed baseline 对比；需语料 + MinerU + GROBID；默认排除",
     "integration: 跨节点 / 编译后工作流集成测试",
     "three_branch: FE + platform + ingest 三分支联调（语料缺失时 skip）",
+    "smoke: 快速冒烟（import / 路由 / 契约字段）",
 ]
-addopts = "-m 'not red'"
+addopts = "-m 'not red and not live_mineru and not live_grobid and not live_benchmark'"
 
 [tool.ruff]
 line-length = 120

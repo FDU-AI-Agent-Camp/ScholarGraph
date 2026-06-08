@@ -2,7 +2,7 @@
  * 答辩路径冒烟 + 边界鲁棒性：memory router 挂载真实视图，API 层 mock。
  */
 import { createPinia, setActivePinia } from 'pinia'
-import { flushPromises, mount } from '@vue/test-utils'
+import { mount } from '@vue/test-utils'
 import { createMemoryHistory, createRouter } from 'vue-router'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -13,6 +13,7 @@ import { PAPERS_BASELINE_COPY } from '@/constants/papersCopy'
 import { PATROL_BASELINE_COPY } from '@/constants/patrolCopy'
 import { routes } from '@/router/index'
 import { RouteName } from '@/router/meta'
+import { mountAppRoute, waitForRouterViewRender } from '@/test/helpers/mountRoute'
 import { paperGraphSmokeStub } from '@/test/helpers/paperGraphSmokeStub'
 import { routerViewShell } from '@/test/helpers/routerViewShell'
 
@@ -126,21 +127,7 @@ function seedHappyApiMocks(): void {
 
 async function mountRoute(path: string) {
   setActivePinia(createPinia())
-  const router = createRouter({
-    history: createMemoryHistory(),
-    routes,
-  })
-  await router.push(path)
-  await router.isReady()
-
-  const wrapper = mount(routerViewShell, {
-    global: {
-      plugins: [router],
-      stubs: routeStubs,
-    },
-  })
-  await flushPromises()
-  return { wrapper, router }
+  return mountAppRoute(path, routeStubs)
 }
 
 describe('smoke routes integration (答辩路径)', () => {
@@ -201,8 +188,9 @@ describe('smoke routes integration (答辩路径)', () => {
         plugins: [router],
         stubs: routeStubs,
       },
+      attachTo: document.body,
     })
-    await flushPromises()
+    await waitForRouterViewRender(wrapper)
 
     expect(wrapper.find('.paper-graph-smoke-stub').attributes('data-highlight')).toBe('n1')
   })
@@ -284,8 +272,9 @@ describe('smoke routes robustness (API failures)', () => {
           },
         },
       },
+      attachTo: document.body,
     })
-    await flushPromises()
+    await waitForRouterViewRender(wrapper)
 
     const pushSpy = vi.spyOn(router, 'push')
     await wrapper.find('.graph-view__error-cta').trigger('click')

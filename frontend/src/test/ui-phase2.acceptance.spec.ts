@@ -4,6 +4,7 @@
 import { mount } from '@vue/test-utils'
 import { describe, expect, it } from 'vitest'
 import BadgeParadigm from '@/components/ui/BadgeParadigm.vue'
+import { PARADIGM_LABELS } from '@/utils/paradigmLabels'
 import BadgeStatus from '@/components/ui/BadgeStatus.vue'
 import EmptyState from '@/components/ui/EmptyState.vue'
 import { EMPTY_STATE_PRESETS } from '@/components/ui/emptyStatePresets'
@@ -60,9 +61,9 @@ describe('Phase 2 UI acceptance', () => {
       expect(badgeStatusSrc).toContain('var(--color-error)')
     })
 
-    it('renders HSS/STEM/unknown with visible text labels', () => {
-      expect(mount(BadgeParadigm, { props: { paradigm: 'HSS' } }).text()).toBe('HSS')
-      expect(mount(BadgeParadigm, { props: { paradigm: 'STEM' } }).text()).toBe('STEM')
+    it('renders HSS/STEM/unknown with visible Chinese text labels', () => {
+      expect(mount(BadgeParadigm, { props: { paradigm: 'HSS' } }).text()).toBe(PARADIGM_LABELS.HSS)
+      expect(mount(BadgeParadigm, { props: { paradigm: 'STEM' } }).text()).toBe(PARADIGM_LABELS.STEM)
       expect(mount(BadgeParadigm, { props: { paradigm: undefined } }).text()).toBe('未知')
     })
 

@@ -2,11 +2,12 @@
 import { computed } from 'vue'
 
 import type { Paradigm } from '@/api/types'
+import { getParadigmLabel } from '@/utils/paradigmLabels'
 
 export type ParadigmBadgeVariant = Paradigm | 'unknown'
 
 const props = defineProps<{
-  /** HSS / STEM from API; nullish values render as unknown. */
+  /** API paradigm code (HSS / STEM); nullish values render as unknown. */
   paradigm?: Paradigm | null | string
 }>()
 
@@ -17,15 +18,7 @@ const variant = computed((): ParadigmBadgeVariant => {
   return 'unknown'
 })
 
-const label = computed(() => {
-  if (variant.value === 'HSS') {
-    return 'HSS'
-  }
-  if (variant.value === 'STEM') {
-    return 'STEM'
-  }
-  return '未知'
-})
+const label = computed(() => getParadigmLabel(props.paradigm))
 </script>
 
 <template>

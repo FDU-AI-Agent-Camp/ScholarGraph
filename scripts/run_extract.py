@@ -27,8 +27,10 @@ def _parse_args() -> argparse.Namespace:
 async def _main() -> int:
     args = _parse_args()
     full_text = args.text if args.text is not None else args.file.read_text(encoding="utf-8")
-    graph = await extract(full_text, Paradigm(args.paradigm))
-    json_payload = graph.model_dump_json(indent=2)
+    result = await extract(full_text, Paradigm(args.paradigm))
+    json_payload = result.graph.model_dump_json(indent=2)
+    if result.warnings:
+        print(f"# warnings: {result.warnings}", file=sys.stderr)
     if args.out:
         args.out.write_text(json_payload + "\n", encoding="utf-8")
     else:

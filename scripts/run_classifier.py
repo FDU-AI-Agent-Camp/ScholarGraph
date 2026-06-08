@@ -27,7 +27,7 @@ def _load_fixture_inputs() -> dict[str, str]:
 
 async def _classify_text(text: str) -> dict[str, Any]:
     result = await classify(text)
-    return result.model_dump(mode="json")
+    return result.classification.model_dump(mode="json")
 
 
 async def _run_eval() -> dict[str, Any]:
@@ -41,16 +41,17 @@ async def _run_eval() -> dict[str, Any]:
     for row in rows:
         paper_id = row["paper_id"]
         prediction = await classify(inputs[paper_id])
-        is_correct = prediction.paradigm == row["paradigm_gold"]
+        is_correct = prediction.classification.paradigm == row["paradigm_gold"]
         correct += int(is_correct)
         results.append(
             {
                 "paper_id": paper_id,
                 "gold": row["paradigm_gold"],
-                "predicted": prediction.paradigm,
-                "confidence": prediction.confidence,
+                "predicted": prediction.classification.paradigm,
+                "confidence": prediction.classification.confidence,
                 "correct": is_correct,
-                "reason": prediction.reason,
+                "reason": prediction.classification.reason,
+                "warnings": prediction.warnings,
             }
         )
     return {"accuracy": correct / len(rows), "correct": correct, "total": len(rows), "results": results}

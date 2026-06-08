@@ -45,9 +45,35 @@ async def test_m0_classify_matches_gold_label(paper_id: str) -> None:
     snippet = (await ingest_pdf(pdf_path, paper_id=paper_id))["classifier_input"]
     result = await classify(snippet)
 
-    assert result.paradigm.value == gold["paradigm_gold"]
-    assert 0.0 <= result.confidence <= 1.0
-    assert result.reason.strip()
+    assert result.classification.paradigm.value == gold["paradigm_gold"]
+    assert 0.0 <= result.classification.confidence <= 1.0
+    assert result.classification.reason.strip()
+
+
+@pytest.mark.red
+@pytest.mark.parametrize(
+    "paper_id",
+    ["stem-001", "hss-001", "hss-002"],
+)
+async def test_m0_classify_with_rules_merged_head_matches_gold(paper_id: str) -> None:
+    """T5 / P4: dual(rules) merged ``classifier_input`` still matches ``paradigm_gold``."""
+    from backend.ingest.head_candidates import build_pymupdf_head_candidate
+    from backend.ingest.head_merge import merge_with_rules
+    from backend.ingest.router import get_pdf_page_count, is_short_pdf
+
+    pdf_path: Path = CORPUS_BY_PAPER_ID[paper_id]
+    if not pdf_path.is_file():
+        pytest.skip(f"微语料 PDF 未就位: {pdf_path}")
+
+    gold = next(row for row in load_classifier_labels() if row["paper_id"] == paper_id)
+    page_count = get_pdf_page_count(pdf_path)
+    snippets = build_pymupdf_head_candidate(pdf_path)
+    merged = merge_with_rules(snippets, None, is_short=is_short_pdf(page_count))
+    result = await classify(merged.to_classifier_input())
+
+    assert result.classification.paradigm.value == gold["paradigm_gold"]
+    assert 0.0 <= result.classification.confidence <= 1.0
+    assert result.classification.reason.strip()
 
 
 def test_m0_classifier_labels_rejects_invalid_paradigm(tmp_path: Path) -> None:

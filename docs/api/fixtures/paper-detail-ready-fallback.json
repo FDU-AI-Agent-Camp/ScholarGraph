@@ -1,0 +1,18 @@
+{
+  "data": {
+    "paper_id": "hss-fallback-001",
+    "title": "启发式降级示例论文",
+    "status": "ready",
+    "paradigm": "HSS",
+    "created_at": "2026-05-19T10:00:00Z",
+    "updated_at": "2026-05-19T10:05:00Z",
+    "classification": {
+      "paradigm": "HSS",
+      "confidence": 0.88,
+      "reason": "Mock 分类"
+    },
+    "extract_warnings": ["extract_heuristic_fallback"],
+    "classify_warnings": []
+  },
+  "meta": { "request_id": "mock-detail-fallback-001" }
+}
