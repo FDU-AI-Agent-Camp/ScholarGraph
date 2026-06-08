@@ -57,7 +57,7 @@ describe('§1.4.4 Copy & typography discipline', () => {
       expect([...HOME_BASELINE_COPY.titleLines]).toEqual(['解构论文逻辑，', '发现学术共同体'])
       expect(HOME_BASELINE_COPY.primaryCta).toBe('上传论文')
       expect(HOME_BASELINE_COPY.secondaryCta).toBe('浏览文献库')
-      expect(HOME_BASELINE_COPY.subtitle).toMatch(/HSS.*STEM|STEM.*HSS/)
+      expect(HOME_BASELINE_COPY.subtitle).toMatch(/人文社科.*理工科|理工科.*人文社科/)
     })
 
     it('Papers — H1 副文案 / Upload / Empty baseline', () => {

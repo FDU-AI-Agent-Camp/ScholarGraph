@@ -2,8 +2,8 @@
 export const HOME_BASELINE_COPY = {
   eyebrow: 'AI AGENT · GRAPH RAG',
   titleLines: ['解构论文逻辑，', '发现学术共同体'] as const,
-  subtitle: '面向 HSS 与 STEM 双范式分流：上传 PDF 后自动建图，在同一工作台完成多尺度问答与共同体巡检。',
-  paradigmCaption: 'HSS 侧重理论视角与文本论证；STEM 侧重方法、实验与可复现流程。',
+  subtitle: '面向人文社科与理工科双范式分流：上传 PDF 后自动建图，在同一工作台完成多尺度问答与共同体巡检。',
+  paradigmCaption: '人文社科侧重理论视角与文本论证；理工科侧重方法、实验与可复现流程。',
   primaryCta: '上传论文',
   secondaryCta: '浏览文献库',
 } as const

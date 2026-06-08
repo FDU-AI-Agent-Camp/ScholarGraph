@@ -2,6 +2,7 @@ import { mount } from '@vue/test-utils'
 import { describe, expect, it } from 'vitest'
 
 import BadgeParadigm from '@/components/ui/BadgeParadigm.vue'
+import { PARADIGM_LABELS } from '@/utils/paradigmLabels'
 import BadgeStatus from '@/components/ui/BadgeStatus.vue'
 import EmptyState from '@/components/ui/EmptyState.vue'
 import { EMPTY_STATE_PRESETS } from '@/components/ui/emptyStatePresets'
@@ -15,9 +16,9 @@ describe('BadgeParadigm', () => {
     const hss = mount(BadgeParadigm, { props: { paradigm: 'HSS' } })
     const stem = mount(BadgeParadigm, { props: { paradigm: 'STEM' } })
 
-    expect(hss.text()).toBe('HSS')
+    expect(hss.text()).toBe(PARADIGM_LABELS.HSS)
     expect(hss.classes()).toContain('badge-paradigm--HSS')
-    expect(stem.text()).toBe('STEM')
+    expect(stem.text()).toBe(PARADIGM_LABELS.STEM)
     expect(stem.classes()).toContain('badge-paradigm--STEM')
   })
 

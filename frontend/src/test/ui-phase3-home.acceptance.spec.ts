@@ -97,7 +97,7 @@ describe('Phase 3 Home acceptance', () => {
 
       const wrapper = mount(HomeView, { global: { stubs: globalStubs } })
       expect(wrapper.find('.home-subtitle').classes()).toContain('text-body-lg')
-      expect(wrapper.find('.home-subtitle').text()).toMatch(/HSS.*STEM|STEM.*HSS/)
+      expect(wrapper.find('.home-subtitle').text()).toMatch(/人文社科.*理工科|理工科.*人文社科/)
     })
   })
 
