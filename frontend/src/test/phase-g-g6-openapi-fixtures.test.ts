@@ -13,10 +13,7 @@ import classifyFallbackStatusFixture from '../../../docs/api/fixtures/paper-stat
 
 const repoRoot = resolve(import.meta.dirname, '../../..')
 const openapiYaml = readFileSync(resolve(repoRoot, 'docs/api/openapi.yaml'), 'utf-8')
-const generatedSchema = readFileSync(
-  resolve(repoRoot, 'frontend/src/api/generated/schema.d.ts'),
-  'utf-8',
-)
+const generatedSchema = readFileSync(resolve(repoRoot, 'frontend/src/api/generated/schema.d.ts'), 'utf-8')
 
 describe('Phase G G.6 OpenAPI / fixtures (frontend)', () => {
   it('OpenAPI documents classify_warnings on PaperStatusData and PaperDetail', () => {

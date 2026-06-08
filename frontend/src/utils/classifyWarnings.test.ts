@@ -34,10 +34,7 @@ describe('classifyWarnings', () => {
 
   it('deduplicates repeated machine codes in display messages', () => {
     expect(
-      resolveClassifyWarningMessages([
-        CLASSIFIER_HEURISTIC_FALLBACK_CODE,
-        CLASSIFIER_HEURISTIC_FALLBACK_CODE,
-      ]),
+      resolveClassifyWarningMessages([CLASSIFIER_HEURISTIC_FALLBACK_CODE, CLASSIFIER_HEURISTIC_FALLBACK_CODE]),
     ).toEqual([CLASSIFIER_HEURISTIC_FALLBACK_MESSAGE])
   })
 
@@ -46,8 +43,9 @@ describe('classifyWarnings', () => {
   })
 
   it('maps known code and passes unknown codes in mixed lists', () => {
-    expect(
-      resolveClassifyWarningMessages([CLASSIFIER_HEURISTIC_FALLBACK_CODE, 'future_code']),
-    ).toEqual([CLASSIFIER_HEURISTIC_FALLBACK_MESSAGE, 'future_code'])
+    expect(resolveClassifyWarningMessages([CLASSIFIER_HEURISTIC_FALLBACK_CODE, 'future_code'])).toEqual([
+      CLASSIFIER_HEURISTIC_FALLBACK_MESSAGE,
+      'future_code',
+    ])
   })
 })

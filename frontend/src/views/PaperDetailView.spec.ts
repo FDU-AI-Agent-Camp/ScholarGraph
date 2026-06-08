@@ -273,9 +273,7 @@ describe('PaperDetailView', () => {
 
       expect(wrapper.find('.detail-graph__classify-warning').exists()).toBe(true)
       expect(wrapper.find('.detail-graph__extract-warning').exists()).toBe(true)
-      const warnings = wrapper
-        .findAll('.el-alert-stub')
-        .filter((node) => node.attributes('data-type') === 'warning')
+      const warnings = wrapper.findAll('.el-alert-stub').filter((node) => node.attributes('data-type') === 'warning')
       expect(warnings).toHaveLength(2)
       expect(warnings.map((node) => node.attributes('data-title'))).toEqual([
         CLASSIFIER_HEURISTIC_FALLBACK_MESSAGE,

@@ -207,8 +207,6 @@ describe('cross-stack merge (fixture parity for BE HTTP tests)', () => {
     const detail = classifyFallbackDetailFixture.data as import('@/api/types').PaperDetail
     expect(status.classify_warnings).toEqual([CLASSIFIER_HEURISTIC_FALLBACK_CODE])
     expect(detail.classify_warnings).toEqual([CLASSIFIER_HEURISTIC_FALLBACK_CODE])
-    expect(resolveClassifyWarningMessages(status.classify_warnings)).toEqual([
-      CLASSIFIER_HEURISTIC_FALLBACK_MESSAGE,
-    ])
+    expect(resolveClassifyWarningMessages(status.classify_warnings)).toEqual([CLASSIFIER_HEURISTIC_FALLBACK_MESSAGE])
   })
 })

@@ -95,9 +95,7 @@ describe('Phase G FE↔BE classify fallback integration', () => {
       props: { paperId: 'hss-classify-fallback-001', autoStart: false },
     })
 
-    const warning = wrapper
-      .findAll('.el-alert-stub')
-      .find((node) => node.attributes('data-type') === 'warning')
+    const warning = wrapper.findAll('.el-alert-stub').find((node) => node.attributes('data-type') === 'warning')
     expect(warning?.attributes('data-title')).toBe(CLASSIFIER_HEURISTIC_FALLBACK_MESSAGE)
     expect(wrapper.find('.status-panel__classify-warning').exists()).toBe(true)
     expect(elMessageWarning).not.toHaveBeenCalled()

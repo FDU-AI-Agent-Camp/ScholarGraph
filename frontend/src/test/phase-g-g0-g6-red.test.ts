@@ -47,12 +47,7 @@ describe('Phase G G.0–G.6 red (frontend)', () => {
   })
 
   it('G.6 wrong codes are not the frozen classifier fallback code', () => {
-    for (const wrong of [
-      'extract_heuristic_fallback',
-      'Classifier_Heuristic_Fallback',
-      'classifier_heuristic',
-      '',
-    ]) {
+    for (const wrong of ['extract_heuristic_fallback', 'Classifier_Heuristic_Fallback', 'classifier_heuristic', '']) {
       expect(wrong).not.toBe(CLASSIFIER_HEURISTIC_FALLBACK_CODE)
     }
   })

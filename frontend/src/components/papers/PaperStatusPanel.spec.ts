@@ -224,9 +224,7 @@ describe('PaperStatusPanel', () => {
     })
 
     expect(wrapper.find('.status-panel__classify-warning').exists()).toBe(true)
-    const warning = wrapper
-      .findAll('.el-alert-stub')
-      .find((node) => node.attributes('data-type') === 'warning')
+    const warning = wrapper.findAll('.el-alert-stub').find((node) => node.attributes('data-type') === 'warning')
     expect(warning?.attributes('data-title')).toBe(CLASSIFIER_HEURISTIC_FALLBACK_MESSAGE)
     expect(ElMessage.warning).not.toHaveBeenCalled()
   })
@@ -240,9 +238,7 @@ describe('PaperStatusPanel', () => {
 
     expect(wrapper.find('.status-panel__classify-warning').exists()).toBe(true)
     expect(wrapper.find('.status-panel__extract-warning').exists()).toBe(true)
-    const warnings = wrapper
-      .findAll('.el-alert-stub')
-      .filter((node) => node.attributes('data-type') === 'warning')
+    const warnings = wrapper.findAll('.el-alert-stub').filter((node) => node.attributes('data-type') === 'warning')
     expect(warnings).toHaveLength(2)
     expect(warnings.map((node) => node.attributes('data-title'))).toEqual([
       CLASSIFIER_HEURISTIC_FALLBACK_MESSAGE,
