@@ -2,7 +2,7 @@
 
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from backend.schemas.graph import HSS_EDGE_TYPES, HSS_NODE_TYPES, STEM_EDGE_TYPES, STEM_NODE_TYPES
 from backend.schemas.paradigm import Paradigm
@@ -28,6 +28,20 @@ class ExtractedNode(BaseModel):
     confidence: float = Field(default=1.0, ge=0.0, le=1.0)
     data: dict[str, Any] = Field(default_factory=dict)
 
+    @field_validator("label", mode="before")
+    @classmethod
+    def _truncate_label(cls, value: str) -> str:
+        """Avoid hard failures when the LLM emits an overly long label."""
+        return value[:120] if isinstance(value, str) else value
+
+    @field_validator("source_span", mode="before")
+    @classmethod
+    def _truncate_source_span(cls, value: str | None) -> str | None:
+        """Avoid hard failures when the LLM emits an overly long source span."""
+        if isinstance(value, str):
+            return value[:500]
+        return value
+
 
 class ExtractedEdge(BaseModel):
     """An edge produced by Stage 2 (edge extraction)."""
@@ -43,6 +57,14 @@ class ExtractedEdge(BaseModel):
         description="Textual evidence supporting this relation.",
     )
     data: dict[str, Any] = Field(default_factory=dict)
+
+    @field_validator("source_span", mode="before")
+    @classmethod
+    def _truncate_source_span(cls, value: str | None) -> str | None:
+        """Avoid hard failures when the LLM emits an overly long source span."""
+        if isinstance(value, str):
+            return value[:500]
+        return value
 
 
 class ExtractedNodeList(BaseModel):
