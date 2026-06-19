@@ -11,6 +11,7 @@ from langchain_core.messages import HumanMessage, SystemMessage
 
 from backend.config import Settings, get_settings
 from backend.llm.client import LlmClient, get_llm_client
+from backend.llm.structured_output import ainvoke_structured
 from backend.schemas.extract_phase import ExtractedEdgeList, ExtractedNodeList
 from backend.schemas.paradigm import Paradigm
 
@@ -128,8 +129,6 @@ async def build_edges_with_llm(
         max_chars=cfg.extract_max_input_chars,
     )
 
-    chat = client.chat
-    structured = chat.with_structured_output(ExtractedEdgeList)
     messages = [
         SystemMessage(content=system_prompt),
         HumanMessage(content=user_content),
@@ -137,7 +136,7 @@ async def build_edges_with_llm(
 
     started_at = time.perf_counter()
     try:
-        result = await structured.ainvoke(messages)
+        result = await ainvoke_structured(client, ExtractedEdgeList, messages)
     except Exception as exc:
         logger.warning(
             "build_edges_failed",
@@ -146,9 +145,6 @@ async def build_edges_with_llm(
         raise
 
     elapsed_ms = int((time.perf_counter() - started_at) * 1000)
-    if not isinstance(result, ExtractedEdgeList):
-        result = ExtractedEdgeList.model_validate(result)
-
     logger.info(
         "build_edges_success",
         extra={

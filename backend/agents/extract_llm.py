@@ -11,6 +11,7 @@ from langchain_core.messages import HumanMessage, SystemMessage
 
 from backend.config import Settings, get_settings
 from backend.llm.client import LlmClient, get_llm_client
+from backend.llm.structured_output import ainvoke_structured
 from backend.schemas.graph import UnifiedPaperGraph
 from backend.schemas.paradigm import Paradigm
 
@@ -67,19 +68,16 @@ async def _invoke_structured(
     user_content: str,
     use_fallback_model: bool,
 ) -> UnifiedPaperGraph:
-    chat = client.fallback_chat if use_fallback_model and client.fallback_chat is not None else client.chat
-    structured = chat.with_structured_output(UnifiedPaperGraph)
     messages = [
         SystemMessage(content=system_prompt),
         HumanMessage(content=user_content),
     ]
-    if hasattr(structured, "ainvoke"):
-        result = await structured.ainvoke(messages)
-    else:
-        result = structured.invoke(messages)  # type: ignore[attr-defined]
-    if isinstance(result, UnifiedPaperGraph):
-        return result
-    return UnifiedPaperGraph.model_validate(result)
+    return await ainvoke_structured(
+        client,
+        UnifiedPaperGraph,
+        messages,
+        use_fallback_model=use_fallback_model,
+    )
 
 
 def _validate_llm_graph(graph: UnifiedPaperGraph, *, expected_paradigm: Paradigm) -> None:
