@@ -47,7 +47,8 @@ def main(argv: list[str] | None = None) -> int:
         ("ruff format --check", ["ruff", "format", "--check", *RUFF_TARGETS]),
     ]
     if not args.lint_only:
-        steps.append(("pytest", ["pytest", "-q", "-m", DEFAULT_PYTEST_MARKER]))
+        # Use ``python -m pytest`` to avoid Windows entry-point canonicalisation issues.
+        steps.append(("pytest", [sys.executable, "-m", "pytest", "-q", "-m", DEFAULT_PYTEST_MARKER]))
 
     for label, command in steps:
         if run_step(label, command) != EXIT_SUCCESS:
