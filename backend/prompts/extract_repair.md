@@ -1,0 +1,28 @@
+# Repair Previous Extraction Output
+
+Your previous extraction produced invalid output. The validation errors are listed below.
+
+## Validation Errors
+
+{error_messages}
+
+## Previous Attempt
+
+{previous_json}
+
+## Instructions
+
+1. Fix all validation errors listed above.
+2. Do not change correct content unnecessarily.
+3. Ensure all ids are unique.
+4. Ensure all edge `source` and `target` values reference existing node ids.
+5. Ensure all node and edge types are from the allowed whitelist for {paradigm}.
+6. Return the corrected JSON in the same schema.
+
+## Allowed Node Types
+
+{allowed_node_types}
+
+## Allowed Edge Types
+
+{allowed_edge_types}

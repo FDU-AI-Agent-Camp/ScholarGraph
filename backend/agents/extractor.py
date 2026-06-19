@@ -75,6 +75,36 @@ async def _extract_live(
             reason="extract_llm_disabled",
         )
 
+    if not settings.extract_two_phase_enabled:
+        return await _extract_single_phase(
+            full_text,
+            paradigm,
+            paper_id=paper_id,
+            title=title,
+            head_context=head_context,
+            settings=settings,
+        )
+
+    return await _extract_two_phase(
+        full_text,
+        paradigm,
+        paper_id=paper_id,
+        title=title,
+        head_context=head_context,
+        settings=settings,
+    )
+
+
+async def _extract_single_phase(
+    full_text: str,
+    paradigm: Paradigm,
+    *,
+    paper_id: str,
+    title: str,
+    head_context: str | None,
+    settings: Settings,
+) -> ExtractResult:
+    """Legacy single-phase extraction path (kept for backward compatibility)."""
     try:
         graph = await extract_with_llm(
             full_text,
@@ -91,7 +121,43 @@ async def _extract_live(
     except Exception as exc:
         if not settings.extract_heuristic_fallback:
             raise ServiceError(PIPELINE_FAILED_CODE, f"图谱 LLM 抽取失败: {exc}") from exc
+        return _fallback_to_heuristic(
+            full_text,
+            paradigm,
+            paper_id=paper_id,
+            title=title,
+            reason=exc,
+        )
 
+
+async def _extract_two_phase(
+    full_text: str,
+    paradigm: Paradigm,
+    *,
+    paper_id: str,
+    title: str,
+    head_context: str | None,
+    settings: Settings,
+) -> ExtractResult:
+    """Two-phase extraction with self-repair via LangGraph sub-graph."""
+    # Lazy import avoids circular dependency: graph -> agents -> graph
+    try:
+        from backend.graph.extract_workflow import run_extract_subgraph
+
+        result = await run_extract_subgraph(
+            full_text,
+            paradigm,
+            paper_id=paper_id,
+            title=title,
+            head_context=head_context,
+        )
+        return ExtractResult(
+            graph=result.graph.model_copy(update={"paper_id": paper_id, "paradigm": paradigm}),
+            warnings=result.warnings,
+        )
+    except Exception as exc:
+        if not settings.extract_heuristic_fallback:
+            raise ServiceError(PIPELINE_FAILED_CODE, f"图谱 LLM 抽取失败: {exc}") from exc
         return _fallback_to_heuristic(
             full_text,
             paradigm,

@@ -87,6 +87,16 @@ class Settings(BaseSettings):
         default=True,
         validation_alias="EXTRACT_HEURISTIC_FALLBACK",
     )
+    extract_two_phase_enabled: bool = Field(
+        default=True,
+        validation_alias="EXTRACT_TWO_PHASE_ENABLED",
+    )
+    extract_repair_max_retries: int = Field(
+        default=2,
+        ge=0,
+        le=5,
+        validation_alias="EXTRACT_REPAIR_MAX_RETRIES",
+    )
 
     classifier_llm_enabled: bool = Field(default=True, validation_alias="CLASSIFIER_LLM_ENABLED")
     classifier_heuristic_fallback: bool = Field(

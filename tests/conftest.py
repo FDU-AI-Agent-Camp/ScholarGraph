@@ -13,6 +13,7 @@ from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+from backend.config import get_settings
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 RUN_PIPELINE_SCRIPT = REPO_ROOT / "scripts" / "run_pipeline.py"
@@ -65,6 +66,17 @@ def benchmark_dual_route_module():
     sys.modules[spec.name] = module
     spec.loader.exec_module(module)
     return module
+
+
+@pytest.fixture(autouse=True)
+def _disable_two_phase_extraction_for_legacy_tests(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Default tests to the single-phase extraction path to preserve existing mocks.
+
+    New tests for the two-phase sub-graph should explicitly re-enable it with
+    ``monkeypatch.setenv('EXTRACT_TWO_PHASE_ENABLED', 'true')``.
+    """
+    monkeypatch.setenv("EXTRACT_TWO_PHASE_ENABLED", "false")
+    get_settings.cache_clear()
 
 
 @pytest.fixture
@@ -128,6 +140,7 @@ def mock_pipeline_node_services(
         with (
             patch("backend.graph.nodes.get_ingest_service", return_value=ingest_svc),
             patch("backend.graph.nodes.get_agent_service", return_value=agent_svc),
+            patch("backend.services.agent_service.get_agent_service", return_value=agent_svc),
             patch(
                 "backend.graph.nodes.get_pipeline_completion_service",
                 return_value=completion_svc,
@@ -202,6 +215,7 @@ def mock_agent_services_only(
 
         with (
             patch("backend.graph.nodes.get_agent_service", return_value=agent_svc),
+            patch("backend.services.agent_service.get_agent_service", return_value=agent_svc),
             patch(
                 "backend.graph.nodes.get_pipeline_completion_service",
                 return_value=completion_svc,
