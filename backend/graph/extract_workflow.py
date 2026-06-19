@@ -229,9 +229,10 @@ def validate_node(state: ExtractSubgraphState) -> ExtractSubgraphState:
         summary=summary,
     )
 
+    parse_warnings = list(dict.fromkeys(nodes.warnings + edges.warnings))
     return {
         "graph": unified.model_dump(mode="json"),
-        "extract_warnings": [],
+        "extract_warnings": parse_warnings,
         "last_error": None,
         "error_level": None,
     }

@@ -3,7 +3,7 @@
 import logging
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, ValidationInfo, field_validator, model_validator
 
 from backend.schemas.graph import HSS_EDGE_TYPES, HSS_NODE_TYPES, STEM_EDGE_TYPES, STEM_NODE_TYPES
 from backend.schemas.paradigm import Paradigm
@@ -38,15 +38,15 @@ class ExtractedNode(BaseModel):
 
     @field_validator("label", mode="before")
     @classmethod
-    def _truncate_label(cls, value: str) -> str:
+    def _truncate_label(cls, value: str, info: ValidationInfo) -> str:
         """Avoid hard failures when the LLM emits an overly long label."""
-        return _smart_truncate(value, MAX_NODE_LABEL_LENGTH, "node.label")
+        return _smart_truncate(value, MAX_NODE_LABEL_LENGTH, "node.label", info)
 
     @field_validator("source_span", mode="before")
     @classmethod
-    def _truncate_source_span(cls, value: str | None) -> str | None:
+    def _truncate_source_span(cls, value: str | None, info: ValidationInfo) -> str | None:
         """Avoid hard failures when the LLM emits an overly long source span."""
-        return _smart_truncate_optional(value, MAX_SOURCE_SPAN_LENGTH, "node.source_span")
+        return _smart_truncate_optional(value, MAX_SOURCE_SPAN_LENGTH, "node.source_span", info)
 
 
 class ExtractedEdge(BaseModel):
@@ -66,18 +66,18 @@ class ExtractedEdge(BaseModel):
 
     @field_validator("label", mode="before")
     @classmethod
-    def _truncate_label(cls, value: str) -> str:
+    def _truncate_label(cls, value: str, info: ValidationInfo) -> str:
         """Avoid hard failures when the LLM emits an overly long edge label."""
-        return _smart_truncate(value, MAX_EDGE_LABEL_LENGTH, "edge.label")
+        return _smart_truncate(value, MAX_EDGE_LABEL_LENGTH, "edge.label", info)
 
     @field_validator("source_span", mode="before")
     @classmethod
-    def _truncate_source_span(cls, value: str | None) -> str | None:
+    def _truncate_source_span(cls, value: str | None, info: ValidationInfo) -> str | None:
         """Avoid hard failures when the LLM emits an overly long source span."""
-        return _smart_truncate_optional(value, MAX_SOURCE_SPAN_LENGTH, "edge.source_span")
+        return _smart_truncate_optional(value, MAX_SOURCE_SPAN_LENGTH, "edge.source_span", info)
 
 
-def _smart_truncate(value: str, max_length: int, field_name: str) -> str:
+def _smart_truncate(value: str, max_length: int, field_name: str, info: ValidationInfo) -> str:
     """Truncate ``value`` to ``max_length`` with an ellipsis suffix and log.
 
     Keeps the original when it already fits. The suffix is included in the
@@ -92,14 +92,49 @@ def _smart_truncate(value: str, max_length: int, field_name: str) -> str:
         "extract_field_truncated",
         extra={"field": field_name, "original_length": len(value), "max_length": max_length},
     )
+    _record_truncation_warning(info, field_name)
     return truncated
 
 
-def _smart_truncate_optional(value: str | None, max_length: int, field_name: str) -> str | None:
+def _smart_truncate_optional(
+    value: str | None,
+    max_length: int,
+    field_name: str,
+    info: ValidationInfo,
+) -> str | None:
     """Optional variant of :func:`_smart_truncate`."""
     if value is None:
         return None
-    return _smart_truncate(value, max_length, field_name)
+    return _smart_truncate(value, max_length, field_name, info)
+
+
+def _record_truncation_warning(info: ValidationInfo, field_name: str) -> None:
+    """Append a truncation warning to the validation context when available."""
+    context = info.context
+    if isinstance(context, dict):
+        warnings = context.get("warnings")
+        if isinstance(warnings, list):
+            warnings.append(f"extract_field_truncated:{field_name}")
+
+
+def _merge_context_warnings(model: BaseModel, info: ValidationInfo) -> None:
+    """Merge any warnings recorded in ``info.context`` into the model field.
+
+    This allows parse-time validators (e.g. truncation) to surface warnings
+    in the validated result without callers needing to inspect context.
+    """
+    context = info.context
+    if not isinstance(context, dict):
+        return
+    context_warnings = context.get("warnings")
+    if not isinstance(context_warnings, list):
+        return
+    # ``warnings`` is defined on the concrete subclasses that call this helper.
+    existing = getattr(model, "warnings", None)
+    if not isinstance(existing, list):
+        return
+    merged = list(dict.fromkeys(existing + context_warnings))
+    model.warnings = merged  # type: ignore[attr-defined]
 
 
 class ExtractedNodeList(BaseModel):
@@ -107,6 +142,10 @@ class ExtractedNodeList(BaseModel):
 
     paradigm: Paradigm
     nodes: list[ExtractedNode] = Field(min_length=1)
+    warnings: list[str] = Field(
+        default_factory=list,
+        description="Parse-time warnings (e.g. field truncation).",
+    )
 
     @model_validator(mode="after")
     def validate_node_consistency(self) -> "ExtractedNodeList":
@@ -124,6 +163,11 @@ class ExtractedNodeList(BaseModel):
             raise ValueError(f"{self.paradigm.value} graph contains forbidden node types: {forbidden}")
         return self
 
+    @model_validator(mode="after")
+    def merge_warnings(self, info: ValidationInfo) -> "ExtractedNodeList":
+        _merge_context_warnings(self, info)
+        return self
+
 
 class ExtractedEdgeList(BaseModel):
     """Stage 2 output: extracted edges validated against available nodes."""
@@ -133,6 +177,10 @@ class ExtractedEdgeList(BaseModel):
     node_ids: list[str] = Field(
         default_factory=list,
         description="Available node ids that edges may reference.",
+    )
+    warnings: list[str] = Field(
+        default_factory=list,
+        description="Parse-time warnings (e.g. field truncation).",
     )
 
     @model_validator(mode="after")
@@ -158,6 +206,11 @@ class ExtractedEdgeList(BaseModel):
                 raise ValueError(f"Edges reference missing nodes: {dangling}")
         return self
 
+    @model_validator(mode="after")
+    def merge_warnings(self, info: ValidationInfo) -> "ExtractedEdgeList":
+        _merge_context_warnings(self, info)
+        return self
+
 
 class ExtractedGraph(BaseModel):
     """Combined Stage 1 + Stage 2 output, ready to become UnifiedPaperGraph."""
@@ -168,6 +221,10 @@ class ExtractedGraph(BaseModel):
     nodes: list[ExtractedNode]
     edges: list[ExtractedEdge]
     summary: str | None = None
+    warnings: list[str] = Field(
+        default_factory=list,
+        description="Parse-time warnings (e.g. field truncation).",
+    )
 
     @model_validator(mode="after")
     def validate_graph_consistency(self) -> "ExtractedGraph":
@@ -200,4 +257,9 @@ class ExtractedGraph(BaseModel):
         if forbidden_edges:
             raise ValueError(f"Forbidden edge types: {forbidden_edges}")
 
+        return self
+
+    @model_validator(mode="after")
+    def merge_warnings(self, info: ValidationInfo) -> "ExtractedGraph":
+        _merge_context_warnings(self, info)
         return self

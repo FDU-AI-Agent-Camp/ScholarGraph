@@ -136,7 +136,12 @@ async def build_edges_with_llm(
 
     started_at = time.perf_counter()
     try:
-        result = await ainvoke_structured(client, ExtractedEdgeList, messages)
+        result = await ainvoke_structured(
+            client,
+            ExtractedEdgeList,
+            messages,
+            context={"warnings": []},
+        )
     except Exception as exc:
         logger.warning(
             "build_edges_failed",

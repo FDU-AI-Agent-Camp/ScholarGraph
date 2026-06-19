@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import logging
 import re
-from typing import TypeVar
+from typing import Any, TypeVar
 
 from langchain_core.messages import BaseMessage
 from pydantic import BaseModel
@@ -79,7 +79,7 @@ def _extract_json(raw: str) -> str:
     return stripped[start:]
 
 
-def _parse_model_response(raw: str, schema: type[T]) -> T:
+def _parse_model_response(raw: str, schema: type[T], *, context: dict[str, Any] | None = None) -> T:
     """Parse raw LLM string into ``schema``, tolerating markdown wrappers."""
     json_text = _extract_json(raw)
     # Pre-validate to produce a clearer error message when content is not JSON.
@@ -88,7 +88,7 @@ def _parse_model_response(raw: str, schema: type[T]) -> T:
     except json.JSONDecodeError as exc:
         msg = f"Model returned non-JSON content: {raw[:200]}..."
         raise ValueError(msg) from exc
-    return schema.model_validate_json(json_text)
+    return schema.model_validate_json(json_text, context=context)
 
 
 async def ainvoke_structured(
@@ -97,6 +97,7 @@ async def ainvoke_structured(
     messages: list[BaseMessage],
     *,
     use_fallback_model: bool = False,
+    context: dict[str, Any] | None = None,
 ) -> T:
     """Invoke the LLM and parse the response into ``schema``.
 
@@ -109,4 +110,4 @@ async def ainvoke_structured(
     content = response.content
     if not isinstance(content, str):
         content = str(content)
-    return _parse_model_response(content, schema)
+    return _parse_model_response(content, schema, context=context)

@@ -129,7 +129,12 @@ async def extract_nodes_with_llm(
 
     started_at = time.perf_counter()
     try:
-        result = await ainvoke_structured(client, ExtractedNodeList, messages)
+        result = await ainvoke_structured(
+            client,
+            ExtractedNodeList,
+            messages,
+            context={"warnings": []},
+        )
     except Exception as exc:
         logger.warning(
             "extract_nodes_failed",
