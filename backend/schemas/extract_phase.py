@@ -1,11 +1,19 @@
 """Intermediate schemas for two-phase graph extraction (v2)."""
 
+import logging
 from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from backend.schemas.graph import HSS_EDGE_TYPES, HSS_NODE_TYPES, STEM_EDGE_TYPES, STEM_NODE_TYPES
 from backend.schemas.paradigm import Paradigm
+
+logger = logging.getLogger(__name__)
+
+MAX_NODE_LABEL_LENGTH = 120
+MAX_EDGE_LABEL_LENGTH = 120
+MAX_SOURCE_SPAN_LENGTH = 500
+TRUNCATION_SUFFIX = "..."
 
 
 class ExtractedNode(BaseModel):
@@ -32,15 +40,13 @@ class ExtractedNode(BaseModel):
     @classmethod
     def _truncate_label(cls, value: str) -> str:
         """Avoid hard failures when the LLM emits an overly long label."""
-        return value[:120] if isinstance(value, str) else value
+        return _smart_truncate(value, MAX_NODE_LABEL_LENGTH, "node.label")
 
     @field_validator("source_span", mode="before")
     @classmethod
     def _truncate_source_span(cls, value: str | None) -> str | None:
         """Avoid hard failures when the LLM emits an overly long source span."""
-        if isinstance(value, str):
-            return value[:500]
-        return value
+        return _smart_truncate_optional(value, MAX_SOURCE_SPAN_LENGTH, "node.source_span")
 
 
 class ExtractedEdge(BaseModel):
@@ -49,22 +55,51 @@ class ExtractedEdge(BaseModel):
     id: str = Field(min_length=1, description="Unique edge identifier.")
     source: str = Field(min_length=1, description="Source node id.")
     target: str = Field(min_length=1, description="Target node id.")
-    label: str = Field(min_length=1)
+    label: str = Field(min_length=1, max_length=MAX_EDGE_LABEL_LENGTH)
     type: str = Field(min_length=1, description="Edge type from the paradigm whitelist.")
     source_span: str | None = Field(
         default=None,
-        max_length=500,
+        max_length=MAX_SOURCE_SPAN_LENGTH,
         description="Textual evidence supporting this relation.",
     )
     data: dict[str, Any] = Field(default_factory=dict)
+
+    @field_validator("label", mode="before")
+    @classmethod
+    def _truncate_label(cls, value: str) -> str:
+        """Avoid hard failures when the LLM emits an overly long edge label."""
+        return _smart_truncate(value, MAX_EDGE_LABEL_LENGTH, "edge.label")
 
     @field_validator("source_span", mode="before")
     @classmethod
     def _truncate_source_span(cls, value: str | None) -> str | None:
         """Avoid hard failures when the LLM emits an overly long source span."""
-        if isinstance(value, str):
-            return value[:500]
+        return _smart_truncate_optional(value, MAX_SOURCE_SPAN_LENGTH, "edge.source_span")
+
+
+def _smart_truncate(value: str, max_length: int, field_name: str) -> str:
+    """Truncate ``value`` to ``max_length`` with an ellipsis suffix and log.
+
+    Keeps the original when it already fits. The suffix is included in the
+    final length budget so the result never exceeds ``max_length``.
+    """
+    if not isinstance(value, str):
         return value
+    if len(value) <= max_length:
+        return value
+    truncated = value[: max_length - len(TRUNCATION_SUFFIX)] + TRUNCATION_SUFFIX
+    logger.warning(
+        "extract_field_truncated",
+        extra={"field": field_name, "original_length": len(value), "max_length": max_length},
+    )
+    return truncated
+
+
+def _smart_truncate_optional(value: str | None, max_length: int, field_name: str) -> str | None:
+    """Optional variant of :func:`_smart_truncate`."""
+    if value is None:
+        return None
+    return _smart_truncate(value, max_length, field_name)
 
 
 class ExtractedNodeList(BaseModel):

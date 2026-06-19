@@ -54,6 +54,24 @@ class TestExtractedNodeList:
         )
         assert node_list.nodes[0].type == "Method"
 
+    def test_overly_long_label_is_truncated_with_ellipsis(self) -> None:
+        long_label = "A" * 200
+        node_list = ExtractedNodeList(
+            paradigm=Paradigm.HSS,
+            nodes=[_hss_node(label=long_label)],
+        )
+        assert node_list.nodes[0].label.endswith("...")
+        assert len(node_list.nodes[0].label) == 120
+
+    def test_overly_long_source_span_is_truncated_with_ellipsis(self) -> None:
+        long_span = "B" * 600
+        node_list = ExtractedNodeList(
+            paradigm=Paradigm.HSS,
+            nodes=[_hss_node(source_span=long_span)],
+        )
+        assert node_list.nodes[0].source_span.endswith("...")
+        assert len(node_list.nodes[0].source_span) == 500
+
 
 class TestExtractedEdgeList:
     def test_valid_hss_edges_pass(self) -> None:

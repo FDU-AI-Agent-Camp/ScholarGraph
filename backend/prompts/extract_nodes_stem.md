@@ -37,6 +37,13 @@ Do not use any HSS-only types: `Thesis`, `SubArgument`, `AnalyticalLens`, `Intel
 }
 ```
 
+## Strict Field Constraints
+
+- `label` must be a concise technical phrase (≤ 50 characters). Do not copy full sentences.
+- `source_span` must be a short textual snippet (≤ 200 characters). Quote only the relevant fragment.
+
+⚠️ **Absolute prohibition**: Labels longer than 50 characters or direct copies of long sentences will be considered invalid output.
+
 ## Minimum Required Nodes
 
 - 1 × ResearchQuestion
