@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import json
+
 import pytest
 from backend.schemas.extract_phase import (
     ExtractedEdge,
@@ -71,6 +73,27 @@ class TestExtractedNodeList:
         )
         assert node_list.nodes[0].source_span.endswith("...")
         assert len(node_list.nodes[0].source_span) == 500
+
+    def test_truncation_records_warning_in_context(self) -> None:
+        long_label = "A" * 200
+        warnings: list[str] = []
+        raw_payload = json.dumps(
+            {
+                "paradigm": Paradigm.HSS.value,
+                "warnings": [],
+                "nodes": [
+                    {
+                        "id": "n1",
+                        "label": long_label,
+                        "type": "Thesis",
+                        "source_span": "span",
+                    }
+                ],
+            }
+        )
+        result = ExtractedNodeList.model_validate_json(raw_payload, context={"warnings": warnings})
+        assert result.warnings == warnings
+        assert "extract_field_truncated:node.label" in warnings
 
 
 class TestExtractedEdgeList:
