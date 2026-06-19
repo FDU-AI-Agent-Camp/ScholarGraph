@@ -32,7 +32,6 @@ Given the extracted nodes below, construct all meaningful edges between them. On
 ```json
 {
   "paradigm": "HSS",
-  "node_ids": ["n_thesis", "n_sub_1", ...],
   "edges": [
     {
       "id": "e_sub_1",
@@ -46,3 +45,5 @@ Given the extracted nodes below, construct all meaningful edges between them. On
   ]
 }
 ```
+
+- You do not need to repeat the full list of available node ids in the output; only include the ``edges`` array.

@@ -130,6 +130,60 @@ async def _extract_single_phase(
         )
 
 
+async def _extract_chunked_two_phase(
+    full_text: str,
+    paradigm: Paradigm,
+    *,
+    paper_id: str,
+    title: str,
+    head_context: str | None,
+    settings: Settings,
+) -> ExtractResult:
+    """Chunked two-phase extraction for papers longer than the input limit."""
+    from backend.agents.extract_chunked import extract_chunked
+    from backend.schemas.graph import GraphEdge, GraphNode
+
+    try:
+        extracted_graph = await extract_chunked(
+            full_text,
+            paradigm,
+            paper_id=paper_id,
+            title=title,
+            head_context=head_context,
+            settings=settings,
+        )
+    except Exception as exc:
+        if not settings.extract_heuristic_fallback:
+            raise ServiceError(PIPELINE_FAILED_CODE, f"图谱 LLM 抽取失败: {exc}") from exc
+        return _fallback_to_heuristic(
+            full_text,
+            paradigm,
+            paper_id=paper_id,
+            title=title,
+            reason=exc,
+        )
+
+    unified = UnifiedPaperGraph(
+        paper_id=paper_id,
+        title=title,
+        paradigm=paradigm,
+        nodes=[GraphNode(id=n.id, label=n.label, type=n.type, data=n.data) for n in extracted_graph.nodes],
+        edges=[
+            GraphEdge(
+                id=e.id,
+                source=e.source,
+                target=e.target,
+                label=e.label,
+                type=e.type,
+                data=e.data,
+            )
+            for e in extracted_graph.edges
+        ],
+        summary=extracted_graph.summary,
+    )
+    return ExtractResult(graph=unified, warnings=extracted_graph.warnings)
+
+
 async def _extract_two_phase(
     full_text: str,
     paradigm: Paradigm,
@@ -140,6 +194,16 @@ async def _extract_two_phase(
     settings: Settings,
 ) -> ExtractResult:
     """Two-phase extraction with self-repair via LangGraph sub-graph."""
+    if len(full_text) > settings.extract_max_input_chars and settings.extract_chunked_enabled:
+        return await _extract_chunked_two_phase(
+            full_text,
+            paradigm,
+            paper_id=paper_id,
+            title=title,
+            head_context=head_context,
+            settings=settings,
+        )
+
     # Lazy import avoids circular dependency: graph -> agents -> graph
     try:
         from backend.graph.extract_workflow import run_extract_subgraph

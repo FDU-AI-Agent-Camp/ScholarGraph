@@ -91,6 +91,27 @@ class Settings(BaseSettings):
         default=True,
         validation_alias="EXTRACT_TWO_PHASE_ENABLED",
     )
+    extract_chunked_enabled: bool = Field(
+        default=True,
+        validation_alias="EXTRACT_CHUNKED_ENABLED",
+    )
+    extract_chunk_max_chars: int = Field(
+        default=12_000,
+        ge=1_000,
+        validation_alias="EXTRACT_CHUNK_MAX_CHARS",
+    )
+    extract_chunk_concurrency: int = Field(
+        default=2,
+        ge=1,
+        le=10,
+        validation_alias="EXTRACT_CHUNK_CONCURRENCY",
+    )
+    extract_chunk_max_chunks: int = Field(
+        default=10,
+        ge=1,
+        le=50,
+        validation_alias="EXTRACT_CHUNK_MAX_CHUNKS",
+    )
     extract_repair_max_retries: int = Field(
         default=2,
         ge=0,
