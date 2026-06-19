@@ -31,6 +31,9 @@ const graphLoading = ref(false)
 let abort: AbortController | null = null
 
 const isReady = () => paperStore.currentPaper?.status === 'ready'
+const isPreview = () =>
+  paperStore.currentPaper?.status !== 'ready' && Boolean(paperStore.currentPaper?.preview_available)
+const isInteractive = () => isReady() || isPreview()
 
 const extractWarningMessages = computed(() => resolveExtractWarningMessages(paperStore.currentPaper?.extract_warnings))
 const classifyWarningMessages = computed(() =>
@@ -51,7 +54,7 @@ function formatDetailTime(iso: string | undefined): string {
 }
 
 async function loadGraphIfReady(): Promise<void> {
-  if (!isReady() || paperStore.currentGraph?.paper_id === props.paperId) {
+  if (!isInteractive() || paperStore.currentGraph?.paper_id === props.paperId) {
     return
   }
   graphLoading.value = true
@@ -72,16 +75,16 @@ onMounted(async () => {
 })
 
 watch(
-  () => paperStore.currentPaper?.status,
-  (status) => {
-    if (status === 'ready') {
+  () => [paperStore.currentPaper?.status, paperStore.currentPaper?.preview_available],
+  () => {
+    if (isInteractive()) {
       void loadGraphIfReady()
     }
   },
 )
 
 async function ask(): Promise<void> {
-  if (!question.value.trim() || !isReady()) {
+  if (!question.value.trim() || !isInteractive()) {
     return
   }
   answer.value = ''
@@ -145,7 +148,7 @@ function onGraphNodeClick(nodeId: string): void {
       <header class="detail-header">
         <div class="detail-header__toolbar">
           <RouterLink to="/papers" class="detail-header__back">← {{ DETAIL_BASELINE_COPY.backLink }}</RouterLink>
-          <el-button v-if="isReady()" link type="primary" @click="openFullGraph">
+          <el-button v-if="isInteractive()" link type="primary" @click="openFullGraph">
             {{ DETAIL_BASELINE_COPY.fullGraph }}
           </el-button>
         </div>
@@ -173,31 +176,43 @@ function onGraphNodeClick(nodeId: string): void {
           <section class="detail-qa">
             <h2 class="text-h2 detail-qa__title">{{ DETAIL_BASELINE_COPY.qaSectionTitle }}</h2>
             <el-alert
-              v-if="!isReady()"
+              v-if="!isInteractive()"
               type="info"
               :title="DETAIL_BASELINE_COPY.notReadyAlert"
               show-icon
               :closable="false"
               class="detail-qa__alert"
             />
+            <el-alert
+              v-if="isPreview()"
+              type="warning"
+              :title="DETAIL_BASELINE_COPY.mvpPreviewAlert"
+              show-icon
+              :closable="false"
+              class="detail-qa__alert detail-qa__alert--mvp"
+            />
             <el-input
               v-model="question"
               type="textarea"
               :rows="3"
               class="detail-qa__input"
-              :disabled="!isReady()"
+              :disabled="!isInteractive()"
               :placeholder="DETAIL_BASELINE_COPY.qaPlaceholder"
             />
             <el-space class="detail-qa__actions">
-              <el-button type="primary" :loading="streaming" :disabled="!isReady()" @click="ask">提问</el-button>
-              <el-button v-if="streaming" :disabled="!isReady()" @click="stopStream">停止</el-button>
-              <el-button :disabled="!isReady()" @click="openFullGraph">{{ DETAIL_BASELINE_COPY.fullGraph }}</el-button>
+              <el-button type="primary" :loading="streaming" :disabled="!isInteractive()" @click="ask">
+                提问
+              </el-button>
+              <el-button v-if="streaming" :disabled="!isInteractive()" @click="stopStream">停止</el-button>
+              <el-button :disabled="!isInteractive()" @click="openFullGraph">
+                {{ DETAIL_BASELINE_COPY.fullGraph }}
+              </el-button>
             </el-space>
-            <div v-if="(answer || streaming) && isReady()" class="detail-qa__answer-panel text-body-lg">
+            <div v-if="(answer || streaming) && isInteractive()" class="detail-qa__answer-panel text-body-lg">
               <span class="detail-qa__answer-text">{{ answer }}</span>
               <span v-if="streaming" class="detail-qa__cursor" aria-hidden="true">|</span>
             </div>
-            <div v-if="citations.length && isReady()" class="detail-qa__citations">
+            <div v-if="citations.length && isInteractive()" class="detail-qa__citations">
               <span class="text-caption detail-qa__citations-label">{{ DETAIL_BASELINE_COPY.citationLabel }}：</span>
               <div class="citations-list">
                 <TagCitation
@@ -232,13 +247,21 @@ function onGraphNodeClick(nodeId: string): void {
           />
           <div class="detail-graph__header">
             <h2 class="text-h2 detail-graph__title">{{ DETAIL_BASELINE_COPY.graphPreviewTitle }}</h2>
-            <el-button v-if="isReady()" link type="primary" @click="openFullGraph">
+            <el-button v-if="isInteractive()" link type="primary" @click="openFullGraph">
               {{ DETAIL_BASELINE_COPY.graphFullscreenLink }}
             </el-button>
           </div>
+          <el-alert
+            v-if="isPreview()"
+            type="warning"
+            :title="DETAIL_BASELINE_COPY.mvpGraphAlert"
+            show-icon
+            :closable="false"
+            class="detail-graph__mvp-alert"
+          />
           <div v-loading="graphLoading" class="detail-graph__canvas">
             <PaperGraph
-              v-if="isReady() && paperStore.currentGraph"
+              v-if="isInteractive() && paperStore.currentGraph"
               compact
               :graph="paperStore.currentGraph"
               :highlight-node-id="highlightNodeId"

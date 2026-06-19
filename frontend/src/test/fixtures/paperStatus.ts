@@ -21,6 +21,7 @@ export const readyStatus: PaperStatusData = {
   stage: 'ready',
   message: '处理完成',
   updated_at: '2026-05-19T10:05:00Z',
+  preview_available: true,
   extract_warnings: [],
   classify_warnings: [],
 }
@@ -55,4 +56,5 @@ export const failedStatusWithoutCode: PaperStatusData = {
   stage: 'failed',
   message: '流水线异常终止',
   updated_at: '2026-05-19T10:03:00Z',
+  preview_available: false,
 }

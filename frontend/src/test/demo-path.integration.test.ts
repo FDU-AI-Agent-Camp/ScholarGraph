@@ -94,7 +94,7 @@ describe('design-spec §16 Prototype 答辩路径', () => {
     })
 
     it('processing state disables QA and shows not-ready alert copy', () => {
-      expect(detailViewSrc).toContain(':disabled="!isReady()"')
+      expect(detailViewSrc).toContain(':disabled="!isInteractive()"')
       expect(detailViewSrc).toContain('DETAIL_BASELINE_COPY.notReadyAlert')
       expect(detailViewSrc).toContain('detail-graph__placeholder')
     })

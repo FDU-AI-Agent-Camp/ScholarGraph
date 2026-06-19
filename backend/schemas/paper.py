@@ -49,6 +49,10 @@ class PaperDetail(PaperSummary):
         default=None,
         description="Async dual(rules) merged document head with per-field sources (P10/P11).",
     )
+    preview_available: bool = Field(
+        default=False,
+        description="True when an MVP skeleton graph is available for preview QA/graph.",
+    )
     extract_warnings: list[str] = Field(
         default_factory=list,
         description="Machine-readable graph-extract degrade codes (e.g. extract_heuristic_fallback).",
@@ -72,6 +76,10 @@ class PaperStatusData(BaseModel):
     stage: PipelineStage | None = None
     message: str
     updated_at: datetime
+    preview_available: bool = Field(
+        default=False,
+        description="True when an MVP skeleton graph can be queried for preview QA/graph.",
+    )
     error_code: str | None = Field(
         default=None,
         description="Machine-readable code when status=failed.",

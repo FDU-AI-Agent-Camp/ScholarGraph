@@ -40,8 +40,9 @@ export interface PaginatedPapers {
   limit: number
 }
 
-export type PaperDetail = Schema['PaperDetail'] & {
+export type PaperDetail = Omit<Schema['PaperDetail'], 'preview_available'> & {
   classification?: ParadigmClassification | null
+  preview_available?: boolean
 }
 
 export type PaperCreateResult = {
@@ -50,7 +51,9 @@ export type PaperCreateResult = {
   message: string
 }
 
-export type PaperStatusData = Schema['PaperStatusData']
+export type PaperStatusData = Omit<Schema['PaperStatusData'], 'preview_available'> & {
+  preview_available?: boolean
+}
 
 export type GraphNode = Schema['GraphNode']
 export type GraphEdge = Schema['GraphEdge']

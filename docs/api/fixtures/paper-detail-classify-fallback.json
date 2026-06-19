@@ -6,6 +6,7 @@
     "paradigm": "STEM",
     "created_at": "2026-05-19T10:00:00Z",
     "updated_at": "2026-05-19T10:05:00Z",
+    "preview_available": true,
     "classification": {
       "paradigm": "STEM",
       "confidence": 0.82,

@@ -77,6 +77,7 @@ def _seed_status_for_detail(service: PaperService, detail: PaperDetail) -> None:
             stage=PipelineStage.READY,
             message="建图完成",
             updated_at=updated_at,
+            preview_available=detail.preview_available,
         )
     elif detail.status == PaperStatus.PROCESSING:
         service._status[detail.paper_id] = PaperStatusData(
@@ -86,6 +87,7 @@ def _seed_status_for_detail(service: PaperService, detail: PaperDetail) -> None:
             stage=PipelineStage.CLASSIFYING,
             message="正在识别范式与理论视角…",
             updated_at=updated_at,
+            preview_available=detail.preview_available,
         )
     elif detail.status == PaperStatus.PENDING:
         service._status[detail.paper_id] = PaperStatusData(
@@ -95,4 +97,5 @@ def _seed_status_for_detail(service: PaperService, detail: PaperDetail) -> None:
             stage=None,
             message="任务已创建，请轮询 status 接口",
             updated_at=updated_at,
+            preview_available=False,
         )

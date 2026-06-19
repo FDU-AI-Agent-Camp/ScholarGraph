@@ -222,7 +222,7 @@ describe('Phase 5 Detail acceptance (5.1–5.10)', () => {
     it('PaperDetailView binds baseline alert copy for non-ready papers', () => {
       expect(detailCopySrc).toContain(DETAIL_BASELINE_COPY.notReadyAlert)
       expect(detailViewSrc).toContain('DETAIL_BASELINE_COPY.notReadyAlert')
-      expect(detailViewSrc).toContain(':disabled="!isReady()"')
+      expect(detailViewSrc).toContain(':disabled="!isInteractive()"')
     })
   })
 
