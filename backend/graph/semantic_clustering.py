@@ -21,18 +21,17 @@ _SEMANTIC_BRIDGE_LABEL = "semantic_related"
 
 
 def _node_text(node: ExtractedNode) -> str:
-    """Textual representation of a node for embedding."""
-    parts = [node.label]
-    if node.source_span:
-        parts.append(node.source_span)
-    folded = node.data.get("folded_leaves")
-    if isinstance(folded, list):
-        for leaf in folded:
-            if isinstance(leaf, dict):
-                leaf_label = leaf.get("label")
-                if leaf_label:
-                    parts.append(str(leaf_label))
-    return "\n".join(parts)
+    """High-signal textual representation of a node for embedding.
+
+    bge-m3's vector space is dense; long source spans dilute the core concept.
+    We force the model to attend to the node type and label, and keep the
+    supplementary evidence to a short 100-character snippet.
+    """
+    evidence = (node.source_span or "")[:100]
+    text = f"[类型: {node.type}] 核心标签: {node.label}"
+    if evidence:
+        text += f" | 补充说明: {evidence}"
+    return text
 
 
 def _cosine_similarity(a: Sequence[float], b: Sequence[float]) -> float:

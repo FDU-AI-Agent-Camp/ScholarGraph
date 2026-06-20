@@ -9,6 +9,7 @@ from pydantic import BaseModel, Field, field_validator
 from backend.api.deps import get_paper_service_dep, get_request_id
 from backend.api.responses import paginated, success
 from backend.api.sse import QA_STREAM_HEADERS, format_sse_event
+from backend.graph.skeleton import build_skeleton_graph
 from backend.schemas.paper import PaperStatus
 from backend.schemas.paradigm import Paradigm
 from backend.services.paper_service import PaperService
@@ -88,11 +89,18 @@ async def get_paper_status(
 @router.get("/{paper_id}/graph")
 async def get_paper_graph(
     paper_id: str,
+    view: str | None = Query(default=None, description="Use 'skeleton' for downsampled graph"),
     request_id: str = Depends(get_request_id),
     service: PaperService = Depends(get_paper_service_dep),
 ) -> dict:
-    """Return UnifiedPaperGraph when paper status is ready."""
+    """Return UnifiedPaperGraph when paper status is ready.
+
+    Query ``?view=skeleton`` returns only the largest connected component,
+    capped at 300 nodes by degree centrality.
+    """
     graph = await service.get_graph(paper_id)
+    if view == "skeleton":
+        graph = build_skeleton_graph(graph)
     return success(graph, request_id)
 
 

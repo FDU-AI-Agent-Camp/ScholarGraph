@@ -5,7 +5,7 @@ from __future__ import annotations
 import pytest
 
 from backend.config import Settings
-from backend.graph.semantic_clustering import semantic_cluster_and_merge
+from backend.graph.semantic_clustering import _node_text, semantic_cluster_and_merge
 from backend.schemas.extract_phase import ExtractedEdge, ExtractedEdgeList, ExtractedGraph, ExtractedNode, ExtractedNodeList
 from backend.schemas.paradigm import Paradigm
 
@@ -35,11 +35,12 @@ def _graph() -> ExtractedGraph:
 class _FakeEmbeddingClient:
     """Deterministic embedding client for unit tests.
 
-    Vectors are crafted so that:
-    - n1 and n2 are identical (cluster)
-    - n3 is orthogonal to n1/n2
-    - n4 is orthogonal to n5
-    - n5 is close enough to n4 to be bridged
+    Vectors are keyed by node label so that the strong-feature text format
+    used by ``_node_text`` still maps to the expected similarity landscape:
+    - Adam Optimizer and Adam are very similar (cluster)
+    - SGD is orthogonal to Adam variants
+    - CNN is orthogonal to Survey
+    - Survey is close enough to CNN to be bridged
     """
 
     def __init__(self) -> None:
@@ -51,8 +52,19 @@ class _FakeEmbeddingClient:
             "Survey": [0.45, 0.0, 0.9],
         }
 
+    def _extract_label(self, text: str) -> str:
+        prefix = "核心标签: "
+        start = text.find(prefix)
+        if start == -1:
+            return text
+        start += len(prefix)
+        end = text.find(" |", start)
+        if end == -1:
+            return text[start:]
+        return text[start:end]
+
     async def embed_texts(self, texts: list[str]) -> list[list[float]]:
-        return [self.vectors[text] for text in texts]
+        return [self.vectors[self._extract_label(text)] for text in texts]
 
 
 def _settings(enabled: bool = True, sim: float = 0.92, knn: float = 0.85) -> Settings:
@@ -141,3 +153,18 @@ async def test_embedding_failure_is_graceful() -> None:
 
     assert len(result.nodes) == 5
     assert any("SEMANTIC_CLUSTERING_SKIPPED" in w for w in result.warnings)
+
+
+class TestNodeText:
+    def test_includes_type_label_and_truncated_source_span(self) -> None:
+        node = ExtractedNode(
+            id="n1",
+            label="情感共鸣转向",
+            type="Claim",
+            source_span="这是一个非常长的补充说明" * 10,
+        )
+        text = _node_text(node)
+        assert text.startswith("[类型: Claim] 核心标签: 情感共鸣转向 | 补充说明:")
+        evidence = text.split("补充说明:")[1].strip()
+        assert len(evidence) <= 100
+        assert "这是一个非常长的补充说明" in text
