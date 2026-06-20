@@ -161,8 +161,10 @@ def merge_edge_lists(
     seen: dict[tuple[str, str, str, str], ExtractedEdge] = {}
     for edge_list in edge_lists:
         for edge in edge_list.edges:
-            source = id_map.get(edge.source, edge.source)
-            target = id_map.get(edge.target, edge.target)
+            raw_source = edge.source.lstrip("#")
+            raw_target = edge.target.lstrip("#")
+            source = id_map.get(raw_source, raw_source)
+            target = id_map.get(raw_target, raw_target)
             key = (source, target, edge.type, edge.label)
             existing = seen.get(key)
             if existing is None:
@@ -197,14 +199,21 @@ def merge_graphs(
     merged_nodes, id_map = merge_node_lists(node_lists, prefixed=node_ids_prefixed)
     merged_edges = merge_edge_lists(edge_lists, id_map)
 
+    node_ids = {node.id for node in merged_nodes.nodes}
+    valid_edges = [edge for edge in merged_edges.edges if edge.source in node_ids and edge.target in node_ids]
+    removed = len(merged_edges.edges) - len(valid_edges)
+    dangling_warning = f"DANGLING_EDGES_REMOVED:{removed}" if removed else ""
+
     warnings = list(dict.fromkeys(merged_nodes.warnings + merged_edges.warnings))
+    if dangling_warning:
+        warnings.append(dangling_warning)
 
     return ExtractedGraph(
         paper_id=paper_id,
         title=title,
         paradigm=paradigm,
         nodes=merged_nodes.nodes,
-        edges=merged_edges.edges,
+        edges=valid_edges,
         summary=summary,
         warnings=warnings,
     )

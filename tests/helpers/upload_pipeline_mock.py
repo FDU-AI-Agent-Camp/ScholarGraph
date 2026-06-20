@@ -7,6 +7,8 @@ from contextlib import contextmanager
 from pathlib import Path
 from unittest.mock import patch
 
+from backend.schemas.ingest_head import IngestHead
+from backend.services.head_refine_service import HeadRefineResult
 from tests.conftest import mock_pipeline_node_services
 
 
@@ -20,8 +22,24 @@ def mock_http_upload_pipeline_run() -> Iterator[None]:
         with mock_pipeline_node_services(paper_id):
             return await real_run_paper_pipeline(paper_id, pdf_path)
 
-    with patch(
-        "backend.graph.workflow.run_paper_pipeline",
-        side_effect=run_with_mock_nodes,
+    async def fake_refine_head_async(paper_id: str, pdf_path: Path, **kwargs):
+        return HeadRefineResult(
+            paper_id=paper_id,
+            page_count=1,
+            route=None,
+            merged=IngestHead(title="mock", abstract="mock abstract", intro="mock intro"),
+            classifier_input="mock classifier input",
+            warnings=[],
+        )
+
+    with (
+        patch(
+            "backend.graph.workflow.run_paper_pipeline",
+            side_effect=run_with_mock_nodes,
+        ),
+        patch(
+            "backend.services.head_refine_service.refine_head_async",
+            new=fake_refine_head_async,
+        ),
     ):
         yield

@@ -105,13 +105,14 @@ class TestExtractedEdgeList:
         )
         assert len(edge_list.edges) == 1
 
-    def test_duplicate_edge_ids_raise(self) -> None:
-        with pytest.raises(ValueError, match="Duplicate edge ids"):
-            ExtractedEdgeList(
-                paradigm=Paradigm.HSS,
-                edges=[_hss_edge(id="e1"), _hss_edge(id="e1")],
-                node_ids=["n1"],
-            )
+    def test_duplicate_edge_ids_are_deduplicated_with_warning(self) -> None:
+        edge_list = ExtractedEdgeList(
+            paradigm=Paradigm.HSS,
+            edges=[_hss_edge(id="e1"), _hss_edge(id="e1")],
+            node_ids=["n1"],
+        )
+        assert len(edge_list.edges) == 1
+        assert any("DUPLICATE_EDGE_IDS_DEDUPLICATED" in w for w in edge_list.warnings)
 
     def test_forbidden_hss_edge_type_raises(self) -> None:
         with pytest.raises(ValueError, match="forbidden edge types"):

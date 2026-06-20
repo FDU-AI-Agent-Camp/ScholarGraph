@@ -129,15 +129,27 @@ async def extract_chunked(
         prompt = _anchor_text(resolved_head, chunk.text)
         await rate_limiter.acquire(tokens=1, chars=len(prompt))
         async with semaphore:
-            node_list = await extract_nodes_with_llm(
-                prompt,
-                paradigm,
-                paper_id=paper_id,
-                title=title,
-                head_context=resolved_head,
-                settings=cfg,
-                llm_client=client,
-            )
+            try:
+                node_list = await extract_nodes_with_llm(
+                    prompt,
+                    paradigm,
+                    paper_id=paper_id,
+                    title=title,
+                    head_context=resolved_head,
+                    settings=cfg,
+                    llm_client=client,
+                )
+            except Exception as exc:
+                logger.warning(
+                    "chunked_node_extraction_failed",
+                    extra={
+                        "paper_id": paper_id,
+                        "chunk_index": chunk.index,
+                        "chunk_title": chunk.title,
+                        "error": type(exc).__name__,
+                    },
+                )
+                return None
             if not node_list.nodes:
                 logger.warning(
                     "chunked_node_extraction_empty",
@@ -160,16 +172,28 @@ async def extract_chunked(
         async with semaphore:
             if not global_nodes.nodes:
                 return None
-            return await build_edges_with_llm(
-                global_nodes,
-                prompt,
-                paper_id=paper_id,
-                title=title,
-                head_context=resolved_head,
-                chunk_title=chunk.title,
-                settings=cfg,
-                llm_client=client,
-            )
+            try:
+                return await build_edges_with_llm(
+                    global_nodes,
+                    prompt,
+                    paper_id=paper_id,
+                    title=title,
+                    head_context=resolved_head,
+                    chunk_title=chunk.title,
+                    settings=cfg,
+                    llm_client=client,
+                )
+            except Exception as exc:
+                logger.warning(
+                    "chunked_edge_extraction_failed",
+                    extra={
+                        "paper_id": paper_id,
+                        "chunk_index": chunk.index,
+                        "chunk_title": chunk.title,
+                        "error": type(exc).__name__,
+                    },
+                )
+                return None
 
     per_chunk_edges = [e for e in await asyncio.gather(*(_edges_for_chunk(chunk) for chunk in chunks)) if e is not None]
 

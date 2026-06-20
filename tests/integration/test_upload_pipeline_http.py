@@ -79,6 +79,7 @@ async def test_upload_detail_status_tracks_processing_before_ready(
                 saw_processing = True
                 assert detail_data["status"] == "processing"
                 assert status_data["stage"] in (
+                    "head_refining",
                     "ingesting",
                     "classifying",
                     "extracting",

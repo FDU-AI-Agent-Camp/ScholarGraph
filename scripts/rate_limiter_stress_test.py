@@ -156,6 +156,11 @@ async def main() -> None:
         elapsed = time.monotonic() - started_at
         extract_chunked_module.get_extract_rate_limiter = original_factory
 
+    if graph is not None:
+        graph_path = REPORT_DIR / f"{paper_id}.graph.json"
+        graph_path.write_text(graph.model_dump_json(indent=2), encoding="utf-8")
+        logger.info("Graph written to %s", graph_path)
+
     report: dict[str, Any] = {
         "started_at": datetime.fromtimestamp(started_at, UTC).isoformat(),
         "elapsed_s": round(elapsed, 2),
