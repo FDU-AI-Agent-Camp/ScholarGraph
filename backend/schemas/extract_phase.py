@@ -185,12 +185,24 @@ class ExtractedEdgeList(BaseModel):
 
     @model_validator(mode="after")
     def validate_edge_consistency(self) -> "ExtractedEdgeList":
-        """Enforce unique ids, valid edge types, and dangling-free references."""
-        ids = [edge.id for edge in self.edges]
-        seen: set[str] = set()
-        duplicates = [eid for eid in ids if eid in seen or seen.add(eid)]
-        if duplicates:
-            raise ValueError(f"Duplicate edge ids: {duplicates}")
+        """Enforce unique ids, valid edge types, and dangling-free references.
+
+        Duplicate edge ids from a single LLM response are deduplicated with a
+        warning rather than failing the whole chunked extraction (Slice 2).
+        """
+        seen_ids: set[str] = set()
+        deduplicated: list[ExtractedEdge] = []
+        duplicate_ids: set[str] = set()
+        for edge in self.edges:
+            if edge.id in seen_ids:
+                duplicate_ids.add(edge.id)
+                continue
+            seen_ids.add(edge.id)
+            deduplicated.append(edge)
+
+        if duplicate_ids:
+            self.warnings.append(f"DUPLICATE_EDGE_IDS_DEDUPLICATED:{','.join(sorted(duplicate_ids))}")
+            self.edges = deduplicated
 
         allowed = HSS_EDGE_TYPES if self.paradigm == Paradigm.HSS else STEM_EDGE_TYPES
         forbidden = [edge.type for edge in self.edges if edge.type not in allowed]
