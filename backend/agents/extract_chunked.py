@@ -9,6 +9,7 @@ from typing import Any
 from backend.agents.extract_edges import build_edges_with_llm
 from backend.agents.extract_nodes import extract_nodes_with_llm
 from backend.config import Settings, get_settings
+from backend.graph.semantic_clustering import semantic_cluster_and_merge
 from backend.graph.head_store import HeadStore
 from backend.graph.merge_graphs import merge_graphs
 from backend.ingest.chunking import TextChunk, chunk_text
@@ -248,6 +249,9 @@ async def extract_chunked(
         extra_warnings=chunk_warnings,
         prune=True,
     )
+
+    if cfg.semantic_clustering_enabled:
+        result = await semantic_cluster_and_merge(result, cfg)
 
     logger.info(
         "chunked_extraction_success",

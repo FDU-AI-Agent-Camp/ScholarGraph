@@ -136,6 +136,46 @@ class Settings(BaseSettings):
         validation_alias="EXTRACT_STRUCTURED_OUTPUT_REPAIR",
     )
 
+    # ------------------------------------------------------------------
+    # Semantic clustering / graph dehydration (Slice 2 second-order)
+    # ------------------------------------------------------------------
+    semantic_clustering_enabled: bool = Field(
+        default=False,
+        validation_alias="SEMANTIC_CLUSTERING_ENABLED",
+    )
+    semantic_similarity_threshold: float = Field(
+        default=0.92,
+        ge=0.0,
+        le=1.0,
+        validation_alias="SEMANTIC_SIMILARITY_THRESHOLD",
+    )
+    semantic_knn_threshold: float = Field(
+        default=0.85,
+        ge=0.0,
+        le=1.0,
+        validation_alias="SEMANTIC_KNN_THRESHOLD",
+    )
+    embedding_provider: Literal["openai", "ollama"] = Field(
+        default="openai",
+        validation_alias="EMBEDDING_PROVIDER",
+    )
+    embedding_model: str = Field(
+        default="bge-m3",
+        validation_alias="EMBEDDING_MODEL",
+    )
+    embedding_api_base_url: str | None = Field(
+        default=None,
+        validation_alias="EMBEDDING_API_BASE_URL",
+    )
+    embedding_api_key: str = Field(
+        default="",
+        validation_alias="EMBEDDING_API_KEY",
+    )
+    embedding_ollama_url: str = Field(
+        default="http://localhost:11434",
+        validation_alias="EMBEDDING_OLLAMA_URL",
+    )
+
     extract_repair_max_retries: int = Field(
         default=2,
         ge=0,
@@ -172,6 +212,14 @@ class Settings(BaseSettings):
     @property
     def is_llm_live(self) -> bool:
         return self.llm_mode == "live"
+
+    @property
+    def embedding_api_key_effective(self) -> str:
+        return self.embedding_api_key.strip() or self.require_llm_key()
+
+    @property
+    def embedding_api_base_url_effective(self) -> str | None:
+        return self.embedding_api_base_url or self.llm_api_base_url or None
 
     @property
     def llm_model_fallback_effective(self) -> str | None:
