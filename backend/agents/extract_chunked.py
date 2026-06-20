@@ -246,6 +246,7 @@ async def extract_chunked(
         summary=summary,
         node_ids_prefixed=True,
         extra_warnings=chunk_warnings,
+        prune=True,
     )
 
     logger.info(

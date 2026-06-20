@@ -51,12 +51,12 @@ def _node_list(count: int) -> ExtractedNodeList:
     )
 
 
-def _edge_list(count: int) -> ExtractedEdgeList:
+def _edge_list(count: int, source: str = "c0_n0", target: str = "c0_n1") -> ExtractedEdgeList:
     from backend.schemas.extract_phase import ExtractedEdge
     return ExtractedEdgeList(
         paradigm=Paradigm.HSS,
         nodes=[],
-        edges=[ExtractedEdge(id=f"e{i}", source="n0", target="n1", label="supports", type="SUPPORTS") for i in range(count)],
+        edges=[ExtractedEdge(id=f"e{i}", source=source, target=target, label="supports", type="SUPPORTS") for i in range(count)],
     )
 
 
@@ -116,8 +116,14 @@ class TestChunkRetry:
                 raise RuntimeError("chunk 0 always fails")
             return _node_list(2)
 
+        async def selective_build_edges(*args, **kwargs) -> ExtractedEdgeList:
+            prompt = args[1] if len(args) > 1 else kwargs.get("prompt", "")
+            if "chunk0" in prompt:
+                return _edge_list(1, source="c0_n0", target="c0_n1")
+            return _edge_list(1, source="c1_n0", target="c1_n1")
+
         monkeypatch.setattr("backend.agents.extract_chunked.extract_nodes_with_llm", selective_extract_nodes)
-        monkeypatch.setattr("backend.agents.extract_chunked.build_edges_with_llm", AsyncMock(return_value=_edge_list(1)))
+        monkeypatch.setattr("backend.agents.extract_chunked.build_edges_with_llm", AsyncMock(side_effect=selective_build_edges))
 
         result = await extract_chunked("x" * 50_000, Paradigm.HSS, paper_id=paper_id, settings=settings)
 

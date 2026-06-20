@@ -11,6 +11,17 @@ from backend.schemas.paradigm import Paradigm
 
 logger = logging.getLogger(__name__)
 
+# Node types that are safe to fold into their single neighbour during heuristic
+# baseline pruning. These are typically secondary evidentiary nodes that merely
+# decorate a Claim/Thesis/Method rather than acting as graph navigation hubs.
+_FOLDABLE_LEAF_TYPES = frozenset({
+    "Evidence",
+    "ObjectOrData",
+    "Dataset",
+    "Metric",
+    "Baseline",
+})
+
 
 class _UnionFind:
     """Disjoint-set union-find with path compression."""
@@ -186,6 +197,92 @@ def merge_edge_lists(
     )
 
 
+def _heuristic_prune(graph: ExtractedGraph) -> ExtractedGraph:
+    """First-order graph dehydration: zero-degree purge + leaf-node folding.
+
+    This is intentionally cheap and deterministic. It runs in a single pass and
+    is designed to shrink the graph by 30-40% before any embedding-based or
+    community-detection pruning happens.
+    """
+    nodes = graph.nodes
+    edges = graph.edges
+
+    node_by_id = {node.id: node for node in nodes}
+    incident_edges: dict[str, list[ExtractedEdge]] = {node.id: [] for node in nodes}
+
+    for edge in edges:
+        if edge.source in incident_edges:
+            incident_edges[edge.source].append(edge)
+        if edge.target in incident_edges:
+            incident_edges[edge.target].append(edge)
+
+    # 1. Zero-Degree Purge: remove nodes with no incident edges.
+    zero_degree_ids = {node.id for node in nodes if not incident_edges[node.id]}
+    kept_node_ids = set(node_by_id.keys()) - zero_degree_ids
+
+    # 2. Leaf-Node Folding: collapse degree-1 secondary nodes into their parent.
+    folded_leaf_ids: set[str] = set()
+    parent_folds: dict[str, list[dict[str, Any]]] = {}
+
+    for leaf_id in sorted(kept_node_ids):
+        if leaf_id in folded_leaf_ids:
+            continue
+        leaf = node_by_id[leaf_id]
+        if leaf.type not in _FOLDABLE_LEAF_TYPES:
+            continue
+
+        leaf_edges = incident_edges[leaf_id]
+        if len(leaf_edges) != 1:
+            continue
+
+        edge = leaf_edges[0]
+        parent_id = edge.target if edge.source == leaf_id else edge.source
+        if parent_id not in kept_node_ids or parent_id in folded_leaf_ids:
+            continue
+
+        parent = node_by_id[parent_id]
+        # Avoid ambiguous folding when two foldable leaves point at each other.
+        if parent.type in _FOLDABLE_LEAF_TYPES and len(incident_edges[parent_id]) == 1:
+            continue
+
+        parent_folds.setdefault(parent_id, []).append({
+            "leaf_id": leaf_id,
+            "leaf_type": leaf.type,
+            "label": leaf.label,
+            "source_span": leaf.source_span,
+        })
+        folded_leaf_ids.add(leaf_id)
+
+    removed_ids = zero_degree_ids | folded_leaf_ids
+    new_nodes: list[ExtractedNode] = []
+    for node in nodes:
+        if node.id in removed_ids:
+            continue
+        folds = parent_folds.get(node.id)
+        if folds:
+            new_data = dict(node.data)
+            existing = new_data.setdefault("folded_leaves", [])
+            if isinstance(existing, list):
+                existing.extend(folds)
+            else:
+                new_data["folded_leaves"] = folds
+            node = node.model_copy(update={"data": new_data})
+        new_nodes.append(node)
+
+    new_edges = [
+        edge for edge in edges
+        if edge.source not in removed_ids and edge.target not in removed_ids
+    ]
+
+    warnings = list(graph.warnings)
+    if zero_degree_ids:
+        warnings.append(f"PRUNED_ZERO_DEGREE:{len(zero_degree_ids)}")
+    if folded_leaf_ids:
+        warnings.append(f"FOLDED_LEAVES:{len(folded_leaf_ids)}")
+
+    return graph.model_copy(update={"nodes": new_nodes, "edges": new_edges, "warnings": warnings})
+
+
 def merge_graphs(
     paper_id: str,
     title: str | None,
@@ -195,8 +292,16 @@ def merge_graphs(
     summary: str | None = None,
     node_ids_prefixed: bool = False,
     extra_warnings: list[str] | None = None,
+    prune: bool = False,
 ) -> ExtractedGraph:
-    """Merge multiple per-chunk extraction results into a single validated graph."""
+    """Merge multiple per-chunk extraction results into a single validated graph.
+
+    Args:
+        prune: When ``True``, apply heuristic baseline pruning (zero-degree
+            purge + leaf-node folding) before returning. Disabled by default so
+            low-level merge semantics remain stable for callers that need the
+            raw graph; the chunked extraction pipeline enables it explicitly.
+    """
     merged_nodes, id_map = merge_node_lists(node_lists, prefixed=node_ids_prefixed)
     merged_edges = merge_edge_lists(edge_lists, id_map)
 
@@ -209,7 +314,7 @@ def merge_graphs(
     if dangling_warning:
         warnings.append(dangling_warning)
 
-    return ExtractedGraph(
+    graph = ExtractedGraph(
         paper_id=paper_id,
         title=title,
         paradigm=paradigm,
@@ -218,3 +323,8 @@ def merge_graphs(
         summary=summary,
         warnings=warnings,
     )
+
+    if prune:
+        graph = _heuristic_prune(graph)
+
+    return graph

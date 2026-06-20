@@ -92,3 +92,91 @@ class TestMergeGraphs:
         assert len(graph.nodes) == 3
         assert len(graph.edges) == 2
         assert all(e.source in {n.id for n in graph.nodes} for e in graph.edges)
+
+
+class TestHeuristicPruning:
+    def test_zero_degree_nodes_are_removed(self) -> None:
+        nodes = ExtractedNodeList(
+            paradigm=Paradigm.HSS,
+            nodes=[
+                _node("c0_n1", "Main Claim", "Claim"),
+                _node("c0_n2", "Orphan Evidence", "Evidence"),
+                _node("c0_n3", "Supporting Claim", "Claim"),
+            ],
+        )
+        edges = ExtractedEdgeList(
+            paradigm=Paradigm.HSS,
+            edges=[_edge("e1", "c0_n1", "c0_n3", "SUPPORTS")],
+        )
+        graph = merge_graphs(
+            "p1", "Title", Paradigm.HSS, [nodes], [edges], prune=True, node_ids_prefixed=True
+        )
+
+        assert len(graph.nodes) == 2
+        assert {n.id for n in graph.nodes} == {"c0_n1", "c0_n3"}
+        assert any("PRUNED_ZERO_DEGREE:1" in w for w in graph.warnings)
+
+    def test_leaf_evidence_is_folded_into_parent_claim(self) -> None:
+        nodes = ExtractedNodeList(
+            paradigm=Paradigm.HSS,
+            nodes=[
+                _node("c0_n1", "Main Claim", "Claim"),
+                _node("c0_n2", "Survey data", "Evidence"),
+            ],
+        )
+        edges = ExtractedEdgeList(
+            paradigm=Paradigm.HSS,
+            edges=[_edge("e1", "c0_n2", "c0_n1", "SUPPORTS")],
+        )
+        graph = merge_graphs(
+            "p1", "Title", Paradigm.HSS, [nodes], [edges], prune=True, node_ids_prefixed=True
+        )
+
+        assert len(graph.nodes) == 1
+        assert graph.nodes[0].id == "c0_n1"
+        assert len(graph.edges) == 0
+        assert any("FOLDED_LEAVES:1" in w for w in graph.warnings)
+        folded = graph.nodes[0].data.get("folded_leaves", [])
+        assert len(folded) == 1
+        assert folded[0]["leaf_id"] == "c0_n2"
+        assert folded[0]["leaf_type"] == "Evidence"
+
+    def test_leaf_pair_is_not_ambiguously_folded(self) -> None:
+        nodes = ExtractedNodeList(
+            paradigm=Paradigm.HSS,
+            nodes=[
+                _node("c0_n1", "Evidence A", "Evidence"),
+                _node("c0_n2", "Evidence B", "Evidence"),
+            ],
+        )
+        edges = ExtractedEdgeList(
+            paradigm=Paradigm.HSS,
+            edges=[_edge("e1", "c0_n1", "c0_n2", "RELATES_TO")],
+        )
+        graph = merge_graphs(
+            "p1", "Title", Paradigm.HSS, [nodes], [edges], prune=True, node_ids_prefixed=True
+        )
+
+        assert len(graph.nodes) == 2
+        assert len(graph.edges) == 1
+        assert not any("FOLDED_LEAVES" in w for w in graph.warnings)
+
+    def test_non_leaf_nodes_are_not_folded(self) -> None:
+        nodes = ExtractedNodeList(
+            paradigm=Paradigm.HSS,
+            nodes=[
+                _node("c0_n1", "Thesis", "Thesis"),
+                _node("c0_n2", "Sub Argument", "SubArgument"),
+            ],
+        )
+        edges = ExtractedEdgeList(
+            paradigm=Paradigm.HSS,
+            edges=[_edge("e1", "c0_n2", "c0_n1", "SUB_ARGUMENT_OF")],
+        )
+        graph = merge_graphs(
+            "p1", "Title", Paradigm.HSS, [nodes], [edges], prune=True, node_ids_prefixed=True
+        )
+
+        assert len(graph.nodes) == 2
+        assert len(graph.edges) == 1
+        assert not any("FOLDED_LEAVES" in w for w in graph.warnings)
