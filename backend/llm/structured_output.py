@@ -94,6 +94,8 @@ def _parse_model_response(raw: str, schema: type[T], *, context: dict[str, Any] 
             from json_repair import loads as repair_loads
 
             data = repair_loads(json_text)
+            if not isinstance(data, (dict, list)):
+                raise ValueError("repaired content is not a JSON object or array")
             logger.warning(
                 "json_repair_succeeded",
                 extra={"original_preview": json_text[:200], "repaired_preview": json.dumps(data)[:200]},
