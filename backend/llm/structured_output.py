@@ -80,15 +80,28 @@ def _extract_json(raw: str) -> str:
 
 
 def _parse_model_response(raw: str, schema: type[T], *, context: dict[str, Any] | None = None) -> T:
-    """Parse raw LLM string into ``schema``, tolerating markdown wrappers."""
+    """Parse raw LLM string into ``schema``, tolerating markdown wrappers.
+
+    If the extracted JSON is truncated or malformed, attempt a local repair
+    (bracket closure, escape fixes, etc.) before giving up. This avoids wasting
+    API tokens on retries for trivially recoverable model output.
+    """
     json_text = _extract_json(raw)
-    # Pre-validate to produce a clearer error message when content is not JSON.
     try:
-        json.loads(json_text)
-    except json.JSONDecodeError as exc:
-        msg = f"Model returned non-JSON content: {raw[:200]}..."
-        raise ValueError(msg) from exc
-    return schema.model_validate_json(json_text, context=context)
+        data = json.loads(json_text)
+    except json.JSONDecodeError:
+        try:
+            from json_repair import loads as repair_loads
+
+            data = repair_loads(json_text)
+            logger.warning(
+                "json_repair_succeeded",
+                extra={"original_preview": json_text[:200], "repaired_preview": json.dumps(data)[:200]},
+            )
+        except Exception as repair_exc:
+            msg = f"Model returned non-JSON content: {raw[:200]}..."
+            raise ValueError(msg) from repair_exc
+    return schema.model_validate(data, context=context)
 
 
 async def ainvoke_structured(
@@ -102,8 +115,9 @@ async def ainvoke_structured(
     """Invoke the LLM and parse the response into ``schema``.
 
     Unlike LangChain's ``with_structured_output``, this helper strips markdown
-    code fences and extracts the first JSON object, making it compatible with
-    models that do not strictly follow OpenAI's JSON schema mode.
+    code fences, extracts the first JSON object, and locally repairs truncated
+    JSON when possible, making it compatible with models that do not strictly
+    follow OpenAI's JSON schema mode.
     """
     chat = client.fallback_chat if use_fallback_model and client.fallback_chat is not None else client.chat
     response = await chat.ainvoke(messages)

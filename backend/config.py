@@ -121,6 +121,21 @@ class Settings(BaseSettings):
         ge=0,
         validation_alias="EXTRACT_CHUNK_TPM_LIMIT",
     )
+    extract_chunk_retry_attempts: int = Field(
+        default=3,
+        ge=0,
+        validation_alias="EXTRACT_CHUNK_RETRY_ATTEMPTS",
+    )
+    extract_chunk_retry_delay_s: float = Field(
+        default=3.0,
+        ge=0,
+        validation_alias="EXTRACT_CHUNK_RETRY_DELAY_S",
+    )
+    extract_structured_output_repair: bool = Field(
+        default=True,
+        validation_alias="EXTRACT_STRUCTURED_OUTPUT_REPAIR",
+    )
+
     extract_repair_max_retries: int = Field(
         default=2,
         ge=0,

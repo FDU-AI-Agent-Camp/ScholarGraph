@@ -42,12 +42,15 @@ def _register_paper(paper_id: str) -> None:
 @pytest.fixture(autouse=True)
 def _fresh_state(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("LLM_MODE", "mock")
-    from backend.config import get_settings
+    from backend.config import Settings, get_settings
     from backend.services.paper_service import get_paper_service
 
     get_settings.cache_clear()
     get_paper_service.cache_clear()
     reset_extract_worker()
+    # Zero retry delay keeps mock-mode worker tests fast.
+    _fast_settings = Settings(_env_file=None, llm_mode="mock", extract_chunk_retry_delay_s=0.0)
+    monkeypatch.setattr("backend.services.extract_worker.get_settings", lambda: _fast_settings)
     yield
     reset_extract_worker()
     get_paper_service.cache_clear()

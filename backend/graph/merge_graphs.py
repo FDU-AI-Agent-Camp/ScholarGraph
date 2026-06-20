@@ -194,6 +194,7 @@ def merge_graphs(
     edge_lists: list[ExtractedEdgeList],
     summary: str | None = None,
     node_ids_prefixed: bool = False,
+    extra_warnings: list[str] | None = None,
 ) -> ExtractedGraph:
     """Merge multiple per-chunk extraction results into a single validated graph."""
     merged_nodes, id_map = merge_node_lists(node_lists, prefixed=node_ids_prefixed)
@@ -204,7 +205,7 @@ def merge_graphs(
     removed = len(merged_edges.edges) - len(valid_edges)
     dangling_warning = f"DANGLING_EDGES_REMOVED:{removed}" if removed else ""
 
-    warnings = list(dict.fromkeys(merged_nodes.warnings + merged_edges.warnings))
+    warnings = list(dict.fromkeys(merged_nodes.warnings + merged_edges.warnings + (extra_warnings or [])))
     if dangling_warning:
         warnings.append(dangling_warning)
 
