@@ -79,6 +79,7 @@ async def test_extract_node_reaches_be_only_via_agent_service(
     with patch("backend.graph.nodes.get_agent_service") as get_svc:
         agent = MagicMock()
         agent.extract_graph = AsyncMock(return_value=ExtractResult(graph=graph, warnings=[]))
+        agent.should_extract_in_background = MagicMock(return_value=False)
         get_svc.return_value = agent
         out = await nodes.extract_node(post_classify_state)
 

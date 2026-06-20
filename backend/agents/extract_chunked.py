@@ -13,6 +13,7 @@ from backend.graph.head_store import HeadStore
 from backend.graph.merge_graphs import merge_graphs
 from backend.ingest.chunking import TextChunk, chunk_text
 from backend.llm.client import LlmClient, get_llm_client
+from backend.llm.rate_limiter import get_extract_rate_limiter
 from backend.schemas.extract_phase import ExtractedEdgeList, ExtractedGraph, ExtractedNodeList
 from backend.schemas.paradigm import Paradigm
 
@@ -100,17 +101,16 @@ async def extract_chunked(
     if not chunks:
         raise ValueError("Chunking produced no usable text chunks.")
 
-    max_chunks = cfg.extract_chunk_max_chunks
-    if len(chunks) > max_chunks:
+    if len(chunks) > cfg.extract_chunk_max_chunks:
         logger.warning(
-            "chunk_count_exceeds_limit",
+            "chunk_count_exceeds_safety_limit",
             extra={
                 "paper_id": paper_id,
                 "chunk_count": len(chunks),
-                "max_chunks": max_chunks,
+                "max_chunks": cfg.extract_chunk_max_chunks,
             },
         )
-        chunks = chunks[:max_chunks]
+        chunks = chunks[: cfg.extract_chunk_max_chunks]
 
     logger.info(
         "chunked_extraction_start",
@@ -122,12 +122,15 @@ async def extract_chunked(
         },
     )
 
+    rate_limiter = get_extract_rate_limiter()
     semaphore = asyncio.Semaphore(cfg.extract_chunk_concurrency or _DEFAULT_CHUNK_CONCURRENCY)
 
     async def _nodes_for_chunk(chunk: TextChunk) -> ExtractedNodeList | None:
+        prompt = _anchor_text(resolved_head, chunk.text)
+        await rate_limiter.acquire(tokens=1, chars=len(prompt))
         async with semaphore:
             node_list = await extract_nodes_with_llm(
-                _anchor_text(resolved_head, chunk.text),
+                prompt,
                 paradigm,
                 paper_id=paper_id,
                 title=title,
@@ -152,12 +155,14 @@ async def extract_chunked(
     global_nodes, _ = merge_node_lists(per_chunk_nodes, prefixed=True)
 
     async def _edges_for_chunk(chunk: TextChunk) -> ExtractedEdgeList | None:
+        prompt = _anchor_text(resolved_head, chunk.text)
+        await rate_limiter.acquire(tokens=1, chars=len(prompt))
         async with semaphore:
             if not global_nodes.nodes:
                 return None
             return await build_edges_with_llm(
                 global_nodes,
-                _anchor_text(resolved_head, chunk.text),
+                prompt,
                 paper_id=paper_id,
                 title=title,
                 head_context=resolved_head,

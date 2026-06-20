@@ -59,6 +59,9 @@ class WorkflowState(TypedDict, total=False):
     classify_warnings: list[str]
     extract_warnings: list[str]
 
+    # Slice 2: long papers schedule full extraction in the background.
+    background_extraction_scheduled: bool
+
     failed: bool
 
 

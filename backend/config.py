@@ -107,10 +107,19 @@ class Settings(BaseSettings):
         validation_alias="EXTRACT_CHUNK_CONCURRENCY",
     )
     extract_chunk_max_chunks: int = Field(
-        default=10,
+        default=1000,
         ge=1,
-        le=50,
         validation_alias="EXTRACT_CHUNK_MAX_CHUNKS",
+    )
+    extract_chunk_rpm_limit: int = Field(
+        default=60,
+        ge=0,
+        validation_alias="EXTRACT_CHUNK_RPM_LIMIT",
+    )
+    extract_chunk_tpm_limit: int = Field(
+        default=1_000_000,
+        ge=0,
+        validation_alias="EXTRACT_CHUNK_TPM_LIMIT",
     )
     extract_repair_max_retries: int = Field(
         default=2,

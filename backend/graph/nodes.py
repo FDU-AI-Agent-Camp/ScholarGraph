@@ -4,7 +4,7 @@ from pathlib import Path
 
 from backend.graph.state import STAGE_PERCENT, WorkflowState
 from backend.schemas.paper import PaperStatus, PaperStatusData, PipelineStage
-from backend.schemas.paradigm import Paradigm
+from backend.schemas.paradigm import Paradigm, ParadigmClassification
 from backend.services.agent_service import get_agent_service
 from backend.services.errors import PIPELINE_FAILED_CODE, ServiceError
 from backend.services.head_refine_wait import wait_for_refined_classifier_input
@@ -126,10 +126,36 @@ async def classify_node(state: WorkflowState) -> WorkflowState:
 async def extract_node(state: WorkflowState) -> WorkflowState:
     _mark_progress(state, stage=PipelineStage.EXTRACTING, message="正在抽取逻辑图谱")
     paper_id = state["paper_id"]
+    paradigm = Paradigm(state["paradigm"])
+    agent_service = get_agent_service()
+
+    if agent_service.should_extract_in_background(state["full_text"]):
+        try:
+            classification = ParadigmClassification.model_validate(state["classification"])
+            result = await agent_service.extract_graph_background(
+                state["full_text"],
+                paradigm,
+                paper_id=paper_id,
+                classification=classification,
+            )
+        except ServiceError as exc:
+            return _failure_patch(exc, stage=PipelineStage.EXTRACTING)
+
+        if result.warnings:
+            get_paper_service().record_extract_warnings(paper_id, result.warnings)
+
+        return _success_patch(
+            stage=PipelineStage.EXTRACTING,
+            message="全量抽取已在后台启动，可先预览 MVP 骨架",
+            graph=result.graph.model_dump(mode="json"),
+            extract_warnings=result.warnings,
+            background_extraction_scheduled=True,
+        )
+
     try:
-        result = await get_agent_service().extract_graph(
+        result = await agent_service.extract_graph(
             state["full_text"],
-            Paradigm(state["paradigm"]),
+            paradigm,
             paper_id=paper_id,
         )
     except ServiceError as exc:

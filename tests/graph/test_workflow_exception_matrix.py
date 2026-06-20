@@ -70,6 +70,7 @@ async def test_node_maps_service_error_to_failed_workflow_state(
     else:
         mock_method = AsyncMock(side_effect=error)
     setattr(svc, service_method, mock_method)
+    svc.should_extract_in_background = MagicMock(return_value=False)
     patch_target = f"backend.graph.nodes.{service_getter}"
     with patch(patch_target, return_value=svc):
         out = await node_fn(state)
@@ -121,6 +122,7 @@ async def test_pipeline_end_to_end_failure_updates_paper_status(
         svc.classify_paradigm = AsyncMock(side_effect=error)
     else:
         svc.extract_graph = AsyncMock(side_effect=error)
+    svc.should_extract_in_background = MagicMock(return_value=False)
 
     patch_target = f"backend.graph.nodes.{service_getter}"
     with patch(patch_target, return_value=svc):
