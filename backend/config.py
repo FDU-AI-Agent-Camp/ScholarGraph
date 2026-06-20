@@ -8,6 +8,25 @@ from pydantic import AliasChoices, Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
+# Different embedding models train with different vector-space densities.
+# Hard-coding a single threshold would break when switching models, so we keep
+# per-model defaults and allow explicit env overrides.
+DEFAULT_EMBEDDING_MODEL_THRESHOLDS: dict[str, dict[str, float]] = {
+    "bge-m3": {
+        "similarity": 0.85,
+        "knn": 0.75,
+    },
+    "text-embedding-3-small": {
+        "similarity": 0.65,
+        "knn": 0.55,
+    },
+    "default": {
+        "similarity": 0.80,
+        "knn": 0.70,
+    },
+}
+
+
 class Settings(BaseSettings):
     """Runtime configuration; values come from `.env` at repository root."""
 
@@ -143,15 +162,17 @@ class Settings(BaseSettings):
         default=False,
         validation_alias="SEMANTIC_CLUSTERING_ENABLED",
     )
+    # When negative, fall back to model-specific defaults defined below.
+    # Explicit env values always take precedence.
     semantic_similarity_threshold: float = Field(
-        default=0.92,
-        ge=0.0,
+        default=-1.0,
+        ge=-1.0,
         le=1.0,
         validation_alias="SEMANTIC_SIMILARITY_THRESHOLD",
     )
     semantic_knn_threshold: float = Field(
-        default=0.85,
-        ge=0.0,
+        default=-1.0,
+        ge=-1.0,
         le=1.0,
         validation_alias="SEMANTIC_KNN_THRESHOLD",
     )
@@ -220,6 +241,36 @@ class Settings(BaseSettings):
     @property
     def embedding_api_base_url_effective(self) -> str | None:
         return self.embedding_api_base_url or self.llm_api_base_url or None
+
+    @property
+    def semantic_similarity_threshold_effective(self) -> float:
+        """Return the entity-resolution threshold.
+
+        Explicit ``SEMANTIC_SIMILARITY_THRESHOLD`` values win; otherwise we
+        look up a per-model default.
+        """
+        if self.semantic_similarity_threshold >= 0:
+            return self.semantic_similarity_threshold
+        thresholds = DEFAULT_EMBEDDING_MODEL_THRESHOLDS.get(
+            self.embedding_model,
+            DEFAULT_EMBEDDING_MODEL_THRESHOLDS["default"],
+        )
+        return thresholds["similarity"]
+
+    @property
+    def semantic_knn_threshold_effective(self) -> float:
+        """Return the K-NN island-bridging threshold.
+
+        Explicit ``SEMANTIC_KNN_THRESHOLD`` values win; otherwise we look up a
+        per-model default.
+        """
+        if self.semantic_knn_threshold >= 0:
+            return self.semantic_knn_threshold
+        thresholds = DEFAULT_EMBEDDING_MODEL_THRESHOLDS.get(
+            self.embedding_model,
+            DEFAULT_EMBEDDING_MODEL_THRESHOLDS["default"],
+        )
+        return thresholds["knn"]
 
     @property
     def llm_model_fallback_effective(self) -> str | None:

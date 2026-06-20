@@ -301,7 +301,7 @@ async def semantic_cluster_and_merge(
     for i in range(len(node_ids)):
         for j in range(i + 1, len(node_ids)):
             similarity = _cosine_similarity(embeddings[i], embeddings[j])
-            if similarity >= settings.semantic_similarity_threshold:
+            if similarity >= settings.semantic_similarity_threshold_effective:
                 uf.union(node_ids[i], node_ids[j])
 
     clusters: dict[str, set[str]] = defaultdict(set)
@@ -327,7 +327,7 @@ async def semantic_cluster_and_merge(
         nodes_after_merge,
         edges_after_merge,
         merged_embeddings,
-        settings.semantic_knn_threshold,
+        settings.semantic_knn_threshold_effective,
     )
 
     warnings = list(graph.warnings)
