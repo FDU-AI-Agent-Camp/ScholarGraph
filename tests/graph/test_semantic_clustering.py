@@ -5,7 +5,7 @@ from __future__ import annotations
 import pytest
 
 from backend.config import Settings
-from backend.graph.semantic_clustering import _cross_type_merge_allowed, _elect_root, _node_text, semantic_cluster_and_merge
+from backend.graph.semantic_clustering import _cross_type_merge_allowed, _deduplicate_edges_by_type, _elect_root, _node_text, semantic_cluster_and_merge
 from backend.schemas.extract_phase import ExtractedEdge, ExtractedEdgeList, ExtractedGraph, ExtractedNode, ExtractedNodeList
 from backend.schemas.paradigm import Paradigm
 
@@ -153,6 +153,37 @@ async def test_embedding_failure_is_graceful() -> None:
 
     assert len(result.nodes) == 5
     assert any("SEMANTIC_CLUSTERING_SKIPPED" in w for w in result.warnings)
+
+
+
+
+class TestEdgeDeduplication:
+    def test_deduplicate_edges_by_type_collapse_same_type_parallels(self) -> None:
+        edges = [
+            ExtractedEdge(id="e1", source="a", target="b", label="supports", type="SUPPORTS"),
+            ExtractedEdge(id="e2", source="a", target="b", label="also supports", type="SUPPORTS"),
+            ExtractedEdge(id="e3", source="a", target="b", label="contextualizes", type="CONTEXTUALIZES"),
+        ]
+        result = _deduplicate_edges_by_type(edges)
+        assert len(result) == 2
+        assert {e.type for e in result} == {"SUPPORTS", "CONTEXTUALIZES"}
+
+    def test_deduplicate_edges_keeps_first_occurrence(self) -> None:
+        edges = [
+            ExtractedEdge(id="first", source="a", target="b", label="first", type="SUPPORTS"),
+            ExtractedEdge(id="second", source="a", target="b", label="second", type="SUPPORTS"),
+        ]
+        result = _deduplicate_edges_by_type(edges)
+        assert len(result) == 1
+        assert result[0].id == "first"
+
+    def test_deduplicate_edges_preserves_different_targets(self) -> None:
+        edges = [
+            ExtractedEdge(id="e1", source="a", target="b", label="supports", type="SUPPORTS"),
+            ExtractedEdge(id="e2", source="a", target="c", label="supports", type="SUPPORTS"),
+        ]
+        result = _deduplicate_edges_by_type(edges)
+        assert len(result) == 2
 
 
 class TestNodeText:

@@ -315,6 +315,25 @@ def _add_knn_bridges(
     return new_edges, bridges_added
 
 
+def _deduplicate_edges_by_type(edges: list[ExtractedEdge]) -> list[ExtractedEdge]:
+    """Collapse parallel edges that share source, target and edge type.
+
+    After node merges, edges originally pointing to distinct aliases may be
+    redirected to the same canonical root, producing parallel edges. AntV G6
+    renders these as thick overlapping lines, so we keep only the first edge
+    for each (source, target, type) triple.
+    """
+    seen: set[tuple[str, str, str]] = set()
+    unique_edges: list[ExtractedEdge] = []
+    for edge in edges:
+        key = (edge.source, edge.target, edge.type)
+        if key in seen:
+            continue
+        seen.add(key)
+        unique_edges.append(edge)
+    return unique_edges
+
+
 async def semantic_cluster_and_merge(
     graph: ExtractedGraph,
     settings: Settings,
@@ -389,6 +408,9 @@ async def semantic_cluster_and_merge(
         merged_embeddings,
         settings.semantic_knn_threshold_effective,
     )
+
+    # 3. Collapse parallel edges produced by node merges / K-NN bridging.
+    final_edges = _deduplicate_edges_by_type(final_edges)
 
     warnings = list(graph.warnings)
     if merged_clusters:
