@@ -22,6 +22,54 @@ _FOLDABLE_LEAF_TYPES = frozenset({
     "Baseline",
 })
 
+# Unicode replacement character produced by broken PDF font mapping.
+_REPLACEMENT_CHAR = "\ufffd"
+_GARBLED_RUN_RE = re.compile(r"\ufffd{3,}")
+
+
+def _is_garbled(text: str | None) -> bool:
+    """Detect labels corrupted by PDF font-mapping failures.
+
+    A label is considered garbled when:
+    - it contains 3+ consecutive U+FFFD replacement characters, or
+    - more than 50% of its characters are U+FFFD.
+    """
+    if not text:
+        return False
+    if _GARBLED_RUN_RE.search(text):
+        return True
+    replacement_count = text.count(_REPLACEMENT_CHAR)
+    return replacement_count / len(text) > 0.5
+
+
+def _sanitize_graph_labels(graph: ExtractedGraph) -> ExtractedGraph:
+    """Replace garbled node labels with type-safe fallbacks.
+
+    Nodes are never deleted, preserving graph connectivity. The original label is
+    preserved in ``node.data["original_label"]`` for debugging.
+    """
+    new_nodes: list[ExtractedNode] = []
+    sanitized_count = 0
+
+    for node in graph.nodes:
+        if not _is_garbled(node.label):
+            new_nodes.append(node)
+            continue
+
+        fallback = f"[{node.type}]" if node.type else "[Corrupted Node Data]"
+        new_data = dict(node.data)
+        new_data["original_label"] = node.label
+        new_data["label_sanitized"] = True
+        new_nodes.append(node.model_copy(update={"label": fallback, "data": new_data}))
+        sanitized_count += 1
+
+    if sanitized_count == 0:
+        return graph
+
+    warnings = list(graph.warnings)
+    warnings.append(f"GARBLED_LABELS_SANITIZED:{sanitized_count}")
+    return graph.model_copy(update={"nodes": new_nodes, "warnings": warnings})
+
 
 class _UnionFind:
     """Disjoint-set union-find with path compression."""
@@ -327,4 +375,4 @@ def merge_graphs(
     if prune:
         graph = _heuristic_prune(graph)
 
-    return graph
+    return _sanitize_graph_labels(graph)

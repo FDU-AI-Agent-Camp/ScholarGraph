@@ -180,3 +180,66 @@ class TestHeuristicPruning:
         assert len(graph.nodes) == 2
         assert len(graph.edges) == 1
         assert not any("FOLDED_LEAVES" in w for w in graph.warnings)
+
+
+class TestSanitizeGraphLabels:
+    def test_garbled_label_is_replaced_with_type_fallback(self) -> None:
+        garbled = "\ufffd" * 5
+        # Use non-foldable types (Claim <-> Thesis) so both nodes survive pruning.
+        nodes = ExtractedNodeList(
+            paradigm=Paradigm.HSS,
+            nodes=[
+                _node("c0_n1", "Main Claim", "Claim"),
+                ExtractedNode(id="c0_n2", label=garbled, type="Thesis"),
+            ],
+        )
+        edges = ExtractedEdgeList(
+            paradigm=Paradigm.HSS,
+            edges=[_edge("e1", "c0_n1", "c0_n2", "SUPPORTS")],
+        )
+        graph = merge_graphs(
+            "p1", "Title", Paradigm.HSS, [nodes], [edges], prune=True, node_ids_prefixed=True
+        )
+
+        assert len(graph.nodes) == 2
+        garbled_node = next(n for n in graph.nodes if n.id == "c0_n2")
+        assert garbled_node.label == "[Thesis]"
+        assert garbled_node.data.get("original_label") == garbled
+        assert garbled_node.data.get("label_sanitized") is True
+        assert any("GARBLED_LABELS_SANITIZED:1" in w for w in graph.warnings)
+
+    def test_high_replacement_ratio_is_sanitized(self) -> None:
+        # 60% replacement characters triggers the ratio rule.
+        garbled = "abc" + "\ufffd" * 5
+        nodes = ExtractedNodeList(
+            paradigm=Paradigm.HSS,
+            nodes=[_node("c0_n1", garbled, "Claim")],
+        )
+        # Add a self-loop-like edge so the node is not zero-degree pruned.
+        edges = ExtractedEdgeList(
+            paradigm=Paradigm.HSS,
+            edges=[_edge("e1", "c0_n1", "c0_n1", "RELATES_TO")],
+        )
+        graph = merge_graphs(
+            "p1", "Title", Paradigm.HSS, [nodes], [edges], prune=True, node_ids_prefixed=True
+        )
+
+        assert len(graph.nodes) == 1
+        assert graph.nodes[0].label == "[Claim]"
+
+    def test_clean_label_is_unchanged(self) -> None:
+        nodes = ExtractedNodeList(
+            paradigm=Paradigm.HSS,
+            nodes=[_node("c0_n1", "情感共鸣转向", "Claim")],
+        )
+        edges = ExtractedEdgeList(
+            paradigm=Paradigm.HSS,
+            edges=[_edge("e1", "c0_n1", "c0_n1", "RELATES_TO")],
+        )
+        graph = merge_graphs(
+            "p1", "Title", Paradigm.HSS, [nodes], [edges], prune=True, node_ids_prefixed=True
+        )
+
+        assert len(graph.nodes) == 1
+        assert graph.nodes[0].label == "情感共鸣转向"
+        assert "GARBLED_LABELS_SANITIZED" not in graph.warnings
