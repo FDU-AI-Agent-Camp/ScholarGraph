@@ -5,7 +5,7 @@ from __future__ import annotations
 import pytest
 
 from backend.config import Settings
-from backend.graph.semantic_clustering import _node_text, semantic_cluster_and_merge
+from backend.graph.semantic_clustering import _cross_type_merge_allowed, _node_text, semantic_cluster_and_merge
 from backend.schemas.extract_phase import ExtractedEdge, ExtractedEdgeList, ExtractedGraph, ExtractedNode, ExtractedNodeList
 from backend.schemas.paradigm import Paradigm
 
@@ -168,3 +168,63 @@ class TestNodeText:
         evidence = text.split("补充说明:")[1].strip()
         assert len(evidence) <= 100
         assert "这是一个非常长的补充说明" in text
+
+
+class TestTypeFirewall:
+    def test_cross_type_similar_nodes_are_blocked(self) -> None:
+        nodes = ExtractedNodeList(
+            paradigm=Paradigm.HSS,
+            nodes=[
+                ExtractedNode(id="n1", label="Chinese Films", type="ObjectOrData"),
+                ExtractedNode(id="n2", label="Chinese Films", type="Claim"),
+            ],
+        )
+        edges = ExtractedEdgeList(paradigm=Paradigm.HSS, edges=[])
+        graph = ExtractedGraph(
+            paper_id="p1",
+            title="T",
+            paradigm=Paradigm.HSS,
+            nodes=nodes.nodes,
+            edges=edges.edges,
+        )
+        assert not _cross_type_merge_allowed("ObjectOrData", "Claim")
+
+    def test_allowed_child_parent_merge_is_permitted(self) -> None:
+        assert _cross_type_merge_allowed("SubArgument", "Claim")
+        assert _cross_type_merge_allowed("Evidence", "Claim")
+        assert _cross_type_merge_allowed("ResearchQuestion", "Thesis")
+
+    def test_same_type_is_always_allowed(self) -> None:
+        assert _cross_type_merge_allowed("Claim", "Claim")
+        assert _cross_type_merge_allowed("Method", "Method")
+
+    @pytest.mark.asyncio
+    async def test_firewall_prevents_hub_merging(self) -> None:
+        client = _FakeEmbeddingClient()
+        # Use identical labels so that without the firewall these nodes would merge.
+        nodes = ExtractedNodeList(
+            paradigm=Paradigm.HSS,
+            nodes=[
+                ExtractedNode(id="n1", label="电影产业", type="ObjectOrData"),
+                ExtractedNode(id="n2", label="电影产业", type="Claim"),
+                ExtractedNode(id="n3", label="电影产业", type="SubArgument"),
+            ],
+        )
+        edges = ExtractedEdgeList(
+            paradigm=Paradigm.HSS,
+            edges=[
+                ExtractedEdge(id="e1", source="n3", target="n2", label="SUB_ARGUMENT_OF", type="SUB_ARGUMENT_OF"),
+            ],
+        )
+        graph = ExtractedGraph(
+            paper_id="p1",
+            title="T",
+            paradigm=Paradigm.HSS,
+            nodes=nodes.nodes,
+            edges=edges.edges,
+        )
+        result = await semantic_cluster_and_merge(graph, _settings(), embedding_client=client)
+        # ObjectOrData must remain separate; SubArgument may merge into Claim.
+        types = {n.type for n in result.nodes}
+        assert "ObjectOrData" in types
+        assert "Claim" in types

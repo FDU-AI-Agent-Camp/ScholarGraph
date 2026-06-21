@@ -34,6 +34,32 @@ def _node_text(node: ExtractedNode) -> str:
     return text
 
 
+# Child node types that may be merged into their semantic parent types.
+# The key is the *absorbed* (subordinate) type; the value is the set of parent
+# types it is allowed to collapse into. All other cross-type pairs are blocked.
+_CROSS_TYPE_MERGE_RULES: dict[str, set[str]] = {
+    "SubArgument": {"Claim", "Thesis"},
+    "Evidence": {"Claim", "Method"},
+    "ObjectOrData": set(),  # Data objects must stay distinct from concepts.
+    "Dataset": {"Method"},
+    "Metric": {"Method", "Claim"},
+    "Baseline": {"Method", "Claim"},
+    "ResearchQuestion": {"Thesis"},
+    "AnalyticalLens": {"Claim", "Thesis"},
+    "IntellectualContext": {"Thesis"},
+    "Claim": {"Thesis"},
+}
+
+
+def _cross_type_merge_allowed(type_a: str, type_b: str) -> bool:
+    """Return True if two different node types are allowed to merge."""
+    if type_a == type_b:
+        return True
+    allowed_for_a = _CROSS_TYPE_MERGE_RULES.get(type_a, set())
+    allowed_for_b = _CROSS_TYPE_MERGE_RULES.get(type_b, set())
+    return type_b in allowed_for_a or type_a in allowed_for_b
+
+
 def _cosine_similarity(a: Sequence[float], b: Sequence[float]) -> float:
     """Cosine similarity between two equal-length vectors."""
     if not a or not b:
@@ -293,14 +319,17 @@ async def semantic_cluster_and_merge(
             f"Embedding count mismatch: {len(embeddings)} vectors for {len(graph.nodes)} nodes"
         )
 
-    # 1. Pairwise similarity clustering.
+    # 1. Pairwise similarity clustering with a hard type firewall.
     node_ids = [node.id for node in graph.nodes]
+    node_types = [node.type for node in graph.nodes]
     uf = _UnionFind()
     for i in range(len(node_ids)):
         uf.find(node_ids[i])
     for i in range(len(node_ids)):
         for j in range(i + 1, len(node_ids)):
             similarity = _cosine_similarity(embeddings[i], embeddings[j])
+            if not _cross_type_merge_allowed(node_types[i], node_types[j]):
+                similarity = 0.0
             if similarity >= settings.semantic_similarity_threshold_effective:
                 uf.union(node_ids[i], node_ids[j])
 
