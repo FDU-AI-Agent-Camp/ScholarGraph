@@ -5,7 +5,7 @@ from __future__ import annotations
 import pytest
 
 from backend.config import Settings
-from backend.graph.semantic_clustering import _cross_type_merge_allowed, _node_text, semantic_cluster_and_merge
+from backend.graph.semantic_clustering import _cross_type_merge_allowed, _elect_root, _node_text, semantic_cluster_and_merge
 from backend.schemas.extract_phase import ExtractedEdge, ExtractedEdgeList, ExtractedGraph, ExtractedNode, ExtractedNodeList
 from backend.schemas.paradigm import Paradigm
 
@@ -193,6 +193,32 @@ class TestTypeFirewall:
         assert _cross_type_merge_allowed("SubArgument", "Claim")
         assert _cross_type_merge_allowed("Evidence", "Claim")
         assert _cross_type_merge_allowed("ResearchQuestion", "Thesis")
+
+    def test_central_types_cannot_absorb_each_other(self) -> None:
+        assert not _cross_type_merge_allowed("Claim", "Thesis")
+        assert not _cross_type_merge_allowed("Method", "Claim")
+        assert not _cross_type_merge_allowed("AnalyticalLens", "Claim")
+        assert not _cross_type_merge_allowed("IntellectualContext", "Thesis")
+
+    def test_root_election_prefers_general_type(self) -> None:
+        nodes = [
+            ExtractedNode(id="sub1", label="Sub Arg", type="SubArgument", confidence=0.9),
+            ExtractedNode(id="claim1", label="Main Claim", type="Claim", confidence=0.5),
+        ]
+        degrees = {"sub1": 10, "claim1": 1}
+        nodes_by_id = {n.id: n for n in nodes}
+        root = _elect_root({"sub1", "claim1"}, degrees, nodes_by_id)
+        assert root == "claim1"
+
+    def test_root_election_falls_back_to_degree(self) -> None:
+        nodes = [
+            ExtractedNode(id="claim1", label="Claim A", type="Claim", confidence=0.9),
+            ExtractedNode(id="claim2", label="Claim B", type="Claim", confidence=0.5),
+        ]
+        degrees = {"claim1": 1, "claim2": 10}
+        nodes_by_id = {n.id: n for n in nodes}
+        root = _elect_root({"claim1", "claim2"}, degrees, nodes_by_id)
+        assert root == "claim2"
 
     def test_same_type_is_always_allowed(self) -> None:
         assert _cross_type_merge_allowed("Claim", "Claim")

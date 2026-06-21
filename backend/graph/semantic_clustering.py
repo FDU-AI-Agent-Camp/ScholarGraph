@@ -37,17 +37,21 @@ def _node_text(node: ExtractedNode) -> str:
 # Child node types that may be merged into their semantic parent types.
 # The key is the *absorbed* (subordinate) type; the value is the set of parent
 # types it is allowed to collapse into. All other cross-type pairs are blocked.
+# Keep this list conservative: central concept types (Claim/Method/Thesis) must
+# not absorb each other, otherwise broad topic terms become "super black holes".
 _CROSS_TYPE_MERGE_RULES: dict[str, set[str]] = {
-    "SubArgument": {"Claim", "Thesis"},
+    "SubArgument": {"Claim"},
     "Evidence": {"Claim", "Method"},
     "ObjectOrData": set(),  # Data objects must stay distinct from concepts.
     "Dataset": {"Method"},
-    "Metric": {"Method", "Claim"},
-    "Baseline": {"Method", "Claim"},
+    "Metric": {"Method"},
+    "Baseline": {"Method"},
     "ResearchQuestion": {"Thesis"},
-    "AnalyticalLens": {"Claim", "Thesis"},
-    "IntellectualContext": {"Thesis"},
-    "Claim": {"Thesis"},
+    "AnalyticalLens": set(),
+    "IntellectualContext": set(),
+    "Claim": set(),
+    "Method": set(),
+    "Thesis": set(),
 }
 
 
@@ -58,6 +62,28 @@ def _cross_type_merge_allowed(type_a: str, type_b: str) -> bool:
     allowed_for_a = _CROSS_TYPE_MERGE_RULES.get(type_a, set())
     allowed_for_b = _CROSS_TYPE_MERGE_RULES.get(type_b, set())
     return type_b in allowed_for_a or type_a in allowed_for_b
+
+
+# Root-election priority: lower number = preferred as the canonical root when a
+# cluster contains multiple node types. This prevents a child type (e.g.
+# SubArgument) from becoming the root and swallowing its parent type (Claim).
+_ROOT_TYPE_PRIORITY: dict[str, int] = {
+    "Thesis": 0,
+    "ResearchQuestion": 0,
+    "Method": 1,
+    "Claim": 2,
+    "Experiment": 3,
+    "SubArgument": 4,
+    "AnalyticalLens": 5,
+    "IntellectualContext": 6,
+    "Finding": 7,
+    "Dataset": 8,
+    "Metric": 9,
+    "Baseline": 10,
+    "Evidence": 11,
+    "ObjectOrData": 12,
+}
+_DEFAULT_ROOT_PRIORITY = 99
 
 
 def _cosine_similarity(a: Sequence[float], b: Sequence[float]) -> float:
@@ -85,13 +111,18 @@ def _compute_degrees(nodes: list[ExtractedNode], edges: list[ExtractedEdge]) -> 
 
 
 def _elect_root(cluster_ids: set[str], degrees: dict[str, int], nodes_by_id: dict[str, ExtractedNode]) -> str:
-    """Elect the highest-degree node as the canonical root; break ties by confidence then id."""
+    """Elect the canonical root for a semantic cluster.
 
-    def _score(node_id: str) -> tuple[int, float, str]:
+    Prefer more general node types over subordinate types, then highest degree,
+    then confidence, then deterministic id.
+    """
+
+    def _score(node_id: str) -> tuple[int, int, float, str]:
         node = nodes_by_id[node_id]
-        return (degrees.get(node_id, 0), node.confidence, node_id)
+        priority = _ROOT_TYPE_PRIORITY.get(node.type, _DEFAULT_ROOT_PRIORITY)
+        return (priority, -degrees.get(node_id, 0), -node.confidence, node_id)
 
-    return max(cluster_ids, key=_score)
+    return min(cluster_ids, key=_score)
 
 
 def _build_components(nodes: list[ExtractedNode], edges: list[ExtractedEdge]) -> list[set[str]]:
