@@ -82,6 +82,9 @@ def classify_extraction_error(exc: BaseException) -> NoReturn:
 
     # Deterministic: validation failures, JSON parse errors, context too long, unknown errors
     if isinstance(exc, ValueError):
+        msg = str(exc).lower()
+        if "validation" in msg or "forbidden" in msg or "schema" in msg:
+            raise DeterministicExtractionError(f"Schema validation failed: {exc}") from exc
         # Typically JSON parse failures from malformed LLM output
         raise DeterministicExtractionError(f"LLM output parse error: {exc}") from exc
 
