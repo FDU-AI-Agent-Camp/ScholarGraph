@@ -12,18 +12,27 @@ from backend.agents.extract_edges import build_edges_with_llm
 from backend.agents.extract_heuristic import build_heuristic_graph, extract_title
 from backend.agents.extract_llm import extract_with_llm
 from backend.agents.extract_nodes import extract_nodes_with_llm
+from backend.agents.extract_retry import (
+    _RETRY_CONFIG,
+    extract_chunked_with_retry,
+    handle_extract_failure,
+    run_extract_subgraph_with_retry,
+    warning_code_for_error,
+)
 from backend.agents.extract_types import ExtractResult
 from backend.agents.mock_agents import mock_extract
 from backend.config import Settings, get_settings
 from backend.schemas.extract_phase import ExtractedGraph
 from backend.schemas.graph import GraphEdge, GraphNode, UnifiedPaperGraph
 from backend.schemas.paradigm import Paradigm
-from backend.services.errors import PIPELINE_FAILED_CODE, ServiceError
 
 logger = logging.getLogger(__name__)
 
 MVP_MIN_INPUT_CHARS = 1500
 MVP_TARGET_INPUT_CHARS = 3000
+
+# Re-export for backward-compatible tests that import the helper from here.
+_handle_extract_failure = handle_extract_failure
 
 
 def _fallback_to_heuristic(
@@ -34,15 +43,28 @@ def _fallback_to_heuristic(
     title: str,
     reason: Exception | str,
 ) -> ExtractResult:
-    """Degrade to ``build_heuristic_graph`` and record fallback warning (F.2.2 X10/X12)."""
+    """Degrade to ``build_heuristic_graph`` and record fallback warnings.
+
+    Warnings always include the coarse-grained ``EXTRACT_HEURISTIC_FALLBACK_CODE``
+    for backward compatibility. When the failure reason can be mapped to a
+    fine-grained machine code (timeout, rate limit, JSON parse, schema
+    validation, context window), that code is emitted first so observers can
+    distinguish root causes without parsing the fallback message.
+    """
+    specific_code = warning_code_for_error(reason)
+    warnings = (
+        [specific_code, EXTRACT_HEURISTIC_FALLBACK_CODE]
+        if specific_code != EXTRACT_HEURISTIC_FALLBACK_CODE
+        else [EXTRACT_HEURISTIC_FALLBACK_CODE]
+    )
     logger.warning(
         "extract_llm_fallback",
-        extra={"paper_id": paper_id, "reason": str(reason)},
+        extra={"paper_id": paper_id, "warning_codes": warnings, "reason": str(reason)},
     )
     graph = build_heuristic_graph(full_text, paradigm, title=title).model_copy(
         update={"paper_id": paper_id, "paradigm": paradigm},
     )
-    return ExtractResult(graph=graph, warnings=[EXTRACT_HEURISTIC_FALLBACK_CODE])
+    return ExtractResult(graph=graph, warnings=warnings)
 
 
 def _resolve_head_context(paper_id: str) -> str | None:
@@ -244,9 +266,16 @@ async def _extract_single_phase(
     head_context: str | None,
     settings: Settings,
 ) -> ExtractResult:
-    """Legacy single-phase extraction path (kept for backward compatibility)."""
-    try:
-        graph = await extract_with_llm(
+    """Legacy single-phase extraction path (kept for backward compatibility).
+
+    ``extract_with_llm`` is invoked through a tenacity retry wrapper so transient
+    failures (timeouts, rate limits) are retried before falling back.
+    """
+    from tenacity import retry
+
+    @retry(**_RETRY_CONFIG)
+    async def _call_extract_with_llm() -> UnifiedPaperGraph:
+        return await extract_with_llm(
             full_text,
             paradigm,
             paper_id=paper_id,
@@ -254,21 +283,26 @@ async def _extract_single_phase(
             head_context=head_context,
             settings=settings,
         )
-        final_graph = graph.model_copy(update={"paper_id": paper_id, "paradigm": paradigm})
-        _save_preview_graph(paper_id, final_graph, warnings=[])
-        return ExtractResult(graph=final_graph, warnings=[])
+
+    try:
+        graph = await _call_extract_with_llm()
     except Exception as exc:
-        if not settings.extract_heuristic_fallback:
-            raise ServiceError(PIPELINE_FAILED_CODE, f"图谱 LLM 抽取失败: {exc}") from exc
-        fallback = _fallback_to_heuristic(
-            full_text,
-            paradigm,
+        return handle_extract_failure(
+            exc,
+            settings=settings,
             paper_id=paper_id,
-            title=title,
-            reason=exc,
+            fallback_action=lambda reason: _fallback_to_heuristic(
+                full_text,
+                paradigm,
+                paper_id=paper_id,
+                title=title,
+                reason=reason,
+            ),
         )
-        _save_preview_graph(paper_id, fallback.graph, warnings=fallback.warnings)
-        return fallback
+
+    final_graph = graph.model_copy(update={"paper_id": paper_id, "paradigm": paradigm})
+    _save_preview_graph(paper_id, final_graph, warnings=[])
+    return ExtractResult(graph=final_graph, warnings=[])
 
 
 async def _extract_chunked_two_phase(
@@ -280,12 +314,13 @@ async def _extract_chunked_two_phase(
     head_context: str | None,
     settings: Settings,
 ) -> ExtractResult:
-    """Chunked two-phase extraction for papers longer than the input limit."""
-    from backend.agents.extract_chunked import extract_chunked
-    from backend.schemas.graph import GraphEdge, GraphNode
+    """Chunked two-phase extraction for papers longer than the input limit.
 
+    Transient failures (timeouts, rate limits) are retried with exponential
+    backoff by tenacity. Deterministic failures trigger heuristic fallback.
+    """
     try:
-        extracted_graph = await extract_chunked(
+        extracted_graph = await extract_chunked_with_retry(
             full_text,
             paradigm,
             paper_id=paper_id,
@@ -294,14 +329,17 @@ async def _extract_chunked_two_phase(
             settings=settings,
         )
     except Exception as exc:
-        if not settings.extract_heuristic_fallback:
-            raise ServiceError(PIPELINE_FAILED_CODE, f"图谱 LLM 抽取失败: {exc}") from exc
-        return _fallback_to_heuristic(
-            full_text,
-            paradigm,
+        return handle_extract_failure(
+            exc,
+            settings=settings,
             paper_id=paper_id,
-            title=title,
-            reason=exc,
+            fallback_action=lambda reason: _fallback_to_heuristic(
+                full_text,
+                paradigm,
+                paper_id=paper_id,
+                title=title,
+                reason=reason,
+            ),
         )
 
     unified = UnifiedPaperGraph(
@@ -380,9 +418,7 @@ async def _extract_two_phase(
 
     # Short paper: full extraction is fast enough to serve as its own preview.
     try:
-        from backend.graph.extract_workflow import run_extract_subgraph
-
-        result = await run_extract_subgraph(
+        result = await run_extract_subgraph_with_retry(
             full_text,
             paradigm,
             paper_id=paper_id,
@@ -393,17 +429,18 @@ async def _extract_two_phase(
         _save_preview_graph(paper_id, final_graph, warnings=result.warnings)
         return ExtractResult(graph=final_graph, warnings=result.warnings)
     except Exception as exc:
-        if not settings.extract_heuristic_fallback:
-            raise ServiceError(PIPELINE_FAILED_CODE, f"图谱 LLM 抽取失败: {exc}") from exc
-        fallback = _fallback_to_heuristic(
-            full_text,
-            paradigm,
+        return handle_extract_failure(
+            exc,
+            settings=settings,
             paper_id=paper_id,
-            title=title,
-            reason=exc,
+            fallback_action=lambda reason: _fallback_to_heuristic(
+                full_text,
+                paradigm,
+                paper_id=paper_id,
+                title=title,
+                reason=reason,
+            ),
         )
-        _save_preview_graph(paper_id, fallback.graph, warnings=fallback.warnings)
-        return fallback
 
 
 async def extract(

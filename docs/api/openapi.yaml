@@ -388,8 +388,13 @@ components:
               type: array
               items:
                 type: string
-              description: Machine-readable graph-extract degrade codes (e.g. extract_heuristic_fallback).
-              example: []
+              description: |
+                Machine-readable graph-extract degrade codes. Always includes the coarse
+                `extract_heuristic_fallback` when heuristic fallback is triggered. Fine-grained
+                root-cause codes may precede it: `extract_llm_timeout`,
+                `extract_llm_rate_limited`, `extract_llm_json_invalid`,
+                `extract_schema_validation_failed`, `extract_context_window_exceeded`.
+              example: [extract_llm_timeout, extract_heuristic_fallback]
             classify_warnings:
               type: array
               items:
@@ -450,8 +455,13 @@ components:
           type: array
           items:
             type: string
-          description: Machine-readable graph-extract degrade codes (e.g. extract_heuristic_fallback).
-          example: []
+          description: |
+            Machine-readable graph-extract degrade codes. Always includes the coarse
+            `extract_heuristic_fallback` when heuristic fallback is triggered. Fine-grained
+            root-cause codes may precede it: `extract_llm_timeout`,
+            `extract_llm_rate_limited`, `extract_llm_json_invalid`,
+            `extract_schema_validation_failed`, `extract_context_window_exceeded`.
+          example: [extract_llm_timeout, extract_heuristic_fallback]
         classify_warnings:
           type: array
           items:
