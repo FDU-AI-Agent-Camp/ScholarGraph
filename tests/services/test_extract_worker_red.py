@@ -274,6 +274,7 @@ async def test_graph_endpoint_fails_when_no_preview_and_full_extraction_failed()
         await task
 
     from backend.api.exceptions import ApiError
+
     with pytest.raises(ApiError) as exc_info:
         await service.get_graph(paper_id)
     assert exc_info.value.code == "GRAPH_NOT_READY"

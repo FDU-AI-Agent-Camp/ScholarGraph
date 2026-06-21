@@ -99,8 +99,8 @@ def schedule_full_extraction(
 ) -> asyncio.Task[None]:
     """Start (or return) the background full-extraction task for *paper_id*.
 
-    The task is idempotent: only one background extraction runs per paper at a
-time.
+        The task is idempotent: only one background extraction runs per paper at a
+    time.
     """
     existing = _full_extract_tasks.get(paper_id)
     if existing is not None and not existing.done():

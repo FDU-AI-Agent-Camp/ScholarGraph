@@ -232,10 +232,7 @@ async def extract_chunked(
 
     per_chunk_edges = [e for e in await asyncio.gather(*(_edges_for_chunk(chunk) for chunk in chunks)) if e is not None]
 
-    summary = (
-        f"Chunked two-phase extraction ({paradigm.value}): "
-        f"{len(chunks)} chunks, {len(global_nodes.nodes)} nodes."
-    )
+    summary = f"Chunked two-phase extraction ({paradigm.value}): {len(chunks)} chunks, {len(global_nodes.nodes)} nodes."
 
     result = merge_graphs(
         paper_id=paper_id,

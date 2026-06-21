@@ -85,9 +85,7 @@ async def test_patch_source_spans_ignores_empty_llm_responses() -> None:
     text = "Evidence text here."
 
     mock_chat = AsyncMock()
-    mock_chat.ainvoke.return_value = MagicMock(
-        content=json.dumps([{"index": 0, "source_span": ""}])
-    )
+    mock_chat.ainvoke.return_value = MagicMock(content=json.dumps([{"index": 0, "source_span": ""}]))
 
     mock_client = MagicMock(spec=LlmClient)
     mock_client.chat = mock_chat
@@ -118,9 +116,7 @@ async def test_patch_source_spans_batches_large_sets() -> None:
 
     mock_chat = AsyncMock()
     mock_chat.ainvoke.return_value = MagicMock(
-        content=json.dumps(
-            [{"index": i, "source_span": "Verbatim sentence for all edges."} for i in range(8)]
-        )
+        content=json.dumps([{"index": i, "source_span": "Verbatim sentence for all edges."} for i in range(8)])
     )
 
     mock_client = MagicMock(spec=LlmClient)

@@ -33,7 +33,7 @@ class TestParseModelResponse:
         assert result.nodes[0].id == "n1"
 
     def test_unrepairable_json_raises(self) -> None:
-        raw = 'this is not json at all'
+        raw = "this is not json at all"
         with pytest.raises(ValueError, match="non-JSON"):
             _parse_model_response(raw, ExtractedNodeList)
 

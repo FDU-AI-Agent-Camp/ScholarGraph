@@ -16,6 +16,7 @@ def __getattr__(name: str) -> object:
     """Lazily re-export GraphStore so existing patches keep working."""
     if name == "GraphStore":
         from backend.graph.store import GraphStore
+
         return GraphStore
     msg = f"module {__name__!r} has no attribute {name!r}"
     raise AttributeError(msg)

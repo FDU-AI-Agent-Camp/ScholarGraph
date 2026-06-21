@@ -225,12 +225,14 @@ def _merge_clusters(
         aliases = new_data.get("semantic_aliases", [])
         if not isinstance(aliases, list):
             aliases = []
-        aliases.append({
-            "id": node.id,
-            "label": node.label,
-            "type": node.type,
-            "source_span": node.source_span,
-        })
+        aliases.append(
+            {
+                "id": node.id,
+                "label": node.label,
+                "type": node.type,
+                "source_span": node.source_span,
+            }
+        )
         new_data["semantic_aliases"] = aliases
 
         # Merge folded leaves if the alias carried them.
@@ -420,9 +422,7 @@ async def semantic_cluster_and_merge(
         return graph.model_copy(update={"warnings": warnings})
 
     if len(embeddings) != len(graph.nodes):
-        raise ValueError(
-            f"Embedding count mismatch: {len(embeddings)} vectors for {len(graph.nodes)} nodes"
-        )
+        raise ValueError(f"Embedding count mismatch: {len(embeddings)} vectors for {len(graph.nodes)} nodes")
 
     # 1. Pairwise similarity clustering with a dynamic type firewall.
     node_ids = [node.id for node in graph.nodes]

@@ -59,21 +59,13 @@ def _format_nodes_for_prompt(nodes: ExtractedNodeList) -> str:
 # When the global node directory exceeds the attention threshold, only node types
 # relevant to the current chunk are exposed to the edge-extraction LLM.
 _EDGE_MASKS: dict[tuple[Paradigm, str], set[str]] = {
-    (Paradigm.STEM, "experiments"): {
-        t.value for t in STEM_NODE_TYPES if t.value != "ResearchQuestion"
-    },
-    (Paradigm.STEM, "results"): {
-        t.value for t in STEM_NODE_TYPES if t.value != "ResearchQuestion"
-    },
+    (Paradigm.STEM, "experiments"): {t.value for t in STEM_NODE_TYPES if t.value != "ResearchQuestion"},
+    (Paradigm.STEM, "results"): {t.value for t in STEM_NODE_TYPES if t.value != "ResearchQuestion"},
     (Paradigm.STEM, "methods"): {
         t.value for t in STEM_NODE_TYPES if t.value not in {"ResearchQuestion", "Baseline", "Claim"}
     },
-    (Paradigm.HSS, "theoretical framework"): {
-        t.value for t in HSS_NODE_TYPES if t.value != "ObjectOrData"
-    },
-    (Paradigm.HSS, "analysis"): {
-        t.value for t in HSS_NODE_TYPES if t.value not in {"IntellectualContext"}
-    },
+    (Paradigm.HSS, "theoretical framework"): {t.value for t in HSS_NODE_TYPES if t.value != "ObjectOrData"},
+    (Paradigm.HSS, "analysis"): {t.value for t in HSS_NODE_TYPES if t.value not in {"IntellectualContext"}},
 }
 
 _DEFAULT_MASK_NODE_THRESHOLD = 80
@@ -84,7 +76,7 @@ def _chapter_keyword(chunk_title: str | None) -> str | None:
     if not chunk_title:
         return None
     lowered = chunk_title.lower()
-    for (_paradigm, keyword) in _EDGE_MASKS:
+    for _paradigm, keyword in _EDGE_MASKS:
         if keyword in lowered:
             return keyword
     return None
@@ -178,11 +170,7 @@ def _build_user_payload(
 
 def _collect_incomplete_core_edges(edges: list[ExtractedEdge]) -> list[tuple[int, ExtractedEdge]]:
     """Return indices and edges of core argument edges missing source_span."""
-    return [
-        (idx, edge)
-        for idx, edge in enumerate(edges)
-        if edge.type in _CORE_EDGE_TYPES and not edge.source_span
-    ]
+    return [(idx, edge) for idx, edge in enumerate(edges) if edge.type in _CORE_EDGE_TYPES and not edge.source_span]
 
 
 async def _patch_source_spans(
@@ -226,13 +214,7 @@ async def _patch_source_spans(
             "- If no matching sentence can be found, return an empty string for that source_span.\n"
             "- Output ONLY the JSON array, no markdown, no explanation."
         )
-        user_prompt = (
-            "Rationales:\n"
-            f"{rationales_block}\n\n"
-            "Source text:\n"
-            f"{text_for_patch}\n\n"
-            "Return the JSON array now."
-        )
+        user_prompt = f"Rationales:\n{rationales_block}\n\nSource text:\n{text_for_patch}\n\nReturn the JSON array now."
 
         try:
             response = await chat.ainvoke(

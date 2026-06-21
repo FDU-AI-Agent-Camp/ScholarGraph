@@ -30,7 +30,14 @@ class TestBuildSkeletonGraph:
     def test_applies_degree_cutoff_when_giant_component_too_large(self) -> None:
         nodes = [_node(f"n{i}") for i in range(DEFAULT_MAX_SKELETON_NODES + 50)]
         # Build a line graph: all nodes connected, degrees low except ends.
-        edges = [_edge(f"e{i}", f"n{i}", f"n{i + 1}",) for i in range(len(nodes) - 1)]
+        edges = [
+            _edge(
+                f"e{i}",
+                f"n{i}",
+                f"n{i + 1}",
+            )
+            for i in range(len(nodes) - 1)
+        ]
         graph = UnifiedPaperGraph(
             paper_id="p1",
             paradigm=Paradigm.HSS,

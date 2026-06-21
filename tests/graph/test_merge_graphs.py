@@ -107,9 +107,7 @@ class TestHeuristicPruning:
             paradigm=Paradigm.HSS,
             edges=[_edge("e1", "c0_n1", "c0_n3", "SUPPORTS")],
         )
-        graph = merge_graphs(
-            "p1", "Title", Paradigm.HSS, [nodes], [edges], prune=True, node_ids_prefixed=True
-        )
+        graph = merge_graphs("p1", "Title", Paradigm.HSS, [nodes], [edges], prune=True, node_ids_prefixed=True)
 
         assert len(graph.nodes) == 2
         assert {n.id for n in graph.nodes} == {"c0_n1", "c0_n3"}
@@ -127,9 +125,7 @@ class TestHeuristicPruning:
             paradigm=Paradigm.HSS,
             edges=[_edge("e1", "c0_n2", "c0_n1", "SUPPORTS")],
         )
-        graph = merge_graphs(
-            "p1", "Title", Paradigm.HSS, [nodes], [edges], prune=True, node_ids_prefixed=True
-        )
+        graph = merge_graphs("p1", "Title", Paradigm.HSS, [nodes], [edges], prune=True, node_ids_prefixed=True)
 
         assert len(graph.nodes) == 1
         assert graph.nodes[0].id == "c0_n1"
@@ -152,9 +148,7 @@ class TestHeuristicPruning:
             paradigm=Paradigm.HSS,
             edges=[_edge("e1", "c0_n1", "c0_n2", "RELATES_TO")],
         )
-        graph = merge_graphs(
-            "p1", "Title", Paradigm.HSS, [nodes], [edges], prune=True, node_ids_prefixed=True
-        )
+        graph = merge_graphs("p1", "Title", Paradigm.HSS, [nodes], [edges], prune=True, node_ids_prefixed=True)
 
         assert len(graph.nodes) == 2
         assert len(graph.edges) == 1
@@ -172,9 +166,7 @@ class TestHeuristicPruning:
             paradigm=Paradigm.HSS,
             edges=[_edge("e1", "c0_n2", "c0_n1", "SUB_ARGUMENT_OF")],
         )
-        graph = merge_graphs(
-            "p1", "Title", Paradigm.HSS, [nodes], [edges], prune=True, node_ids_prefixed=True
-        )
+        graph = merge_graphs("p1", "Title", Paradigm.HSS, [nodes], [edges], prune=True, node_ids_prefixed=True)
 
         assert len(graph.nodes) == 2
         assert len(graph.edges) == 1
@@ -196,9 +188,7 @@ class TestSanitizeGraphLabels:
             paradigm=Paradigm.HSS,
             edges=[_edge("e1", "c0_n1", "c0_n2", "SUPPORTS")],
         )
-        graph = merge_graphs(
-            "p1", "Title", Paradigm.HSS, [nodes], [edges], prune=True, node_ids_prefixed=True
-        )
+        graph = merge_graphs("p1", "Title", Paradigm.HSS, [nodes], [edges], prune=True, node_ids_prefixed=True)
 
         assert len(graph.nodes) == 2
         garbled_node = next(n for n in graph.nodes if n.id == "c0_n2")
@@ -219,9 +209,7 @@ class TestSanitizeGraphLabels:
             paradigm=Paradigm.HSS,
             edges=[_edge("e1", "c0_n1", "c0_n1", "RELATES_TO")],
         )
-        graph = merge_graphs(
-            "p1", "Title", Paradigm.HSS, [nodes], [edges], prune=True, node_ids_prefixed=True
-        )
+        graph = merge_graphs("p1", "Title", Paradigm.HSS, [nodes], [edges], prune=True, node_ids_prefixed=True)
 
         assert len(graph.nodes) == 1
         assert graph.nodes[0].label == "[Claim]"
@@ -235,9 +223,7 @@ class TestSanitizeGraphLabels:
             paradigm=Paradigm.HSS,
             edges=[_edge("e1", "c0_n1", "c0_n1", "RELATES_TO")],
         )
-        graph = merge_graphs(
-            "p1", "Title", Paradigm.HSS, [nodes], [edges], prune=True, node_ids_prefixed=True
-        )
+        graph = merge_graphs("p1", "Title", Paradigm.HSS, [nodes], [edges], prune=True, node_ids_prefixed=True)
 
         assert len(graph.nodes) == 1
         assert graph.nodes[0].label == "情感共鸣转向"

@@ -53,9 +53,7 @@ class _OllamaEmbeddingBackend:
                 payload = response.json()
                 embeddings = payload.get("embeddings")
                 if not isinstance(embeddings, list) or len(embeddings) != len(batch):
-                    raise ValueError(
-                        f"Unexpected Ollama embed response shape: {list(payload.keys())}"
-                    )
+                    raise ValueError(f"Unexpected Ollama embed response shape: {list(payload.keys())}")
                 all_embeddings.extend(embeddings)
 
         return all_embeddings

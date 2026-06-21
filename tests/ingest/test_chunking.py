@@ -54,11 +54,7 @@ class TestChunkText:
         assert all(len(c.text) <= 1000 for c in chunks)
 
     def test_tiny_chunks_merged_with_neighbors(self) -> None:
-        text = (
-            "Introduction\n\nShort.\n\n"
-            "Methods\n\n" + ("We use method X. " * 200) + "\n\n"
-            "Results\n\nOk."
-        )
+        text = "Introduction\n\nShort.\n\nMethods\n\n" + ("We use method X. " * 200) + "\n\nResults\n\nOk."
         chunks = chunk_text(text, Paradigm.STEM, max_chunk_chars=2000)
         # The tiny "Short" and "Ok" chunks should be merged into neighbors.
         assert len(chunks) <= 2

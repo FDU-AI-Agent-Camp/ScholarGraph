@@ -696,7 +696,10 @@ describe('PaperDetailView', () => {
 
       await flushPromises()
       await wrapper.find('.qa-textarea').setValue('核心论点是什么？')
-      await wrapper.findAll('button').find((button) => button.text() === '提问')?.trigger('click')
+      await wrapper
+        .findAll('button')
+        .find((button) => button.text() === '提问')
+        ?.trigger('click')
       await flushPromises()
 
       expect(mockStreamPaperQa).toHaveBeenCalledWith(

@@ -71,9 +71,6 @@ def build_skeleton_graph(
 
     kept_node_ids = giant_component
     kept_nodes = [node for node in graph.nodes if node.id in kept_node_ids]
-    kept_edges = [
-        edge for edge in graph.edges
-        if edge.source in kept_node_ids and edge.target in kept_node_ids
-    ]
+    kept_edges = [edge for edge in graph.edges if edge.source in kept_node_ids and edge.target in kept_node_ids]
 
     return graph.model_copy(update={"nodes": kept_nodes, "edges": kept_edges})

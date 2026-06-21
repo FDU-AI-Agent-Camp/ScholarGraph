@@ -82,12 +82,8 @@ async def main() -> None:
         "node_count": len(nodes),
         "edge_count": len(edges),
         "warnings": result.warnings,
-        "rationale_coverage_by_type": {
-            etype: _coverage(edges, etype, "rationale") for etype in all_types
-        },
-        "source_span_coverage_by_type": {
-            etype: _coverage(edges, etype, "source_span") for etype in all_types
-        },
+        "rationale_coverage_by_type": {etype: _coverage(edges, etype, "rationale") for etype in all_types},
+        "source_span_coverage_by_type": {etype: _coverage(edges, etype, "source_span") for etype in all_types},
         "rationale_length_stats": {
             "min": min(rationale_lengths) if rationale_lengths else None,
             "max": max(rationale_lengths) if rationale_lengths else None,

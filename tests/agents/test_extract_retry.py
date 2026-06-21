@@ -153,6 +153,3 @@ async def test_extract_single_phase_retries_transient_errors_then_succeeds() -> 
 
     assert llm_mock.await_count == 3
     assert result.graph.paper_id == "p"
-
-
-

@@ -59,8 +59,7 @@ def evaluate_graph_quality(
     isolated_ratio = isolated_node_ratio(graph)
     if isolated_ratio > max_isolated_node_ratio:
         reasons.append(
-            f"isolated node ratio {isolated_ratio:.1%} "
-            f"above threshold {max_isolated_node_ratio:.1%}",
+            f"isolated node ratio {isolated_ratio:.1%} above threshold {max_isolated_node_ratio:.1%}",
         )
 
     return not reasons, reasons

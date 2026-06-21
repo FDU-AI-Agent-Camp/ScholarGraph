@@ -50,9 +50,6 @@ def sample_pdf(tmp_path: Path) -> Path:
     return pdf_path
 
 
-
-
-
 @pytest.mark.asyncio
 async def test_reextract_runs_pipeline_and_reaches_ready(
     mock_pipeline_env: tuple[Path, Path],
@@ -73,6 +70,7 @@ async def test_reextract_runs_pipeline_and_reaches_ready(
         task = asyncio.create_task(_run())
         scheduled_tasks.append(task)
         return task
+
     dest = sample_pdf.parent / "uploads" / f"{paper_id}.pdf"
     dest.parent.mkdir(parents=True, exist_ok=True)
     dest.write_bytes(sample_pdf.read_bytes())

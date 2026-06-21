@@ -79,9 +79,7 @@ def _build_section_regex(titles: list[str]) -> re.Pattern[str]:
         r"^\s*(?:"
         r"(?:\d+(?:\.\d+)*\s+[.\-]?\s*)|"
         r"(?:[IVXivx]+\.\s*)"
-        r")?("
-        + "|".join(escaped)
-        + r")\s*(?:[:.\-]?\s*)*$"
+        r")?(" + "|".join(escaped) + r")\s*(?:[:.\-]?\s*)*$"
     )
     return re.compile(pattern, re.MULTILINE | re.IGNORECASE)
 

@@ -20,13 +20,15 @@ logger = logging.getLogger(__name__)
 # Node types that are safe to fold into their single neighbour during heuristic
 # baseline pruning. These are typically secondary evidentiary nodes that merely
 # decorate a Claim/Thesis/Method rather than acting as graph navigation hubs.
-_FOLDABLE_LEAF_TYPES = frozenset({
-    "Evidence",
-    "ObjectOrData",
-    "Dataset",
-    "Metric",
-    "Baseline",
-})
+_FOLDABLE_LEAF_TYPES = frozenset(
+    {
+        "Evidence",
+        "ObjectOrData",
+        "Dataset",
+        "Metric",
+        "Baseline",
+    }
+)
 
 # Unicode replacement character produced by broken PDF font mapping.
 _REPLACEMENT_CHAR = "\ufffd"
@@ -299,12 +301,14 @@ def _heuristic_prune(graph: ExtractedGraph) -> ExtractedGraph:
         if parent.type in _FOLDABLE_LEAF_TYPES and len(incident_edges[parent_id]) == 1:
             continue
 
-        parent_folds.setdefault(parent_id, []).append({
-            "leaf_id": leaf_id,
-            "leaf_type": leaf.type,
-            "label": leaf.label,
-            "source_span": leaf.source_span,
-        })
+        parent_folds.setdefault(parent_id, []).append(
+            {
+                "leaf_id": leaf_id,
+                "leaf_type": leaf.type,
+                "label": leaf.label,
+                "source_span": leaf.source_span,
+            }
+        )
         folded_leaf_ids.add(leaf_id)
 
     removed_ids = zero_degree_ids | folded_leaf_ids
@@ -323,10 +327,7 @@ def _heuristic_prune(graph: ExtractedGraph) -> ExtractedGraph:
             node = node.model_copy(update={"data": new_data})
         new_nodes.append(node)
 
-    new_edges = [
-        edge for edge in edges
-        if edge.source not in removed_ids and edge.target not in removed_ids
-    ]
+    new_edges = [edge for edge in edges if edge.source not in removed_ids and edge.target not in removed_ids]
 
     warnings = list(graph.warnings)
     if zero_degree_ids:

@@ -166,8 +166,6 @@ async def test_embedding_failure_is_graceful() -> None:
     assert any("SEMANTIC_CLUSTERING_SKIPPED" in w for w in result.warnings)
 
 
-
-
 class TestEdgeDeduplication:
     def test_deduplicate_edges_by_type_collapse_same_type_parallels(self) -> None:
         edges = [
@@ -267,7 +265,6 @@ class TestTypeFirewall:
         root = _elect_root({"claim1", "claim2"}, degrees, nodes_by_id)
         assert root == "claim2"
 
-
         assert _cross_type_merge_allowed("Claim", "Claim")
         assert _cross_type_merge_allowed("Method", "Method")
 
@@ -292,8 +289,11 @@ class TestTypeFirewall:
         texts_low = [_node_text(n) for n in nodes_low]
         vectors_low = dict(zip(texts_low, [[1.0, 0.0, 0.0], [0.87, 0.4931, 0.0]], strict=True))
         graph_low = ExtractedGraph(
-            paper_id="p1", title="T", paradigm=Paradigm.HSS,
-            nodes=nodes_low, edges=[],
+            paper_id="p1",
+            title="T",
+            paradigm=Paradigm.HSS,
+            nodes=nodes_low,
+            edges=[],
         )
         result_low = await semantic_cluster_and_merge(
             graph_low, _settings(sim=0.85), embedding_client=_PenaltyEmbeddingClient(vectors_low)
@@ -308,8 +308,11 @@ class TestTypeFirewall:
         texts_high = [_node_text(n) for n in nodes_high]
         vectors_high = dict(zip(texts_high, [[1.0, 0.0, 0.0], [0.95, 0.3122, 0.0]], strict=True))
         graph_high = ExtractedGraph(
-            paper_id="p1", title="T", paradigm=Paradigm.HSS,
-            nodes=nodes_high, edges=[],
+            paper_id="p1",
+            title="T",
+            paradigm=Paradigm.HSS,
+            nodes=nodes_high,
+            edges=[],
         )
         result_high = await semantic_cluster_and_merge(
             graph_high, _settings(sim=0.85), embedding_client=_PenaltyEmbeddingClient(vectors_high)

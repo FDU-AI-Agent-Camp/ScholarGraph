@@ -187,9 +187,7 @@ def _print_summary(results: list[EvalResult]) -> None:
         print(f"- Avg time (success/fallback): {avg_time:.2f}s")
         print(f"- Avg nodes/edges: {avg_nodes:.1f} / {avg_edges:.1f}")
 
-    trunc_warnings = sum(
-        1 for r in ok_results for w in r.warnings if "extract_field_truncated" in w
-    )
+    trunc_warnings = sum(1 for r in ok_results for w in r.warnings if "extract_field_truncated" in w)
     print(f"- Truncation warnings: {trunc_warnings}")
 
 

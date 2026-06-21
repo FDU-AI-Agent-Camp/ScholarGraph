@@ -19,6 +19,7 @@ def __getattr__(name: str) -> object:
             pipeline_node_names,
             run_paper_pipeline,
         )
+
         mapping = {
             "build_paper_pipeline_graph": build_paper_pipeline_graph,
             "get_compiled_paper_pipeline": get_compiled_paper_pipeline,

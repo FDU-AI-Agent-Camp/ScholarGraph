@@ -45,6 +45,7 @@ def _register_paper(paper_id: str) -> None:
 
 def _node_list(count: int) -> ExtractedNodeList:
     from backend.schemas.extract_phase import ExtractedNode
+
     return ExtractedNodeList(
         paradigm=Paradigm.HSS,
         nodes=[ExtractedNode(id=f"n{i}", label=f"N{i}", type="Thesis") for i in range(count)],
@@ -53,6 +54,7 @@ def _node_list(count: int) -> ExtractedNodeList:
 
 def _edge_list(count: int, source: str = "c0_n0", target: str = "c0_n1") -> ExtractedEdgeList:
     from backend.schemas.extract_phase import ExtractedEdge
+
     return ExtractedEdgeList(
         paradigm=Paradigm.HSS,
         nodes=[],
@@ -118,6 +120,7 @@ class TestChunkRetry:
         def _two_chunks(text: str, paradigm: Paradigm, *, max_chunk_chars: int) -> list:
             _ = text, paradigm, max_chunk_chars
             from backend.ingest.chunking import TextChunk
+
             return [
                 TextChunk(index=0, text="chunk0", title="t0", start_char=0, end_char=6),
                 TextChunk(index=1, text="chunk1", title="t1", start_char=6, end_char=12),
