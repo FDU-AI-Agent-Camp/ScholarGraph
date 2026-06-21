@@ -41,7 +41,7 @@ def _node_text(node: ExtractedNode) -> str:
 # not absorb each other, otherwise broad topic terms become "super black holes".
 _CROSS_TYPE_MERGE_RULES: dict[str, set[str]] = {
     "SubArgument": {"Claim"},
-    "Evidence": {"Claim", "Method"},
+    "Evidence": set(),  # Evidence is already folded; if it survives, keep it real.
     "ObjectOrData": set(),  # Data objects must stay distinct from concepts.
     "Dataset": {"Method"},
     "Metric": {"Method"},
@@ -53,6 +53,10 @@ _CROSS_TYPE_MERGE_RULES: dict[str, set[str]] = {
     "Method": set(),
     "Thesis": set(),
 }
+
+# When two different node types are allowed to merge, apply a similarity penalty
+# so the cross-type threshold is effectively higher (e.g. 0.85 -> 0.90).
+_CROSS_TYPE_PENALTY = 0.05
 
 
 def _cross_type_merge_allowed(type_a: str, type_b: str) -> bool:
@@ -369,7 +373,7 @@ async def semantic_cluster_and_merge(
             f"Embedding count mismatch: {len(embeddings)} vectors for {len(graph.nodes)} nodes"
         )
 
-    # 1. Pairwise similarity clustering with a hard type firewall.
+    # 1. Pairwise similarity clustering with a dynamic type firewall.
     node_ids = [node.id for node in graph.nodes]
     node_types = [node.type for node in graph.nodes]
     uf = _UnionFind()
@@ -378,8 +382,13 @@ async def semantic_cluster_and_merge(
     for i in range(len(node_ids)):
         for j in range(i + 1, len(node_ids)):
             similarity = _cosine_similarity(embeddings[i], embeddings[j])
-            if not _cross_type_merge_allowed(node_types[i], node_types[j]):
-                similarity = 0.0
+            if node_types[i] != node_types[j]:
+                if _cross_type_merge_allowed(node_types[i], node_types[j]):
+                    # Raise the bar for cross-type merges to avoid loose hubs.
+                    similarity = max(0.0, similarity - _CROSS_TYPE_PENALTY)
+                else:
+                    # Hard firewall for forbidden cross-type pairs.
+                    similarity = 0.0
             if similarity >= settings.semantic_similarity_threshold_effective:
                 uf.union(node_ids[i], node_ids[j])
 

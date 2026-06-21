@@ -222,8 +222,13 @@ class TestTypeFirewall:
 
     def test_allowed_child_parent_merge_is_permitted(self) -> None:
         assert _cross_type_merge_allowed("SubArgument", "Claim")
-        assert _cross_type_merge_allowed("Evidence", "Claim")
         assert _cross_type_merge_allowed("ResearchQuestion", "Thesis")
+        assert _cross_type_merge_allowed("Dataset", "Method")
+
+    def test_evidence_is_isolated_from_claim_and_thesis(self) -> None:
+        assert not _cross_type_merge_allowed("Evidence", "Claim")
+        assert not _cross_type_merge_allowed("Evidence", "Thesis")
+        assert not _cross_type_merge_allowed("Evidence", "Method")
 
     def test_central_types_cannot_absorb_each_other(self) -> None:
         assert not _cross_type_merge_allowed("Claim", "Thesis")
@@ -251,9 +256,54 @@ class TestTypeFirewall:
         root = _elect_root({"claim1", "claim2"}, degrees, nodes_by_id)
         assert root == "claim2"
 
-    def test_same_type_is_always_allowed(self) -> None:
+
         assert _cross_type_merge_allowed("Claim", "Claim")
         assert _cross_type_merge_allowed("Method", "Method")
+
+    @pytest.mark.asyncio
+    async def test_cross_type_penalty_tightens_merge_gate(self) -> None:
+        """SubArgument-Claim at 0.87 raw similarity should NOT merge after -0.05 penalty."""
+
+        from backend.graph.semantic_clustering import _node_text
+
+        class _PenaltyEmbeddingClient:
+            def __init__(self, vectors: dict[str, list[float]]) -> None:
+                self._vectors = vectors
+
+            async def embed_texts(self, texts: list[str]) -> list[list[float]]:
+                return [self._vectors[t] for t in texts]
+
+        # Low similarity pair: should remain separate.
+        nodes_low = [
+            ExtractedNode(id="sub_low", label="x", type="SubArgument"),
+            ExtractedNode(id="claim_low", label="x", type="Claim"),
+        ]
+        texts_low = [_node_text(n) for n in nodes_low]
+        vectors_low = dict(zip(texts_low, [[1.0, 0.0, 0.0], [0.87, 0.4931, 0.0]]))
+        graph_low = ExtractedGraph(
+            paper_id="p1", title="T", paradigm=Paradigm.HSS,
+            nodes=nodes_low, edges=[],
+        )
+        result_low = await semantic_cluster_and_merge(
+            graph_low, _settings(sim=0.85), embedding_client=_PenaltyEmbeddingClient(vectors_low)
+        )
+        assert len(result_low.nodes) == 2
+
+        # High similarity pair: should merge.
+        nodes_high = [
+            ExtractedNode(id="sub_high", label="x", type="SubArgument"),
+            ExtractedNode(id="claim_high", label="x", type="Claim"),
+        ]
+        texts_high = [_node_text(n) for n in nodes_high]
+        vectors_high = dict(zip(texts_high, [[1.0, 0.0, 0.0], [0.95, 0.3122, 0.0]]))
+        graph_high = ExtractedGraph(
+            paper_id="p1", title="T", paradigm=Paradigm.HSS,
+            nodes=nodes_high, edges=[],
+        )
+        result_high = await semantic_cluster_and_merge(
+            graph_high, _settings(sim=0.85), embedding_client=_PenaltyEmbeddingClient(vectors_high)
+        )
+        assert len(result_high.nodes) == 1
 
     @pytest.mark.asyncio
     async def test_firewall_prevents_hub_merging(self) -> None:
