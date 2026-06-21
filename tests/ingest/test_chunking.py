@@ -2,9 +2,7 @@
 
 from __future__ import annotations
 
-import pytest
-
-from backend.ingest.chunking import TextChunk, chunk_text
+from backend.ingest.chunking import chunk_text
 from backend.schemas.paradigm import Paradigm
 
 

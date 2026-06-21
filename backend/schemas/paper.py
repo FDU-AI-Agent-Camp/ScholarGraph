@@ -13,6 +13,7 @@ class PaperStatus(StrEnum):
     PENDING = "pending"
     PROCESSING = "processing"
     READY = "ready"
+    READY_WITH_WARNINGS = "ready_with_warnings"
     FAILED = "failed"
 
 

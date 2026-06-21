@@ -15,7 +15,6 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from httpx import AsyncClient
-
 from tests.api.conftest import assert_error_envelope, assert_success_envelope
 from tests.api.test_papers_upload import VALID_PDF
 

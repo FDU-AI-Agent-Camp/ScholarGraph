@@ -9,7 +9,6 @@ import asyncio
 import json
 import logging
 from collections import defaultdict
-from collections.abc import Sequence
 from datetime import UTC, datetime
 from pathlib import Path
 

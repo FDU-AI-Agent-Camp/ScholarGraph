@@ -3,10 +3,21 @@
 from __future__ import annotations
 
 import pytest
-
 from backend.config import Settings
-from backend.graph.semantic_clustering import _cross_type_merge_allowed, _deduplicate_edges_by_type, _elect_root, _node_text, semantic_cluster_and_merge
-from backend.schemas.extract_phase import ExtractedEdge, ExtractedEdgeList, ExtractedGraph, ExtractedNode, ExtractedNodeList
+from backend.graph.semantic_clustering import (
+    _cross_type_merge_allowed,
+    _deduplicate_edges_by_type,
+    _elect_root,
+    _node_text,
+    semantic_cluster_and_merge,
+)
+from backend.schemas.extract_phase import (
+    ExtractedEdge,
+    ExtractedEdgeList,
+    ExtractedGraph,
+    ExtractedNode,
+    ExtractedNodeList,
+)
 from backend.schemas.paradigm import Paradigm
 
 
@@ -211,7 +222,7 @@ class TestTypeFirewall:
             ],
         )
         edges = ExtractedEdgeList(paradigm=Paradigm.HSS, edges=[])
-        graph = ExtractedGraph(
+        _ = ExtractedGraph(
             paper_id="p1",
             title="T",
             paradigm=Paradigm.HSS,
@@ -279,7 +290,7 @@ class TestTypeFirewall:
             ExtractedNode(id="claim_low", label="x", type="Claim"),
         ]
         texts_low = [_node_text(n) for n in nodes_low]
-        vectors_low = dict(zip(texts_low, [[1.0, 0.0, 0.0], [0.87, 0.4931, 0.0]]))
+        vectors_low = dict(zip(texts_low, [[1.0, 0.0, 0.0], [0.87, 0.4931, 0.0]], strict=True))
         graph_low = ExtractedGraph(
             paper_id="p1", title="T", paradigm=Paradigm.HSS,
             nodes=nodes_low, edges=[],
@@ -295,7 +306,7 @@ class TestTypeFirewall:
             ExtractedNode(id="claim_high", label="x", type="Claim"),
         ]
         texts_high = [_node_text(n) for n in nodes_high]
-        vectors_high = dict(zip(texts_high, [[1.0, 0.0, 0.0], [0.95, 0.3122, 0.0]]))
+        vectors_high = dict(zip(texts_high, [[1.0, 0.0, 0.0], [0.95, 0.3122, 0.0]], strict=True))
         graph_high = ExtractedGraph(
             paper_id="p1", title="T", paradigm=Paradigm.HSS,
             nodes=nodes_high, edges=[],

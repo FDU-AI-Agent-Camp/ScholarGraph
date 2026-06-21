@@ -201,6 +201,9 @@ def mock_agent_services_only(
                 target="n1",
                 label="SUPPORTS",
                 type="SUPPORTS",
+                rationale="Mock self-supporting edge to satisfy quality gate coverage.",
+                source_span="Mock textual anchor.",
+                confidence="HIGH",
             ),
         ],
     )

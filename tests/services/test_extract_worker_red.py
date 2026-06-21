@@ -12,10 +12,9 @@ from __future__ import annotations
 
 from collections.abc import AsyncIterator
 from datetime import UTC, datetime
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import patch
 
 import pytest
-
 from backend.config import Settings
 from backend.graph.qa import _GraphQaEngine
 from backend.schemas.graph import GraphEdge, GraphNode, UnifiedPaperGraph

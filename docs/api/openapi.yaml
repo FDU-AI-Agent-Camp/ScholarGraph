@@ -246,7 +246,11 @@ components:
 
     PaperStatus:
       type: string
-      enum: [pending, processing, ready, failed]
+      enum: [pending, processing, ready, ready_with_warnings, failed]
+      description: |
+        `ready_with_warnings` means the graph is available but failed the
+        confidence gate (e.g. low SUPPORTS rationale coverage or too many
+        isolated nodes). The client should render a yellow warning border.
 
     PipelineStage:
       type: string

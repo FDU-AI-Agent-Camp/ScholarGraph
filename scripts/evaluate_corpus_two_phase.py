@@ -18,7 +18,7 @@ import json
 import os
 import time
 from dataclasses import asdict, dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -196,7 +196,7 @@ def _print_summary(results: list[EvalResult]) -> None:
 def _save_report(results: list[EvalResult], *, max_chars: int) -> Path:
     """Persist evaluation report as JSON."""
     REPORT_DIR.mkdir(parents=True, exist_ok=True)
-    ts = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
+    ts = datetime.now(UTC).strftime("%Y%m%d_%H%M%S")
     path = REPORT_DIR / f"corpus_two_phase_eval_{ts}.json"
     payload = {
         "meta": {

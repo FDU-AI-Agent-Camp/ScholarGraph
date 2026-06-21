@@ -5,7 +5,6 @@ from __future__ import annotations
 from unittest.mock import AsyncMock, patch
 
 import pytest
-
 from backend.agents.extract_chunked import extract_chunked
 from backend.config import get_settings
 from backend.llm.client import reset_llm_client_cache

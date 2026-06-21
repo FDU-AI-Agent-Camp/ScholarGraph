@@ -9,6 +9,7 @@ from unittest.mock import patch
 
 from backend.schemas.ingest_head import IngestHead
 from backend.services.head_refine_service import HeadRefineResult
+
 from tests.conftest import mock_pipeline_node_services
 
 

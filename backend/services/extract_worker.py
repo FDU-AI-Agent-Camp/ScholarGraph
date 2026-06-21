@@ -12,7 +12,6 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from typing import Any
 
 from backend.agents.extract_heuristic import extract_title
 from backend.agents.extractor import _extract_chunked_two_phase

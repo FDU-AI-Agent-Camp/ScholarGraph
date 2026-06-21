@@ -6,15 +6,14 @@ import json
 from unittest.mock import AsyncMock, patch
 
 import pytest
-from langchain_core.messages import AIMessage
-
 from backend.agents.extract_edges import build_edges_with_llm
 from backend.agents.extract_nodes import extract_nodes_with_llm
-from backend.config import get_settings, Settings
+from backend.config import Settings, get_settings
 from backend.graph.extract_workflow import build_extract_subgraph
 from backend.llm.client import LlmClient, reset_llm_client_cache
-from backend.schemas.extract_phase import ExtractedEdge, ExtractedEdgeList, ExtractedNode, ExtractedNodeList
+from backend.schemas.extract_phase import ExtractedEdgeList, ExtractedNode, ExtractedNodeList
 from backend.schemas.paradigm import Paradigm
+from langchain_core.messages import AIMessage
 
 
 @pytest.fixture

@@ -78,6 +78,9 @@ def mock_extract(full_text: str, paradigm: Paradigm) -> UnifiedPaperGraph:
                 target="n_claim",
                 label="SUPPORTS",
                 type="SUPPORTS",
+                rationale="Transformer 原子嵌入方法为性能优于 GNN 基线的主张提供技术依据。",
+                source_span="我们提出基于 Transformer 的原子嵌入方法。",
+                confidence="HIGH",
             ),
             GraphEdge(
                 id="e2",
@@ -85,6 +88,9 @@ def mock_extract(full_text: str, paradigm: Paradigm) -> UnifiedPaperGraph:
                 target="n_claim",
                 label="SUPPORTS",
                 type="SUPPORTS",
+                rationale="Materials Project 基准实验验证了该方法优于 GNN 基线。",
+                source_span="在 Materials Project 基准上，模型平均性能超过当前最优 GNN 方法。",
+                confidence="HIGH",
             ),
         ],
     )

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from backend.agents.extract_chunked import extract_chunked
@@ -56,7 +56,16 @@ def _edge_list(count: int, source: str = "c0_n0", target: str = "c0_n1") -> Extr
     return ExtractedEdgeList(
         paradigm=Paradigm.HSS,
         nodes=[],
-        edges=[ExtractedEdge(id=f"e{i}", source=source, target=target, label="supports", type="SUPPORTS") for i in range(count)],
+        edges=[
+            ExtractedEdge(
+                id=f"e{i}",
+                source=source,
+                target=target,
+                label="supports",
+                type="SUPPORTS",
+            )
+            for i in range(count)
+        ],
     )
 
 
@@ -88,8 +97,14 @@ class TestChunkRetry:
             return _node_list(2)
 
         monkeypatch.setattr("backend.agents.extract_chunked.extract_nodes_with_llm", flaky_extract_nodes)
-        monkeypatch.setattr("backend.agents.extract_chunked.build_edges_with_llm", AsyncMock(return_value=_edge_list(1)))
-        monkeypatch.setattr("backend.agents.extract_chunked.get_extract_rate_limiter", lambda: MagicMock(acquire=AsyncMock()))
+        monkeypatch.setattr(
+            "backend.agents.extract_chunked.build_edges_with_llm",
+            AsyncMock(return_value=_edge_list(1)),
+        )
+        monkeypatch.setattr(
+            "backend.agents.extract_chunked.get_extract_rate_limiter",
+            lambda: MagicMock(acquire=AsyncMock()),
+        )
 
         result = await extract_chunked("x" * 50_000, Paradigm.HSS, paper_id=paper_id, settings=settings)
         assert call_count == 3
@@ -109,7 +124,10 @@ class TestChunkRetry:
             ]
 
         monkeypatch.setattr("backend.agents.extract_chunked.chunk_text", _two_chunks)
-        monkeypatch.setattr("backend.agents.extract_chunked.get_extract_rate_limiter", lambda: MagicMock(acquire=AsyncMock()))
+        monkeypatch.setattr(
+            "backend.agents.extract_chunked.get_extract_rate_limiter",
+            lambda: MagicMock(acquire=AsyncMock()),
+        )
 
         async def selective_extract_nodes(prompt: str, *args, **kwargs) -> ExtractedNodeList:
             if "chunk0" in prompt:
@@ -123,7 +141,10 @@ class TestChunkRetry:
             return _edge_list(1, source="c1_n0", target="c1_n1")
 
         monkeypatch.setattr("backend.agents.extract_chunked.extract_nodes_with_llm", selective_extract_nodes)
-        monkeypatch.setattr("backend.agents.extract_chunked.build_edges_with_llm", AsyncMock(side_effect=selective_build_edges))
+        monkeypatch.setattr(
+            "backend.agents.extract_chunked.build_edges_with_llm",
+            AsyncMock(side_effect=selective_build_edges),
+        )
 
         result = await extract_chunked("x" * 50_000, Paradigm.HSS, paper_id=paper_id, settings=settings)
 
@@ -135,8 +156,14 @@ class TestChunkRetry:
         _register_paper(paper_id)
         settings = _settings(retry_attempts=1, retry_delay=0.0)
 
-        monkeypatch.setattr("backend.agents.extract_chunked.extract_nodes_with_llm", AsyncMock(side_effect=RuntimeError("boom")))
-        monkeypatch.setattr("backend.agents.extract_chunked.get_extract_rate_limiter", lambda: MagicMock(acquire=AsyncMock()))
+        monkeypatch.setattr(
+            "backend.agents.extract_chunked.extract_nodes_with_llm",
+            AsyncMock(side_effect=RuntimeError("boom")),
+        )
+        monkeypatch.setattr(
+            "backend.agents.extract_chunked.get_extract_rate_limiter",
+            lambda: MagicMock(acquire=AsyncMock()),
+        )
 
         with pytest.raises(ValueError, match="empty node lists"):
             await extract_chunked("x" * 50_000, Paradigm.HSS, paper_id=paper_id, settings=settings)
@@ -156,7 +183,10 @@ class TestChunkSettings:
             raise ValueError("fail")
 
         monkeypatch.setattr("backend.agents.extract_chunked.extract_nodes_with_llm", always_fail)
-        monkeypatch.setattr("backend.agents.extract_chunked.get_extract_rate_limiter", lambda: MagicMock(acquire=AsyncMock()))
+        monkeypatch.setattr(
+            "backend.agents.extract_chunked.get_extract_rate_limiter",
+            lambda: MagicMock(acquire=AsyncMock()),
+        )
 
         with pytest.raises(ValueError, match="empty node lists"):
             await extract_chunked("x" * 50_000, Paradigm.HSS, paper_id=paper_id, settings=settings)

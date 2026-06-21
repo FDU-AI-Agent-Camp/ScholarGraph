@@ -6,7 +6,6 @@ import json
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
-
 from backend.agents.extract_edges import _collect_incomplete_core_edges, _patch_source_spans
 from backend.llm.client import LlmClient
 from backend.schemas.extract_phase import ExtractedEdge

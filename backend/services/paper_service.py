@@ -164,22 +164,14 @@ class PaperService:
         classification: ParadigmClassification,
         graph: UnifiedPaperGraph,
     ) -> None:
-        self.ensure_paper_exists(paper_id)
-        now = datetime.now(UTC)
-        paper = self._papers[paper_id]
-        self._papers[paper_id] = paper.model_copy(
-            update={
-                "status": PaperStatus.READY,
-                "paradigm": classification.paradigm,
-                "classification": classification,
-                "updated_at": now,
-            },
-        )
-        from backend.graph.store import GraphStore
-        from backend.services.pipeline_status_service import get_pipeline_status_service
+        from backend.services.pipeline_completion_service import complete_paper_pipeline
 
-        GraphStore().save(graph)
-        get_pipeline_status_service().mark_ready(paper_id)
+        complete_paper_pipeline(
+            self,
+            paper_id,
+            classification=classification,
+            graph=graph,
+        )
 
     async def force_reextract(self, paper_id: str) -> PaperStatusData:
         """Escape hatch: reset and re-schedule the pipeline for ``paper_id``."""
@@ -427,7 +419,7 @@ class PaperService:
 
     async def get_graph(self, paper_id: str) -> UnifiedPaperGraph:
         paper = await self.get_paper(paper_id)
-        if paper.status == PaperStatus.READY:
+        if paper.status in (PaperStatus.READY, PaperStatus.READY_WITH_WARNINGS):
             from backend.graph.store import GraphStore
 
             graph = GraphStore().load(paper_id)

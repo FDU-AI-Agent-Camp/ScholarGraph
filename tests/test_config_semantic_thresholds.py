@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import pytest
-
 from backend.config import DEFAULT_EMBEDDING_MODEL_THRESHOLDS, Settings
 
 
@@ -35,7 +33,10 @@ class TestSemanticThresholdDefaults:
             semantic_knn_threshold=-1.0,
             embedding_model="some-unknown-model",
         )
-        assert settings.semantic_similarity_threshold_effective == DEFAULT_EMBEDDING_MODEL_THRESHOLDS["default"]["similarity"]
+        assert (
+            settings.semantic_similarity_threshold_effective
+            == DEFAULT_EMBEDDING_MODEL_THRESHOLDS["default"]["similarity"]
+        )
         assert settings.semantic_knn_threshold_effective == DEFAULT_EMBEDDING_MODEL_THRESHOLDS["default"]["knn"]
 
     def test_explicit_env_threshold_overrides_model_default(self) -> None:

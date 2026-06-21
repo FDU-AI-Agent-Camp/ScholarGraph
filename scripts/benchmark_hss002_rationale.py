@@ -13,18 +13,11 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import sys
 import time
 from pathlib import Path
 
-logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
-
-import sys
-
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-
-from backend.agents.extractor import extract
-from backend.schemas.paradigm import Paradigm
-
 
 TEXT_PATH = Path("data/corpus/hss-002.txt")
 PAPER_ID = "benchmark-hss-002-rationale"
@@ -37,6 +30,10 @@ def _coverage(edges: list[dict], edge_type: str, field: str) -> tuple[int, int]:
 
 
 async def main() -> None:
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
+    from backend.agents.extractor import extract
+    from backend.schemas.paradigm import Paradigm
+
     text = TEXT_PATH.read_text(encoding="utf-8")
     print(f"Input: {len(text):,} chars from {TEXT_PATH.name}")
 

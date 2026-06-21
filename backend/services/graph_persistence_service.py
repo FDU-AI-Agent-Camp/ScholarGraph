@@ -24,7 +24,7 @@ def __getattr__(name: str) -> object:
 class GraphPersistenceService:
     """Persist UnifiedPaperGraph to configured storage."""
 
-    def __init__(self, store: "GraphStore | None" = None) -> None:
+    def __init__(self, store: GraphStore | None = None) -> None:
         from backend.graph.store import GraphStore
 
         self._store = store or GraphStore()

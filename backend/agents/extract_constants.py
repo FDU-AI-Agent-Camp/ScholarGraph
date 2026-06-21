@@ -23,3 +23,7 @@ EXTRACT_SCHEMA_VALIDATION_FAILED_MESSAGE = "Schema 校验失败，已降级为�
 
 EXTRACT_CONTEXT_WINDOW_EXCEEDED_CODE = "extract_context_window_exceeded"
 EXTRACT_CONTEXT_WINDOW_EXCEEDED_MESSAGE = "上下文窗口超限，已降级为启发式Fallback。"
+
+# Quality gate warning: graph passed extraction but confidence is too low.
+LOW_CONFIDENCE_GRAPH_CODE = "low_confidence_graph"
+LOW_CONFIDENCE_GRAPH_MESSAGE = "图谱质量未达置信门控，建议人工复核或重新抽取。"

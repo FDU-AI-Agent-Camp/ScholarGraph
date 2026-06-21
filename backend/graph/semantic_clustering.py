@@ -4,11 +4,9 @@ from __future__ import annotations
 
 import logging
 import math
+import re
 from collections import defaultdict
 from collections.abc import Sequence
-from typing import Any
-
-import re
 
 from backend.config import Settings
 from backend.graph.merge_graphs import _UnionFind
@@ -116,7 +114,7 @@ def _cosine_similarity(a: Sequence[float], b: Sequence[float]) -> float:
     """Cosine similarity between two equal-length vectors."""
     if not a or not b:
         return 0.0
-    dot = math.fsum(x * y for x, y in zip(a, b))
+    dot = math.fsum(x * y for x, y in zip(a, b, strict=True))
     norm_a = math.sqrt(math.fsum(x * x for x in a))
     norm_b = math.sqrt(math.fsum(x * x for x in b))
     if norm_a == 0.0 or norm_b == 0.0:
@@ -317,7 +315,6 @@ def _add_knn_bridges(
 
     components.sort(key=len, reverse=True)
     main_component = components[0]
-    main_ids = list(main_component)
     main_indices = [i for i, node in enumerate(nodes) if node.id in main_component]
 
     existing_pairs: set[tuple[str, str]] = set()
@@ -458,7 +455,7 @@ async def semantic_cluster_and_merge(
     # Build embeddings aligned with the merged node list: each kept node uses the
     # embedding of its cluster root.
     root_to_embedding: dict[str, list[float]] = {}
-    for node_id, emb in zip(node_ids, embeddings):
+    for node_id, emb in zip(node_ids, embeddings, strict=True):
         root_id = id_map[node_id]
         if root_id not in root_to_embedding:
             root_to_embedding[root_id] = emb

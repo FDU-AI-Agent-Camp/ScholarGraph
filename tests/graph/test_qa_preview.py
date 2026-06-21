@@ -9,7 +9,7 @@ from pathlib import Path
 import pytest
 from backend.graph.qa import _MVP_PREVIEW_PREFIX, _GraphQaEngine
 from backend.graph.store import GraphStore
-from backend.schemas.graph import GraphEdge, GraphNode, UnifiedPaperGraph
+from backend.schemas.graph import GraphNode, UnifiedPaperGraph
 from backend.schemas.paper import PaperDetail, PaperStatus
 from backend.schemas.paradigm import Paradigm
 from backend.services.paper_service import get_paper_service

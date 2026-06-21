@@ -8,7 +8,7 @@ and worker boundaries so tests remain deterministic without API keys.
 from __future__ import annotations
 
 from datetime import UTC, datetime
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
 from backend.agents.extractor_background import (

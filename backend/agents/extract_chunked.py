@@ -4,14 +4,13 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from typing import Any
 
 from backend.agents.extract_edges import build_edges_with_llm
 from backend.agents.extract_nodes import extract_nodes_with_llm
 from backend.config import Settings, get_settings
-from backend.graph.semantic_clustering import semantic_cluster_and_merge
 from backend.graph.head_store import HeadStore
 from backend.graph.merge_graphs import merge_graphs
+from backend.graph.semantic_clustering import semantic_cluster_and_merge
 from backend.ingest.chunking import TextChunk, chunk_text
 from backend.llm.client import LlmClient, get_llm_client
 from backend.llm.rate_limiter import get_extract_rate_limiter

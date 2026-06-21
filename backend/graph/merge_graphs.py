@@ -6,7 +6,13 @@ import logging
 import re
 from typing import Any
 
-from backend.schemas.extract_phase import ExtractedEdge, ExtractedEdgeList, ExtractedGraph, ExtractedNode, ExtractedNodeList
+from backend.schemas.extract_phase import (
+    ExtractedEdge,
+    ExtractedEdgeList,
+    ExtractedGraph,
+    ExtractedNode,
+    ExtractedNodeList,
+)
 from backend.schemas.paradigm import Paradigm
 
 logger = logging.getLogger(__name__)

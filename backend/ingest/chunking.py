@@ -193,7 +193,16 @@ def _split_oversized(
         )
 
     # Re-number indices sequentially.
-    return [TextChunk(index=i, title=c.title, text=c.text, start_char=c.start_char, end_char=c.end_char) for i, c in enumerate(chunks)]
+    return [
+        TextChunk(
+            index=i,
+            title=c.title,
+            text=c.text,
+            start_char=c.start_char,
+            end_char=c.end_char,
+        )
+        for i, c in enumerate(chunks)
+    ]
 
 
 def _merge_small_chunks(chunks: list[TextChunk], min_chunk_chars: int) -> list[TextChunk]:
@@ -269,4 +278,13 @@ def chunk_text(
     chunks = _merge_small_chunks(chunks, min_chunk_chars)
 
     # Re-index globally.
-    return [TextChunk(index=i, title=c.title, text=c.text, start_char=c.start_char, end_char=c.end_char) for i, c in enumerate(chunks)]
+    return [
+        TextChunk(
+            index=i,
+            title=c.title,
+            text=c.text,
+            start_char=c.start_char,
+            end_char=c.end_char,
+        )
+        for i, c in enumerate(chunks)
+    ]

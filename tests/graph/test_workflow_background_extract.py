@@ -12,7 +12,7 @@ from backend.agents.extract_types import ExtractResult
 from backend.graph import nodes
 from backend.graph.state import WorkflowState
 from backend.graph.workflow import _route_after_extract, run_paper_pipeline
-from backend.schemas.graph import GraphEdge, GraphNode, UnifiedPaperGraph
+from backend.schemas.graph import GraphNode, UnifiedPaperGraph
 from backend.schemas.paper import PaperStatus, PipelineStage
 from backend.schemas.paradigm import Paradigm, ParadigmClassification
 from backend.services.errors import ServiceError

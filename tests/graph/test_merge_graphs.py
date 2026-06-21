@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import pytest
-
 from backend.graph.merge_graphs import merge_edge_lists, merge_graphs, merge_node_lists
 from backend.schemas.extract_phase import ExtractedEdge, ExtractedEdgeList, ExtractedNode, ExtractedNodeList
 from backend.schemas.paradigm import Paradigm

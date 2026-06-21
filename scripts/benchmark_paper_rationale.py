@@ -13,12 +13,7 @@ import sys
 import time
 from pathlib import Path
 
-logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
-
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-
-from backend.agents.extractor import extract
-from backend.schemas.paradigm import Paradigm
 
 
 def _coverage(edges: list[dict], edge_type: str, field: str) -> tuple[int, int]:
@@ -28,6 +23,10 @@ def _coverage(edges: list[dict], edge_type: str, field: str) -> tuple[int, int]:
 
 
 async def main() -> None:
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
+    from backend.agents.extractor import extract
+    from backend.schemas.paradigm import Paradigm
+
     if len(sys.argv) < 4:
         print("Usage: benchmark_paper_rationale.py <txt-path> <STEM|HSS> <paper-id>")
         sys.exit(1)

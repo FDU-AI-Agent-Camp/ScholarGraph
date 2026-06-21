@@ -69,13 +69,13 @@ def _seed_status_for_detail(service: PaperService, detail: PaperDetail) -> None:
         return
 
     updated_at = detail.updated_at or detail.created_at
-    if detail.status == PaperStatus.READY:
+    if detail.status in (PaperStatus.READY, PaperStatus.READY_WITH_WARNINGS):
         service._status[detail.paper_id] = PaperStatusData(
             paper_id=detail.paper_id,
-            status=PaperStatus.READY,
+            status=detail.status,
             percent=100,
             stage=PipelineStage.READY,
-            message="建图完成",
+            message="建图完成" if detail.status == PaperStatus.READY else "建图完成，但置信度未达门控",
             updated_at=updated_at,
             preview_available=detail.preview_available,
         )

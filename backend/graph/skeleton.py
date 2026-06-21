@@ -2,10 +2,9 @@
 
 from __future__ import annotations
 
-from collections import defaultdict, deque
+from collections import deque
 
-from backend.schemas.graph import GraphEdge, GraphNode, UnifiedPaperGraph
-
+from backend.schemas.graph import GraphEdge, UnifiedPaperGraph
 
 DEFAULT_MAX_SKELETON_NODES = 300
 

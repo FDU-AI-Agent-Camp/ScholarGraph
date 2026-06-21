@@ -7,7 +7,6 @@ from typing import Literal
 from pydantic import AliasChoices, Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-
 # Different embedding models train with different vector-space densities.
 # Hard-coding a single threshold would break when switching models, so we keep
 # per-model defaults and allow explicit env overrides.
@@ -153,6 +152,18 @@ class Settings(BaseSettings):
     extract_structured_output_repair: bool = Field(
         default=True,
         validation_alias="EXTRACT_STRUCTURED_OUTPUT_REPAIR",
+    )
+    extract_min_supports_rationale_coverage: float = Field(
+        default=0.5,
+        ge=0.0,
+        le=1.0,
+        validation_alias="EXTRACT_MIN_SUPPORTS_RATIONALE_COVERAGE",
+    )
+    extract_max_isolated_node_ratio: float = Field(
+        default=0.4,
+        ge=0.0,
+        le=1.0,
+        validation_alias="EXTRACT_MAX_ISOLATED_NODE_RATIO",
     )
 
     # ------------------------------------------------------------------

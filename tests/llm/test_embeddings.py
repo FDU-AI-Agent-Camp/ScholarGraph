@@ -6,7 +6,6 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import httpx
 import pytest
-
 from backend.config import Settings
 from backend.llm.embeddings import EmbeddingClient
 

@@ -2,12 +2,9 @@
 
 from __future__ import annotations
 
-import pytest
-
 from backend.agents.extract_edges import _anchor_prompt, _filter_nodes_for_chunk
 from backend.schemas.extract_phase import ExtractedNode, ExtractedNodeList
 from backend.schemas.paradigm import Paradigm
-
 
 _COUNTERS: dict[str, int] = {}
 

@@ -20,7 +20,6 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from backend.agents.extractor import extract_graph_only
 from backend.schemas.paradigm import Paradigm
 
-
 SAMPLE_TEXT_PATH = Path("data/corpus/stem-001.txt")
 SAMPLE_LIMIT_CHARS = 6000
 
@@ -60,7 +59,11 @@ def main() -> None:
 
     rationale_lengths = [len(e["rationale"]) for e in edges if e.get("rationale")]
     if rationale_lengths:
-        print(f"\nRationale lengths: min={min(rationale_lengths)}, max={max(rationale_lengths)}, avg={sum(rationale_lengths) / len(rationale_lengths):.1f}")
+        avg_length = sum(rationale_lengths) / len(rationale_lengths)
+        print(
+            f"\nRationale lengths: min={min(rationale_lengths)}, max={max(rationale_lengths)}, "
+            f"avg={avg_length:.1f}"
+        )
 
     print("\n=== Sample SUPPORTS edges ===")
     for e in [e for e in edges if e["type"] == "SUPPORTS"][:3]:

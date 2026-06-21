@@ -166,7 +166,7 @@ class _GraphQaEngine:
             yield QaEvent("done", {"answer_id": ""})
             return
 
-        is_preview = paper.status != PaperStatus.READY
+        is_preview = paper.status not in {PaperStatus.READY, PaperStatus.READY_WITH_WARNINGS}
 
         if is_preview and not paper.preview_available:
             yield QaEvent(
