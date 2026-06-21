@@ -104,6 +104,23 @@ async def get_paper_graph(
     return success(graph, request_id)
 
 
+@router.post("/{paper_id}/reextract")
+async def force_reextract_paper(
+    paper_id: str,
+    request_id: str = Depends(get_request_id),
+    service: PaperService = Depends(get_paper_service_dep),
+) -> dict:
+    """Forcefully re-run the extraction pipeline for an existing paper.
+
+    This is the escape hatch when the previous extraction fell back to a
+    heuristic graph (e.g. ``extract_llm_timeout``). It clears the existing
+    graph, preview, warnings and refined head, resets status to PENDING and
+    re-enqueues the pipeline from the stored PDF.
+    """
+    status_data = await service.force_reextract(paper_id)
+    return success(status_data, request_id)
+
+
 @router.post("/{paper_id}/qa/stream")
 async def stream_paper_qa(
     paper_id: str,

@@ -44,3 +44,11 @@ class HeadStore:
         if not path.is_file():
             return None
         return PersistedHeadRefine.model_validate_json(path.read_text(encoding="utf-8"))
+
+    def delete(self, paper_id: str) -> bool:
+        """Remove persisted head refine record if it exists."""
+        path = self._path(paper_id)
+        if not path.is_file():
+            return False
+        path.unlink()
+        return True

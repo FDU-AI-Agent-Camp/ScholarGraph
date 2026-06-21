@@ -46,6 +46,7 @@ class PaperService:
         self._extract_warnings: dict[str, list[str]] = {}
         self._preview_graphs: dict[str, UnifiedPaperGraph] = {}
         self._preview_available: dict[str, bool] = {}
+        self._pdf_paths: dict[str, Path] = {}
         seed_from_fixtures(self)
 
     async def list_papers(
@@ -179,6 +180,13 @@ class PaperService:
 
         GraphStore().save(graph)
         get_pipeline_status_service().mark_ready(paper_id)
+
+    async def force_reextract(self, paper_id: str) -> PaperStatusData:
+        """Escape hatch: reset and re-schedule the pipeline for ``paper_id``."""
+        self.ensure_paper_exists(paper_id)
+        from backend.services.reextract_service import force_reextract
+
+        return force_reextract(self, paper_id)
 
     def fail_pipeline(
         self,
@@ -461,6 +469,7 @@ class PaperService:
             updated_at=now,
         )
         self._papers[paper_id] = detail
+        self._pdf_paths[paper_id] = dest
         self._status[paper_id] = PaperStatusData(
             paper_id=paper_id,
             status=PaperStatus.PENDING,

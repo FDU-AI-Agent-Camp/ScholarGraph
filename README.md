@@ -82,7 +82,8 @@ PDF 转为文本并完成 head refine 后，流水线进入分类节点。Live �
 - **短论文**（≤ `EXTRACT_MAX_INPUT_CHARS`）：单次 LLM structured output 直接输出 `UnifiedPaperGraph`；
 - **长论文**：**Chunked Two-Phase 抽取**——先按 chunk 抽取节点，再按 chunk 抽取边，最后合并、一阶脱水、二阶语义聚类，输出终态 `UnifiedPaperGraph`。长论文会先返回一个轻量 **MVP 骨架预览**，再异步完成全量抽取；
 - LLM 调用具备 tenacity 指数退避重试（`stop=3`，`wait=2~30s`），仅对超时、限流、网络等 transient 错误重试；
-- 失败时降级 **启发式建图**（`extract_heuristic.py`），`extract_warnings` 保留通用机器码 `extract_heuristic_fallback`，并额外暴露细粒度根因码：`extract_llm_timeout`、`extract_llm_rate_limited`、`extract_llm_json_invalid`、`extract_schema_validation_failed`、`extract_context_window_exceeded`。
+- 失败时降级 **启发式建图**（`extract_heuristic.py`），`extract_warnings` 保留通用机器码 `extract_heuristic_fallback`，并额外暴露细粒度根因码：`extract_llm_timeout`、`extract_llm_rate_limited`、`extract_llm_json_invalid`、`extract_schema_validation_failed`、`extract_context_window_exceeded`；
+- **逃生舱重抽**：即使重试后仍 fallback，用户可调用 `POST /papers/{id}/reextract` 强制清空旧图谱/预览/warnings 并重新入队流水线，前端对应 **[FORCE RE-EXTRACT]** 按钮。
 
 **分类与抽取独立**：分类 LLM 成功时抽取仍可能 fallback（schema 更大、耗时更长）。
 
