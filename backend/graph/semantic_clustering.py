@@ -8,12 +8,34 @@ from collections import defaultdict
 from collections.abc import Sequence
 from typing import Any
 
+import re
+
 from backend.config import Settings
 from backend.graph.merge_graphs import _UnionFind
 from backend.llm.embeddings import EmbeddingClient
 from backend.schemas.extract_phase import ExtractedEdge, ExtractedGraph, ExtractedNode
 
 logger = logging.getLogger(__name__)
+
+# Extract the numeric prefix from ids like "e5_supports".
+_EDGE_ID_INDEX_RE = re.compile(r"^e(\d+)_.*$")
+
+
+def _next_edge_index(edges: list[ExtractedEdge]) -> int:
+    """Return the next sequential integer for a generated edge id.
+
+    Falls back to ``len(edges) + 1`` when existing ids do not follow the
+    ``e{N}_{type}`` convention, so KNN bridges never reuse a numeric prefix.
+    """
+    max_idx = 0
+    for edge in edges:
+        match = _EDGE_ID_INDEX_RE.match(edge.id)
+        if match:
+            max_idx = max(max_idx, int(match.group(1)))
+    if max_idx:
+        return max_idx + 1
+    return len(edges) + 1
+
 
 # Edge type used for weak semantic bridges between isolated components.
 _SEMANTIC_BRIDGE_TYPE = "RELATES_TO"
@@ -231,22 +253,47 @@ def _merge_clusters(
         )
 
     # Remap edges through the cluster map and deduplicate.
+    # Use the original id as a placeholder; ids are reassigned sequentially
+    # after deduplication so that downstream KNN bridging cannot collide with
+    # gaps left by dropped self-loops or duplicate edges.
+    def _richer_edge(a: ExtractedEdge, b: ExtractedEdge) -> ExtractedEdge:
+        """Keep the edge that carries more semantic information.
+
+        Prefer longer rationale, then longer source_span. This avoids data
+        bloat from string concatenation while preserving the richest logic
+        path after node merges.
+        """
+        a_rationale_len = len(a.rationale or "")
+        b_rationale_len = len(b.rationale or "")
+        if b_rationale_len > a_rationale_len:
+            return b
+        if a_rationale_len > b_rationale_len:
+            return a
+        # Tie-break on source_span length when rationale is equal or absent.
+        if b.source_span and len(b.source_span) > len(a.source_span or ""):
+            return b
+        return a
+
     dedup: dict[tuple[str, str, str, str], ExtractedEdge] = {}
-    for idx, edge in enumerate(edges, start=1):
+    for edge in edges:
         source = id_map.get(edge.source, edge.source)
         target = id_map.get(edge.target, edge.target)
         if source == target:
             continue
         key = (source, target, edge.type, edge.label)
-        candidate = edge.model_copy(update={"id": f"e{idx}_{edge.type.lower()}", "source": source, "target": target})
+        remapped = edge.model_copy(update={"source": source, "target": target})
         existing = dedup.get(key)
         if existing is None:
-            dedup[key] = candidate
-        elif candidate.source_span and len(candidate.source_span) > len(existing.source_span or ""):
-            dedup[key] = candidate
+            dedup[key] = remapped
+        else:
+            dedup[key] = _richer_edge(existing, remapped)
+
+    merged_edges: list[ExtractedEdge] = []
+    for idx, edge in enumerate(dedup.values(), start=1):
+        merged_edges.append(edge.model_copy(update={"id": f"e{idx}_{edge.type.lower()}"}))
 
     merged_count = sum(1 for cluster in clusters if len(cluster) > 1)
-    return list(new_nodes_by_id.values()), list(dedup.values()), id_map, merged_count
+    return list(new_nodes_by_id.values()), merged_edges, id_map, merged_count
 
 
 def _add_knn_bridges(
@@ -273,7 +320,7 @@ def _add_knn_bridges(
 
     new_edges = list(edges)
     bridges_added = 0
-    next_edge_id = len(edges) + 1
+    next_edge_id = _next_edge_index(new_edges)
 
     for component in components[1:]:
         # Representative: highest-degree node inside the island.

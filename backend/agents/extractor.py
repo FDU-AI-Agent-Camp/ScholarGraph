@@ -111,6 +111,9 @@ def _to_unified_graph(
                 target=e.target,
                 label=e.label,
                 type=e.type,
+                rationale=e.rationale,
+                source_span=e.source_span,
+                confidence=e.confidence,
                 data=e.data,
             )
             for e in extracted.edges
@@ -313,6 +316,9 @@ async def _extract_chunked_two_phase(
                 target=e.target,
                 label=e.label,
                 type=e.type,
+                rationale=e.rationale,
+                source_span=e.source_span,
+                confidence=e.confidence,
                 data=e.data,
             )
             for e in extracted_graph.edges

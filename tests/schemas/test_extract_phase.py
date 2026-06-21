@@ -139,6 +139,70 @@ class TestExtractedEdgeList:
         assert edge_list.edges == []
 
 
+class TestExtractedEdgeCoreQuality:
+    def test_core_edge_missing_rationale_is_flagged(self) -> None:
+        edge = ExtractedEdge(
+            id="e1",
+            source="n1",
+            target="n2",
+            label="SUPPORTS",
+            type="SUPPORTS",
+            source_span="some span",
+        )
+        assert edge.data.get("rationale_missing") is True
+        assert edge.data.get("incomplete") is True
+
+    def test_core_edge_missing_source_span_is_flagged(self) -> None:
+        edge = ExtractedEdge(
+            id="e1",
+            source="n1",
+            target="n2",
+            label="SUPPORTS",
+            type="SUPPORTS",
+            rationale="some rationale",
+        )
+        assert edge.data.get("rationale_missing") is True
+        assert edge.data.get("incomplete") is True
+
+    def test_core_edge_with_all_fields_is_not_flagged(self) -> None:
+        edge = ExtractedEdge(
+            id="e1",
+            source="n1",
+            target="n2",
+            label="SUPPORTS",
+            type="SUPPORTS",
+            rationale="some rationale",
+            source_span="some span",
+        )
+        assert "rationale_missing" not in edge.data
+        assert "incomplete" not in edge.data
+
+    def test_non_core_edge_missing_fields_is_not_flagged(self) -> None:
+        edge = ExtractedEdge(
+            id="e1",
+            source="n1",
+            target="n2",
+            label="USES_METHOD",
+            type="USES_METHOD",
+        )
+        assert "rationale_missing" not in edge.data
+        assert "incomplete" not in edge.data
+
+    def test_rationale_truncation_is_applied(self) -> None:
+        long_rationale = "R" * 600
+        edge = ExtractedEdge(
+            id="e1",
+            source="n1",
+            target="n2",
+            label="SUPPORTS",
+            type="SUPPORTS",
+            rationale=long_rationale,
+            source_span="span",
+        )
+        assert edge.rationale.endswith("...")
+        assert len(edge.rationale) == 500
+
+
 class TestExtractedGraph:
     def test_valid_graph_passes(self) -> None:
         graph = ExtractedGraph(

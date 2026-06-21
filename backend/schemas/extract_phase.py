@@ -1,7 +1,7 @@
 """Intermediate schemas for two-phase graph extraction (v2)."""
 
 import logging
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationInfo, field_validator, model_validator
 
@@ -57,10 +57,19 @@ class ExtractedEdge(BaseModel):
     target: str = Field(min_length=1, description="Target node id.")
     label: str = Field(min_length=1, max_length=MAX_EDGE_LABEL_LENGTH)
     type: str = Field(min_length=1, description="Edge type from the paradigm whitelist.")
+    rationale: str | None = Field(
+        default=None,
+        max_length=MAX_SOURCE_SPAN_LENGTH,
+        description="Logical justification for the relationship (required for core argument edges).",
+    )
     source_span: str | None = Field(
         default=None,
         max_length=MAX_SOURCE_SPAN_LENGTH,
         description="Textual evidence supporting this relation.",
+    )
+    confidence: Literal["HIGH", "MEDIUM", "LOW"] | None = Field(
+        default=None,
+        description="Confidence tier for this relation.",
     )
     data: dict[str, Any] = Field(default_factory=dict)
 
@@ -70,11 +79,31 @@ class ExtractedEdge(BaseModel):
         """Avoid hard failures when the LLM emits an overly long edge label."""
         return _smart_truncate(value, MAX_EDGE_LABEL_LENGTH, "edge.label", info)
 
+    @field_validator("rationale", mode="before")
+    @classmethod
+    def _truncate_rationale(cls, value: str | None, info: ValidationInfo) -> str | None:
+        """Avoid hard failures when the LLM emits an overly long rationale."""
+        return _smart_truncate_optional(value, MAX_SOURCE_SPAN_LENGTH, "edge.rationale", info)
+
     @field_validator("source_span", mode="before")
     @classmethod
     def _truncate_source_span(cls, value: str | None, info: ValidationInfo) -> str | None:
         """Avoid hard failures when the LLM emits an overly long source span."""
         return _smart_truncate_optional(value, MAX_SOURCE_SPAN_LENGTH, "edge.source_span", info)
+
+    @model_validator(mode="after")
+    def inspect_core_edge_quality(self) -> "ExtractedEdge":
+        """Mark core argument edges that lack rationale or source_span.
+
+        Pydantic fields remain optional to avoid hard failures when the LLM
+        disobeys the prompt, but we silently flag the defect so downstream
+        consumers can degrade gracefully.
+        """
+        core_edge_types = {"SUPPORTS", "CONTRADICTS", "EXPLAINS"}
+        if self.type in core_edge_types and (not self.rationale or not self.source_span):
+            self.data["rationale_missing"] = True
+            self.data["incomplete"] = True
+        return self
 
 
 def _smart_truncate(value: str, max_length: int, field_name: str, info: ValidationInfo) -> str:

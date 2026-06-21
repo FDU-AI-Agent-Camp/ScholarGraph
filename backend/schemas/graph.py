@@ -1,7 +1,7 @@
 """Unified paper graph schema with paradigm-specific validation (G6 via GraphStore)."""
 
 from enum import StrEnum
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -59,7 +59,6 @@ STEM_EDGE_TYPES = frozenset(
         "MEASURED_BY",
         "COMPARES_TO",
         "SUPPORTS",
-        "SUPPORTED_BY",
         "PRODUCES",
         "RELATES_TO",
     }
@@ -98,6 +97,9 @@ class GraphEdge(BaseModel):
     target: str = Field(min_length=1)
     label: str = Field(min_length=1)
     type: str = Field(min_length=1)
+    rationale: str | None = Field(default=None, description="Logical justification for the relationship.")
+    source_span: str | None = Field(default=None, description="Verbatim textual evidence from the paper.")
+    confidence: Literal["HIGH", "MEDIUM", "LOW"] | None = Field(default=None, description="Confidence tier.")
     data: dict[str, Any] = Field(default_factory=dict)
 
 

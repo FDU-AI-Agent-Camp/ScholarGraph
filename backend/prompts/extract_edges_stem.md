@@ -16,8 +16,11 @@ Given the extracted nodes below, construct all meaningful edges between them. On
 | `MEASURED_BY` | Claim → Metric | Claim is quantified by a metric. |
 | `COMPARES_TO` | Claim → Baseline | Claim is stated relative to a baseline. |
 | `SUPPORTS` | Evidence → Claim | Experimental evidence backs a claim. |
-| `SUPPORTED_BY` | Claim → Evidence | Inverse emphasis (claim supported by evidence). |
 | `PRODUCES` | Method/Experiment → Finding | Method or experiment produces a finding. |
+
+### Forbidden edge directions
+
+- **Do not use `SUPPORTED_BY` or any inverse of `SUPPORTS`**. All evidence-to-claim relations must be expressed as `Evidence --SUPPORTS--> Claim` only.
 | `RELATES_TO` | any → any | Generic semantic relation when no specific type applies. |
 
 ## Requirements
@@ -26,6 +29,30 @@ Given the extracted nodes below, construct all meaningful edges between them. On
 - Each major Claim must have at least one Evidence connected via `SUPPORTS`.
 - Claims linked to Metrics/Baselines must use `MEASURED_BY` / `COMPARES_TO`.
 - Do not create edges that reference node ids not in the Available Nodes list.
+
+## Edge Attributes
+
+Each edge may include `rationale`, `source_span`, and `confidence`.
+
+### CRITICAL RULE for `source_span`
+
+You are functioning as an **exact text extractor**, not a summarizer.
+
+- `source_span` is **required** for `SUPPORTS`, `CONTRADICTS`, and `EXPLAINS`.
+- The `source_span` MUST be a **verbatim, continuous substring** copied directly from the provided chunk text.
+- **DO NOT summarize. DO NOT paraphrase. DO NOT leave it empty.**
+- If you construct a `SUPPORTS` or `CONTRADICTS` edge, you absolutely MUST locate the exact sentence that justifies it and copy it into `source_span`.
+
+### `rationale` (logic path)
+
+- `rationale` is **required** for `SUPPORTS`, `CONTRADICTS`, and `EXPLAINS`.
+- Explain **why** the source relates to the target in 1–2 concrete sentences.
+- Do not write tautologies like "A supports B".
+- Keep it concise: Chinese ≤ 80 characters; English ≤ 30 words.
+
+### `confidence` (quality tier)
+
+- Optional for all edges: `"HIGH"` if explicitly stated, `"MEDIUM"` if strongly implied, `"LOW"` if speculative.
 
 ## Output Schema
 
@@ -39,7 +66,9 @@ Given the extracted nodes below, construct all meaningful edges between them. On
       "target": "n_rq",
       "label": "ADDRESSES",
       "type": "ADDRESSES",
+      "rationale": "The proposed method is explicitly designed to solve the research question stated in the abstract.",
       "source_span": "...",
+      "confidence": "HIGH",
       "data": {}
     }
   ]

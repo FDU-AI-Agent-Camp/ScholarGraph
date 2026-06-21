@@ -61,6 +61,27 @@ def test_f33_stem_graph_rejects_hss_edge_type() -> None:
         )
 
 
+def test_f33_stem_graph_rejects_supported_by_inverse_edge() -> None:
+    """SUPPORTED_BY was removed from the STEM ontology; only Evidence->Claim SUPPORTS is allowed."""
+    base = minimal_f33_stem_graph()
+    with pytest.raises(ValidationError, match="forbidden edge types"):
+        UnifiedPaperGraph(
+            paper_id=base.paper_id,
+            paradigm=Paradigm.STEM,
+            nodes=base.nodes,
+            edges=[
+                *base.edges,
+                GraphEdge(
+                    id="e_bad",
+                    source="n_claim",
+                    target="n_evidence",
+                    label="SUPPORTED_BY",
+                    type="SUPPORTED_BY",
+                ),
+            ],
+        )
+
+
 def test_f33_stem_graph_accepts_optional_experiment_finding() -> None:
     graph = UnifiedPaperGraph(
         paper_id="stem-exp",

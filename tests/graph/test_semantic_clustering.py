@@ -335,3 +335,126 @@ class TestTypeFirewall:
         types = {n.type for n in result.nodes}
         assert "ObjectOrData" in types
         assert "Claim" in types
+
+
+class _OrthogonalEmbeddingClient:
+    """Return one-hot vectors so every node is orthogonal (no similarity merges)."""
+
+    async def embed_texts(self, texts: list[str]) -> list[list[float]]:
+        dim = max(len(texts), 8)
+        return [[1.0 if i == j else 0.0 for j in range(dim)] for i in range(len(texts))]
+
+
+class TestEdgeRationaleMerging:
+    def test_longer_rationale_wins_on_merge(self) -> None:
+        from backend.graph.semantic_clustering import _merge_clusters
+
+        nodes = [
+            ExtractedNode(id="a", label="A", type="Method"),
+            ExtractedNode(id="b", label="B", type="Method"),
+            ExtractedNode(id="c", label="C", type="Method"),
+        ]
+        edges = [
+            ExtractedEdge(
+                id="e1",
+                source="a",
+                target="b",
+                label="SUPPORTS",
+                type="SUPPORTS",
+                rationale="short",
+                source_span="span1",
+            ),
+            ExtractedEdge(
+                id="e2",
+                source="a",
+                target="b",
+                label="SUPPORTS",
+                type="SUPPORTS",
+                rationale="this is the longer and more informative rationale",
+                source_span="span2",
+            ),
+        ]
+        merged_nodes, merged_edges, _, _ = _merge_clusters(
+            nodes,
+            edges,
+            clusters=[{"a"}, {"b"}, {"c"}],
+        )
+        assert len(merged_edges) == 1
+        assert merged_edges[0].rationale == "this is the longer and more informative rationale"
+
+    def test_source_span_tie_breaks_when_rationale_equal(self) -> None:
+        from backend.graph.semantic_clustering import _merge_clusters
+
+        nodes = [
+            ExtractedNode(id="a", label="A", type="Method"),
+            ExtractedNode(id="b", label="B", type="Method"),
+        ]
+        edges = [
+            ExtractedEdge(
+                id="e1",
+                source="a",
+                target="b",
+                label="SUPPORTS",
+                type="SUPPORTS",
+                rationale="same rationale",
+                source_span="short",
+            ),
+            ExtractedEdge(
+                id="e2",
+                source="a",
+                target="b",
+                label="SUPPORTS",
+                type="SUPPORTS",
+                rationale="same rationale",
+                source_span="this is a much longer source span that should win",
+            ),
+        ]
+        _, merged_edges, _, _ = _merge_clusters(nodes, edges, clusters=[{"a"}, {"b"}])
+        assert len(merged_edges) == 1
+        assert "much longer source span" in (merged_edges[0].source_span or "")
+
+
+class TestEdgeIdUniqueness:
+    @pytest.mark.asyncio
+    async def test_no_duplicate_edge_ids_after_self_loop_gaps_and_knn_bridges(self) -> None:
+        """Regression: dropped self-loops used to leave id gaps; KNN bridges could collide."""
+        nodes = [
+            ExtractedNode(id="a", label="A", type="Method"),
+            ExtractedNode(id="b", label="B", type="Method"),
+            ExtractedNode(id="c", label="C", type="Method"),
+            ExtractedNode(id="d", label="D", type="Method"),
+            ExtractedNode(id="e", label="E", type="Method"),
+            ExtractedNode(id="f", label="F", type="Method"),
+            ExtractedNode(id="g", label="G", type="Method"),
+            ExtractedNode(id="h", label="H", type="Method"),
+        ]
+        edges = [
+            ExtractedEdge(id="e1", source="a", target="b", label="RELATES_TO", type="RELATES_TO"),
+            ExtractedEdge(id="e2", source="c", target="c", label="RELATES_TO", type="RELATES_TO"),
+            ExtractedEdge(id="e3", source="d", target="d", label="RELATES_TO", type="RELATES_TO"),
+            ExtractedEdge(id="e4", source="e", target="f", label="RELATES_TO", type="RELATES_TO"),
+            ExtractedEdge(id="e5", source="g", target="h", label="RELATES_TO", type="RELATES_TO"),
+        ]
+        graph = ExtractedGraph(
+            paper_id="p1",
+            title="T",
+            paradigm=Paradigm.STEM,
+            nodes=nodes,
+            edges=edges,
+        )
+        settings = Settings(
+            _env_file=None,
+            llm_mode="mock",
+            semantic_clustering_enabled=True,
+            semantic_similarity_threshold=1.0,
+            semantic_knn_threshold=0.0,
+        )
+        result = await semantic_cluster_and_merge(
+            graph,
+            settings,
+            embedding_client=_OrthogonalEmbeddingClient(),
+        )
+        edge_ids = [edge.id for edge in result.edges]
+        assert len(edge_ids) == len(set(edge_ids))
+        # All output edges should be valid UnifiedPaperGraph material.
+        assert all(edge.id.startswith("e") for edge in result.edges)

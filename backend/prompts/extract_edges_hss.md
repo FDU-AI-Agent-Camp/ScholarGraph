@@ -27,6 +27,30 @@ Given the extracted nodes below, construct all meaningful edges between them. On
 - Use `LENS_OF` when the lens frames the overall argument.
 - Do not create edges that reference node ids not in the Available Nodes list.
 
+## Edge Attributes
+
+Each edge may include `rationale`, `source_span`, and `confidence`.
+
+### CRITICAL RULE for `source_span`
+
+You are functioning as an **exact text extractor**, not a summarizer.
+
+- `source_span` is **required** for `SUPPORTS`, `CONTRADICTS`, and `EXPLAINS`.
+- The `source_span` MUST be a **verbatim, continuous substring** copied directly from the provided chunk text.
+- **DO NOT summarize. DO NOT paraphrase. DO NOT leave it empty.**
+- If you construct a `SUPPORTS` or `CONTRADICTS` edge, you absolutely MUST locate the exact sentence that justifies it and copy it into `source_span`.
+
+### `rationale` (logic path)
+
+- `rationale` is **required** for `SUPPORTS`, `CONTRADICTS`, and `EXPLAINS`.
+- Explain **why** the source relates to the target in 1–2 concrete sentences.
+- Do not write tautologies like "A supports B".
+- Keep it concise: Chinese ≤ 80 characters; English ≤ 30 words.
+
+### `confidence` (quality tier)
+
+- Optional for all edges: `"HIGH"` if explicitly stated, `"MEDIUM"` if strongly implied, `"LOW"` if speculative.
+
 ## Output Schema
 
 ```json
@@ -39,7 +63,9 @@ Given the extracted nodes below, construct all meaningful edges between them. On
       "target": "n_thesis",
       "label": "SUB_ARGUMENT_OF",
       "type": "SUB_ARGUMENT_OF",
+      "rationale": "The sub-argument directly advances the central thesis by establishing the historical conditions of the case.",
       "source_span": "...",
+      "confidence": "HIGH",
       "data": {}
     }
   ]

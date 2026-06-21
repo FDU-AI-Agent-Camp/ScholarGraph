@@ -12,7 +12,7 @@ from langchain_core.messages import HumanMessage, SystemMessage
 from backend.config import Settings, get_settings
 from backend.llm.client import LlmClient, get_llm_client
 from backend.llm.structured_output import ainvoke_structured
-from backend.schemas.extract_phase import ExtractedEdgeList, ExtractedNodeList
+from backend.schemas.extract_phase import ExtractedEdge, ExtractedEdgeList, ExtractedNodeList
 from backend.schemas.graph import HSS_NODE_TYPES, STEM_NODE_TYPES
 from backend.schemas.paradigm import Paradigm
 
@@ -117,6 +117,14 @@ def _filter_nodes_for_chunk(
 
 _DEFAULT_MAX_EDGES_PER_CHUNK = 25
 
+# Core argument edge types that must carry a source_span for traceability.
+_CORE_EDGE_TYPES = {"SUPPORTS", "CONTRADICTS", "EXPLAINS"}
+
+# Maximum chunk text length fed into the targeted source_span patcher.
+_PATCH_MAX_TEXT_CHARS = 12000
+# Maximum rationales to patch in a single LLM call.
+_PATCH_BATCH_SIZE = 8
+
 
 def _anchor_prompt(nodes_json: str, max_edges: int = _DEFAULT_MAX_EDGES_PER_CHUNK) -> str:
     """Build the strict node-directory anchor appended to the system prompt."""
@@ -166,6 +174,98 @@ def _build_user_payload(
     if head_context and head_context.strip():
         payload["document_head"] = head_context.strip()
     return json.dumps(payload, ensure_ascii=False)
+
+
+def _collect_incomplete_core_edges(edges: list[ExtractedEdge]) -> list[tuple[int, ExtractedEdge]]:
+    """Return indices and edges of core argument edges missing source_span."""
+    return [
+        (idx, edge)
+        for idx, edge in enumerate(edges)
+        if edge.type in _CORE_EDGE_TYPES and not edge.source_span
+    ]
+
+
+async def _patch_source_spans(
+    edges: list[ExtractedEdge],
+    full_text: str,
+    *,
+    paper_id: str,
+    client: LlmClient,
+) -> list[ExtractedEdge]:
+    """Backfill missing source_span for core argument edges within the same chunk.
+
+    Uses a low-temperature, batched LLM call constrained to the current chunk text
+    to prevent hallucination from global context. If patching fails, the original
+    edges are returned unchanged and the Pydantic validator will keep the
+    ``incomplete`` flag.
+    """
+    incomplete = _collect_incomplete_core_edges(edges)
+    if not incomplete:
+        return edges
+
+    chat = client.chat
+    text_for_patch = full_text[:_PATCH_MAX_TEXT_CHARS]
+
+    patched_edges = list(edges)
+    for batch_start in range(0, len(incomplete), _PATCH_BATCH_SIZE):
+        batch = incomplete[batch_start : batch_start + _PATCH_BATCH_SIZE]
+
+        rationales_block = "\n".join(
+            f"{i}. {edge.rationale or 'No rationale provided.'}" for i, (_, edge) in enumerate(batch)
+        )
+        system_prompt = (
+            "You are an exact text extractor. Your task is to locate the verbatim sentence "
+            "in the provided source text that justifies each given rationale.\n\n"
+            "Rules:\n"
+            "- Return a JSON array with one object per rationale, in the SAME order.\n"
+            '- Each object must have fields {"index": number, "source_span": string}.\n'
+            "- The source_span MUST be a verbatim, continuous substring from the source text.\n"
+            "- Do not summarize, paraphrase, or invent text.\n"
+            "- If no matching sentence can be found, return an empty string for that source_span.\n"
+            "- Output ONLY the JSON array, no markdown, no explanation."
+        )
+        user_prompt = (
+            "Rationales:\n"
+            f"{rationales_block}\n\n"
+            "Source text:\n"
+            f"{text_for_patch}\n\n"
+            "Return the JSON array now."
+        )
+
+        try:
+            response = await chat.ainvoke(
+                [SystemMessage(content=system_prompt), HumanMessage(content=user_prompt)],
+                temperature=0.0,
+            )
+            content = response.content if hasattr(response, "content") else str(response)
+            content = content.strip()
+            if content.startswith("```"):
+                content = content.removeprefix("```json").removeprefix("```").removesuffix("```").strip()
+            patches = json.loads(content)
+            if not isinstance(patches, list):
+                patches = [patches]
+
+            for patch in patches:
+                if not isinstance(patch, dict):
+                    continue
+                index = patch.get("index")
+                source_span = patch.get("source_span")
+                if index is None or not isinstance(source_span, str):
+                    continue
+                if 0 <= index < len(batch):
+                    original_idx, original_edge = batch[index]
+                    if source_span.strip():
+                        patched_edges[original_idx] = original_edge.model_copy(
+                            update={"source_span": source_span.strip()}
+                        )
+        except Exception as exc:
+            logger.warning(
+                "source_span_patch_failed",
+                extra={"paper_id": paper_id, "batch_size": len(batch), "error": str(exc)},
+            )
+            continue
+
+    return patched_edges
 
 
 async def build_edges_with_llm(
@@ -240,6 +340,15 @@ async def build_edges_with_llm(
             extra={"paper_id": paper_id, "paradigm": nodes.paradigm.value, "error": str(exc)},
         )
         raise
+
+    patched_edges = await _patch_source_spans(
+        result.edges,
+        full_text,
+        paper_id=paper_id,
+        client=client,
+    )
+    if patched_edges is not result.edges:
+        result = result.model_copy(update={"edges": patched_edges})
 
     elapsed_ms = int((time.perf_counter() - started_at) * 1000)
     logger.info(
