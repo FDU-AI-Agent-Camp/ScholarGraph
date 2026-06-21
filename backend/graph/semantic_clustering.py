@@ -184,7 +184,14 @@ def _merge_clusters(
     edges: list[ExtractedEdge],
     clusters: list[set[str]],
 ) -> tuple[list[ExtractedNode], list[ExtractedEdge], dict[str, str], int]:
-    """Merge each semantic cluster into a single elected root node."""
+    """Merge each semantic cluster into a single elected root node.
+
+    After merging, parallel edges redirected to the same canonical root are
+    deduplicated. The surviving edge keeps the richest semantic payload:
+    longer rationale wins, with source_span length used as a tie-breaker.
+    Final edge ids are reassigned sequentially so that downstream KNN bridge
+    generation cannot collide with gaps left by dropped self-loops or duplicates.
+    """
     nodes_by_id = {node.id: node for node in nodes}
     degrees = _compute_degrees(nodes, edges)
 

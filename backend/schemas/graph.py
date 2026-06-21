@@ -61,6 +61,9 @@ STEM_EDGE_TYPES = frozenset(
         "SUPPORTS",
         "PRODUCES",
         "RELATES_TO",
+        # NOTE: SUPPORTED_BY was intentionally removed to keep the evidence flow
+        # unidirectional: Evidence --SUPPORTS--> Claim. This avoids LLM confusion
+        # over which node carries the textual anchor (source_span).
     }
 )
 HSS_EDGE_TYPES = frozenset(
@@ -98,7 +101,7 @@ class GraphEdge(BaseModel):
     label: str = Field(min_length=1)
     type: str = Field(min_length=1)
     rationale: str | None = Field(default=None, description="Logical justification for the relationship.")
-    source_span: str | None = Field(default=None, description="Verbatim textual evidence from the paper.")
+    source_span: str | None = Field(default=None, description="Verbatim textual evidence from the paper supporting this relation.")
     confidence: Literal["HIGH", "MEDIUM", "LOW"] | None = Field(default=None, description="Confidence tier.")
     data: dict[str, Any] = Field(default_factory=dict)
 

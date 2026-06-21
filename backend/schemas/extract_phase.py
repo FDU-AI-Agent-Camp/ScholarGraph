@@ -65,7 +65,7 @@ class ExtractedEdge(BaseModel):
     source_span: str | None = Field(
         default=None,
         max_length=MAX_SOURCE_SPAN_LENGTH,
-        description="Textual evidence supporting this relation.",
+        description="Verbatim textual evidence from the paper supporting this relation.",
     )
     confidence: Literal["HIGH", "MEDIUM", "LOW"] | None = Field(
         default=None,

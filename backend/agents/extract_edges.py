@@ -194,10 +194,12 @@ async def _patch_source_spans(
 ) -> list[ExtractedEdge]:
     """Backfill missing source_span for core argument edges within the same chunk.
 
-    Uses a low-temperature, batched LLM call constrained to the current chunk text
-    to prevent hallucination from global context. If patching fails, the original
-    edges are returned unchanged and the Pydantic validator will keep the
-    ``incomplete`` flag.
+    Core argument edges (SUPPORTS/CONTRADICTS/EXPLAINS) must carry a verbatim
+    source_span for traceability. When the Stage-2 LLM omits it, this function
+    runs a low-temperature, batched LLM call constrained to the current chunk
+    text to prevent hallucination from global context. If patching fails, the
+    original edges are returned unchanged and the Pydantic validator keeps the
+    ``incomplete`` flag so downstream consumers can degrade gracefully.
     """
     incomplete = _collect_incomplete_core_edges(edges)
     if not incomplete:
@@ -282,6 +284,10 @@ async def build_edges_with_llm(
 ) -> ExtractedEdgeList:
     """Build edges from extracted nodes via structured LLM call (Stage 2).
 
+    The structured output is post-processed by ``_patch_source_spans`` to
+    backfill verbatim ``source_span`` values for core argument edges that the
+    LLM initially omitted, keeping the graph traceable for downstream GraphRAG.
+
     Args:
         nodes: Validated node list from Stage 1.
         full_text: Paper full text or current chunk text.
@@ -295,7 +301,7 @@ async def build_edges_with_llm(
         previous_error: When set, the prompt asks the LLM to fix this error.
 
     Returns:
-        Validated ExtractedEdgeList.
+        Validated ExtractedEdgeList with patched source_span for core edges.
     """
     cfg = settings or get_settings()
     client = llm_client or get_llm_client()
