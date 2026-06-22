@@ -217,6 +217,11 @@ export interface components {
             /** @description Async dual(rules) merged document head with per-field sources. */
             ingest_head?: components["schemas"]["IngestHead"] | null;
             /**
+             * @description True when an MVP skeleton graph is available for preview QA/graph.
+             * @default false
+             */
+            preview_available: boolean;
+            /**
              * @description Machine-readable graph-extract degrade codes (e.g. extract_heuristic_fallback).
              * @example []
              */
@@ -239,6 +244,11 @@ export interface components {
             message: string;
             /** Format: date-time */
             updated_at: string;
+            /**
+             * @description True when an MVP skeleton graph can be queried for preview QA/graph.
+             * @default false
+             */
+            preview_available: boolean;
             /**
              * @description Machine-readable code when status=failed.
              * @example LLM_JSON_INVALID

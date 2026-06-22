@@ -45,7 +45,7 @@ def stem_graph() -> UnifiedPaperGraph:
             GraphNode(id="ev1", label="端到端延迟测量", type="Evidence"),
         ],
         edges=[
-            GraphEdge(id="e1", source="c1", target="ev1", label="SUPPORTED_BY", type="SUPPORTED_BY"),
+            GraphEdge(id="e1", source="ev1", target="c1", label="SUPPORTS", type="SUPPORTS"),
             GraphEdge(id="e2", source="m1", target="ds1", label="EVALUATED_ON", type="EVALUATED_ON"),
         ],
     )

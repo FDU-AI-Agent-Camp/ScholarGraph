@@ -9,8 +9,8 @@ Return strict JSON with:
 - `paper_id`
 - `title`
 - `paradigm`: `STEM`
-- `nodes`: array of `{ "id", "label", "type", "data" }`
-- `edges`: array of `{ "id", "source", "target", "label", "type" }`
+- `nodes`: array of `{ "id", "label", "type", "source_span", "confidence", "data" }`
+- `edges`: array of `{ "id", "source", "target", "label", "type", "rationale", "source_span", "confidence", "data" }`
 - `summary`
 
 ---
@@ -67,9 +67,61 @@ Only these `type` values are valid for STEM graphs:
 | type | Semantics | source → target |
 |------|-----------|-----------------|
 | `USES_METHOD` | One method or module builds on another | `Method` → `Method` |
-| `SUPPORTED_BY` | Inverse emphasis: claim is supported by evidence | `Claim` → `Evidence` |
 | `PRODUCES` | Method or experiment produces a finding | `Method` or `Experiment` → `Finding` |
-| `RELATES_TO` | Semantically related nodes when no specific edge above applies | any → any |
+
+#### Dynamic relation invention
+
+If none of the predefined edge types fits a relationship precisely, **do not lazily use `RELATES_TO`**. Instead, invent a concise, specific relation verb in `SCREAMING_SNAKE_CASE` (e.g., `OPTIMIZES`, `ACCELERATES`, `DERIVES_FROM`, `LIMITS`). `RELATES_TO` is allowed only as a last resort.
+
+### Forbidden edge directions
+
+- **Do not use `SUPPORTED_BY` or any inverse of `SUPPORTS`**. All evidence-to-claim relations must be expressed as `Evidence --SUPPORTS--> Claim` only.
+
+---
+
+## Edge attribute requirements
+
+Edges may carry three additional fields: `rationale`, `source_span`, and `confidence`.
+
+### `rationale` (logic path)
+
+- **Required** for core argument edges: `SUPPORTS`, `CONTRADICTS`, `EXPLAINS`.
+- **Optional** for all other edge types.
+- Must explain **why** the source relates to the target in 1–2 sentences.
+- Must contain concrete logical evidence. Do **not** write tautologies like "A supports B".
+- Chinese ≤ 80 characters; English ≤ 30 words.
+
+### CRITICAL RULE for `source_span`
+
+You are functioning as an **exact text extractor**, not a summarizer.
+
+- **Required** for `SUPPORTS`, `CONTRADICTS`, and `EXPLAINS`.
+- MUST be a **verbatim, continuous substring** copied directly from the paper text.
+- **DO NOT summarize. DO NOT paraphrase. DO NOT leave it empty.**
+- For every `SUPPORTS` or `CONTRADICTS` edge, locate the exact sentence that justifies it and copy it into `source_span`.
+
+### `confidence` (quality tier)
+
+- Optional for all edges.
+- Use `"HIGH"` when the relation is explicitly stated in the text.
+- Use `"MEDIUM"` when the relation is strongly implied.
+- Use `"LOW"` when the relation is speculative or inferred.
+
+### Example
+
+```json
+{
+  "id": "e_supports_1",
+  "source": "n_evidence_1",
+  "target": "n_claim_1",
+  "label": "SUPPORTS",
+  "type": "SUPPORTS",
+  "rationale": "The 86.33% accuracy metric directly quantifies the model's performance, supporting the claim that it outperforms baselines.",
+  "source_span": "The knowledge graph-enhanced DeepSeek-V3 model achieved the best performance... with an accuracy rate of 86.33%",
+  "confidence": "HIGH",
+  "data": {}
+}
+```
 
 ---
 

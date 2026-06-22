@@ -143,6 +143,38 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  /papers/{paper_id}/reextract:
+    post:
+      tags: [papers]
+      operationId: forceReextractPaper
+      summary: 强制重新抽取图谱（逃生舱）
+      description: |
+        当上一轮回抽取因 LLM 超时/限流等原因降级为启发式 fallback 时，
+        调用此接口清空已有图谱、预览和 warnings，重置状态为 pending 并重新入队流水线。
+      parameters:
+        - $ref: "#/components/parameters/PaperId"
+      responses:
+        "200":
+          description: 已重新入队，返回当前 pending 状态
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PaperStatusResponse"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: PAPER_ALREADY_PROCESSING
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "422":
+          description: PDF_NOT_FOUND
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
   /papers/{paper_id}/qa/stream:
     post:
       tags: [papers]
@@ -214,7 +246,12 @@ components:
 
     PaperStatus:
       type: string
-      enum: [pending, processing, ready, failed]
+      enum: [pending, processing, ready, ready_with_warnings, failed]
+      description: |
+        `ready_with_warnings` means the graph is available but failed the
+        confidence gate (e.g. low SUPPORTS rationale coverage, too many
+        isolated nodes, or a high ratio of generic fallback edges such as
+        RELATES_TO). The client should render a yellow warning border.
 
     PipelineStage:
       type: string
@@ -380,12 +417,21 @@ components:
                 - $ref: "#/components/schemas/IngestHead"
               nullable: true
               description: Async dual(rules) merged document head with per-field sources.
+            preview_available:
+              type: boolean
+              default: false
+              description: True when an MVP skeleton graph is available for preview QA/graph.
             extract_warnings:
               type: array
               items:
                 type: string
-              description: Machine-readable graph-extract degrade codes (e.g. extract_heuristic_fallback).
-              example: []
+              description: |
+                Machine-readable graph-extract degrade codes. Always includes the coarse
+                `extract_heuristic_fallback` when heuristic fallback is triggered. Fine-grained
+                root-cause codes may precede it: `extract_llm_timeout`,
+                `extract_llm_rate_limited`, `extract_llm_json_invalid`,
+                `extract_schema_validation_failed`, `extract_context_window_exceeded`.
+              example: [extract_llm_timeout, extract_heuristic_fallback]
             classify_warnings:
               type: array
               items:
@@ -422,6 +468,10 @@ components:
         updated_at:
           type: string
           format: date-time
+        preview_available:
+          type: boolean
+          default: false
+          description: True when an MVP skeleton graph can be queried for preview QA/graph.
         error_code:
           type: string
           nullable: true
@@ -442,8 +492,13 @@ components:
           type: array
           items:
             type: string
-          description: Machine-readable graph-extract degrade codes (e.g. extract_heuristic_fallback).
-          example: []
+          description: |
+            Machine-readable graph-extract degrade codes. Always includes the coarse
+            `extract_heuristic_fallback` when heuristic fallback is triggered. Fine-grained
+            root-cause codes may precede it: `extract_llm_timeout`,
+            `extract_llm_rate_limited`, `extract_llm_json_invalid`,
+            `extract_schema_validation_failed`, `extract_context_window_exceeded`.
+          example: [extract_llm_timeout, extract_heuristic_fallback]
         classify_warnings:
           type: array
           items:
@@ -487,6 +542,19 @@ components:
           type: string
         type:
           type: string
+        rationale:
+          type: string
+          nullable: true
+          description: Logical justification for the relationship.
+        source_span:
+          type: string
+          nullable: true
+          description: Verbatim textual evidence from the paper.
+        confidence:
+          type: string
+          nullable: true
+          enum: [HIGH, MEDIUM, LOW]
+          description: Confidence tier for the relation.
 
     GraphResponse:
       type: object

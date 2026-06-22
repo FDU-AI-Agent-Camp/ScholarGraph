@@ -13,6 +13,8 @@ from backend.graph.query import GraphQuery
 from backend.graph.store import GraphStore
 from backend.llm.client import LlmClient, get_llm_client
 from backend.schemas.graph import UnifiedPaperGraph
+from backend.schemas.paper import PaperStatus
+from backend.services.paper_service import PaperService, get_paper_service
 
 logger = logging.getLogger(__name__)
 
@@ -22,6 +24,14 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 _CITE_RE = re.compile(r"\[CITE:(\S+?)\]")
 _CITE_DELIM = "[CITE:"
+
+# Injected into the QA prompt when the user queries an MVP skeleton graph.
+_MVP_PREVIEW_PREFIX = (
+    "\n\n## 系统提示（SYSTEM NOTIFICATION）\n\n"
+    "当前加载的是论文的 **MVP 宏观骨架图谱**：仅包含核心研究问题、主要理论视角/方法、"
+    "以及核心结论等高层节点。深度论证链、实验细节与细分材料仍在后台全量解构中。"
+    "请仅在宏观摘要尺度下回答问题，避免对细节证据做过度推断。"
+)
 
 
 def _split_incomplete_cite(buffer: str) -> tuple[str, str] | None:
@@ -127,10 +137,12 @@ class _GraphQaEngine:
         store: GraphStore | None = None,
         llm: LlmClient | None = None,
         query: GraphQuery | None = None,
+        paper_service: PaperService | None = None,
     ) -> None:
         self._store = store or GraphStore()
         self._llm = llm or get_llm_client()
         self._query = query or GraphQuery()
+        self._paper_service = paper_service or get_paper_service()
 
     # ── public ───────────────────────────────────────────────────────
 
@@ -139,10 +151,24 @@ class _GraphQaEngine:
         paper_id: str,
         question: str,
     ) -> AsyncIterator[QaEvent]:
-        """Yield ``QaEvent`` items for a single QA turn."""
+        """Yield ``QaEvent`` items for a single QA turn.
 
-        graph = self._store.load(paper_id)
-        if graph is None:
+        Allows QA over an MVP skeleton graph while the full pipeline is still
+        running, as long as ``preview_available`` has been marked.
+        """
+        try:
+            paper = await self._paper_service.get_paper(paper_id)
+        except Exception:
+            yield QaEvent(
+                "error",
+                {"code": "GRAPH_NOT_FOUND", "message": f"论文 {paper_id} 不存在或图谱尚未建好，请等待流水线完成。"},
+            )
+            yield QaEvent("done", {"answer_id": ""})
+            return
+
+        is_preview = paper.status not in {PaperStatus.READY, PaperStatus.READY_WITH_WARNINGS}
+
+        if is_preview and not paper.preview_available:
             yield QaEvent(
                 "error",
                 {"code": "GRAPH_NOT_FOUND", "message": f"论文 {paper_id} 的图谱尚未建好，请等待流水线完成。"},
@@ -150,8 +176,21 @@ class _GraphQaEngine:
             yield QaEvent("done", {"answer_id": ""})
             return
 
+        graph = self._store.load(paper_id)
+        if graph is None:
+            # Fall back to the in-memory preview graph for non-ready papers.
+            graph = self._paper_service.get_preview_graph(paper_id)
+
+        if graph is None:
+            yield QaEvent(
+                "error",
+                {"code": "GRAPH_NOT_FOUND", "message": f"论文 {paper_id} 的图谱数据缺失。"},
+            )
+            yield QaEvent("done", {"answer_id": ""})
+            return
+
         subgraph = self._query.subgraph_for_question(graph, question)
-        prompt = self._build_prompt(graph, subgraph, question)
+        prompt = self._build_prompt(graph, subgraph, question, is_preview=is_preview)
 
         answer_id = f"ans-{paper_id}"
         try:
@@ -244,6 +283,8 @@ class _GraphQaEngine:
         graph: UnifiedPaperGraph,
         subgraph: dict,
         question: str,
+        *,
+        is_preview: bool = False,
     ) -> str:
         """Format the QA prompt with graph context."""
         template = self._load_prompt_template()
@@ -256,12 +297,15 @@ class _GraphQaEngine:
         if not edges_desc:
             edges_desc = "（无匹配关系）"
 
-        return template.format(
+        prompt = template.format(
             paradigm=graph.paradigm.value,
             nodes=nodes_desc,
             edges=edges_desc,
             question=question,
         )
+        if is_preview:
+            prompt += _MVP_PREVIEW_PREFIX
+        return prompt
 
     @staticmethod
     def _load_prompt_template() -> str:

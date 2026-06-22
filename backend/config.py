@@ -7,6 +7,24 @@ from typing import Literal
 from pydantic import AliasChoices, Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+# Different embedding models train with different vector-space densities.
+# Hard-coding a single threshold would break when switching models, so we keep
+# per-model defaults and allow explicit env overrides.
+DEFAULT_EMBEDDING_MODEL_THRESHOLDS: dict[str, dict[str, float]] = {
+    "bge-m3": {
+        "similarity": 0.85,
+        "knn": 0.75,
+    },
+    "text-embedding-3-small": {
+        "similarity": 0.65,
+        "knn": 0.55,
+    },
+    "default": {
+        "similarity": 0.80,
+        "knn": 0.70,
+    },
+}
+
 
 class Settings(BaseSettings):
     """Runtime configuration; values come from `.env` at repository root."""
@@ -87,6 +105,130 @@ class Settings(BaseSettings):
         default=True,
         validation_alias="EXTRACT_HEURISTIC_FALLBACK",
     )
+    extract_two_phase_enabled: bool = Field(
+        default=True,
+        validation_alias="EXTRACT_TWO_PHASE_ENABLED",
+    )
+    extract_chunked_enabled: bool = Field(
+        default=True,
+        validation_alias="EXTRACT_CHUNKED_ENABLED",
+    )
+    extract_chunk_max_chars: int = Field(
+        default=12_000,
+        ge=1_000,
+        validation_alias="EXTRACT_CHUNK_MAX_CHARS",
+    )
+    extract_chunk_overlap_ratio: float = Field(
+        default=0.12,
+        ge=0.0,
+        le=0.5,
+        validation_alias="EXTRACT_CHUNK_OVERLAP_RATIO",
+        description="Sliding-window overlap between consecutive chunks (0.0 = no overlap).",
+    )
+    extract_chunk_concurrency: int = Field(
+        default=2,
+        ge=1,
+        le=10,
+        validation_alias="EXTRACT_CHUNK_CONCURRENCY",
+    )
+    extract_chunk_max_chunks: int = Field(
+        default=1000,
+        ge=1,
+        validation_alias="EXTRACT_CHUNK_MAX_CHUNKS",
+    )
+    extract_chunk_rpm_limit: int = Field(
+        default=60,
+        ge=0,
+        validation_alias="EXTRACT_CHUNK_RPM_LIMIT",
+    )
+    extract_chunk_tpm_limit: int = Field(
+        default=1_000_000,
+        ge=0,
+        validation_alias="EXTRACT_CHUNK_TPM_LIMIT",
+    )
+    extract_chunk_retry_attempts: int = Field(
+        default=3,
+        ge=0,
+        validation_alias="EXTRACT_CHUNK_RETRY_ATTEMPTS",
+    )
+    extract_chunk_retry_delay_s: float = Field(
+        default=3.0,
+        ge=0,
+        validation_alias="EXTRACT_CHUNK_RETRY_DELAY_S",
+    )
+    extract_structured_output_repair: bool = Field(
+        default=True,
+        validation_alias="EXTRACT_STRUCTURED_OUTPUT_REPAIR",
+    )
+    extract_min_supports_rationale_coverage: float = Field(
+        default=0.5,
+        ge=0.0,
+        le=1.0,
+        validation_alias="EXTRACT_MIN_SUPPORTS_RATIONALE_COVERAGE",
+    )
+    extract_max_isolated_node_ratio: float = Field(
+        default=0.4,
+        ge=0.0,
+        le=1.0,
+        validation_alias="EXTRACT_MAX_ISOLATED_NODE_RATIO",
+    )
+    extract_max_generic_edge_ratio: float = Field(
+        default=1.0,
+        ge=0.0,
+        le=1.0,
+        validation_alias="EXTRACT_MAX_GENERIC_EDGE_RATIO",
+        description="Maximum allowed fraction of generic RELATES_TO-like edges. "
+        "1.0 disables the check; set lower (e.g. 0.25) to enforce dynamic relation invention.",
+    )
+
+    # ------------------------------------------------------------------
+    # Semantic clustering / graph dehydration (Slice 2 second-order)
+    # ------------------------------------------------------------------
+    semantic_clustering_enabled: bool = Field(
+        default=False,
+        validation_alias="SEMANTIC_CLUSTERING_ENABLED",
+    )
+    # When negative, fall back to model-specific defaults defined below.
+    # Explicit env values always take precedence.
+    semantic_similarity_threshold: float = Field(
+        default=-1.0,
+        ge=-1.0,
+        le=1.0,
+        validation_alias="SEMANTIC_SIMILARITY_THRESHOLD",
+    )
+    semantic_knn_threshold: float = Field(
+        default=-1.0,
+        ge=-1.0,
+        le=1.0,
+        validation_alias="SEMANTIC_KNN_THRESHOLD",
+    )
+    embedding_provider: Literal["openai", "ollama"] = Field(
+        default="openai",
+        validation_alias="EMBEDDING_PROVIDER",
+    )
+    embedding_model: str = Field(
+        default="bge-m3",
+        validation_alias="EMBEDDING_MODEL",
+    )
+    embedding_api_base_url: str | None = Field(
+        default=None,
+        validation_alias="EMBEDDING_API_BASE_URL",
+    )
+    embedding_api_key: str = Field(
+        default="",
+        validation_alias="EMBEDDING_API_KEY",
+    )
+    embedding_ollama_url: str = Field(
+        default="http://localhost:11434",
+        validation_alias="EMBEDDING_OLLAMA_URL",
+    )
+
+    extract_repair_max_retries: int = Field(
+        default=2,
+        ge=0,
+        le=5,
+        validation_alias="EXTRACT_REPAIR_MAX_RETRIES",
+    )
 
     classifier_llm_enabled: bool = Field(default=True, validation_alias="CLASSIFIER_LLM_ENABLED")
     classifier_heuristic_fallback: bool = Field(
@@ -117,6 +259,44 @@ class Settings(BaseSettings):
     @property
     def is_llm_live(self) -> bool:
         return self.llm_mode == "live"
+
+    @property
+    def embedding_api_key_effective(self) -> str:
+        return self.embedding_api_key.strip() or self.require_llm_key()
+
+    @property
+    def embedding_api_base_url_effective(self) -> str | None:
+        return self.embedding_api_base_url or self.llm_api_base_url or None
+
+    @property
+    def semantic_similarity_threshold_effective(self) -> float:
+        """Return the entity-resolution threshold.
+
+        Explicit ``SEMANTIC_SIMILARITY_THRESHOLD`` values win; otherwise we
+        look up a per-model default.
+        """
+        if self.semantic_similarity_threshold >= 0:
+            return self.semantic_similarity_threshold
+        thresholds = DEFAULT_EMBEDDING_MODEL_THRESHOLDS.get(
+            self.embedding_model,
+            DEFAULT_EMBEDDING_MODEL_THRESHOLDS["default"],
+        )
+        return thresholds["similarity"]
+
+    @property
+    def semantic_knn_threshold_effective(self) -> float:
+        """Return the K-NN island-bridging threshold.
+
+        Explicit ``SEMANTIC_KNN_THRESHOLD`` values win; otherwise we look up a
+        per-model default.
+        """
+        if self.semantic_knn_threshold >= 0:
+            return self.semantic_knn_threshold
+        thresholds = DEFAULT_EMBEDDING_MODEL_THRESHOLDS.get(
+            self.embedding_model,
+            DEFAULT_EMBEDDING_MODEL_THRESHOLDS["default"],
+        )
+        return thresholds["knn"]
 
     @property
     def llm_model_fallback_effective(self) -> str | None:

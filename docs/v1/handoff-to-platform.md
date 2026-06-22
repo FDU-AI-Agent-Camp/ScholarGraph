@@ -189,7 +189,7 @@ async def run_patrol(paper_ids: list[str], mode: PatrolMode) -> PatrolReport:
 | 步骤 | 动作 |
 |------|------|
 | 1 | `from backend.ingest import ingest_pdf` 等导入无循环依赖 |
-| 2 | `graph/workflow.py` 节点：`ingest` → `classify` → `extract` → `store`，经 `PipelineStatusService` 更新 `stage` / `percent` |
+| 2 | `graph/workflow.py` 节点：`ingest` → `wait_head_refine` → `classify` → `extract` → `store`，经 `PipelineStatusService` 更新 `stage` / `percent` |
 | 3 | `api/routes/papers.py`：REST + `schedule_paper_pipeline` |
 | 4 | `api/routes/papers.py`：`POST .../qa/stream` SSE 序列化 `qa_stream()` |
 | 5 | `api/routes/patrol.py`：调用 `run_patrol` |
@@ -205,6 +205,7 @@ async def run_patrol(paper_ids: list[str], mode: PatrolMode) -> PatrolReport:
 | `POST /papers` | 存文件 → `schedule_paper_pipeline(paper_id, pdf_path)` |
 | `GET /papers/{id}/status` | `PaperService.get_status` / `PipelineStatusService` 快照 |
 | `GET /papers/{id}/graph` | `GraphStore.load` + `to_g6` |
+| `POST /papers/{id}/reextract` | `PaperService.force_reextract()` → 重新调度流水线 |
 | `POST /papers/{id}/qa/stream` | `qa_stream` → SSE（同在 `papers.py`） |
 | `POST /patrol` | `run_patrol` |
 

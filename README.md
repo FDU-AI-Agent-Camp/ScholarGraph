@@ -77,11 +77,23 @@ PDF 转为文本并完成 head refine 后，流水线进入分类节点。Live �
 
 ### 2. 特化抽取图谱（Specialized Extraction）
 
-根据分类结果，状态机进入 STEM / HSS 分支。Live 模式下 **单次 LLM structured output**（`extract_stem.md` / `extract_hss.md` → `UnifiedPaperGraph`）；失败时降级 **启发式建图**（`extract_heuristic.py`），写入 `extract_warnings` 机器码 `extract_heuristic_fallback`。**分类与抽取独立**：分类 LLM 成功时抽取仍可能 fallback（schema 更大、耗时更长）。
+根据分类结果，状态机进入 STEM / HSS 分支。Live 模式下：
+
+- **短论文**（≤ `EXTRACT_MAX_INPUT_CHARS`）：单次 LLM structured output 直接输出 `UnifiedPaperGraph`；
+- **长论文**：**Chunked Two-Phase 抽取**——先按 chunk 抽取节点，再按 chunk 抽取边，最后合并、一阶脱水、二阶语义聚类，输出终态 `UnifiedPaperGraph`。长论文会先返回一个轻量 **MVP 骨架预览**，再异步完成全量抽取；
+- LLM 调用具备 tenacity 指数退避重试（`stop=3`，`wait=2~30s`），仅对超时、限流、网络等 transient 错误重试；
+- 失败时降级 **启发式建图**（`extract_heuristic.py`），`extract_warnings` 保留通用机器码 `extract_heuristic_fallback`，并额外暴露细粒度根因码：`extract_llm_timeout`、`extract_llm_rate_limited`、`extract_llm_json_invalid`、`extract_schema_validation_failed`、`extract_context_window_exceeded`；
+- **逃生舱重抽**：即使重试后仍 fallback，用户可调用 `POST /papers/{id}/reextract` 强制清空旧图谱/预览/warnings 并重新入队流水线，前端对应 **[FORCE RE-EXTRACT]** 按钮；
+- **质量门控（Plan D）**：Finalize 前检查三项指标：`SUPPORTS` rationale coverage、孤立节点占比、通用兜底边（如 `RELATES_TO`）占比。任一指标未通过时状态为 `ready_with_warnings` 并写入 `extract_warnings: [low_confidence_graph]`，前端可渲染黄色警示边框。默认阈值 `EXTRACT_MIN_SUPPORTS_RATIONALE_COVERAGE=0.5`、`EXTRACT_MAX_ISOLATED_NODE_RATIO=0.4`、`EXTRACT_MAX_GENERIC_EDGE_RATIO=1.0`（设为 1.0 表示默认不拦截，调低可强制 LLM 发明具体关系动词）。
+
+**分类与抽取独立**：分类 LLM 成功时抽取仍可能 fallback（schema 更大、耗时更长）。
 
 - 挂载**不同的 Pydantic Schema**（统一的 `UnifiedPaperGraph` 外壳，内部分 STEM / HSS 子结构）；
 - 注入**特化 Prompt 模板**；
-- **Schema 约束**：若范式为 HSS，图谱中**不允许**出现 `Metric`、`Baseline` 等 STEM 专用节点类型，仅允许 `Analytical_Lens`、`Intellectual_Context` 等 HSS 类型（反之亦然，在 STEM 分支禁用 HSS 专有类型）。
+- **边属性升维**：核心论证边（`SUPPORTS` / `CONTRADICTS` / `EXPLAINS`）强制携带 `rationale`（逻辑推演）与 `source_span`（原文锚点），可选 `confidence` 置信度分层；若 LLM 漏填 `confidence`，Pydantic 将其规范化为 `MEDIUM` 并在 `edge.data.confidence_missing` 中标记；
+- **动态关系发明**：允许 LLM 在预定义边类型之外发明 `SCREAMING_SNAKE_CASE` 动词（如 `DERIVES_FROM`、`EXEMPLIFIES`），禁止把 `RELATES_TO` 当作兜底；质量门控会统计通用兜底边比例；
+- **反向边精简**：STEM 本体已废除 `SUPPORTED_BY`，统一使用 `Evidence --SUPPORTS--> Claim`；
+- **Schema 约束**：节点类型严格按范式白名单校验（HSS 不允许 `Metric`、`Baseline` 等 STEM 专用类型，STEM 反之）；边类型以范式预定义列表为主，但允许 LLM 发明 `SCREAMING_SNAKE_CASE` 动词，`RELATES_TO` 等兜底类型被显式禁止。
 
 ### 3. 交叉对齐（Cross-paradigm Alignment，后续扩展）
 
@@ -122,10 +134,10 @@ flowchart TB
 
 | 维度 | 说明 |
 |------|------|
-| Intellectual_Context | 作者批判、质疑或修正的既有观点、学者或流派 |
-| Thesis / Sub-argument | 核心结论与 3–5 个支撑性分论点及其递进关系 |
-| Analytical_Lens | 核心理论武器（如结构洞、差序格局） |
-| Object_or_Data | 质性材料（访谈、档案、文本等） |
+| IntellectualContext | 作者批判、质疑或修正的既有观点、学者或流派 |
+| Thesis / SubArgument | 核心结论与 3–5 个支撑性分论点及其递进关系 |
+| AnalyticalLens | 核心理论武器（如结构洞、差序格局） |
+| ObjectOrData | 质性材料（访谈、档案、文本等） |
 | 边类型示例 | `CHALLENGES`、`SUB_ARGUMENT_OF`、`EXAMINES_THROUGH` |
 
 ### 2. 多尺度阐释：基于图谱的问答
@@ -152,17 +164,17 @@ flowchart TB
 
 社科论文极少凭空立论，作者常在「推翻」或「修正」某个既有流派。
 
-> **Prompt 指令**：请找出作者在引言或文献综述中，明确批判、质疑或试图修正的传统观点、学者或学术流派（常伴随「然而」「过去的研究忽略了」等转折）。将其抽象为 `Intellectual_Context` 节点，并用 `CHALLENGES` 边指向该节点。
+> **Prompt 指令**：请找出作者在引言或文献综述中，明确批判、质疑或试图修正的传统观点、学者或学术流派（常伴随「然而」「过去的研究忽略了」等转折）。将其抽象为 `IntellectualContext` 节点，并用 `CHALLENGES` 边指向该节点。
 
 ### 2. 论证树状递进（Sub-arguments Chain）
 
 一个大论点（Thesis）往往由 3–4 个章节级分论点联合支撑。
 
-> **Prompt 指令**：识别文章的核心结论（Thesis）。根据大标题或核心论证段落，拆解出支撑该结论的 3–5 个次级分论点（Sub-arguments），建立 `[Sub_Argument] --SUB_ARGUMENT_OF--> [Thesis]`，还原质性论证骨架。
+> **Prompt 指令**：识别文章的核心结论（Thesis）。根据大标题或核心论证段落，拆解出支撑该结论的 3–5 个次级分论点（SubArguments），建立 `[SubArgument] --SUB_ARGUMENT_OF--> [Thesis]`，还原质性论证骨架。
 
 ### 3. 理论视角对材料的裁剪（Analytical Lens vs Object）
 
-> **Prompt 指令**：找出作者赖以分析的核心理论武器（如「结构洞理论」「差序格局」），以及具体质性材料（如「某村落宗族访谈」「某晚清日记」）。建立 `[Object_or_Data] --EXAMINES_THROUGH--> [Analytical_Lens]`。
+> **Prompt 指令**：找出作者赖以分析的核心理论武器（如「结构洞理论」「差序格局」），以及具体质性材料（如「某村落宗族访谈」「某晚清日记」）。建立 `[ObjectOrData] --EXAMINES_THROUGH--> [AnalyticalLens]`。
 
 ---
 
@@ -182,7 +194,7 @@ flowchart TB
 
 | 巡检模式 | 触发逻辑 | 产出洞察（示例） |
 |----------|----------|------------------|
-| **理论视角冲突（Lens Clash）** | 两篇论文的 **Object_or_Data** 高度重合，但 **Analytical_Lens** 不同 | *巡检报告：关于「网络社群极化」，论文 A 引入波德里亚「消费社会」视角，视为符号狂欢；论文 B 引入哈贝马斯「公共领域」理论，视为理性沟通失效。两者存在潜在学派冲突。* |
+| **理论视角冲突（Lens Clash）** | 两篇论文的 **ObjectOrData** 高度重合，但 **AnalyticalLens** 不同 | *巡检报告：关于「网络社群极化」，论文 A 引入波德里亚「消费社会」视角，视为符号狂欢；论文 B 引入哈贝马斯「公共领域」理论，视为理性沟通失效。两者存在潜在学派冲突。* |
 | **论据孤岛与空白（Archive Gap）** | 构建「核心论点 × 史料/材料类型」覆盖矩阵 | *巡检报告：关于「近代江南棉纺织业演变」的 5 篇文献中，4 篇采用「海关统计年报」作 Evidence，仅 1 篇采用「民间契约文书」。「核心论点 3」在口述史/民间档案层面仍属研究空白。* |
 
 **演示目标**：在 Demo 中自动识别两篇社科论文「用不同理论讨论同一对象」，形成训练营级别的差异化展示。
@@ -244,7 +256,8 @@ cp .env.example .env   # 默认 LLM_MODE=mock；接华为云时改为 live 并�
 uv sync --group dev
 uv run python scripts/check_backend.py   # ruff lint + format-check + pytest（排除 red）
 uv run python scripts/run_d_gates.py     # D-01～D-10 代码基座（含 FE npm run check，可 --skip-frontend）
-uv run uvicorn backend.main:app --reload --host 127.0.0.1 --port 8000
+uv run python -m uvicorn backend.main:app --reload --host 127.0.0.1 --port 8000
+# 注意：Windows + Git Bash 下请使用 `python -m uvicorn`，直接 `uv run uvicorn` 可能报脚本路径解析错误
 ```
 
 **终端 2 — 前端**（`frontend/`）：
@@ -286,7 +299,7 @@ npm run dev
 ### 3. 手工固化 Schema 与边类型
 
 - 在代码中定义 `UnifiedPaperGraph`（或等价结构）及范式枚举。
-- **HSS 分支**：禁止 `Metric`、`Baseline`；仅允许 `Analytical_Lens`、`Intellectual_Context` 等。
+- **HSS 分支**：禁止 `Metric`、`Baseline`；仅允许 `AnalyticalLens`、`IntellectualContext` 等。
 - **STEM 分支**：禁止 HSS 专有类型；保留实验—声称—证据链。
 
 ### 4. 纵向切片里程碑

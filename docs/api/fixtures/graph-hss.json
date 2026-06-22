@@ -13,21 +13,30 @@
         "source": "n2",
         "target": "n1",
         "label": "SUB_ARGUMENT_OF",
-        "type": "SUB_ARGUMENT_OF"
+        "type": "SUB_ARGUMENT_OF",
+        "rationale": "分论点从制度路径依赖角度支撑核心论点，构成论证树的主干。",
+        "source_span": "制度一旦形成便会产生路径依赖，长期锁定后续演变方向。",
+        "confidence": "HIGH"
       },
       {
         "id": "e2",
         "source": "n_lens",
         "target": "n1",
         "label": "LENS_OF",
-        "type": "LENS_OF"
+        "type": "LENS_OF",
+        "rationale": "历史制度主义为解释制度路径依赖提供了核心理论视角。",
+        "source_span": "本文以历史制度主义为分析视角，考察近代中国通商口岸的制度演变。",
+        "confidence": "HIGH"
       },
       {
         "id": "e3",
         "source": "n_lens",
         "target": "n2",
         "label": "INFORMS",
-        "type": "INFORMS"
+        "type": "INFORMS",
+        "rationale": "历史制度主义视角具体指导了分论点对制度路径依赖的阐释。",
+        "source_span": "在历史制度主义视角下，分论点进一步揭示了路径依赖机制。",
+        "confidence": "MEDIUM"
       }
     ]
   },

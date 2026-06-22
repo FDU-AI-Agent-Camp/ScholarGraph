@@ -44,6 +44,9 @@ class PaperService:
         self._head_refine_warnings: dict[str, list[str]] = {}
         self._classify_warnings: dict[str, list[str]] = {}
         self._extract_warnings: dict[str, list[str]] = {}
+        self._preview_graphs: dict[str, UnifiedPaperGraph] = {}
+        self._preview_available: dict[str, bool] = {}
+        self._pdf_paths: dict[str, Path] = {}
         seed_from_fixtures(self)
 
     async def list_papers(
@@ -70,12 +73,13 @@ class PaperService:
         return self._enrich_paper_detail(paper, paper_id)
 
     def _enrich_paper_detail(self, paper: PaperDetail, paper_id: str) -> PaperDetail:
-        """Attach optional ingest head and extract degrade codes for detail API (X17)."""
+        """Attach optional ingest head, preview flag, and degrade codes for detail API (X17)."""
         self._hydrate_head_refine_from_disk(paper_id)
         ingest_head = self._refined_head.get(paper_id)
         return paper.model_copy(
             update={
                 "ingest_head": ingest_head,
+                "preview_available": self.is_preview_available(paper_id),
                 "extract_warnings": self.get_extract_warnings(paper_id),
                 "classify_warnings": self.get_classify_warnings(paper_id),
             },
@@ -110,6 +114,7 @@ class PaperService:
         )
         self.ensure_paper_exists(paper_id)
         now = datetime.now(UTC)
+        preview_available = self.is_preview_available(paper_id)
         snapshot = PaperStatusData(
             paper_id=paper_id,
             status=status,
@@ -117,6 +122,7 @@ class PaperService:
             stage=stage,
             message=message,
             updated_at=now,
+            preview_available=preview_available,
             error_code=error_code,
             failed_during=_to_failed_during(failed_during),
             head_refine_warnings=self.get_head_refine_warnings(paper_id),
@@ -125,7 +131,9 @@ class PaperService:
         )
         self._status[paper_id] = snapshot
         paper = self._papers[paper_id]
-        self._papers[paper_id] = paper.model_copy(update={"status": status, "updated_at": now})
+        self._papers[paper_id] = paper.model_copy(
+            update={"status": status, "updated_at": now, "preview_available": preview_available},
+        )
         return snapshot
 
     def update_pipeline_status(
@@ -156,22 +164,21 @@ class PaperService:
         classification: ParadigmClassification,
         graph: UnifiedPaperGraph,
     ) -> None:
-        self.ensure_paper_exists(paper_id)
-        now = datetime.now(UTC)
-        paper = self._papers[paper_id]
-        self._papers[paper_id] = paper.model_copy(
-            update={
-                "status": PaperStatus.READY,
-                "paradigm": classification.paradigm,
-                "classification": classification,
-                "updated_at": now,
-            },
-        )
-        from backend.graph.store import GraphStore
-        from backend.services.pipeline_status_service import get_pipeline_status_service
+        from backend.services.pipeline_completion_service import complete_paper_pipeline
 
-        GraphStore().save(graph)
-        get_pipeline_status_service().mark_ready(paper_id)
+        complete_paper_pipeline(
+            self,
+            paper_id,
+            classification=classification,
+            graph=graph,
+        )
+
+    async def force_reextract(self, paper_id: str) -> PaperStatusData:
+        """Escape hatch: reset and re-schedule the pipeline for ``paper_id``."""
+        self.ensure_paper_exists(paper_id)
+        from backend.services.reextract_service import force_reextract
+
+        return force_reextract(self, paper_id)
 
     def fail_pipeline(
         self,
@@ -355,6 +362,30 @@ class PaperService:
     def get_extract_warnings(self, paper_id: str) -> list[str]:
         return list(self._extract_warnings.get(paper_id, ()))
 
+    def save_preview_graph(self, paper_id: str, graph: UnifiedPaperGraph) -> None:
+        """Persist the latest preview graph in memory."""
+        self.ensure_paper_exists(paper_id)
+        self._preview_graphs[paper_id] = graph
+
+    def mark_preview_available(self, paper_id: str) -> None:
+        """Surface preview availability on detail and status snapshots."""
+        self.ensure_paper_exists(paper_id)
+        self._preview_available[paper_id] = True
+        if paper_id in self._papers:
+            paper = self._papers[paper_id]
+            if not paper.preview_available:
+                self._papers[paper_id] = paper.model_copy(update={"preview_available": True})
+        if paper_id in self._status:
+            snapshot = self._status[paper_id]
+            if not snapshot.preview_available:
+                self._status[paper_id] = snapshot.model_copy(update={"preview_available": True})
+
+    def is_preview_available(self, paper_id: str) -> bool:
+        return bool(self._preview_available.get(paper_id, False))
+
+    def get_preview_graph(self, paper_id: str) -> UnifiedPaperGraph | None:
+        return self._preview_graphs.get(paper_id)
+
     def _enrich_status_snapshot(self, snapshot: PaperStatusData, paper_id: str) -> PaperStatusData:
         return self._enrich_status_with_extract_warnings(
             self._enrich_status_with_classify_warnings(
@@ -388,18 +419,24 @@ class PaperService:
 
     async def get_graph(self, paper_id: str) -> UnifiedPaperGraph:
         paper = await self.get_paper(paper_id)
-        if paper.status != PaperStatus.READY:
-            raise ApiError(
-                "GRAPH_NOT_READY",
-                "图谱尚未就绪，请轮询 status 接口",
-                status_code=409,
-            )
-        from backend.graph.store import GraphStore
+        if paper.status in (PaperStatus.READY, PaperStatus.READY_WITH_WARNINGS):
+            from backend.graph.store import GraphStore
 
-        graph = GraphStore().load(paper_id)
-        if graph is None:
-            raise ApiError("GRAPH_NOT_READY", "图谱数据缺失", status_code=409)
-        return graph
+            graph = GraphStore().load(paper_id)
+            if graph is None:
+                raise ApiError("GRAPH_NOT_READY", "图谱数据缺失", status_code=409)
+            return graph
+
+        if paper.preview_available or self.is_preview_available(paper_id):
+            preview = self.get_preview_graph(paper_id)
+            if preview is not None:
+                return preview
+
+        raise ApiError(
+            "GRAPH_NOT_READY",
+            "图谱尚未就绪，请轮询 status 接口",
+            status_code=409,
+        )
 
     async def create_from_upload(self, *, filename: str, content: bytes) -> PaperCreateResult:
         if not filename.lower().endswith(".pdf"):
@@ -424,6 +461,7 @@ class PaperService:
             updated_at=now,
         )
         self._papers[paper_id] = detail
+        self._pdf_paths[paper_id] = dest
         self._status[paper_id] = PaperStatusData(
             paper_id=paper_id,
             status=PaperStatus.PENDING,

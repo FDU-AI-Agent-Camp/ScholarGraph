@@ -116,3 +116,100 @@ async def test_classify_with_llm_retries_fallback_model(live_classify_env: None)
     assert result.paradigm == Paradigm.HSS
     primary_chat.with_structured_output.assert_called_once()
     fallback_chat.with_structured_output.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_classify_with_llm_recovers_from_markdown_fenced_json(
+    live_classify_env: None,
+) -> None:
+    """If with_structured_output chokes on ```json fences, parse the raw text."""
+    _ = live_classify_env
+    expected = ParadigmClassification(
+        paradigm=Paradigm.STEM,
+        confidence=0.85,
+        reason="Experiments and metrics.",
+    )
+    raw_text = '```json\n{"paradigm": "STEM", "confidence": 0.85, "reason": "Experiments and metrics."}\n```'
+
+    def _raise_fenced(*args: object, **kwargs: object) -> None:
+        # Trigger a real Pydantic json_invalid ValidationError.
+        ParadigmClassification.model_validate_json(raw_text)
+
+    primary_runnable = MagicMock()
+    primary_runnable.ainvoke = AsyncMock(side_effect=_raise_fenced)
+    fallback_runnable = MagicMock()
+    fallback_runnable.ainvoke = AsyncMock(return_value=expected)
+
+    primary_chat = MagicMock()
+    primary_chat.with_structured_output.return_value = primary_runnable
+    fallback_chat = MagicMock()
+    fallback_chat.with_structured_output.return_value = fallback_runnable
+
+    client = LlmClient()
+    client._chat = primary_chat
+    client._fallback_chat = fallback_chat
+
+    result = await classify_with_llm(STEM_SAMPLE, llm_client=client)
+    assert result.paradigm == Paradigm.STEM
+    assert result.confidence == 0.85
+
+
+@pytest.mark.parametrize(
+    "raw_output",
+    [
+        '{"paradigm": "STEM", "confidence": 0.9, "reason": "Plain JSON."}',
+        '```json\n{"paradigm": "STEM", "confidence": 0.9, "reason": "Fenced JSON."}\n```',
+        'Some preamble text {"paradigm": "STEM", "confidence": 0.9, "reason": "Embedded JSON."} trailing text',
+        '{"paradigm": "STEM", "confidence": 0.9, "reason": "Trailing comma",}',
+        '  \n  {"paradigm": "STEM", "confidence": 0.9, "reason": "Whitespace surrounded."}  \n  ',
+    ],
+    ids=["plain", "fenced", "embedded", "trailing_comma", "whitespace"],
+)
+@pytest.mark.asyncio
+async def test_classify_with_llm_parses_various_string_outputs(
+    live_classify_env: None,
+    raw_output: str,
+) -> None:
+    """Robust data cleaning tolerates common LLM JSON formatting mistakes."""
+    _ = live_classify_env
+    structured_runnable = MagicMock()
+    structured_runnable.ainvoke = AsyncMock(return_value=raw_output)
+    chat = MagicMock()
+    chat.with_structured_output.return_value = structured_runnable
+
+    client = LlmClient()
+    client._chat = chat
+    client._fallback_chat = None
+
+    result = await classify_with_llm(STEM_SAMPLE, llm_client=client)
+    assert result.paradigm == Paradigm.STEM
+    assert result.confidence == 0.9
+
+
+@pytest.mark.parametrize(
+    "raw_output",
+    [
+        '{"confidence": 0.9, "reason": "Missing paradigm."}',
+        '{"paradigm": "INVALID", "confidence": 0.9, "reason": "Bad paradigm."}',
+        "not json at all",
+    ],
+    ids=["missing_paradigm", "invalid_paradigm", "non_json"],
+)
+@pytest.mark.asyncio
+async def test_classify_with_llm_rejects_invalid_outputs(
+    live_classify_env: None,
+    raw_output: str,
+) -> None:
+    """Invalid string outputs must still fail and trigger fallback logic upstream."""
+    _ = live_classify_env
+    structured_runnable = MagicMock()
+    structured_runnable.ainvoke = AsyncMock(return_value=raw_output)
+    chat = MagicMock()
+    chat.with_structured_output.return_value = structured_runnable
+
+    client = LlmClient()
+    client._chat = chat
+    client._fallback_chat = None
+
+    with pytest.raises((ValidationError, ValueError)):
+        await classify_with_llm(STEM_SAMPLE, llm_client=client)

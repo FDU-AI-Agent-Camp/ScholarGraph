@@ -41,7 +41,29 @@ def test_f33_minimal_stem_graph_excludes_hss_only_node_types() -> None:
     assert_stem_excludes_hss_only_node_types(minimal_f33_stem_graph())
 
 
-def test_f33_stem_graph_rejects_hss_edge_type() -> None:
+def test_f33_stem_graph_accepts_dynamic_hss_edge_type() -> None:
+    """Dynamic relation invention allows uppercase SNAKE_CASE edge types across paradigms."""
+    base = minimal_f33_stem_graph()
+    graph = UnifiedPaperGraph(
+        paper_id=base.paper_id,
+        paradigm=Paradigm.STEM,
+        nodes=base.nodes,
+        edges=[
+            *base.edges,
+            GraphEdge(
+                id="e_bad",
+                source="n_method",
+                target="n_question",
+                label="SUB_ARGUMENT_OF",
+                type="SUB_ARGUMENT_OF",
+            ),
+        ],
+    )
+    assert graph.edges[-1].type == "SUB_ARGUMENT_OF"
+
+
+def test_f33_stem_graph_rejects_supported_by_inverse_edge() -> None:
+    """SUPPORTED_BY was removed from the STEM ontology; only Evidence->Claim SUPPORTS is allowed."""
     base = minimal_f33_stem_graph()
     with pytest.raises(ValidationError, match="forbidden edge types"):
         UnifiedPaperGraph(
@@ -52,10 +74,10 @@ def test_f33_stem_graph_rejects_hss_edge_type() -> None:
                 *base.edges,
                 GraphEdge(
                     id="e_bad",
-                    source="n_method",
-                    target="n_question",
-                    label="SUB_ARGUMENT_OF",
-                    type="SUB_ARGUMENT_OF",
+                    source="n_claim",
+                    target="n_evidence",
+                    label="SUPPORTED_BY",
+                    type="SUPPORTED_BY",
                 ),
             ],
         )

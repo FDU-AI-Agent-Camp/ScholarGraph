@@ -66,7 +66,7 @@ npm run dev
 - URL：`http://localhost:5173/papers`
 - 操作：在页面内嵌上传区选择 PDF，提交 `POST /papers`。
 - 验收：列表刷新或出现新论文；失败时展示 `INGEST_FAILED` 等错误提示。
-- 上传成功后详情页自动轮询 `GET .../status`，直至 `ready` / `failed`（支持暂停/继续刷新）。
+- 上传成功后详情页自动轮询 `GET .../status`，直至 `ready` / `ready_with_warnings` / `failed`（支持暂停/继续刷新）。
 - 亦可跳过上传，直接使用 seed 论文 `hss-001` / `hss-002`。
 
 ### 3. 论文详情（状态轮询）
@@ -74,6 +74,7 @@ npm run dev
 | 场景 | URL | 验收 |
 |------|-----|------|
 | ready | `/papers/hss-001` | 元数据展示；状态面板为 ready |
+| ready_with_warnings | 使用质量门控触发的论文 | 元数据展示；状态面板为 ready_with_warnings，画布带黄色警示边框 |
 | processing | `/papers/hss-002` | 进度条 / stage 轮询 |
 | failed | `/papers/hss-failed-001` | 红色告警：`LLM_JSON_INVALID`、`failed_during: classifying` |
 

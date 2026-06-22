@@ -93,7 +93,7 @@
      | `ready` | 100 | 建图完成 |
      | `failed` | 0 | 流水线失败（含 `error_code` / `failed_during`） |
 
-  3. `status=ready` 后 `GET /papers/{id}/graph` 拉取 G6 数据  
+  3. `status=ready` 或 `status=ready_with_warnings` 后 `GET /papers/{id}/graph` 拉取 G6 数据；`ready_with_warnings` 表示图谱可用但质量门控触发，前端建议渲染黄色警示边框
   4. 若 LLM 降级，轮询响应含 **`classify_warnings`** / **`extract_warnings`**（机器码）；前端映射为 toast / alert（见 [api-contract.md §1.1](./api-contract.md#11-降级警告字段classify_warnings--extract_warnings)）
 - **WebSocket**：人力充裕时可由 L 增加 `WS /papers/{id}/progress`；V1 不强制。
 

@@ -9,6 +9,7 @@ from langchain_core.messages import HumanMessage, SystemMessage
 
 from backend.config import Settings, get_settings
 from backend.llm.client import LlmClient, get_llm_client
+from backend.llm.structured_output import _parse_model_response
 from backend.schemas.paradigm import Paradigm, ParadigmClassification
 
 logger = logging.getLogger(__name__)
@@ -24,6 +25,20 @@ def load_classifier_prompt() -> str:
     raise FileNotFoundError(f"Missing classifier prompt: {CLASSIFIER_PROMPT_PATH}")
 
 
+def _extract_raw_json_from_error(exc: Exception) -> str | None:
+    """Pull the raw LLM output out of a Pydantic json_invalid ValidationError."""
+    errors = getattr(exc, "errors", None)
+    if not callable(errors):
+        return None
+    try:
+        for err in errors():
+            if err.get("type") == "json_invalid":
+                return err.get("input")
+    except Exception:
+        return None
+    return None
+
+
 async def _invoke_structured(
     client: LlmClient,
     *,
@@ -37,12 +52,24 @@ async def _invoke_structured(
         SystemMessage(content=system_prompt),
         HumanMessage(content=user_content),
     ]
-    if hasattr(structured, "ainvoke"):
-        result = await structured.ainvoke(messages)
-    else:
-        result = structured.invoke(messages)  # type: ignore[attr-defined]
+    try:
+        if hasattr(structured, "ainvoke"):
+            result = await structured.ainvoke(messages)
+        else:
+            result = structured.invoke(messages)  # type: ignore[attr-defined]
+    except Exception as exc:
+        raw = _extract_raw_json_from_error(exc)
+        if raw is not None:
+            try:
+                return _parse_model_response(raw, ParadigmClassification)
+            except Exception:
+                pass
+        raise
+
     if isinstance(result, ParadigmClassification):
         return result
+    if isinstance(result, str):
+        return _parse_model_response(result, ParadigmClassification)
     return ParadigmClassification.model_validate(result)
 
 

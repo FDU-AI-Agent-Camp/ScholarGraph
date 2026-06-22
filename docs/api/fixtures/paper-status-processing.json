@@ -6,6 +6,7 @@
     "stage": "classifying",
     "message": "正在识别范式与理论视角…",
     "updated_at": "2026-05-19T10:12:00Z",
+    "preview_available": false,
     "classify_warnings": []
   },
   "meta": { "request_id": "mock-status-001" }

@@ -72,7 +72,7 @@ sequenceDiagram
 |---|------|
 | 1 | **SSE**：仅 `POST /api/v1/papers/{paper_id}/qa/stream` + body `{"question"}`；FE 用 `fetch-event-source`，不用 GET `EventSource` |
 | 2 | **分类结果**：`ParadigmClassification` 内嵌于 `GET /papers/{id}` 的 `classification`；**无** `/classification` 路由 |
-| 3 | **`status` vs `stage`**：`status`=业务态（`pending/processing/ready/failed`）；`stage`=流水线步骤（仅 `GET .../status`） |
+| 3 | **`status` vs `stage`**：`status`=业务态（`pending/processing/ready/ready_with_warnings/failed`）；`stage`=流水线步骤（仅 `GET .../status`） |
 | 4 | **范式 JSON**：`paradigm` + `confidence` + `reason`，与 [README](../../README.md) 一致，见 [api-contract §1](./api-contract.md#1-范式分类-jsonparadigmclassification) |
 | 5 | **分页**：`GET /papers` 支持 `offset`/`limit`（默认 20）；各端点完整 JSON 见 [api-contract](./api-contract.md) |
 
@@ -110,6 +110,7 @@ sequenceDiagram
 | GET | `/papers/{paper_id}` | BE-L | 元数据 + **内嵌** `classification` → [§7](./api-contract.md#7-get-apiv1paperspaper_id) |
 | GET | `/papers/{paper_id}/status` | BE-L | 长轮询；含 `status`+`stage` → [§8](./api-contract.md#8-get-apiv1paperspaper_idstatus) |
 | GET | `/papers/{paper_id}/graph` | BE-3 | G6；409 若未 ready |
+| POST | `/papers/{paper_id}/reextract` | BE-L | 强制重抽；从已保存 PDF 重新调度流水线 |
 | POST | `/patrol` | BE-4 | 双文巡检 → [§10](./api-contract.md#10-post-apiv1patrol) |
 
 ### 3.3 SSE — 多尺度问答（已冻结）
@@ -135,7 +136,7 @@ sequenceDiagram
 class IngestResult(TypedDict):
     paper_id: str
     full_text: str
-    classifier_input: str  # 标题+摘要+关键词+引言片段（PyMuPDF 前 25 页 head + snippets.py）
+    classifier_input: str  # 标题+摘要+关键词+引言片段（PyMuPDF 前 25 页 head + snippets.py 初值；异步 head_refine 完成后再消费精炼结果）
 
 async def ingest_pdf(file_path: Path, paper_id: str | None = None) -> IngestResult: ...
 ```
@@ -172,7 +173,7 @@ async def run_patrol(paper_ids: list[str], mode: PatrolMode) -> PatrolReport: ..
 
 ```python
 async def run_paper_pipeline(paper_id: str, pdf_path: Path) -> None:
-    """ingest → classify → extract → store；更新 status。"""
+    """ingest → wait_head_refine → classify → extract → store；更新 status。"""
 ```
 
 ### 4.6 任务 ID → 模块映射

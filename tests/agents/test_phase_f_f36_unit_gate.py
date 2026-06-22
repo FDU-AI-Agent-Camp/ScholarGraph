@@ -11,7 +11,6 @@ from backend.agents.extract_types import ExtractResult
 from backend.agents.extractor import extract
 from backend.config import get_settings
 from backend.llm.client import LlmClient, reset_llm_client_cache
-from backend.schemas.graph import UnifiedPaperGraph
 from backend.schemas.paradigm import Paradigm
 from tests.agents.conftest import minimal_valid_llm_graph
 from tests.helpers.f33_hss_graphs import assert_hss_excludes_stem_only_node_types
@@ -30,13 +29,11 @@ def live_extract_env(monkeypatch: pytest.MonkeyPatch) -> None:
 
 @pytest.mark.asyncio
 async def test_t7_with_structured_output_success_has_no_extract_warnings(live_extract_env) -> None:
-    """T7: mock with_structured_output → valid graph → warnings=[]."""
+    """T7: mock LLM JSON response → valid graph → warnings=[]."""
     _ = live_extract_env
     llm_graph = minimal_valid_llm_graph(paper_id="t7-paper")
-    structured_runnable = MagicMock()
-    structured_runnable.ainvoke = AsyncMock(return_value=llm_graph)
     chat = MagicMock()
-    chat.with_structured_output.return_value = structured_runnable
+    chat.ainvoke = AsyncMock(return_value=MagicMock(content=llm_graph.model_dump_json()))
 
     client = LlmClient()
     client._chat = chat
@@ -48,7 +45,7 @@ async def test_t7_with_structured_output_success_has_no_extract_warnings(live_ex
         paper_id="t7-paper",
         llm_client=client,
     )
-    chat.with_structured_output.assert_called_once_with(UnifiedPaperGraph)
+    chat.ainvoke.assert_awaited_once()
 
     with patch(
         "backend.agents.extractor.extract_with_llm",

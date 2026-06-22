@@ -1,4 +1,4 @@
-"""LangGraph StateGraph: ingest → classify → extract → store."""
+"""LangGraph StateGraph: ingest → wait_head_refine → classify → extract → store."""
 
 from functools import lru_cache
 from pathlib import Path
@@ -28,6 +28,18 @@ RouteKey = Literal["continue", "fail"]
 def _route_after_step(state: WorkflowState) -> RouteKey:
     if state.get("failed"):
         return "fail"
+    return "continue"
+
+
+def _route_after_extract(state: WorkflowState) -> RouteKey:
+    """Long papers schedule full extraction in the background; end the main pipeline.
+
+    The background task will finalize and mark the paper ready/failed later.
+    """
+    if state.get("failed"):
+        return "fail"
+    if state.get("background_extraction_scheduled"):
+        return "background"
     return "continue"
 
 
@@ -61,8 +73,8 @@ def build_paper_pipeline_graph() -> StateGraph:
     )
     graph.add_conditional_edges(
         NODE_EXTRACT,
-        _route_after_step,
-        {"continue": NODE_STORE, "fail": NODE_FAIL},
+        _route_after_extract,
+        {"continue": NODE_STORE, "fail": NODE_FAIL, "background": END},
     )
     graph.add_conditional_edges(
         NODE_STORE,
