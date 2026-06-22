@@ -12,6 +12,7 @@ from pydantic import BaseModel
 from backend.config import Settings, get_settings
 from backend.ingest.head_candidates import HeadCandidate
 from backend.llm.client import get_llm_client
+from backend.llm.structured_output import _parse_model_response
 from backend.schemas.ingest_head import IngestHead
 
 logger = logging.getLogger(__name__)
@@ -141,6 +142,20 @@ def _resolve_head_llm_model(settings: Settings) -> str:
     return settings.llm_model_primary
 
 
+def _extract_raw_json_from_error(exc: Exception) -> str | None:
+    """Pull the raw LLM output out of a Pydantic json_invalid ValidationError."""
+    errors = getattr(exc, "errors", None)
+    if not callable(errors):
+        return None
+    try:
+        for err in errors():
+            if err.get("type") == "json_invalid":
+                return err.get("input")
+    except Exception:
+        return None
+    return None
+
+
 async def merge_with_llm(
     snippets: HeadCandidate,
     path_b: HeadCandidate | None,
@@ -177,28 +192,41 @@ async def merge_with_llm(
             chat = client.fallback_chat
         structured = chat.with_structured_output(IngestHeadLlmOutput)
         if hasattr(structured, "ainvoke"):
-            result = await structured.ainvoke(messages)
+            raw_result = await structured.ainvoke(messages)
         else:
-            result = structured.invoke(messages)  # type: ignore[attr-defined]
-        if not isinstance(result, IngestHeadLlmOutput):
-            result = IngestHeadLlmOutput.model_validate(result)
-        return IngestHead(
-            title=result.title.strip(),
-            abstract=result.abstract.strip(),
-            keywords=result.keywords.strip(),
-            intro=result.intro.strip(),
-            conclusion=result.conclusion.strip(),
-            journal=result.journal.strip(),
-            funding=result.funding.strip(),
-            affiliation=result.affiliation.strip(),
-            research_object=result.research_object.strip(),
-            methodology_tool=result.methodology_tool.strip(),
-            core_intellectual_contribution=result.core_intellectual_contribution.strip(),
-            sources={field: "llm" for field in HEAD_FIELDS},
-        )
-    except Exception:
-        logger.exception("Head merge LLM failed (model=%s, timeout=%ss)", model_name, timeout)
-        return merge_with_rules(snippets, path_b, is_short=is_short)
+            raw_result = structured.invoke(messages)  # type: ignore[attr-defined]
+        if isinstance(raw_result, IngestHeadLlmOutput):
+            result = raw_result
+        elif isinstance(raw_result, str):
+            result = _parse_model_response(raw_result, IngestHeadLlmOutput)
+        else:
+            result = IngestHeadLlmOutput.model_validate(raw_result)
+    except Exception as exc:
+        raw = _extract_raw_json_from_error(exc)
+        if raw is not None:
+            try:
+                result = _parse_model_response(raw, IngestHeadLlmOutput)
+            except Exception:
+                logger.exception("Head merge LLM failed (model=%s, timeout=%ss)", model_name, timeout)
+                return merge_with_rules(snippets, path_b, is_short=is_short)
+        else:
+            logger.exception("Head merge LLM failed (model=%s, timeout=%ss)", model_name, timeout)
+            return merge_with_rules(snippets, path_b, is_short=is_short)
+
+    return IngestHead(
+        title=result.title.strip(),
+        abstract=result.abstract.strip(),
+        keywords=result.keywords.strip(),
+        intro=result.intro.strip(),
+        conclusion=result.conclusion.strip(),
+        journal=result.journal.strip(),
+        funding=result.funding.strip(),
+        affiliation=result.affiliation.strip(),
+        research_object=result.research_object.strip(),
+        methodology_tool=result.methodology_tool.strip(),
+        core_intellectual_contribution=result.core_intellectual_contribution.strip(),
+        sources={field: "llm" for field in HEAD_FIELDS},
+    )
 
 
 async def merge_head_candidates(
