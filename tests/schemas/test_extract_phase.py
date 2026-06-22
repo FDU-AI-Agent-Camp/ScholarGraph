@@ -173,9 +173,37 @@ class TestExtractedEdgeCoreQuality:
             type="SUPPORTS",
             rationale="some rationale",
             source_span="some span",
+            confidence="HIGH",
         )
         assert "rationale_missing" not in edge.data
         assert "incomplete" not in edge.data
+
+    def test_missing_confidence_is_defaulted_to_medium_and_flagged(self) -> None:
+        edge = ExtractedEdge(
+            id="e1",
+            source="n1",
+            target="n2",
+            label="SUPPORTS",
+            type="SUPPORTS",
+            rationale="some rationale",
+            source_span="some span",
+        )
+        assert edge.confidence == "MEDIUM"
+        assert edge.data.get("confidence_missing") is True
+
+    def test_explicit_confidence_is_preserved(self) -> None:
+        edge = ExtractedEdge(
+            id="e1",
+            source="n1",
+            target="n2",
+            label="SUPPORTS",
+            type="SUPPORTS",
+            rationale="some rationale",
+            source_span="some span",
+            confidence="LOW",
+        )
+        assert edge.confidence == "LOW"
+        assert "confidence_missing" not in edge.data
 
     def test_non_core_edge_missing_fields_is_not_flagged(self) -> None:
         edge = ExtractedEdge(

@@ -100,12 +100,17 @@ class ExtractedEdge(BaseModel):
 
     @model_validator(mode="after")
     def inspect_core_edge_quality(self) -> "ExtractedEdge":
-        """Mark core argument edges that lack rationale or source_span.
+        """Normalize optional fields and flag defects instead of hard-failing.
 
-        Pydantic fields remain optional to avoid hard failures when the LLM
-        disobeys the prompt, but we silently flag the defect so downstream
-        consumers can degrade gracefully.
+        - ``confidence`` defaults to ``MEDIUM`` when the LLM omits it, so
+          downstream consumers never see ``None``; the incident is recorded.
+        - Core argument edges missing ``rationale`` or ``source_span`` are
+          flagged as incomplete.
         """
+        if self.confidence is None:
+            self.confidence = "MEDIUM"
+            self.data["confidence_missing"] = True
+
         core_edge_types = {"SUPPORTS", "CONTRADICTS", "EXPLAINS"}
         if self.type in core_edge_types and (not self.rationale or not self.source_span):
             self.data["rationale_missing"] = True
