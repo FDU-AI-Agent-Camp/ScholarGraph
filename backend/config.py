@@ -303,6 +303,20 @@ class Settings(BaseSettings):
         default=True,
         validation_alias="CLASSIFIER_HEURISTIC_FALLBACK",
     )
+    classifier_two_phase_enabled: bool = Field(
+        default=True,
+        validation_alias="CLASSIFIER_TWO_PHASE_ENABLED",
+        description="Run profile generation (Stage A) before paradigm judgment (Stage B).",
+    )
+    classifier_profile_llm_model: str = Field(
+        default="",
+        validation_alias="CLASSIFIER_PROFILE_LLM_MODEL",
+        description="Lightweight model for Stage A profile generation; empty means use primary model.",
+    )
+    classifier_profile_llm_timeout_seconds: int = Field(
+        default=60,
+        validation_alias="CLASSIFIER_PROFILE_LLM_TIMEOUT_SECONDS",
+    )
 
     @field_validator("cors_origins", mode="before")
     @classmethod

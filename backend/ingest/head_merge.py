@@ -16,13 +16,15 @@ from backend.schemas.ingest_head import IngestHead
 
 logger = logging.getLogger(__name__)
 
-HEAD_FIELDS = ("title", "abstract", "keywords", "intro")
+HEAD_FIELDS = ("title", "abstract", "keywords", "intro", "conclusion", "journal", "funding", "affiliation")
 MAX_LLM_CANDIDATE_CHARS = 12_000
 
 HEAD_MERGE_SYSTEM_PROMPT = (
     "You merge academic paper header fields from two PDF extraction paths. "
     "For each field, pick the most accurate text from the candidates. "
-    "Do NOT invent or paraphrase metadata; use empty string when absent."
+    "Do NOT invent or paraphrase metadata; use empty string when absent. "
+    "Conclusion and meta-information (journal, funding, affiliation) are optional soft signals; "
+    "keep them only when supported by the source text."
 )
 
 
@@ -33,6 +35,10 @@ class IngestHeadLlmOutput(BaseModel):
     abstract: str = ""
     keywords: str = ""
     intro: str = ""
+    conclusion: str = ""
+    journal: str = ""
+    funding: str = ""
+    affiliation: str = ""
 
 
 def _candidate_payload(label: str, candidate: HeadCandidate) -> dict[str, str]:
@@ -43,6 +49,10 @@ def _candidate_payload(label: str, candidate: HeadCandidate) -> dict[str, str]:
         "abstract": candidate.abstract,
         "keywords": candidate.keywords,
         "intro": candidate.intro,
+        "conclusion": candidate.conclusion,
+        "journal": candidate.journal,
+        "funding": candidate.funding,
+        "affiliation": candidate.affiliation,
     }
 
 
@@ -57,6 +67,10 @@ def _truncate_candidate(candidate: HeadCandidate) -> HeadCandidate:
         abstract=clip(candidate.abstract),
         keywords=clip(candidate.keywords),
         intro=clip(candidate.intro),
+        conclusion=clip(candidate.conclusion),
+        journal=clip(candidate.journal),
+        funding=clip(candidate.funding),
+        affiliation=clip(candidate.affiliation),
         source=candidate.source,
     )
 
@@ -94,6 +108,10 @@ def merge_with_rules(
         abstract=merged["abstract"],
         keywords=merged["keywords"],
         intro=merged["intro"],
+        conclusion=merged["conclusion"],
+        journal=merged["journal"],
+        funding=merged["funding"],
+        affiliation=merged["affiliation"],
         sources=sources,
     )
 
@@ -154,6 +172,10 @@ async def merge_with_llm(
             abstract=result.abstract.strip(),
             keywords=result.keywords.strip(),
             intro=result.intro.strip(),
+            conclusion=result.conclusion.strip(),
+            journal=result.journal.strip(),
+            funding=result.funding.strip(),
+            affiliation=result.affiliation.strip(),
             sources={field: "llm" for field in HEAD_FIELDS},
         )
     except Exception:

@@ -98,7 +98,10 @@ async def test_red_g0_mock_mode_must_not_call_classify_with_llm(monkeypatch: pyt
 
 
 @pytest.mark.asyncio
-async def test_red_g1_llm_rejects_third_paradigm_value(live_classify_env: None) -> None:
+async def test_red_g1_llm_rejects_third_paradigm_value(
+    live_classify_env: None,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """G.0 / G.1: 不允许第三类 paradigm。"""
     _ = live_classify_env
     bad = ParadigmClassification.model_construct(
@@ -113,6 +116,10 @@ async def test_red_g1_llm_rejects_third_paradigm_value(live_classify_env: None) 
     client = LlmClient()
     client._chat = chat
     client._fallback_chat = None
+
+    monkeypatch.setenv("CLASSIFIER_TWO_PHASE_ENABLED", "false")
+    get_settings.cache_clear()
+    reset_llm_client_cache()
 
     with pytest.raises(ValueError, match="Invalid paradigm"):
         await classify_with_llm(STEM_SAMPLE, llm_client=client)

@@ -9,7 +9,7 @@ import pytest
 from backend.agents.classifier import classify
 from backend.agents.classifier_constants import CLASSIFIER_HEURISTIC_FALLBACK_CODE
 from backend.agents.classifier_llm import classify_with_llm
-from backend.agents.classifier_types import ClassifyResult
+from backend.agents.classifier_types import ClassifierProfile, ClassifyResult
 from backend.config import get_settings
 from backend.llm.client import LlmClient, reset_llm_client_cache
 from backend.schemas.paradigm import Paradigm, ParadigmClassification
@@ -25,15 +25,32 @@ STEM_SAMPLE = (
 async def test_g7_classify_with_llm_structured_success(live_classify_env: None) -> None:
     """G7: mock with_structured_output → valid classification."""
     _ = live_classify_env
+    profile = ClassifierProfile(
+        goal="Benchmark agent frameworks.",
+        tools="Datasets, accuracy, F1, ablations.",
+        domain="Artificial intelligence.",
+    )
     expected = ParadigmClassification(
         paradigm=Paradigm.STEM,
         confidence=0.91,
         reason="Quantitative benchmark paper.",
     )
-    structured_runnable = MagicMock()
-    structured_runnable.ainvoke = AsyncMock(return_value=expected)
+
+    def _make_runnable(response: object) -> MagicMock:
+        runnable = MagicMock()
+        runnable.ainvoke = AsyncMock(return_value=response)
+        return runnable
+
     chat = MagicMock()
-    chat.with_structured_output.return_value = structured_runnable
+
+    def _with_structured(model: type[object]) -> MagicMock:
+        if model is ClassifierProfile:
+            return _make_runnable(profile)
+        if model is ParadigmClassification:
+            return _make_runnable(expected)
+        raise ValueError(f"Unexpected model: {model}")
+
+    chat.with_structured_output.side_effect = _with_structured
 
     client = LlmClient()
     client._chat = chat
@@ -41,7 +58,8 @@ async def test_g7_classify_with_llm_structured_success(live_classify_env: None) 
 
     result = await classify_with_llm(STEM_SAMPLE, llm_client=client)
     assert result.paradigm == Paradigm.STEM
-    chat.with_structured_output.assert_called_once_with(ParadigmClassification)
+    chat.with_structured_output.assert_any_call(ClassifierProfile)
+    chat.with_structured_output.assert_any_call(ParadigmClassification)
 
     with patch(
         "backend.agents.classifier.classify_with_llm",

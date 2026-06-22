@@ -223,7 +223,10 @@ async def test_red_classifier_llm_disabled_writes_fallback_warning(monkeypatch: 
 
 
 @pytest.mark.asyncio
-async def test_red_classify_with_llm_rejects_whitespace_reason(live_classify_env: None) -> None:
+async def test_red_classify_with_llm_rejects_whitespace_reason(
+    live_classify_env: None,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """G2.1 red: structured output with blank reason fails validation."""
     from unittest.mock import MagicMock
 
@@ -232,6 +235,10 @@ async def test_red_classify_with_llm_rejects_whitespace_reason(live_classify_env
     from backend.schemas.paradigm import Paradigm, ParadigmClassification
 
     _ = live_classify_env
+    monkeypatch.setenv("CLASSIFIER_TWO_PHASE_ENABLED", "false")
+    get_settings.cache_clear()
+    reset_llm_client_cache()
+
     bad = ParadigmClassification(paradigm=Paradigm.STEM, confidence=0.9, reason="   ")
     structured_runnable = MagicMock()
     structured_runnable.ainvoke = AsyncMock(return_value=bad)
@@ -246,7 +253,10 @@ async def test_red_classify_with_llm_rejects_whitespace_reason(live_classify_env
 
 
 @pytest.mark.asyncio
-async def test_red_classify_with_llm_primary_fail_no_fallback_client_raises(live_classify_env: None) -> None:
+async def test_red_classify_with_llm_primary_fail_no_fallback_client_raises(
+    live_classify_env: None,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """G2.2 red: no fallback_chat → primary failure propagates."""
     from unittest.mock import MagicMock
 
@@ -254,6 +264,10 @@ async def test_red_classify_with_llm_primary_fail_no_fallback_client_raises(live
     from backend.llm.client import LlmClient
 
     _ = live_classify_env
+    monkeypatch.setenv("CLASSIFIER_TWO_PHASE_ENABLED", "false")
+    get_settings.cache_clear()
+    reset_llm_client_cache()
+
     primary_runnable = MagicMock()
     primary_runnable.ainvoke = AsyncMock(side_effect=RuntimeError("primary only"))
     chat = MagicMock()
@@ -265,7 +279,8 @@ async def test_red_classify_with_llm_primary_fail_no_fallback_client_raises(live
     with pytest.raises(RuntimeError, match="primary only"):
         await classify_with_llm(STEM_SAMPLE, llm_client=client)
 
-    primary_runnable.ainvoke.assert_awaited_once()
+    # judge_with_llm retries primary and fallback; with no fallback_chat it reuses the same chat.
+    primary_runnable.ainvoke.assert_awaited()
 
 
 @pytest.mark.asyncio
