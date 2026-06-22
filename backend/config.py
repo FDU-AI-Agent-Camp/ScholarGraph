@@ -259,6 +259,38 @@ class Settings(BaseSettings):
         validation_alias="EMBEDDING_OLLAMA_URL",
     )
 
+    # ------------------------------------------------------------------
+    # Cloud reranker for fine-grained semantic merge verification
+    # ------------------------------------------------------------------
+    reranker_enabled: bool = Field(
+        default=False,
+        validation_alias="RERANKER_ENABLED",
+    )
+    reranker_model: str = Field(
+        default="",
+        validation_alias="RERANKER_MODEL",
+    )
+    reranker_api_base_url: str | None = Field(
+        default=None,
+        validation_alias="RERANKER_API_BASE_URL",
+    )
+    reranker_api_key: str = Field(
+        default="",
+        validation_alias="RERANKER_API_KEY",
+    )
+    reranker_batch_size: int = Field(
+        default=32,
+        ge=1,
+        le=256,
+        validation_alias="RERANKER_BATCH_SIZE",
+    )
+    reranker_threshold: float = Field(
+        default=0.85,
+        ge=0.0,
+        le=1.0,
+        validation_alias="RERANKER_THRESHOLD",
+    )
+
     extract_repair_max_retries: int = Field(
         default=2,
         ge=0,
@@ -303,6 +335,14 @@ class Settings(BaseSettings):
     @property
     def embedding_api_base_url_effective(self) -> str | None:
         return self.embedding_api_base_url or self.llm_api_base_url or None
+
+    @property
+    def reranker_api_base_url_effective(self) -> str | None:
+        return self.reranker_api_base_url or self.llm_api_base_url or None
+
+    @property
+    def reranker_api_key_effective(self) -> str:
+        return self.reranker_api_key.strip() or self.require_llm_key()
 
     @property
     def semantic_similarity_threshold_effective(self) -> float:
