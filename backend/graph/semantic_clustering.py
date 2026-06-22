@@ -8,6 +8,8 @@ import re
 from collections import defaultdict
 from collections.abc import Sequence
 
+import numpy as np
+
 from backend.config import Settings
 from backend.graph.merge_graphs import _UnionFind
 from backend.llm.embeddings import EmbeddingClient
@@ -67,6 +69,54 @@ def _cross_type_merge_allowed(type_a: str, type_b: str) -> bool:
     after a ``Dataset``) and minimizes wasted embedding/reranker work.
     """
     return type_a == type_b
+
+
+def _group_nodes_by_type(nodes: list[ExtractedNode]) -> dict[str, list[tuple[int, ExtractedNode]]]:
+    """Group nodes by their type, preserving original indices.
+
+    Returns a mapping ``type -> [(original_index, node), ...]``.  Grouping by
+    type is the prerequisite for the stage-2 matrix coarse-filter: it keeps the
+    similarity matrix small and guarantees the hard type firewall.
+    """
+    groups: dict[str, list[tuple[int, ExtractedNode]]] = defaultdict(list)
+    for idx, node in enumerate(nodes):
+        groups[node.type].append((idx, node))
+    return groups
+
+
+def _coarse_filter_pairs(
+    nodes: list[ExtractedNode],
+    embeddings: np.ndarray,
+    threshold: float,
+) -> list[tuple[str, str, float]]:
+    """Return high-risk merge candidate pairs using batched matrix math.
+
+    ``embeddings`` must have shape ``(N, D)`` where ``N == len(nodes)``.  The
+    matrix is L2-normalized row-wise so that ``dot(E, E.T)`` equals cosine
+    similarity.  Only the upper triangle (``i < j``) is considered, avoiding
+    self-pairs and duplicates.
+    """
+    n = len(nodes)
+    if n < 2 or embeddings.shape[0] != n:
+        return []
+
+    # L2 normalize per row.  Zero vectors are left as zeros to avoid division
+    # by zero and to produce zero similarity with everything else.
+    norms = np.linalg.norm(embeddings, axis=1, keepdims=True)
+    safe_norms = np.where(norms == 0, 1.0, norms)
+    normalized = embeddings / safe_norms
+
+    similarity_matrix = np.dot(normalized, normalized.T)
+
+    # Upper triangle without the diagonal: i < j.
+    rows, cols = np.triu_indices(n, k=1)
+    scores = similarity_matrix[rows, cols]
+    mask = scores > threshold
+
+    pairs: list[tuple[str, str, float]] = []
+    for i, j, score in zip(rows[mask], cols[mask], scores[mask], strict=True):
+        pairs.append((nodes[i].id, nodes[j].id, float(score)))
+    return pairs
 
 
 # Root-election priority: lower number = preferred as the canonical root when a
@@ -405,26 +455,30 @@ async def semantic_cluster_and_merge(
     if len(embeddings) != len(graph.nodes):
         raise ValueError(f"Embedding count mismatch: {len(embeddings)} vectors for {len(graph.nodes)} nodes")
 
-    # 1. Pairwise similarity clustering with a hard type firewall and
-    #    per-paradigm/per-category thresholds. Only nodes of the same type are
-    #    compared, so cross-type embeddings can never trigger a merge.
+    embeddings_matrix = np.array(embeddings, dtype=np.float32)
+
+    # 1. Stage 1 hard type firewall + Stage 2 matrix coarse-filter.
+    #    Nodes are grouped by type; within each group we compute the full cosine
+    #    similarity matrix with a single NumPy dot product and extract the
+    #    upper-triangle pairs that exceed the dynamic threshold.  This replaces
+    #    the previous O(N^2) Python double loop.
     node_ids = [node.id for node in graph.nodes]
-    node_types = [node.type for node in graph.nodes]
+    type_groups = _group_nodes_by_type(graph.nodes)
     uf = _UnionFind()
-    for i in range(len(node_ids)):
-        uf.find(node_ids[i])
-    for i in range(len(node_ids)):
-        for j in range(i + 1, len(node_ids)):
-            if node_types[i] != node_types[j]:
-                continue
-            similarity = _cosine_similarity(embeddings[i], embeddings[j])
-            threshold = settings.semantic_similarity_threshold_for(
-                node_types[i],
-                node_types[j],
-                graph.paradigm.value,
-            )
-            if similarity >= threshold:
-                uf.union(node_ids[i], node_ids[j])
+    for node_type, indexed_nodes in type_groups.items():
+        group_indices = [idx for idx, _ in indexed_nodes]
+        group_nodes = [graph.nodes[idx] for idx in group_indices]
+        if len(group_nodes) < 2:
+            continue
+        group_embeddings = embeddings_matrix[group_indices]
+        threshold = settings.semantic_similarity_threshold_for(
+            node_type,
+            node_type,
+            graph.paradigm.value,
+        )
+        pairs = _coarse_filter_pairs(group_nodes, group_embeddings, threshold)
+        for node_id_i, node_id_j, _ in pairs:
+            uf.union(node_id_i, node_id_j)
 
     clusters: dict[str, set[str]] = defaultdict(set)
     for node_id in node_ids:

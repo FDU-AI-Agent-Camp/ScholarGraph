@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
+import numpy as np
 import pytest
 from backend.config import Settings
 from backend.graph.semantic_clustering import (
+    _coarse_filter_pairs,
     _cross_type_merge_allowed,
     _deduplicate_edges_by_type,
     _elect_root,
+    _group_nodes_by_type,
     _node_text,
     semantic_cluster_and_merge,
 )
@@ -598,3 +601,176 @@ class TestEdgeIdUniqueness:
         assert len(edge_ids) == len(set(edge_ids))
         # All output edges should be valid UnifiedPaperGraph material.
         assert all(edge.id.startswith("e") for edge in result.edges)
+
+
+class TestGroupNodesByType:
+    def test_groups_by_type_and_preserves_indices(self) -> None:
+        nodes = [
+            ExtractedNode(id="n1", label="Adam", type="Method"),
+            ExtractedNode(id="n2", label="CNN", type="Method"),
+            ExtractedNode(id="n3", label="IMDb", type="Dataset"),
+            ExtractedNode(id="n4", label="Survey", type="Dataset"),
+        ]
+        groups = _group_nodes_by_type(nodes)
+        assert set(groups.keys()) == {"Method", "Dataset"}
+        assert groups["Method"] == [(0, nodes[0]), (1, nodes[1])]
+        assert groups["Dataset"] == [(2, nodes[2]), (3, nodes[3])]
+
+    def test_empty_nodes_returns_empty_groups(self) -> None:
+        assert _group_nodes_by_type([]) == {}
+
+    def test_single_node_group(self) -> None:
+        nodes = [ExtractedNode(id="n1", label="Adam", type="Method")]
+        groups = _group_nodes_by_type(nodes)
+        assert groups == {"Method": [(0, nodes[0])]}
+
+
+class TestCoarseFilterPairs:
+    def _nodes(self, count: int) -> list[ExtractedNode]:
+        return [
+            ExtractedNode(id=f"n{i}", label=f"node {i}", type="Method")
+            for i in range(count)
+        ]
+
+    def test_returns_pairs_above_threshold(self) -> None:
+        nodes = self._nodes(3)
+        # Three orthogonal unit vectors; only (0, 1) is close.
+        embeddings = np.array(
+            [
+                [1.0, 0.0, 0.0],
+                [0.95, 0.31, 0.0],
+                [0.0, 1.0, 0.0],
+            ],
+            dtype=np.float32,
+        )
+        pairs = _coarse_filter_pairs(nodes, embeddings, threshold=0.90)
+        assert len(pairs) == 1
+        assert pairs[0][0] == "n0"
+        assert pairs[0][1] == "n1"
+        assert pairs[0][2] > 0.90
+
+    def test_excludes_self_pairs_and_duplicates(self) -> None:
+        nodes = self._nodes(3)
+        embeddings = np.array(
+            [
+                [1.0, 0.0, 0.0],
+                [1.0, 0.0, 0.0],
+                [1.0, 0.0, 0.0],
+            ],
+            dtype=np.float32,
+        )
+        pairs = _coarse_filter_pairs(nodes, embeddings, threshold=0.99)
+        # Only (0,1), (0,2), (1,2); no (i,i) and no (j,i).
+        assert len(pairs) == 3
+        pair_ids = {(a, b) for a, b, _ in pairs}
+        assert pair_ids == {("n0", "n1"), ("n0", "n2"), ("n1", "n2")}
+
+    def test_threshold_boundary_is_exclusive(self) -> None:
+        nodes = self._nodes(2)
+        embeddings = np.array(
+            [
+                [1.0, 0.0, 0.0],
+                [0.90, 0.4359, 0.0],  # cosine ~= 0.90
+            ],
+            dtype=np.float32,
+        )
+        # score > 0.90 (strict) should yield zero pairs.
+        assert _coarse_filter_pairs(nodes, embeddings, threshold=0.90) == []
+        # score > 0.89 should yield one pair.
+        pairs = _coarse_filter_pairs(nodes, embeddings, threshold=0.89)
+        assert len(pairs) == 1
+
+    def test_zero_vectors_produce_no_pairs(self) -> None:
+        nodes = self._nodes(2)
+        embeddings = np.zeros((2, 4), dtype=np.float32)
+        pairs = _coarse_filter_pairs(nodes, embeddings, threshold=0.0)
+        assert pairs == []
+
+    def test_empty_and_single_node_inputs(self) -> None:
+        assert _coarse_filter_pairs([], np.zeros((0, 4)), threshold=0.0) == []
+        node = self._nodes(1)
+        assert _coarse_filter_pairs(node, np.zeros((1, 4)), threshold=0.0) == []
+
+    def test_l2_normalization_matches_cosine(self) -> None:
+        """Un-normalized input vectors must still produce cosine scores."""
+        nodes = self._nodes(2)
+        # Same direction, different magnitudes.
+        embeddings = np.array(
+            [
+                [2.0, 0.0, 0.0],
+                [5.0, 0.0, 0.0],
+            ],
+            dtype=np.float32,
+        )
+        pairs = _coarse_filter_pairs(nodes, embeddings, threshold=0.99)
+        assert len(pairs) == 1
+        assert pairs[0][2] == pytest.approx(1.0, abs=1e-6)
+
+    def test_mismatched_embedding_count_returns_empty(self) -> None:
+        nodes = self._nodes(2)
+        embeddings = np.zeros((3, 4), dtype=np.float32)
+        assert _coarse_filter_pairs(nodes, embeddings, threshold=0.0) == []
+
+    @pytest.mark.asyncio
+    async def test_integration_matrix_filter_matches_legacy_loop(self) -> None:
+        """The NumPy coarse-filter must produce the same merges as the old loop."""
+
+        class _MatrixEmbeddingClient:
+            """Vectors keyed by label so the matrix filter can exercise grouping."""
+
+            vectors = {
+                "Adam Optimizer": [1.0, 0.0, 0.0],
+                "Adam": [0.95, 0.32, 0.0],
+                "SGD": [0.0, 1.0, 0.0],
+                "CNN": [0.0, 0.0, 1.0],
+                "Survey": [0.45, 0.0, 0.9],
+            }
+
+            async def embed_texts(self, texts: list[str]) -> list[list[float]]:
+                prefix = "核心概念: "
+                result = []
+                for text in texts:
+                    start = text.find(prefix) + len(prefix)
+                    end = text.find(" |", start)
+                    label = text[start:end] if end != -1 else text[start:]
+                    result.append(self.vectors[label])
+                return result
+
+        graph = _graph()
+        result = await semantic_cluster_and_merge(
+            graph,
+            _settings(),
+            embedding_client=_MatrixEmbeddingClient(),
+        )
+        labels = {n.label for n in result.nodes}
+        assert "Adam Optimizer" in labels or "Adam" in labels
+        assert len(result.nodes) == 4
+        assert any("SEMANTIC_CLUSTERS_MERGED:1" in w for w in result.warnings)
+
+    @pytest.mark.asyncio
+    async def test_all_distinct_types_produce_no_merge_pairs(self) -> None:
+        """When every node has a different type, the matrix filter is never invoked."""
+
+        class _IdenticalEmbeddingClient:
+            async def embed_texts(self, texts: list[str]) -> list[list[float]]:
+                return [[1.0, 0.0, 0.0] for _ in texts]
+
+        nodes = [
+            ExtractedNode(id="n1", label="x", type="Method"),
+            ExtractedNode(id="n2", label="x", type="Dataset"),
+            ExtractedNode(id="n3", label="x", type="Claim"),
+        ]
+        graph = ExtractedGraph(
+            paper_id="p1",
+            title="T",
+            paradigm=Paradigm.STEM,
+            nodes=nodes,
+            edges=[],
+        )
+        result = await semantic_cluster_and_merge(
+            graph,
+            _settings(sim=0.5),
+            embedding_client=_IdenticalEmbeddingClient(),
+        )
+        assert len(result.nodes) == 3
+        assert not any("SEMANTIC_CLUSTERS_MERGED" in w for w in result.warnings)
