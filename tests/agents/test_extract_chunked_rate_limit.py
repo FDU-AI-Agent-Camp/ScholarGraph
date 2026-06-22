@@ -69,7 +69,7 @@ class TestExtractChunkedRateLimit:
         paper_id = "rl-001"
         full_text = "x"
 
-        def _five_chunks(text: str, paradigm: Paradigm, *, max_chunk_chars: int) -> list:
+        def _five_chunks(text: str, paradigm: Paradigm, *, max_chunk_chars: int, overlap_ratio: float = 0.0) -> list:
             _ = text, paradigm, max_chunk_chars
             from backend.ingest.chunking import TextChunk
 
@@ -112,7 +112,7 @@ class TestExtractChunkedRateLimit:
         paper_id = "rl-002"
         full_text = "x"
 
-        def _many_chunks(text: str, paradigm: Paradigm, *, max_chunk_chars: int) -> list:
+        def _many_chunks(text: str, paradigm: Paradigm, *, max_chunk_chars: int, overlap_ratio: float = 0.0) -> list:
             _ = text, paradigm, max_chunk_chars
             from backend.ingest.chunking import TextChunk
 
@@ -146,7 +146,7 @@ class TestExtractChunkedRateLimit:
         paper_id = "rl-003"
         full_text = "x"
 
-        def _many_chunks(text: str, paradigm: Paradigm, *, max_chunk_chars: int) -> list:
+        def _many_chunks(text: str, paradigm: Paradigm, *, max_chunk_chars: int, overlap_ratio: float = 0.0) -> list:
             _ = text, paradigm, max_chunk_chars
             from backend.ingest.chunking import TextChunk
 
@@ -191,7 +191,7 @@ class TestExtractChunkedRateLimit:
         paper_id = "rl-004"
         full_text = "x"
 
-        def _ten_chunks(text: str, paradigm: Paradigm, *, max_chunk_chars: int) -> list:
+        def _ten_chunks(text: str, paradigm: Paradigm, *, max_chunk_chars: int, overlap_ratio: float = 0.0) -> list:
             _ = text, paradigm, max_chunk_chars
             from backend.ingest.chunking import TextChunk
 
@@ -253,7 +253,7 @@ class TestExtractChunkedRateLimit:
         paper_id = "rl-005"
         full_text = "x"
 
-        def _two_chunks(text: str, paradigm: Paradigm, *, max_chunk_chars: int) -> list:
+        def _two_chunks(text: str, paradigm: Paradigm, *, max_chunk_chars: int, overlap_ratio: float = 0.0) -> list:
             _ = text, paradigm, max_chunk_chars
             from backend.ingest.chunking import TextChunk
 

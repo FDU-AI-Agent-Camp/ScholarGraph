@@ -97,7 +97,12 @@ async def extract_chunked(
         cfg.extract_chunk_max_chars,
     )
 
-    chunks = chunk_text(full_text, paradigm, max_chunk_chars=max_chunk_chars)
+    chunks = chunk_text(
+        full_text,
+        paradigm,
+        max_chunk_chars=max_chunk_chars,
+        overlap_ratio=cfg.extract_chunk_overlap_ratio,
+    )
     if not chunks:
         raise ValueError("Chunking produced no usable text chunks.")
 

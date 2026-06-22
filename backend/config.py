@@ -118,6 +118,13 @@ class Settings(BaseSettings):
         ge=1_000,
         validation_alias="EXTRACT_CHUNK_MAX_CHARS",
     )
+    extract_chunk_overlap_ratio: float = Field(
+        default=0.12,
+        ge=0.0,
+        le=0.5,
+        validation_alias="EXTRACT_CHUNK_OVERLAP_RATIO",
+        description="Sliding-window overlap between consecutive chunks (0.0 = no overlap).",
+    )
     extract_chunk_concurrency: int = Field(
         default=2,
         ge=1,
@@ -164,6 +171,14 @@ class Settings(BaseSettings):
         ge=0.0,
         le=1.0,
         validation_alias="EXTRACT_MAX_ISOLATED_NODE_RATIO",
+    )
+    extract_max_generic_edge_ratio: float = Field(
+        default=1.0,
+        ge=0.0,
+        le=1.0,
+        validation_alias="EXTRACT_MAX_GENERIC_EDGE_RATIO",
+        description="Maximum allowed fraction of generic RELATES_TO-like edges. "
+        "1.0 disables the check; set lower (e.g. 0.25) to enforce dynamic relation invention.",
     )
 
     # ------------------------------------------------------------------

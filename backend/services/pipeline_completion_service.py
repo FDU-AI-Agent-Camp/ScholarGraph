@@ -53,6 +53,7 @@ def complete_paper_pipeline(
             graph,
             min_supports_rationale_coverage=settings.extract_min_supports_rationale_coverage,
             max_isolated_node_ratio=settings.extract_max_isolated_node_ratio,
+            max_generic_edge_ratio=settings.extract_max_generic_edge_ratio,
         )
 
     final_status = PaperStatus.READY if passed else PaperStatus.READY_WITH_WARNINGS

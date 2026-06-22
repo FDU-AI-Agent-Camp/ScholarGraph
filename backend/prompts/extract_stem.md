@@ -68,7 +68,10 @@ Only these `type` values are valid for STEM graphs:
 |------|-----------|-----------------|
 | `USES_METHOD` | One method or module builds on another | `Method` → `Method` |
 | `PRODUCES` | Method or experiment produces a finding | `Method` or `Experiment` → `Finding` |
-| `RELATES_TO` | Semantically related nodes when no specific edge above applies | any → any |
+
+#### Dynamic relation invention
+
+If none of the predefined edge types fits a relationship precisely, **do not lazily use `RELATES_TO`**. Instead, invent a concise, specific relation verb in `SCREAMING_SNAKE_CASE` (e.g., `OPTIMIZES`, `ACCELERATES`, `DERIVES_FROM`, `LIMITS`). `RELATES_TO` is allowed only as a last resort.
 
 ### Forbidden edge directions
 

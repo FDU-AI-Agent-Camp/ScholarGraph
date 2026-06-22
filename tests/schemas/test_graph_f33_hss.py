@@ -41,25 +41,26 @@ def test_f33_minimal_hss_graph_excludes_stem_only_node_types() -> None:
     assert_hss_excludes_stem_only_node_types(minimal_f33_hss_graph())
 
 
-def test_f33_hss_graph_rejects_stem_edge_type() -> None:
-    with pytest.raises(ValidationError, match="forbidden edge types"):
-        UnifiedPaperGraph(
-            paper_id="bad-hss-edge",
-            paradigm=Paradigm.HSS,
-            nodes=[
-                GraphNode(id="n_sub", label="分论点", type=NodeType.SUB_ARGUMENT),
-                GraphNode(id="n_thesis", label="论点", type=NodeType.THESIS),
-            ],
-            edges=[
-                GraphEdge(
-                    id="e1",
-                    source="n_sub",
-                    target="n_thesis",
-                    label="ADDRESSES",
-                    type="ADDRESSES",
-                ),
-            ],
-        )
+def test_f33_hss_graph_accepts_dynamic_stem_edge_type() -> None:
+    """Dynamic relation invention allows uppercase SNAKE_CASE edge types across paradigms."""
+    graph = UnifiedPaperGraph(
+        paper_id="dynamic-hss-edge",
+        paradigm=Paradigm.HSS,
+        nodes=[
+            GraphNode(id="n_sub", label="分论点", type=NodeType.SUB_ARGUMENT),
+            GraphNode(id="n_thesis", label="论点", type=NodeType.THESIS),
+        ],
+        edges=[
+            GraphEdge(
+                id="e1",
+                source="n_sub",
+                target="n_thesis",
+                label="ADDRESSES",
+                type="ADDRESSES",
+            ),
+        ],
+    )
+    assert graph.edges[0].type == "ADDRESSES"
 
 
 def test_f33_stem_graph_rejects_hss_node_type() -> None:

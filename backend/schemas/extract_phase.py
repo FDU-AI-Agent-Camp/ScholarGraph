@@ -5,7 +5,14 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationInfo, field_validator, model_validator
 
-from backend.schemas.graph import HSS_EDGE_TYPES, HSS_NODE_TYPES, STEM_EDGE_TYPES, STEM_NODE_TYPES
+from backend.schemas.graph import (
+    _DYNAMIC_EDGE_TYPE_PATTERN,
+    _FORBIDDEN_EDGE_TYPES,
+    HSS_EDGE_TYPES,
+    HSS_NODE_TYPES,
+    STEM_EDGE_TYPES,
+    STEM_NODE_TYPES,
+)
 from backend.schemas.paradigm import Paradigm
 
 logger = logging.getLogger(__name__)
@@ -233,10 +240,19 @@ class ExtractedEdgeList(BaseModel):
             self.warnings.append(f"DUPLICATE_EDGE_IDS_DEDUPLICATED:{','.join(sorted(duplicate_ids))}")
             self.edges = deduplicated
 
+        # Predefined types are preferred, but LLM-invented SCREAMING_SNAKE_CASE verbs are allowed.
         allowed = HSS_EDGE_TYPES if self.paradigm == Paradigm.HSS else STEM_EDGE_TYPES
-        forbidden = [edge.type for edge in self.edges if edge.type not in allowed]
-        if forbidden:
-            raise ValueError(f"{self.paradigm.value} graph contains forbidden edge types: {forbidden}")
+        invalid = [
+            edge.type
+            for edge in self.edges
+            if edge.type in _FORBIDDEN_EDGE_TYPES
+            or (edge.type not in allowed and not _DYNAMIC_EDGE_TYPE_PATTERN.match(edge.type))
+        ]
+        if invalid:
+            raise ValueError(
+                f"{self.paradigm.value} graph contains forbidden edge types: {invalid}. "
+                "Use a predefined type or a SCREAMING_SNAKE_CASE verb."
+            )
 
         if self.node_ids:
             node_id_set = set(self.node_ids)
@@ -293,10 +309,18 @@ class ExtractedGraph(BaseModel):
         if forbidden_nodes:
             raise ValueError(f"Forbidden node types: {forbidden_nodes}")
 
+        # Allow predefined edge types and LLM-invented SCREAMING_SNAKE_CASE verbs.
         allowed_edges = HSS_EDGE_TYPES if self.paradigm == Paradigm.HSS else STEM_EDGE_TYPES
-        forbidden_edges = [edge.type for edge in self.edges if edge.type not in allowed_edges]
-        if forbidden_edges:
-            raise ValueError(f"Forbidden edge types: {forbidden_edges}")
+        invalid_edges = [
+            edge.type
+            for edge in self.edges
+            if edge.type in _FORBIDDEN_EDGE_TYPES
+            or (edge.type not in allowed_edges and not _DYNAMIC_EDGE_TYPE_PATTERN.match(edge.type))
+        ]
+        if invalid_edges:
+            raise ValueError(
+                f"Forbidden edge types: {invalid_edges}. Use a predefined type or a SCREAMING_SNAKE_CASE verb."
+            )
 
         return self
 

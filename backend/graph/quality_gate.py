@@ -1,8 +1,9 @@
 """Graph quality gate for the extraction finalize step (Plan D).
 
 A graph is flagged as low-confidence when:
-- SUPPORTS rationale coverage < configured threshold, or
-- isolated node ratio > configured threshold.
+- SUPPORTS rationale coverage < configured threshold,
+- isolated node ratio > configured threshold, or
+- generic RELATES_TO edges dominate the graph.
 
 These checks run after extraction succeeds and before marking the paper ready.
 """
@@ -37,11 +38,21 @@ def isolated_node_ratio(graph: UnifiedPaperGraph) -> float:
     return isolated / len(graph.nodes)
 
 
+def generic_edge_ratio(graph: UnifiedPaperGraph, *, generic_types: set[str] | None = None) -> float:
+    """Fraction of edges labeled with generic fallback types such as RELATES_TO."""
+    generic_types = generic_types or {"RELATES_TO"}
+    if not graph.edges:
+        return 0.0
+    generic = sum(1 for e in graph.edges if e.type in generic_types)
+    return generic / len(graph.edges)
+
+
 def evaluate_graph_quality(
     graph: UnifiedPaperGraph,
     *,
     min_supports_rationale_coverage: float,
     max_isolated_node_ratio: float,
+    max_generic_edge_ratio: float = 1.0,
 ) -> tuple[bool, list[str]]:
     """Return (passed, reasons) for the quality gate.
 
@@ -60,6 +71,12 @@ def evaluate_graph_quality(
     if isolated_ratio > max_isolated_node_ratio:
         reasons.append(
             f"isolated node ratio {isolated_ratio:.1%} above threshold {max_isolated_node_ratio:.1%}",
+        )
+
+    generic_ratio = generic_edge_ratio(graph)
+    if generic_ratio > max_generic_edge_ratio:
+        reasons.append(
+            f"generic edge ratio {generic_ratio:.1%} above threshold {max_generic_edge_ratio:.1%}",
         )
 
     return not reasons, reasons

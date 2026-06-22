@@ -117,7 +117,7 @@ class TestChunkRetry:
         _register_paper(paper_id)
         settings = _settings(retry_attempts=1, retry_delay=0.0)
 
-        def _two_chunks(text: str, paradigm: Paradigm, *, max_chunk_chars: int) -> list:
+        def _two_chunks(text: str, paradigm: Paradigm, *, max_chunk_chars: int, overlap_ratio: float = 0.0) -> list:
             _ = text, paradigm, max_chunk_chars
             from backend.ingest.chunking import TextChunk
 

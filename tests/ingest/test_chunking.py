@@ -68,3 +68,30 @@ class TestChunkText:
         text = "Introduction\n\n" + ("Hello world. " * 200)
         chunks = chunk_text(text, Paradigm.STEM, max_chunk_chars=500, min_chunk_chars=0)
         assert [c.index for c in chunks] == list(range(len(chunks)))
+
+    def test_overlap_chunks_stay_within_budget(self) -> None:
+        text = "Methods\n\n" + ("Sentence one. " * 50) + "\n\n" + ("Sentence two. " * 50)
+        chunks = chunk_text(
+            text,
+            Paradigm.STEM,
+            max_chunk_chars=500,
+            min_chunk_chars=0,
+            overlap_ratio=0.1,
+        )
+        assert len(chunks) > 1
+        assert all(len(c.text) <= 500 for c in chunks)
+
+    def test_overlap_creates_soft_boundaries(self) -> None:
+        text = "Methods\n\n" + ("Alpha. " * 100) + "\n\n" + ("Beta. " * 100)
+        chunks = chunk_text(
+            text,
+            Paradigm.STEM,
+            max_chunk_chars=400,
+            min_chunk_chars=0,
+            overlap_ratio=0.25,
+        )
+        assert len(chunks) >= 2
+        for i in range(1, len(chunks)):
+            # Each chunk after the first should carry some text from the previous chunk.
+            prev_tail = chunks[i - 1].text[-50:]
+            assert prev_tail in chunks[i].text

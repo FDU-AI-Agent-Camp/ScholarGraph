@@ -65,8 +65,11 @@ Only these `type` values are valid for HSS graphs:
 | type | Semantics | source → target |
 |------|-----------|-----------------|
 | `CONTEXTUALIZES` | Prior scholarship provides background without direct challenge | `IntellectualContext` → `Thesis` or `SubArgument` |
-| `RELATES_TO` | Semantically related nodes when no specific edge above applies | any → any |
 | `REF` | Citation or textual reference link between nodes | any → any |
+
+#### Dynamic relation invention
+
+If none of the predefined edge types fits a relationship precisely, **do not lazily use `RELATES_TO`**. Instead, invent a concise, specific relation verb in `SCREAMING_SNAKE_CASE` (e.g., `DERIVES_FROM`, `LIMITS`, `EXTENDS`, `QUALIFIES`). `RELATES_TO` is allowed only as a last resort.
 
 ---
 

@@ -114,11 +114,11 @@ class TestExtractedEdgeList:
         assert len(edge_list.edges) == 1
         assert any("DUPLICATE_EDGE_IDS_DEDUPLICATED" in w for w in edge_list.warnings)
 
-    def test_forbidden_hss_edge_type_raises(self) -> None:
+    def test_invalid_hss_edge_type_format_raises(self) -> None:
         with pytest.raises(ValueError, match="forbidden edge types"):
             ExtractedEdgeList(
                 paradigm=Paradigm.HSS,
-                edges=[_hss_edge(type="USES")],
+                edges=[_hss_edge(type="InvalidType")],
                 node_ids=["n1"],
             )
 
@@ -240,11 +240,11 @@ class TestExtractedGraph:
                 edges=[],
             )
 
-    def test_forbidden_edge_type_in_graph_raises(self) -> None:
+    def test_invalid_edge_type_format_in_graph_raises(self) -> None:
         with pytest.raises(ValueError, match="Forbidden edge types"):
             ExtractedGraph(
                 paper_id="paper-001",
                 paradigm=Paradigm.HSS,
                 nodes=[_hss_node()],
-                edges=[_hss_edge(type="USES")],
+                edges=[_hss_edge(type="InvalidType")],
             )

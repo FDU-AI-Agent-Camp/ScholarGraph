@@ -17,8 +17,11 @@ Given the extracted nodes below, construct all meaningful edges between them. On
 | `INFORMS` | AnalyticalLens → SubArgument | Lens informs a sub-argument. |
 | `SUPPORTS` | Evidence → Claim or Evidence → Thesis | Evidence supports a claim or the thesis. |
 | `CONTEXTUALIZES` | IntellectualContext → Thesis/SubArgument | Prior scholarship provides background. |
-| `RELATES_TO` | any → any | Generic semantic relation when no specific type applies. |
 | `REF` | any → any | Citation or textual reference link. |
+
+### Dynamic relation invention
+
+If none of the predefined edge types precisely captures the relationship, **do not fall back to `RELATES_TO`**. Instead, invent a concise, specific relation verb in `SCREAMING_SNAKE_CASE` (e.g., `OPTIMIZES`, `DERIVES_FROM`, `LIMITS`, `EXTENDS`).
 
 ## Requirements
 
@@ -46,6 +49,12 @@ You are functioning as an **exact text extractor**, not a summarizer.
 - Explain **why** the source relates to the target in 1–2 concrete sentences.
 - Do not write tautologies like "A supports B".
 - Keep it concise: Chinese ≤ 80 characters; English ≤ 30 words.
+
+### CRITICAL: ban on generic `RELATES_TO`
+
+- `RELATES_TO` is **strictly forbidden** unless there is genuinely no other way to express the link.
+- Instead, use one of the predefined types above **or** invent a specific `SCREAMING_SNAKE_CASE` verb that captures the exact relationship.
+- Good examples: `DERIVES_FROM`, `LIMITS`, `EXTENDS`, `QUALIFIES`, `REINFORCES`.
 
 ### `confidence` (quality tier)
 

@@ -18,10 +18,14 @@ Given the extracted nodes below, construct all meaningful edges between them. On
 | `SUPPORTS` | Evidence → Claim | Experimental evidence backs a claim. |
 | `PRODUCES` | Method/Experiment → Finding | Method or experiment produces a finding. |
 
+### Dynamic relation invention
+
+If none of the predefined edge types precisely captures the relationship, **do not fall back to `RELATES_TO`**. Instead, invent a concise, specific relation verb in `SCREAMING_SNAKE_CASE` (e.g., `OPTIMIZES`, `ACCELERATES`, `DERIVES_FROM`, `LIMITS`).
+
 ### Forbidden edge directions
 
 - **Do not use `SUPPORTED_BY` or any inverse of `SUPPORTS`**. All evidence-to-claim relations must be expressed as `Evidence --SUPPORTS--> Claim` only.
-| `RELATES_TO` | any → any | Generic semantic relation when no specific type applies. |
+- **`RELATES_TO` is strictly forbidden** unless absolutely unavoidable. Prefer a predefined type or an invented specific verb.
 
 ## Requirements
 

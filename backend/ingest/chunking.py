@@ -120,38 +120,53 @@ def _split_oversized(
     text: str,
     start_offset: int,
     max_chunk_chars: int,
+    overlap_ratio: float = 0.0,
 ) -> list[TextChunk]:
-    """Split a section that exceeds ``max_chunk_chars`` into paragraph/sentence chunks."""
+    """Split a section that exceeds ``max_chunk_chars`` into paragraph/sentence chunks.
+
+    When ``overlap_ratio > 0``, chunks are built with a content budget of
+    ``max_chunk_chars - overlap_chars`` and then each chunk (except the first)
+    is prefixed with the trailing ``overlap_chars`` of the previous chunk. This
+    soft boundary keeps cross-boundary sentences/claims within a single chunk's
+    context, reducing confidence decay in downstream extraction.
+    """
     if len(text) <= max_chunk_chars:
         return [TextChunk(index=0, title=title, text=text, start_char=start_offset, end_char=start_offset + len(text))]
 
-    chunks: list[TextChunk] = []
+    overlap_chars = int(max_chunk_chars * overlap_ratio)
+    content_budget = max_chunk_chars - overlap_chars
+    if content_budget < 200:
+        overlap_chars = 0
+        content_budget = max_chunk_chars
+
+    raw_chunks: list[TextChunk] = []
     # Prefer paragraph boundaries (double newlines).
     paragraphs = [p.strip() for p in re.split(r"\n\s*\n", text) if p.strip()]
 
     current_text = ""
     current_start = start_offset
     for para in paragraphs:
-        # If a single paragraph exceeds the limit, split it by sentences.
-        if len(para) > max_chunk_chars:
+        # If a single paragraph exceeds the content budget, split it by sentences.
+        if len(para) > content_budget:
             if current_text:
-                chunks.append(
+                stripped = current_text.strip()
+                raw_chunks.append(
                     TextChunk(
-                        index=len(chunks),
+                        index=len(raw_chunks),
                         title=title,
-                        text=current_text.strip(),
+                        text=stripped,
                         start_char=current_start,
-                        end_char=current_start + len(current_text.strip()),
+                        end_char=current_start + len(stripped),
                     )
                 )
                 current_text = ""
             sentences = re.split(r"(?<=[.!?。！？])\s+", para)
             for sent in sentences:
-                if len(current_text) + len(sent) + 1 > max_chunk_chars and current_text:
+                if len(current_text) + len(sent) + 1 > content_budget and current_text:
                     stripped = current_text.strip()
-                    chunks.append(
+                    raw_chunks.append(
                         TextChunk(
-                            index=len(chunks),
+                            index=len(raw_chunks),
                             title=title,
                             text=stripped,
                             start_char=current_start,
@@ -159,15 +174,15 @@ def _split_oversized(
                         )
                     )
                     current_text = ""
-                    current_start = chunks[-1].end_char + 1
+                    current_start = raw_chunks[-1].end_char + 1
                 current_text += sent + " "
             continue
 
-        if len(current_text) + len(para) + 2 > max_chunk_chars and current_text:
+        if len(current_text) + len(para) + 2 > content_budget and current_text:
             stripped = current_text.strip()
-            chunks.append(
+            raw_chunks.append(
                 TextChunk(
-                    index=len(chunks),
+                    index=len(raw_chunks),
                     title=title,
                     text=stripped,
                     start_char=current_start,
@@ -175,18 +190,39 @@ def _split_oversized(
                 )
             )
             current_text = ""
-            current_start = chunks[-1].end_char + 1
+            current_start = raw_chunks[-1].end_char + 1
         current_text += para + "\n\n"
 
     if current_text.strip():
         stripped = current_text.strip()
-        chunks.append(
+        raw_chunks.append(
             TextChunk(
-                index=len(chunks),
+                index=len(raw_chunks),
                 title=title,
                 text=stripped,
                 start_char=current_start,
                 end_char=current_start + len(stripped),
+            )
+        )
+
+    # Apply sliding-window overlap: each chunk after the first carries the tail
+    # of the previous chunk so boundary-spanning claims stay in context.
+    overlapped: list[TextChunk] = []
+    for i, chunk in enumerate(raw_chunks):
+        if i == 0 or overlap_chars <= 0:
+            overlapped.append(chunk)
+            continue
+        prev_text = raw_chunks[i - 1].text
+        prefix = prev_text[-overlap_chars:].strip() if len(prev_text) > overlap_chars else prev_text
+        new_text = f"{prefix}\n\n{chunk.text}".strip()
+        new_start = max(start_offset, chunk.start_char - len(prefix))
+        overlapped.append(
+            TextChunk(
+                index=i,
+                title=chunk.title,
+                text=new_text,
+                start_char=new_start,
+                end_char=chunk.end_char,
             )
         )
 
@@ -199,7 +235,7 @@ def _split_oversized(
             start_char=c.start_char,
             end_char=c.end_char,
         )
-        for i, c in enumerate(chunks)
+        for i, c in enumerate(overlapped)
     ]
 
 
@@ -250,6 +286,7 @@ def chunk_text(
     *,
     max_chunk_chars: int = DEFAULT_MAX_CHUNK_CHARS,
     min_chunk_chars: int = 500,
+    overlap_ratio: float = 0.0,
 ) -> list[TextChunk]:
     """Split ``full_text`` into anchored chunks for long-paper extraction.
 
@@ -258,6 +295,11 @@ def chunk_text(
     paragraph and sentence boundaries. Tiny chunks are merged with neighbors to
     avoid empty extraction results. If no section headers are detected, the text
     falls back to a sliding-window split.
+
+    A positive ``overlap_ratio`` creates a soft boundary between consecutive
+    chunks by repeating the trailing context of chunk N at the start of chunk
+    N+1. This helps the extractor see claim/evidence pairs that would otherwise
+    be split across a hard chunk boundary.
     """
     if not full_text or not full_text.strip():
         return []
@@ -266,12 +308,12 @@ def chunk_text(
     chunks: list[TextChunk] = []
 
     for title, section_text, start, _end in sections:
-        section_chunks = _split_oversized(title, section_text, start, max_chunk_chars)
+        section_chunks = _split_oversized(title, section_text, start, max_chunk_chars, overlap_ratio=overlap_ratio)
         chunks.extend(section_chunks)
 
     # Fallback: if section-aware splitting produced nothing usable, use sliding window.
     if not chunks:
-        chunks = _split_oversized(None, full_text, 0, max_chunk_chars)
+        chunks = _split_oversized(None, full_text, 0, max_chunk_chars, overlap_ratio=overlap_ratio)
 
     chunks = _merge_small_chunks(chunks, min_chunk_chars)
 
