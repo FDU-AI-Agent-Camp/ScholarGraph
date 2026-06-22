@@ -64,7 +64,7 @@ class _FakeEmbeddingClient:
         }
 
     def _extract_label(self, text: str) -> str:
-        prefix = "核心标签: "
+        prefix = "核心概念: "
         start = text.find(prefix)
         if start == -1:
             return text
@@ -196,18 +196,40 @@ class TestEdgeDeduplication:
 
 
 class TestNodeText:
-    def test_includes_type_label_and_truncated_source_span(self) -> None:
+    def test_includes_type_subtype_label_and_definition(self) -> None:
         node = ExtractedNode(
             id="n1",
             label="情感共鸣转向",
             type="Claim",
-            source_span="这是一个非常长的补充说明" * 10,
+            sub_type="Argument",
+            description="情感从个体转向集体共鸣的过程",
+            source_span="这是一个非常长的原文片段，不应影响 embedding 输入" * 10,
         )
         text = _node_text(node)
-        assert text.startswith("[类型: Claim] 核心标签: 情感共鸣转向 | 补充说明:")
-        evidence = text.split("补充说明:")[1].strip()
-        assert len(evidence) <= 100
-        assert "这是一个非常长的补充说明" in text
+        assert text.startswith("类型: Claim | 细分类别: Argument | 核心概念: 情感共鸣转向")
+        assert "语义定义: 情感从个体转向集体共鸣的过程" in text
+        assert "原文片段" not in text
+
+    def test_falls_back_to_general_subtype_when_missing(self) -> None:
+        node = ExtractedNode(
+            id="n1",
+            label="情感共鸣转向",
+            type="Claim",
+        )
+        text = _node_text(node)
+        assert "细分类别: General" in text
+        assert "语义定义" not in text
+
+    def test_reads_subtype_and_definition_from_data(self) -> None:
+        node = ExtractedNode(
+            id="n1",
+            label="情感共鸣转向",
+            type="Claim",
+            data={"sub_type": "Cultural", "description": "defined in data"},
+        )
+        text = _node_text(node)
+        assert "细分类别: Cultural" in text
+        assert "语义定义: defined in data" in text
 
 
 class TestTypeFirewall:

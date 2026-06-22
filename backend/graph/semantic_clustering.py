@@ -44,14 +44,18 @@ _SEMANTIC_BRIDGE_LABEL = "semantically_related"
 def _node_text(node: ExtractedNode) -> str:
     """High-signal textual representation of a node for embedding.
 
-    bge-m3's vector space is dense; long source spans dilute the core concept.
-    We force the model to attend to the node type and label, and keep the
-    supplementary evidence to a short 100-character snippet.
+    Raw source_span is intentionally excluded from embedding input because it
+    contains unstructured local context that dilutes the core concept and
+    produces under-merging (e.g. the same dataset expressed in different chunks).
+    Instead we use a structured template with optional subtype and definition.
     """
-    evidence = (node.source_span or "")[:100]
-    text = f"[类型: {node.type}] 核心标签: {node.label}"
-    if evidence:
-        text += f" | 补充说明: {evidence}"
+    label = node.label.strip()
+    sub_type = node.sub_type or node.data.get("sub_type") or "General"
+    description = node.description or node.data.get("description") or ""
+
+    text = f"类型: {node.type} | 细分类别: {sub_type} | 核心概念: {label}"
+    if description:
+        text += f" | 语义定义: {description}"
     return text
 
 
