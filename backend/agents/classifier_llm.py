@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import json
 import logging
+import re
 from pathlib import Path
 
 from langchain_core.messages import HumanMessage, SystemMessage
@@ -24,6 +26,36 @@ def load_classifier_prompt() -> str:
     raise FileNotFoundError(f"Missing classifier prompt: {CLASSIFIER_PROMPT_PATH}")
 
 
+def _strip_markdown_fences(text: str) -> str:
+    """Remove optional ```json ... ``` wrappers from an LLM response."""
+    text = text.strip()
+    if text.startswith("```"):
+        text = re.sub(r"^```(?:json)?\s*", "", text, flags=re.IGNORECASE)
+        text = re.sub(r"\s*```$", "", text)
+    return text.strip()
+
+
+def _extract_raw_json_from_error(exc: Exception) -> str | None:
+    """Pull the raw LLM output out of a Pydantic json_invalid ValidationError."""
+    errors = getattr(exc, "errors", None)
+    if not callable(errors):
+        return None
+    try:
+        for err in errors():
+            if err.get("type") == "json_invalid":
+                return err.get("input")
+    except Exception:
+        return None
+    return None
+
+
+def _parse_classification_text(text: str) -> ParadigmClassification:
+    """Parse a JSON string (with optional fences) into a classification."""
+    cleaned = _strip_markdown_fences(text)
+    data = json.loads(cleaned)
+    return ParadigmClassification.model_validate(data)
+
+
 async def _invoke_structured(
     client: LlmClient,
     *,
@@ -37,12 +69,24 @@ async def _invoke_structured(
         SystemMessage(content=system_prompt),
         HumanMessage(content=user_content),
     ]
-    if hasattr(structured, "ainvoke"):
-        result = await structured.ainvoke(messages)
-    else:
-        result = structured.invoke(messages)  # type: ignore[attr-defined]
+    try:
+        if hasattr(structured, "ainvoke"):
+            result = await structured.ainvoke(messages)
+        else:
+            result = structured.invoke(messages)  # type: ignore[attr-defined]
+    except Exception as exc:
+        raw = _extract_raw_json_from_error(exc)
+        if raw is not None:
+            try:
+                return _parse_classification_text(raw)
+            except Exception:
+                pass
+        raise
+
     if isinstance(result, ParadigmClassification):
         return result
+    if isinstance(result, str):
+        return _parse_classification_text(result)
     return ParadigmClassification.model_validate(result)
 
 

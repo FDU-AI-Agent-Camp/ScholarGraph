@@ -2,15 +2,15 @@
 
 You are an academic journal editor. Read the paper title, abstract, keywords, and introduction snippet.
 
-Return one strict JSON object:
+Return one strict JSON object and nothing else. Do not wrap the JSON in markdown code blocks (no ```json fences).
 
-```json
+Example:
+
 {
   "paradigm": "STEM",
   "confidence": 0.0,
   "reason": "short user-facing explanation"
 }
-```
 
 Rules:
 
