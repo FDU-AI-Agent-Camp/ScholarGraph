@@ -138,6 +138,16 @@ class TestExtractedEdgeList:
         )
         assert edge_list.edges == []
 
+    def test_edge_with_missing_confidence_is_accepted_in_list(self) -> None:
+        edge = _hss_edge(confidence=None)  # type: ignore[call-arg]
+        edge_list = ExtractedEdgeList(
+            paradigm=Paradigm.HSS,
+            edges=[edge],
+            node_ids=["n1"],
+        )
+        assert edge_list.edges[0].confidence == "MEDIUM"
+        assert edge_list.edges[0].data.get("confidence_missing") is True
+
 
 class TestExtractedEdgeCoreQuality:
     def test_core_edge_missing_rationale_is_flagged(self) -> None:
@@ -204,6 +214,89 @@ class TestExtractedEdgeCoreQuality:
         )
         assert edge.confidence == "LOW"
         assert "confidence_missing" not in edge.data
+
+    def test_explicit_none_confidence_is_defaulted_to_medium(self) -> None:
+        edge = ExtractedEdge(
+            id="e1",
+            source="n1",
+            target="n2",
+            label="SUPPORTS",
+            type="SUPPORTS",
+            rationale="some rationale",
+            source_span="some span",
+            confidence=None,
+        )
+        assert edge.confidence == "MEDIUM"
+        assert edge.data.get("confidence_missing") is True
+
+    def test_missing_confidence_in_json_is_defaulted_to_medium(self) -> None:
+        payload = json.dumps(
+            {
+                "id": "e1",
+                "source": "n1",
+                "target": "n2",
+                "label": "SUPPORTS",
+                "type": "SUPPORTS",
+                "rationale": "rationale",
+                "source_span": "span",
+            }
+        )
+        edge = ExtractedEdge.model_validate_json(payload)
+        assert edge.confidence == "MEDIUM"
+        assert edge.data.get("confidence_missing") is True
+
+    def test_invalid_confidence_value_raises(self) -> None:
+        with pytest.raises(ValueError):
+            ExtractedEdge(
+                id="e1",
+                source="n1",
+                target="n2",
+                label="SUPPORTS",
+                type="SUPPORTS",
+                rationale="some rationale",
+                source_span="some span",
+                confidence="MAYBE",  # type: ignore[arg-type]
+            )
+
+    def test_non_core_edge_missing_confidence_is_flagged(self) -> None:
+        edge = ExtractedEdge(
+            id="e1",
+            source="n1",
+            target="n2",
+            label="USES_METHOD",
+            type="USES_METHOD",
+        )
+        assert edge.confidence == "MEDIUM"
+        assert edge.data.get("confidence_missing") is True
+        assert "rationale_missing" not in edge.data
+
+    def test_multiple_defects_are_all_recorded(self) -> None:
+        edge = ExtractedEdge(
+            id="e1",
+            source="n1",
+            target="n2",
+            label="SUPPORTS",
+            type="SUPPORTS",
+        )
+        assert edge.confidence == "MEDIUM"
+        assert edge.data.get("confidence_missing") is True
+        assert edge.data.get("rationale_missing") is True
+        assert edge.data.get("incomplete") is True
+
+    def test_existing_data_is_preserved_when_backfilling_confidence(self) -> None:
+        edge = ExtractedEdge(
+            id="e1",
+            source="n1",
+            target="n2",
+            label="SUPPORTS",
+            type="SUPPORTS",
+            rationale="some rationale",
+            source_span="some span",
+            data={"custom": 42},
+        )
+        assert edge.confidence == "MEDIUM"
+        assert edge.data.get("custom") == 42
+        assert edge.data.get("confidence_missing") is True
 
     def test_non_core_edge_missing_fields_is_not_flagged(self) -> None:
         edge = ExtractedEdge(
@@ -276,3 +369,13 @@ class TestExtractedGraph:
                 nodes=[_hss_node()],
                 edges=[_hss_edge(type="InvalidType")],
             )
+
+    def test_graph_with_missing_confidence_edge_is_accepted(self) -> None:
+        graph = ExtractedGraph(
+            paper_id="paper-001",
+            paradigm=Paradigm.HSS,
+            nodes=[_hss_node()],
+            edges=[_hss_edge(confidence=None)],  # type: ignore[call-arg]
+        )
+        assert graph.edges[0].confidence == "MEDIUM"
+        assert graph.edges[0].data.get("confidence_missing") is True
