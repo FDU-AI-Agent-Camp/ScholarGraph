@@ -67,9 +67,20 @@ class RerankerClient:
         raise ValueError(msg)
 
     async def rerank_pair(self, text_a: str, text_b: str) -> float:
-        """Return the reranker relevance score for a single (query, document) pair."""
+        """Return the reranker relevance score for a single (query, document) pair.
+
+        When reranking is disabled we return 0.0 instead of 1.0.  Returning 1.0
+        would silently turn off the fine-filter and cause every coarse candidate
+        pair to be merged, reproducing the pre-refactor over-merging behavior.
+        Returning 0.0 is the conservative fallback: no pair is promoted to
+        TRUE_HOMOGENEOUS without explicit verification.
+        """
         if not self._settings.reranker_enabled:
-            return 1.0
+            logger.warning(
+                "reranker_disabled: semantic merge fidelity is degraded; "
+                "all candidate pairs rejected conservatively"
+            )
+            return 0.0
 
         payload: dict[str, Any] = {
             "model": self._model(),
@@ -97,7 +108,12 @@ class RerankerClient:
         request; the batching only limits concurrency.
         """
         if not self._settings.reranker_enabled:
-            return [1.0] * len(pairs)
+            logger.warning(
+                "reranker_disabled: semantic merge fidelity is degraded; "
+                "all %d candidate pairs rejected conservatively",
+                len(pairs),
+            )
+            return [0.0] * len(pairs)
         if not pairs:
             return []
 

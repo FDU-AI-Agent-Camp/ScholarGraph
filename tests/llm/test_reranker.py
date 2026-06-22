@@ -19,15 +19,15 @@ def _settings(enabled: bool = True, model: str = "bge-reranker-v2-m3") -> Settin
 
 
 class TestRerankerClientDisabled:
-    async def test_rerank_pair_returns_one_when_disabled(self) -> None:
+    async def test_rerank_pair_returns_zero_when_disabled(self) -> None:
         client = RerankerClient(_settings(enabled=False))
         score = await client.rerank_pair("a", "b")
-        assert score == 1.0
+        assert score == 0.0
 
-    async def test_rerank_pairs_returns_all_ones_when_disabled(self) -> None:
+    async def test_rerank_pairs_returns_all_zeros_when_disabled(self) -> None:
         client = RerankerClient(_settings(enabled=False))
         scores = await client.rerank_pairs([("a", "b"), ("c", "d")])
-        assert scores == [1.0, 1.0]
+        assert scores == [0.0, 0.0]
 
 
 class TestRerankerClientExtractScore:

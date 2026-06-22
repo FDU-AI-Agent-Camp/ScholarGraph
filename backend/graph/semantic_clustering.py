@@ -530,28 +530,36 @@ async def semantic_cluster_and_merge(
     #    To keep the gate deterministic, we always pass the node with the
     #    lexicographically smaller id as the query and the larger id as the
     #    document.  The merge decision itself still uses the original ids.
-    client = reranker_client or RerankerClient(settings)
-    pair_texts: list[tuple[str, str]] = []
-    for node_id_i, node_id_j, _ in coarse_pairs:
-        text_i = _node_text(nodes_by_id[node_id_i])
-        text_j = _node_text(nodes_by_id[node_id_j])
-        if node_id_i <= node_id_j:
-            pair_texts.append((text_i, text_j))
-        else:
-            pair_texts.append((text_j, text_i))
-    try:
-        rerank_scores = await client.rerank_pairs(pair_texts)
-    except Exception as exc:
-        logger.warning("semantic_clustering_rerank_failed", extra={"error": str(exc)})
-        warnings = list(graph.warnings)
-        warnings.append(f"SEMANTIC_CLUSTERING_RERANK_SKIPPED:{type(exc).__name__}")
-        return graph.model_copy(update={"warnings": warnings})
-
     uf = _UnionFind()
-    for (node_id_i, node_id_j, _coarse_score), rerank_score in zip(
-        coarse_pairs, rerank_scores, strict=True
-    ):
-        if rerank_score > settings.reranker_threshold:
+    if settings.reranker_enabled:
+        client = reranker_client or RerankerClient(settings)
+        pair_texts: list[tuple[str, str]] = []
+        for node_id_i, node_id_j, _ in coarse_pairs:
+            text_i = _node_text(nodes_by_id[node_id_i])
+            text_j = _node_text(nodes_by_id[node_id_j])
+            if node_id_i <= node_id_j:
+                pair_texts.append((text_i, text_j))
+            else:
+                pair_texts.append((text_j, text_i))
+        try:
+            rerank_scores = await client.rerank_pairs(pair_texts)
+        except Exception as exc:
+            logger.warning("semantic_clustering_rerank_failed", extra={"error": str(exc)})
+            warnings = list(graph.warnings)
+            warnings.append(f"SEMANTIC_CLUSTERING_RERANK_SKIPPED:{type(exc).__name__}")
+            return graph.model_copy(update={"warnings": warnings})
+
+        for (node_id_i, node_id_j, _coarse_score), rerank_score in zip(
+            coarse_pairs, rerank_scores, strict=True
+        ):
+            if rerank_score > settings.reranker_threshold:
+                uf.union(node_id_i, node_id_j)
+    else:
+        logger.warning(
+            "semantic_clustering_reranker_disabled: falling back to coarse filter, "
+            "merge fidelity may be degraded and over-merging is likely"
+        )
+        for node_id_i, node_id_j, _ in coarse_pairs:
             uf.union(node_id_i, node_id_j)
 
     clusters: dict[str, set[str]] = defaultdict(set)

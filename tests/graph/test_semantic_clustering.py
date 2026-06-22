@@ -924,7 +924,12 @@ class TestRerankerFineFilter:
 
     @pytest.mark.asyncio
     async def test_disabled_reranker_uses_coarse_filter_only(self) -> None:
-        """When reranker is disabled, coarse-filter pairs pass through unchanged."""
+        """When reranker is disabled, coarse-filter pairs pass through unchanged.
+
+        This is a fidelity-degraded fallback and emits a strong warning log.
+        The RerankerClient itself no longer returns 1.0 when disabled;
+        semantic_cluster_and_merge simply bypasses the fine-filter stage.
+        """
 
         class _IdenticalEmbeddingClient:
             async def embed_texts(self, texts: list[str]) -> list[list[float]]:
