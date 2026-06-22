@@ -166,6 +166,28 @@ def _compute_degrees(nodes: list[ExtractedNode], edges: list[ExtractedEdge]) -> 
     return degrees
 
 
+def _fuse_descriptions(descriptions: list[str]) -> str:
+    """Merge multiple node descriptions into a single canonical description.
+
+    Strategy: deduplicate and join with a separator.  This preserves all
+    captured information without an extra LLM call.  A future summarization
+    path (e.g. LLM-based) can replace this function while keeping the same
+    contract.
+    """
+    unique: list[str] = []
+    seen: set[str] = set()
+    for desc in descriptions:
+        desc = desc.strip()
+        if desc and desc not in seen:
+            seen.add(desc)
+            unique.append(desc)
+    if not unique:
+        return ""
+    if len(unique) == 1:
+        return unique[0]
+    return " | ".join(unique)
+
+
 def _elect_root(cluster_ids: set[str], degrees: dict[str, int], nodes_by_id: dict[str, ExtractedNode]) -> str:
     """Elect the canonical root for a semantic cluster.
 
@@ -290,6 +312,23 @@ def _merge_clusters(
                 "confidence": max(existing.confidence, node.confidence),
             }
         )
+
+    # Fuse descriptions for each multi-node cluster so downstream QA / G6 can
+    # still see the union of captured semantics. Single-node clusters keep their
+    # original description.
+    for cluster in clusters:
+        if len(cluster) <= 1:
+            continue
+        root_id = id_map[next(iter(cluster))]
+        descriptions = [
+            nodes_by_id[node_id].description
+            for node_id in cluster
+            if nodes_by_id[node_id].description
+        ]
+        fused = _fuse_descriptions(descriptions)
+        if fused:
+            existing = new_nodes_by_id[root_id]
+            new_nodes_by_id[root_id] = existing.model_copy(update={"description": fused})
 
     # Remap edges through the cluster map and deduplicate.
     # Use the original id as a placeholder; ids are reassigned sequentially

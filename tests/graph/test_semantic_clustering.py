@@ -10,7 +10,9 @@ from backend.graph.semantic_clustering import (
     _cross_type_merge_allowed,
     _deduplicate_edges_by_type,
     _elect_root,
+    _fuse_descriptions,
     _group_nodes_by_type,
+    _merge_clusters,
     _node_text,
     semantic_cluster_and_merge,
 )
@@ -947,4 +949,94 @@ class TestRerankerFineFilter:
         )
 
         assert len(result.nodes) == 1
+        assert any("SEMANTIC_CLUSTERS_MERGED:1" in w for w in result.warnings)
+
+
+class TestDescriptionFusion:
+    def test_fuse_descriptions_deduplicates_and_joins(self) -> None:
+        result = _fuse_descriptions(["desc A", "desc B", "desc A"])
+        assert result == "desc A | desc B"
+
+    def test_fuse_descriptions_single_returns_unchanged(self) -> None:
+        assert _fuse_descriptions(["only one"]) == "only one"
+
+    def test_fuse_descriptions_empty_returns_empty(self) -> None:
+        assert _fuse_descriptions([]) == ""
+        assert _fuse_descriptions(["", "  "]) == ""
+
+    def test_merge_clusters_fuses_descriptions_into_root(self) -> None:
+        nodes = [
+            ExtractedNode(id="a", label="A", type="Method", description="Root description"),
+            ExtractedNode(id="b", label="B", type="Method", description="Alias description one"),
+            ExtractedNode(id="c", label="C", type="Method", description="Alias description two"),
+        ]
+        merged_nodes, _, _, _ = _merge_clusters(nodes, [], clusters=[{"a", "b", "c"}])
+        assert len(merged_nodes) == 1
+        root = merged_nodes[0]
+        assert "Root description" in (root.description or "")
+        assert "Alias description one" in (root.description or "")
+        assert "Alias description two" in (root.description or "")
+
+    def test_merge_clusters_keeps_original_description_for_singleton(self) -> None:
+        nodes = [
+            ExtractedNode(id="a", label="A", type="Method", description="Singleton description"),
+        ]
+        merged_nodes, _, _, _ = _merge_clusters(nodes, [], clusters=[{"a"}])
+        assert len(merged_nodes) == 1
+        assert merged_nodes[0].description == "Singleton description"
+
+    def test_merge_clusters_tolerates_missing_descriptions(self) -> None:
+        nodes = [
+            ExtractedNode(id="a", label="A", type="Method"),
+            ExtractedNode(id="b", label="B", type="Method", description="Only this"),
+        ]
+        merged_nodes, _, _, _ = _merge_clusters(nodes, [], clusters=[{"a", "b"}])
+        assert len(merged_nodes) == 1
+        assert merged_nodes[0].description == "Only this"
+
+
+class TestUnionFindTransitivity:
+    @pytest.mark.asyncio
+    async def test_transitive_pairs_merge_into_single_cluster(self) -> None:
+        """A~B and B~C through reranker should merge A, B, C into one node."""
+
+        class _IdenticalEmbeddingClient:
+            async def embed_texts(self, texts: list[str]) -> list[list[float]]:
+                return [[1.0, 0.0, 0.0] for _ in texts]
+
+        class _TransitiveRerankerClient:
+            async def rerank_pairs(self, pairs: list[tuple[str, str]]) -> list[float]:
+                return [0.95] * len(pairs)
+
+        nodes = [
+            ExtractedNode(id="n1", label="Adam", type="Method"),
+            ExtractedNode(id="n2", label="Adam Optimizer", type="Method"),
+            ExtractedNode(id="n3", label="Adaptive Moment Estimation", type="Method"),
+        ]
+        graph = ExtractedGraph(
+            paper_id="p1",
+            title="T",
+            paradigm=Paradigm.STEM,
+            nodes=nodes,
+            edges=[],
+        )
+        result = await semantic_cluster_and_merge(
+            graph,
+            Settings(
+                _env_file=None,
+                llm_mode="mock",
+                semantic_clustering_enabled=True,
+                semantic_similarity_threshold=0.5,
+                reranker_enabled=True,
+                reranker_model="bge-reranker-v2-m3",
+                reranker_api_base_url="https://api.example.com/v1",
+                reranker_api_key="fake-key",
+                reranker_threshold=0.85,
+            ),
+            embedding_client=_IdenticalEmbeddingClient(),
+            reranker_client=_TransitiveRerankerClient(),
+        )
+        assert len(result.nodes) == 1
+        root = result.nodes[0]
+        assert len(root.data.get("semantic_aliases", [])) == 2
         assert any("SEMANTIC_CLUSTERS_MERGED:1" in w for w in result.warnings)
