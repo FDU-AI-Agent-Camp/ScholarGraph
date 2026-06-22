@@ -36,8 +36,9 @@ def _next_edge_index(edges: list[ExtractedEdge]) -> int:
 
 
 # Edge type used for weak semantic bridges between isolated components.
-_SEMANTIC_BRIDGE_TYPE = "RELATES_TO"
-_SEMANTIC_BRIDGE_LABEL = "semantic_related"
+# This is intentionally distinct from the forbidden LLM fallback "RELATES_TO".
+_SEMANTIC_BRIDGE_TYPE = "SEMANTICALLY_RELATED_TO"
+_SEMANTIC_BRIDGE_LABEL = "semantically_related"
 
 
 def _node_text(node: ExtractedNode) -> str:
@@ -404,8 +405,8 @@ async def semantic_cluster_and_merge(
     1. Embed each node's label (+ source span + folded leaves).
     2. Cluster nodes whose cosine similarity >= ``semantic_similarity_threshold``.
     3. Merge each cluster into its highest-degree root, remapping edges.
-    4. For remaining small components, add a weak ``RELATES_TO`` bridge to the
-       nearest node in the largest component if similarity >= ``semantic_knn_threshold``.
+    4. For remaining small components, add a weak ``SEMANTICALLY_RELATED_TO`` bridge
+       to the nearest node in the largest component if similarity >= ``semantic_knn_threshold``.
     """
     if not settings.semantic_clustering_enabled or len(graph.nodes) < 2:
         return graph

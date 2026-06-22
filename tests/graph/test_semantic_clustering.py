@@ -129,9 +129,9 @@ async def test_adds_knn_bridge_from_island_to_main_component() -> None:
         embedding_client=_FakeEmbeddingClient(),
     )
 
-    bridge = [e for e in result.edges if e.label == "semantic_related"]
+    bridge = [e for e in result.edges if e.label == "semantically_related"]
     assert len(bridge) == 1
-    assert bridge[0].type == "RELATES_TO"
+    assert bridge[0].type == "SEMANTICALLY_RELATED_TO"
     assert any("SEMANTIC_KNN_EDGES_ADDED:1" in w for w in result.warnings)
 
 
