@@ -11,6 +11,7 @@ const STATUS_LABELS: Record<PaperStatus, string> = {
   pending: '待开始',
   processing: '解构中',
   ready: '已就绪',
+  ready_with_warnings: '已就绪（有警告）',
   failed: '失败',
 }
 

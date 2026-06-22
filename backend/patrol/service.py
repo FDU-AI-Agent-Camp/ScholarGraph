@@ -46,10 +46,13 @@ async def run_patrol(
     elif mode == PatrolMode.CONTRADICTION:
         insight = await build_contradiction_insight(graphs, paper_ids, llm_client=llm_client)
         if insight is None:
+            # Data-quality checks are now handled inside build_contradiction_insight,
+            # which returns an insight with status='insufficient_data' instead of None.
+            # Reaching here means an unexpected internal state.
             raise PatrolError(
-                "PATROL_INSUFFICIENT_DATA",
-                "未找到可比较的 Thesis 节点",
-                status_code=422,
+                "PATROL_INTERNAL_ERROR",
+                "无法构建矛盾巡检洞察",
+                status_code=500,
             )
         insights = [insight]
     else:

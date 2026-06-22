@@ -51,7 +51,10 @@ def test_patrol_report_serializes_to_openapi_json_shape() -> None:
     payload = report.model_dump(mode="json")
     assert payload["mode"] == "lens_clash"
     assert "generated_at" in payload
-    assert payload["insights"][0]["node_refs"][0]["node_id"] == "n_a"
+    insight_payload = payload["insights"][0]
+    assert insight_payload["node_refs"][0]["node_id"] == "n_a"
+    assert insight_payload["status"] == "ready"
+    assert insight_payload["has_contradiction"] is None
 
 
 def test_patrol_summary_output_json_schema_fields() -> None:

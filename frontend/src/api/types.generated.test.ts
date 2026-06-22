@@ -58,6 +58,7 @@ describe('types.ts vs generated OpenAPI schema', () => {
           insight_id: 'i1',
           title: 't',
           summary: 's',
+          status: 'ready',
           paper_ids: ['hss-001'],
           node_refs: [],
         },
