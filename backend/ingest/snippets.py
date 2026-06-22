@@ -177,7 +177,7 @@ def _trim_intro_paragraphs(body: str, *, max_paragraphs: int = 3) -> str:
 
 @dataclass(frozen=True)
 class ClassifierSections:
-    """Structured title / abstract / keywords / intro / conclusion / meta for head merge."""
+    """Structured title / abstract / keywords / intro / conclusion / meta / core contribution for head merge."""
 
     title: str = ""
     abstract: str = ""
@@ -187,6 +187,9 @@ class ClassifierSections:
     journal: str = ""
     funding: str = ""
     affiliation: str = ""
+    research_object: str = ""
+    methodology_tool: str = ""
+    core_intellectual_contribution: str = ""
 
 
 _TITLE_SECTION_RE = re.compile(
@@ -221,6 +224,8 @@ def _parse_meta_block(meta_text: str) -> dict[str, str]:
         value_clean = value.strip()
         if key_clean in {"journal", "funding", "affiliation"} and value_clean:
             mapping[key_clean] = value_clean
+        if key_clean in {"research object", "methodology/tool", "core intellectual contribution"} and value_clean:
+            mapping[key_clean.replace("/", "_").replace(" ", "_")] = value_clean
     return mapping
 
 
@@ -248,6 +253,9 @@ def parse_classifier_sections(classifier_input: str) -> ClassifierSections:
         journal=meta.get("journal", ""),
         funding=meta.get("funding", ""),
         affiliation=meta.get("affiliation", ""),
+        research_object=meta.get("research_object", ""),
+        methodology_tool=meta.get("methodology_tool", ""),
+        core_intellectual_contribution=meta.get("core_intellectual_contribution", ""),
     )
 
 
@@ -281,6 +289,9 @@ def _format_meta_block(
     journal: str = "",
     funding: str = "",
     affiliation: str = "",
+    research_object: str = "",
+    methodology_tool: str = "",
+    core_intellectual_contribution: str = "",
 ) -> str:
     lines: list[str] = []
     if journal.strip():
@@ -289,6 +300,12 @@ def _format_meta_block(
         lines.append(f"Affiliation: {affiliation.strip()}")
     if funding.strip():
         lines.append(f"Funding: {funding.strip()}")
+    if research_object.strip():
+        lines.append(f"Research Object: {research_object.strip()}")
+    if methodology_tool.strip():
+        lines.append(f"Methodology/Tool: {methodology_tool.strip()}")
+    if core_intellectual_contribution.strip():
+        lines.append(f"Core Intellectual Contribution: {core_intellectual_contribution.strip()}")
     if not lines:
         return ""
     return "Meta-Information:\n" + "\n".join(lines)
@@ -304,10 +321,20 @@ def format_classifier_input(
     journal: str = "",
     funding: str = "",
     affiliation: str = "",
+    research_object: str = "",
+    methodology_tool: str = "",
+    core_intellectual_contribution: str = "",
 ) -> str:
     """Compose labeled classifier input aligned with paradigm classification prompts."""
     parts: list[str] = []
-    meta_block = _format_meta_block(journal=journal, funding=funding, affiliation=affiliation)
+    meta_block = _format_meta_block(
+        journal=journal,
+        funding=funding,
+        affiliation=affiliation,
+        research_object=research_object,
+        methodology_tool=methodology_tool,
+        core_intellectual_contribution=core_intellectual_contribution,
+    )
     if meta_block:
         parts.append(meta_block)
     if title.strip():

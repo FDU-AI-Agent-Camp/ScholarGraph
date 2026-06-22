@@ -48,6 +48,9 @@ class HeadCandidate:
     journal: str = ""
     funding: str = ""
     affiliation: str = ""
+    research_object: str = ""
+    methodology_tool: str = ""
+    core_intellectual_contribution: str = ""
     source: str = "pymupdf"
 
     @classmethod
@@ -61,6 +64,9 @@ class HeadCandidate:
             journal=sections.journal,
             funding=sections.funding,
             affiliation=sections.affiliation,
+            research_object=sections.research_object,
+            methodology_tool=sections.methodology_tool,
+            core_intellectual_contribution=sections.core_intellectual_contribution,
             source=source,
         )
 

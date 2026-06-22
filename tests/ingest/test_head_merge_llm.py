@@ -197,7 +197,8 @@ async def test_merge_with_llm_live_cloud_returns_structured_head(
     assert merged.abstract.strip()
     assert merged.sources.get("title") == "llm"
     combined = merged.to_classifier_input()
-    assert combined.startswith("Title:")
+    assert combined.startswith(("Meta-Information:", "Title:"))
+    assert "Title:" in combined
     assert "Abstract:" in combined
     title_lower = merged.title.lower()
     abstract_lower = merged.abstract.lower()

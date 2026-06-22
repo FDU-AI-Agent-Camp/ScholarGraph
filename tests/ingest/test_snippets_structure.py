@@ -152,6 +152,9 @@ Meta-Information:
 Journal: Social History Review
 Funding: National Humanities Grant
 Affiliation: Department of History, Example University
+Research Object: social memory in post-war communities
+Methodology/Tool: oral history interviews
+Core Intellectual Contribution: reveals how collective memory shapes identity
 """
 
 
@@ -165,6 +168,9 @@ def test_parse_classifier_sections_recover_all_fields() -> None:
     assert sections.journal == "Social History Review"
     assert sections.funding == "National Humanities Grant"
     assert sections.affiliation == "Department of History, Example University"
+    assert sections.research_object == "social memory in post-war communities"
+    assert sections.methodology_tool == "oral history interviews"
+    assert "collective memory shapes identity" in sections.core_intellectual_contribution
 
 
 def test_build_classifier_input_with_full_text_extracts_conclusion() -> None:
@@ -203,3 +209,21 @@ def test_build_classifier_input_includes_meta_information() -> None:
     assert "Social History Review" in result
     assert "Department of History" in result
     assert "Oral Histories Project" in result
+
+
+def test_format_classifier_input_includes_core_contribution_fields() -> None:
+    from backend.ingest.snippets import format_classifier_input
+
+    result = format_classifier_input(
+        title="Sherpa Phylogeography",
+        abstract="We analyze Sherpa Y-chromosome data.",
+        journal="Human Genetics",
+        research_object="Sherpa male-line ancestry",
+        methodology_tool="Y-chromosome sequencing",
+        core_intellectual_contribution="argues the Dangxiang Qiang are Sherpa ancestors",
+    )
+    assert result.startswith("Meta-Information:")
+    assert "Research Object: Sherpa male-line ancestry" in result
+    assert "Methodology/Tool: Y-chromosome sequencing" in result
+    assert "Core Intellectual Contribution: argues the Dangxiang Qiang are Sherpa ancestors" in result
+    assert "Title: Sherpa Phylogeography" in result

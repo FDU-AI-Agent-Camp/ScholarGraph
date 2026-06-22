@@ -16,15 +16,31 @@ from backend.schemas.ingest_head import IngestHead
 
 logger = logging.getLogger(__name__)
 
-HEAD_FIELDS = ("title", "abstract", "keywords", "intro", "conclusion", "journal", "funding", "affiliation")
+HEAD_FIELDS = (
+    "title",
+    "abstract",
+    "keywords",
+    "intro",
+    "conclusion",
+    "journal",
+    "funding",
+    "affiliation",
+    "research_object",
+    "methodology_tool",
+    "core_intellectual_contribution",
+)
 MAX_LLM_CANDIDATE_CHARS = 12_000
 
 HEAD_MERGE_SYSTEM_PROMPT = (
     "You merge academic paper header fields from two PDF extraction paths. "
     "For each field, pick the most accurate text from the candidates. "
+    "Additionally extract three interpretive fields that help downstream paradigm classification: "
+    "research_object (the specific object/population/text/event under study), "
+    "methodology_tool (the main technique/algorithm/dataset/instrument used), and "
+    "core_intellectual_contribution (whether the paper's main value is a new tool/method/theory "
+    "or a new finding/interpretation about the research object). "
     "Do NOT invent or paraphrase metadata; use empty string when absent. "
-    "Conclusion and meta-information (journal, funding, affiliation) are optional soft signals; "
-    "keep them only when supported by the source text."
+    "Conclusion and meta-information are optional soft signals; keep them only when supported by the source text."
 )
 
 
@@ -39,6 +55,9 @@ class IngestHeadLlmOutput(BaseModel):
     journal: str = ""
     funding: str = ""
     affiliation: str = ""
+    research_object: str = ""
+    methodology_tool: str = ""
+    core_intellectual_contribution: str = ""
 
 
 def _candidate_payload(label: str, candidate: HeadCandidate) -> dict[str, str]:
@@ -53,6 +72,9 @@ def _candidate_payload(label: str, candidate: HeadCandidate) -> dict[str, str]:
         "journal": candidate.journal,
         "funding": candidate.funding,
         "affiliation": candidate.affiliation,
+        "research_object": candidate.research_object,
+        "methodology_tool": candidate.methodology_tool,
+        "core_intellectual_contribution": candidate.core_intellectual_contribution,
     }
 
 
@@ -71,6 +93,9 @@ def _truncate_candidate(candidate: HeadCandidate) -> HeadCandidate:
         journal=clip(candidate.journal),
         funding=clip(candidate.funding),
         affiliation=clip(candidate.affiliation),
+        research_object=clip(candidate.research_object),
+        methodology_tool=clip(candidate.methodology_tool),
+        core_intellectual_contribution=clip(candidate.core_intellectual_contribution),
         source=candidate.source,
     )
 
@@ -103,17 +128,7 @@ def merge_with_rules(
             sources[field] = "empty"
 
     _ = is_short
-    return IngestHead(
-        title=merged["title"],
-        abstract=merged["abstract"],
-        keywords=merged["keywords"],
-        intro=merged["intro"],
-        conclusion=merged["conclusion"],
-        journal=merged["journal"],
-        funding=merged["funding"],
-        affiliation=merged["affiliation"],
-        sources=sources,
-    )
+    return IngestHead(**merged, sources=sources)
 
 
 def _resolve_head_llm_model(settings: Settings) -> str:
@@ -176,6 +191,9 @@ async def merge_with_llm(
             journal=result.journal.strip(),
             funding=result.funding.strip(),
             affiliation=result.affiliation.strip(),
+            research_object=result.research_object.strip(),
+            methodology_tool=result.methodology_tool.strip(),
+            core_intellectual_contribution=result.core_intellectual_contribution.strip(),
             sources={field: "llm" for field in HEAD_FIELDS},
         )
     except Exception:
