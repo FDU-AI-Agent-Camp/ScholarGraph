@@ -69,7 +69,7 @@ flowchart LR
 | P1-1～P1-2 | `corpus.md` + PDF 就位 | 1 STEM + 2 HSS |
 | P1-3 | `backend/ingest/pdf.py` | UTF-8 正文 |
 | P1-4 | `scripts/extract_text.py` | 可重复执行 |
-| P1-5 | 分类器输入切片 | 供 P2 使用 |
+| P1-5 | 分类器输入候选 / head 精炼 | 同步生成 snippets 初值；异步 head_refine 后供 classify 消费 |
 
 ### P2 — 范式分类 M0（BE-2）
 

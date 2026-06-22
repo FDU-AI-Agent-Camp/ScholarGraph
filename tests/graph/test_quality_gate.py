@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from backend.graph.quality_gate import (
     evaluate_graph_quality,
+    generic_edge_ratio,
     isolated_node_ratio,
     supports_rationale_coverage,
 )
@@ -16,6 +17,7 @@ def _make_graph(
     supports_with_rationale: int,
     supports_without_rationale: int,
     isolated_nodes: int,
+    generic_edges: int = 0,
 ) -> UnifiedPaperGraph:
     nodes: list[GraphNode] = []
     edges: list[GraphEdge] = []
@@ -60,6 +62,23 @@ def _make_graph(
     for _ in range(isolated_nodes):
         nodes.append(GraphNode(id=f"n{node_index}", label="isolated", type="ObjectOrData"))
         node_index += 1
+
+    for _ in range(generic_edges):
+        src_id = f"n{node_index}"
+        nodes.append(GraphNode(id=src_id, label="src", type="SubArgument"))
+        node_index += 1
+        tgt_id = f"n{node_index}"
+        nodes.append(GraphNode(id=tgt_id, label="tgt", type="Thesis"))
+        node_index += 1
+        edges.append(
+            GraphEdge(
+                id=f"e{len(edges)}",
+                source=src_id,
+                target=tgt_id,
+                label="RELATES_TO",
+                type="RELATES_TO",
+            ),
+        )
 
     return UnifiedPaperGraph(
         paper_id="quality-test",
@@ -166,3 +185,34 @@ class TestEvaluateGraphQuality:
         )
         assert passed is False
         assert len(reasons) == 2
+
+    def test_fails_on_high_generic_edge_ratio(self) -> None:
+        graph = _make_graph(
+            supports_with_rationale=2,
+            supports_without_rationale=0,
+            isolated_nodes=0,
+            generic_edges=2,
+        )
+        passed, reasons = evaluate_graph_quality(
+            graph,
+            min_supports_rationale_coverage=0.5,
+            max_isolated_node_ratio=0.4,
+            max_generic_edge_ratio=0.3,
+        )
+        assert passed is False
+        assert any("generic edge ratio" in reason for reason in reasons)
+
+
+class TestGenericEdgeRatio:
+    def test_no_generic_edges_returns_zero(self) -> None:
+        graph = _make_graph(supports_with_rationale=2, supports_without_rationale=0, isolated_nodes=0)
+        assert generic_edge_ratio(graph) == 0.0
+
+    def test_half_generic_edges(self) -> None:
+        graph = _make_graph(
+            supports_with_rationale=1,
+            supports_without_rationale=0,
+            isolated_nodes=0,
+            generic_edges=1,
+        )
+        assert generic_edge_ratio(graph) == 0.5

@@ -63,7 +63,10 @@ class ExtractedEdge(BaseModel):
     source: str = Field(min_length=1, description="Source node id.")
     target: str = Field(min_length=1, description="Target node id.")
     label: str = Field(min_length=1, max_length=MAX_EDGE_LABEL_LENGTH)
-    type: str = Field(min_length=1, description="Edge type from the paradigm whitelist.")
+    type: str = Field(
+        min_length=1,
+        description="Edge type from the paradigm whitelist or an LLM-invented SCREAMING_SNAKE_CASE verb.",
+    )
     rationale: str | None = Field(
         default=None,
         max_length=MAX_SOURCE_SPAN_LENGTH,

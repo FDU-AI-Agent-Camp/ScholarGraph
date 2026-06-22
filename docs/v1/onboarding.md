@@ -60,7 +60,9 @@ cp .env.example .env
 | `CLASSIFIER_HEURISTIC_FALLBACK` | `true` | 分类 LLM 失败是否降级（`false` 可致流水线 failed） |
 | `EXTRACT_LLM_ENABLED` | `true` | 图谱抽取 LLM；`false` → 启发式 + `extract_heuristic_fallback` |
 | `EXTRACT_HEURISTIC_FALLBACK` | `true` | 抽取 LLM 失败是否降级 |
-| `EXTRACT_MAX_INPUT_CHARS` | `20000` | 送入抽取 LLM 的全文上限 |
+| `EXTRACT_MAX_INPUT_CHARS` | `20000` | 送入抽取 LLM 的全文上限；超过且启用 chunked 时进入两阶段分块抽取 |
+| `EXTRACT_CHUNK_OVERLAP_RATIO` | `0.12` | 长文分块滑动窗口重叠比例（0.0 表示无重叠） |
+| `EXTRACT_MAX_GENERIC_EDGE_RATIO` | `1.0` | 允许的最大通用兜底边比例（如 `RELATES_TO`）；调低可强制 LLM 发明具体关系动词 |
 
 分类与抽取**互不影响**：分类准确仍可能出现抽取 fallback。排查：后端日志 `extract_llm attempt failed` / `extract_llm_fallback`（含 `reason`、`elapsed_ms`）。
 

@@ -337,6 +337,7 @@ $font-family: 'Source Han Sans SC', sans-serif;
 | pending | `#9CA3AF` | 已创建，未开始 |
 | processing | `#2563EB`（可脉冲） | 流水线中 |
 | ready | `#059669` | 可问答 / 图谱 |
+| ready_with_warnings | `#F59E0B` / `#D97706` | 图谱可用，但质量门控触发（黄色警示边框） |
 | failed | `#DC2626` | 见 error_code |
 
 ### 6.5 Empty State
@@ -389,6 +390,7 @@ Meta：paper_id mono · 范式 Badge · status Badge · 时间 caption
 | Step | 文案 |
 |------|------|
 | ingesting | 正在解析 PDF |
+| head_refining | 文档头部精炼 |
 | classifying | 范式分类 |
 | extracting | 抽取图谱 |
 | storing | 写入存储 |

@@ -52,8 +52,10 @@ Fixtures：[`paper-status-classify-fallback.json`](../api/fixtures/paper-status-
 
 | 字段 | 出现位置 | 枚举 | 含义 |
 |------|----------|------|------|
-| **`status`** | `POST /papers`、`GET /papers`、`GET /papers/{id}`、`GET .../status` | `pending` `processing` `ready` `failed` | 论文**业务生命周期** |
+| **`status`** | `POST /papers`、`GET /papers`、`GET /papers/{id}`、`GET .../status` | `pending` `processing` `ready` `ready_with_warnings` `failed` | 论文**业务生命周期** |
 | **`stage`** | 仅 `GET /papers/{id}/status` | `ingesting` `head_refining` `classifying` `extracting` `storing` `ready` `failed` | 流水线**当前步骤** |
+
+- `ready_with_warnings`：图谱已可用，但质量门控触发（如 `SUPPORTS` rationale 覆盖不足、孤立节点过多或通用兜底边比例过高）。前端建议渲染黄色警示边框，仍可正常问答/拉图谱。
 
 - `status=processing` 时必有 `stage`（且 `stage` ≠ `ready`）。
 - `status=ready` 时 `stage=ready`，`percent=100`。
@@ -153,7 +155,7 @@ Fixtures：[`paper-status-classify-fallback.json`](../api/fixtures/paper-status-
 | 参数 | 类型 | 默认 |
 |------|------|------|
 | `paradigm` | `STEM` \| `HSS` | — |
-| `status` | `pending` \| `processing` \| `ready` \| `failed` | — |
+| `status` | `pending` \| `processing` \| `ready` \| `ready_with_warnings` \| `failed` | — |
 | `offset` | integer | `0` |
 | `limit` | integer | `20`（max `100`） |
 
@@ -231,7 +233,9 @@ Fixtures：[`paper-status-classify-fallback.json`](../api/fixtures/paper-status-
 }
 ```
 
-**200（完成）**：`status=ready`，`stage=ready`，`percent=100`；若发生过 LLM 降级，响应含 `classify_warnings` / `extract_warnings`（见 [§1.1](#11-降级警告字段classify_warnings--extract_warnings)）。  
+**200（完成）**：`status=ready`，`stage=ready`，`percent=100`；若发生过 LLM 降级，响应含 `classify_warnings` / `extract_warnings`（见 [§1.1](#11-降级警告字段classify_warnings--extract_warnings)）。
+
+**200（带警告完成）**：`status=ready_with_warnings`，`stage=ready`，`percent=100`；响应同样含 `extract_warnings`（如 `low_confidence_graph`）。图谱仍可正常消费，前端建议渲染黄色警示边框。
 
 **200（失败）**：`status=failed`，`stage=failed`，`percent=0`；并返回 `error_code` 与 `failed_during`（失败时所在流水线步骤，不含 `ready`/`failed`）：
 
@@ -338,7 +342,34 @@ V1 同步接口，建议超时 60s。
 
 ---
 
-## 11. Fixtures
+## 11. `POST /api/v1/papers/{paper_id}/reextract`
+
+**用途**：当论文出现 `extract_heuristic_fallback` / `extract_llm_timeout` 等降级，或用户希望重新抽取时，强制清空旧图谱、精炼头、预览与 warnings，从已保存的 PDF 重新调度整条流水线。
+
+**约束**：
+
+- 仅对已有 PDF 的论文有效；找不到论文返回 404。
+- 若论文当前 `status=processing`，返回 409，避免并发冲突。
+- 成功返回最新的 `PaperStatusData`（`status=pending` 或 `processing`，取决于调度时机）。
+
+**200 示例**：
+
+```json
+{
+  "data": {
+    "paper_id": "hss-001",
+    "status": "pending",
+    "percent": 0,
+    "message": "已重新加入抽取队列",
+    "updated_at": "2026-05-19T11:05:00Z"
+  },
+  "meta": { "request_id": "…" }
+}
+```
+
+---
+
+## 12. Fixtures
 
 | 文件 | 用途 |
 |------|------|

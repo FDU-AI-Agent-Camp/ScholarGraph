@@ -84,15 +84,16 @@ PDF 转为文本并完成 head refine 后，流水线进入分类节点。Live �
 - LLM 调用具备 tenacity 指数退避重试（`stop=3`，`wait=2~30s`），仅对超时、限流、网络等 transient 错误重试；
 - 失败时降级 **启发式建图**（`extract_heuristic.py`），`extract_warnings` 保留通用机器码 `extract_heuristic_fallback`，并额外暴露细粒度根因码：`extract_llm_timeout`、`extract_llm_rate_limited`、`extract_llm_json_invalid`、`extract_schema_validation_failed`、`extract_context_window_exceeded`；
 - **逃生舱重抽**：即使重试后仍 fallback，用户可调用 `POST /papers/{id}/reextract` 强制清空旧图谱/预览/warnings 并重新入队流水线，前端对应 **[FORCE RE-EXTRACT]** 按钮；
-- **质量门控（Plan D）**：Finalize 前检查 `SUPPORTS` rationale coverage 与孤立节点占比。未通过时状态为 `ready_with_warnings` 并写入 `extract_warnings: [low_confidence_graph]`，前端可渲染黄色警示边框。默认阈值 `EXTRACT_MIN_SUPPORTS_RATIONALE_COVERAGE=0.5`、`EXTRACT_MAX_ISOLATED_NODE_RATIO=0.4`。
+- **质量门控（Plan D）**：Finalize 前检查三项指标：`SUPPORTS` rationale coverage、孤立节点占比、通用兜底边（如 `RELATES_TO`）占比。任一指标未通过时状态为 `ready_with_warnings` 并写入 `extract_warnings: [low_confidence_graph]`，前端可渲染黄色警示边框。默认阈值 `EXTRACT_MIN_SUPPORTS_RATIONALE_COVERAGE=0.5`、`EXTRACT_MAX_ISOLATED_NODE_RATIO=0.4`、`EXTRACT_MAX_GENERIC_EDGE_RATIO=1.0`（设为 1.0 表示默认不拦截，调低可强制 LLM 发明具体关系动词）。
 
 **分类与抽取独立**：分类 LLM 成功时抽取仍可能 fallback（schema 更大、耗时更长）。
 
 - 挂载**不同的 Pydantic Schema**（统一的 `UnifiedPaperGraph` 外壳，内部分 STEM / HSS 子结构）；
 - 注入**特化 Prompt 模板**；
-- **边属性升维**：核心论证边（`SUPPORTS` / `CONTRADICTS` / `EXPLAINS`）强制携带 `rationale`（逻辑推演）与 `source_span`（原文锚点），可选 `confidence` 置信度分层；
+- **边属性升维**：核心论证边（`SUPPORTS` / `CONTRADICTS` / `EXPLAINS`）强制携带 `rationale`（逻辑推演）与 `source_span`（原文锚点），可选 `confidence` 置信度分层；若 LLM 漏填 `confidence`，Pydantic 将其规范化为 `MEDIUM` 并在 `edge.data.confidence_missing` 中标记；
+- **动态关系发明**：允许 LLM 在预定义边类型之外发明 `SCREAMING_SNAKE_CASE` 动词（如 `DERIVES_FROM`、`EXEMPLIFIES`），禁止把 `RELATES_TO` 当作兜底；质量门控会统计通用兜底边比例；
 - **反向边精简**：STEM 本体已废除 `SUPPORTED_BY`，统一使用 `Evidence --SUPPORTS--> Claim`；
-- **Schema 约束**：若范式为 HSS，图谱中**不允许**出现 `Metric`、`Baseline` 等 STEM 专用节点类型，仅允许 `AnalyticalLens`、`IntellectualContext` 等 HSS 类型（反之亦然，在 STEM 分支禁用 HSS 专有类型）。
+- **Schema 约束**：节点类型严格按范式白名单校验（HSS 不允许 `Metric`、`Baseline` 等 STEM 专用类型，STEM 反之）；边类型以范式预定义列表为主，但允许 LLM 发明 `SCREAMING_SNAKE_CASE` 动词，`RELATES_TO` 等兜底类型被显式禁止。
 
 ### 3. 交叉对齐（Cross-paradigm Alignment，后续扩展）
 

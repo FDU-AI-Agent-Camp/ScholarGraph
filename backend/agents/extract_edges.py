@@ -109,7 +109,8 @@ def _filter_nodes_for_chunk(
 
 _DEFAULT_MAX_EDGES_PER_CHUNK = 25
 
-# Core argument edge types that must carry a source_span for traceability.
+# Core argument edge types that should carry both rationale and source_span.
+# Missing fields are flagged in edge.data instead of hard-failing.
 _CORE_EDGE_TYPES = {"SUPPORTS", "CONTRADICTS", "EXPLAINS"}
 
 # Maximum chunk text length fed into the targeted source_span patcher.

@@ -1,4 +1,4 @@
-"""LangGraph StateGraph: ingest → classify → extract → store."""
+"""LangGraph StateGraph: ingest → wait_head_refine → classify → extract → store."""
 
 from functools import lru_cache
 from pathlib import Path

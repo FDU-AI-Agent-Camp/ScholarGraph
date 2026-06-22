@@ -51,6 +51,7 @@ def _make_graph(
     supports_with_rationale: int,
     supports_without_rationale: int,
     isolated_nodes: int,
+    generic_edges: int = 0,
 ) -> UnifiedPaperGraph:
     nodes: list[GraphNode] = []
     edges: list[GraphEdge] = []
@@ -92,6 +93,23 @@ def _make_graph(
     for _ in range(isolated_nodes):
         nodes.append(GraphNode(id=f"n{idx}", label="iso", type="ObjectOrData"))
         idx += 1
+
+    for _ in range(generic_edges):
+        src = f"n{idx}"
+        nodes.append(GraphNode(id=src, label="src", type="SubArgument"))
+        idx += 1
+        tgt = f"n{idx}"
+        nodes.append(GraphNode(id=tgt, label="tgt", type="Thesis"))
+        idx += 1
+        edges.append(
+            GraphEdge(
+                id=f"e{len(edges)}",
+                source=src,
+                target=tgt,
+                label="RELATES_TO",
+                type="RELATES_TO",
+            ),
+        )
 
     return UnifiedPaperGraph(
         paper_id=paper_id,
@@ -136,6 +154,32 @@ def test_complete_pipeline_marks_ready_with_warnings_on_high_isolation(
     paper_id = "quality-isolated"
     _register_paper(service, paper_id)
     graph = _make_graph(paper_id, supports_with_rationale=2, supports_without_rationale=0, isolated_nodes=6)
+
+    service.complete_pipeline(paper_id, classification=classification, graph=graph)
+
+    assert service._papers[paper_id].status == PaperStatus.READY_WITH_WARNINGS
+    assert LOW_CONFIDENCE_GRAPH_CODE in service.get_extract_warnings(paper_id)
+
+
+def test_complete_pipeline_marks_ready_with_warnings_on_high_generic_edge_ratio(
+    service: PaperService,
+    classification: ParadigmClassification,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    paper_id = "quality-generic"
+    _register_paper(service, paper_id)
+    graph = _make_graph(
+        paper_id,
+        supports_with_rationale=2,
+        supports_without_rationale=0,
+        isolated_nodes=0,
+        generic_edges=2,
+    )
+
+    from backend.config import get_settings
+
+    settings = get_settings()
+    monkeypatch.setattr(settings, "extract_max_generic_edge_ratio", 0.3)
 
     service.complete_pipeline(paper_id, classification=classification, graph=graph)
 

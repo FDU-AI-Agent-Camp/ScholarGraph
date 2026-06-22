@@ -249,8 +249,9 @@ components:
       enum: [pending, processing, ready, ready_with_warnings, failed]
       description: |
         `ready_with_warnings` means the graph is available but failed the
-        confidence gate (e.g. low SUPPORTS rationale coverage or too many
-        isolated nodes). The client should render a yellow warning border.
+        confidence gate (e.g. low SUPPORTS rationale coverage, too many
+        isolated nodes, or a high ratio of generic fallback edges such as
+        RELATES_TO). The client should render a yellow warning border.
 
     PipelineStage:
       type: string
