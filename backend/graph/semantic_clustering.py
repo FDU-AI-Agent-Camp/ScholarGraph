@@ -13,6 +13,7 @@ import numpy as np
 from backend.config import Settings
 from backend.graph.merge_graphs import _UnionFind
 from backend.llm.embeddings import EmbeddingClient
+from backend.llm.reranker import RerankerClient
 from backend.schemas.extract_phase import ExtractedEdge, ExtractedGraph, ExtractedNode
 
 logger = logging.getLogger(__name__)
@@ -427,15 +428,18 @@ async def semantic_cluster_and_merge(
     settings: Settings,
     *,
     embedding_client: EmbeddingClient | None = None,
+    reranker_client: RerankerClient | None = None,
 ) -> ExtractedGraph:
     """Resolve synonym nodes via embedding similarity and stitch isolated islands.
 
     The pipeline:
 
     1. Embed each node's label (+ source span + folded leaves).
-    2. Cluster nodes whose cosine similarity >= ``semantic_similarity_threshold``.
-    3. Merge each cluster into its highest-degree root, remapping edges.
-    4. For remaining small components, add a weak ``SEMANTICALLY_RELATED_TO`` bridge
+    2. Coarse-filter high-risk candidate pairs with batched cosine similarity matrices.
+    3. Fine-filter candidates with a cloud reranker (when enabled); only pairs whose
+       reranker score exceeds ``reranker_threshold`` are merged.
+    4. Merge each cluster into its highest-degree root, remapping edges.
+    5. For remaining small components, add a weak ``SEMANTICALLY_RELATED_TO`` bridge
        to the nearest node in the largest component if similarity >= ``semantic_knn_threshold``.
     """
     if not settings.semantic_clustering_enabled or len(graph.nodes) < 2:
@@ -456,6 +460,7 @@ async def semantic_cluster_and_merge(
         raise ValueError(f"Embedding count mismatch: {len(embeddings)} vectors for {len(graph.nodes)} nodes")
 
     embeddings_matrix = np.array(embeddings, dtype=np.float32)
+    nodes_by_id = {node.id: node for node in graph.nodes}
 
     # 1. Stage 1 hard type firewall + Stage 2 matrix coarse-filter.
     #    Nodes are grouped by type; within each group we compute the full cosine
@@ -464,7 +469,7 @@ async def semantic_cluster_and_merge(
     #    the previous O(N^2) Python double loop.
     node_ids = [node.id for node in graph.nodes]
     type_groups = _group_nodes_by_type(graph.nodes)
-    uf = _UnionFind()
+    coarse_pairs: list[tuple[str, str, float]] = []
     for node_type, indexed_nodes in type_groups.items():
         group_indices = [idx for idx, _ in indexed_nodes]
         group_nodes = [graph.nodes[idx] for idx in group_indices]
@@ -476,8 +481,29 @@ async def semantic_cluster_and_merge(
             node_type,
             graph.paradigm.value,
         )
-        pairs = _coarse_filter_pairs(group_nodes, group_embeddings, threshold)
-        for node_id_i, node_id_j, _ in pairs:
+        coarse_pairs.extend(_coarse_filter_pairs(group_nodes, group_embeddings, threshold))
+
+    # 2. Stage 3 cloud reranker fine-filter (optional but recommended).
+    #    Only pairs whose reranker score is strictly above the threshold are
+    #    promoted to TRUE_HOMOGENEOUS and merged via union-find.
+    client = reranker_client or RerankerClient(settings)
+    pair_texts = [
+        (_node_text(nodes_by_id[node_id_i]), _node_text(nodes_by_id[node_id_j]))
+        for node_id_i, node_id_j, _ in coarse_pairs
+    ]
+    try:
+        rerank_scores = await client.rerank_pairs(pair_texts)
+    except Exception as exc:
+        logger.warning("semantic_clustering_rerank_failed", extra={"error": str(exc)})
+        warnings = list(graph.warnings)
+        warnings.append(f"SEMANTIC_CLUSTERING_RERANK_SKIPPED:{type(exc).__name__}")
+        return graph.model_copy(update={"warnings": warnings})
+
+    uf = _UnionFind()
+    for (node_id_i, node_id_j, _coarse_score), rerank_score in zip(
+        coarse_pairs, rerank_scores, strict=True
+    ):
+        if rerank_score > settings.reranker_threshold:
             uf.union(node_id_i, node_id_j)
 
     clusters: dict[str, set[str]] = defaultdict(set)

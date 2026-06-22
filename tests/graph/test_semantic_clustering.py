@@ -774,3 +774,177 @@ class TestCoarseFilterPairs:
         )
         assert len(result.nodes) == 3
         assert not any("SEMANTIC_CLUSTERS_MERGED" in w for w in result.warnings)
+
+
+class _MockRerankerClient:
+    """Deterministic reranker scores keyed by (text_a, text_b) tuples."""
+
+    def __init__(self, scores: dict[tuple[str, str], float]) -> None:
+        self._scores = scores
+
+    async def rerank_pairs(self, pairs: list[tuple[str, str]]) -> list[float]:
+        return [self._scores.get(pair, 0.5) for pair in pairs]
+
+
+class TestRerankerFineFilter:
+    def _rerank_settings(
+        self,
+        enabled: bool = True,
+        threshold: float = 0.85,
+        sim: float = 0.5,
+    ) -> Settings:
+        return Settings(
+            _env_file=None,
+            llm_mode="mock",
+            semantic_clustering_enabled=True,
+            semantic_similarity_threshold=sim,
+            reranker_enabled=enabled,
+            reranker_model="bge-reranker-v2-m3",
+            reranker_api_base_url="https://api.example.com/v1",
+            reranker_api_key="fake-key",
+            reranker_threshold=threshold,
+        )
+
+    @pytest.mark.asyncio
+    async def test_reranker_blocks_false_synonyms(self) -> None:
+        """数学分析 vs 内容分析 should be rejected by the reranker fine-filter."""
+
+        class _IdenticalEmbeddingClient:
+            async def embed_texts(self, texts: list[str]) -> list[list[float]]:
+                return [[1.0, 0.0, 0.0] for _ in texts]
+
+        nodes = [
+            ExtractedNode(id="n1", label="数学分析", type="Method"),
+            ExtractedNode(id="n2", label="内容分析", type="Method"),
+            ExtractedNode(id="n3", label="PCA", type="Method"),
+            ExtractedNode(id="n4", label="Principal Component Analysis", type="Method"),
+        ]
+        graph = ExtractedGraph(
+            paper_id="p1",
+            title="T",
+            paradigm=Paradigm.STEM,
+            nodes=nodes,
+            edges=[],
+        )
+
+        reranker = _MockRerankerClient(
+            {
+                (_node_text(nodes[0]), _node_text(nodes[1])): 0.30,  # 数学分析 vs 内容分析
+                (_node_text(nodes[0]), _node_text(nodes[2])): 0.30,
+                (_node_text(nodes[0]), _node_text(nodes[3])): 0.30,
+                (_node_text(nodes[1]), _node_text(nodes[2])): 0.30,
+                (_node_text(nodes[1]), _node_text(nodes[3])): 0.30,
+                (_node_text(nodes[2]), _node_text(nodes[3])): 0.95,  # PCA synonym
+            }
+        )
+
+        result = await semantic_cluster_and_merge(
+            graph,
+            self._rerank_settings(),
+            embedding_client=_IdenticalEmbeddingClient(),
+            reranker_client=reranker,
+        )
+
+        labels = {n.label for n in result.nodes}
+        assert "PCA" in labels or "Principal Component Analysis" in labels
+        assert "数学分析" in labels
+        assert "内容分析" in labels
+        assert len(result.nodes) == 3
+        assert any("SEMANTIC_CLUSTERS_MERGED:1" in w for w in result.warnings)
+
+    @pytest.mark.asyncio
+    async def test_reranker_accepts_true_synonyms(self) -> None:
+        """Two phrasings of the same concept should pass the reranker and merge."""
+
+        class _IdenticalEmbeddingClient:
+            async def embed_texts(self, texts: list[str]) -> list[list[float]]:
+                return [[1.0, 0.0, 0.0] for _ in texts]
+
+        nodes = [
+            ExtractedNode(id="n1", label="PCA", type="Method"),
+            ExtractedNode(id="n2", label="Principal Component Analysis", type="Method"),
+        ]
+        graph = ExtractedGraph(
+            paper_id="p1",
+            title="T",
+            paradigm=Paradigm.STEM,
+            nodes=nodes,
+            edges=[],
+        )
+
+        reranker = _MockRerankerClient(
+            {(_node_text(nodes[0]), _node_text(nodes[1])): 0.95}
+        )
+
+        result = await semantic_cluster_and_merge(
+            graph,
+            self._rerank_settings(),
+            embedding_client=_IdenticalEmbeddingClient(),
+            reranker_client=reranker,
+        )
+
+        assert len(result.nodes) == 1
+        assert any("SEMANTIC_CLUSTERS_MERGED:1" in w for w in result.warnings)
+
+    @pytest.mark.asyncio
+    async def test_reranker_failure_skips_merging(self) -> None:
+        """If the reranker raises, clustering is skipped and a warning is emitted."""
+
+        class _FailingRerankerClient:
+            async def rerank_pairs(self, pairs: list[tuple[str, str]]) -> list[float]:
+                raise RuntimeError("reranker unavailable")
+
+        class _IdenticalEmbeddingClient:
+            async def embed_texts(self, texts: list[str]) -> list[list[float]]:
+                return [[1.0, 0.0, 0.0] for _ in texts]
+
+        nodes = [
+            ExtractedNode(id="n1", label="PCA", type="Method"),
+            ExtractedNode(id="n2", label="Principal Component Analysis", type="Method"),
+        ]
+        graph = ExtractedGraph(
+            paper_id="p1",
+            title="T",
+            paradigm=Paradigm.STEM,
+            nodes=nodes,
+            edges=[],
+        )
+
+        result = await semantic_cluster_and_merge(
+            graph,
+            self._rerank_settings(),
+            embedding_client=_IdenticalEmbeddingClient(),
+            reranker_client=_FailingRerankerClient(),
+        )
+
+        assert len(result.nodes) == 2
+        assert any("SEMANTIC_CLUSTERING_RERANK_SKIPPED" in w for w in result.warnings)
+
+    @pytest.mark.asyncio
+    async def test_disabled_reranker_uses_coarse_filter_only(self) -> None:
+        """When reranker is disabled, coarse-filter pairs pass through unchanged."""
+
+        class _IdenticalEmbeddingClient:
+            async def embed_texts(self, texts: list[str]) -> list[list[float]]:
+                return [[1.0, 0.0, 0.0] for _ in texts]
+
+        nodes = [
+            ExtractedNode(id="n1", label="数学分析", type="Method"),
+            ExtractedNode(id="n2", label="内容分析", type="Method"),
+        ]
+        graph = ExtractedGraph(
+            paper_id="p1",
+            title="T",
+            paradigm=Paradigm.STEM,
+            nodes=nodes,
+            edges=[],
+        )
+
+        result = await semantic_cluster_and_merge(
+            graph,
+            self._rerank_settings(enabled=False),
+            embedding_client=_IdenticalEmbeddingClient(),
+        )
+
+        assert len(result.nodes) == 1
+        assert any("SEMANTIC_CLUSTERS_MERGED:1" in w for w in result.warnings)
