@@ -73,6 +73,22 @@ def test_load_classifier_prompt_reads_markdown_file() -> None:
     assert len(prompt.strip()) > 50
 
 
+def test_classifier_prompt_contains_intent_reranking_red_lines() -> None:
+    prompt = load_classifier_prompt().lower()
+    assert "hss lock" in prompt
+    assert "stem lock" in prompt
+    assert "history" in prompt
+    assert "archaeology" in prompt
+    assert "social phenomenon" in prompt
+    assert "cultural anthropology" in prompt
+    assert "population evolution" in prompt
+    assert "ethnic migration" in prompt
+    assert "hard science" in prompt
+    assert "mathematics" in prompt
+    assert "algorithm itself" in prompt
+    assert "engineering artifact" in prompt
+
+
 def test_load_classifier_profile_prompt_reads_markdown_file() -> None:
     prompt = load_classifier_profile_prompt()
     assert CLASSIFIER_PROFILE_PROMPT_PATH.is_file()

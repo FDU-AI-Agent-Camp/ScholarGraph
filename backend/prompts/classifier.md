@@ -30,6 +30,15 @@ Rules:
 - Choose `HSS` when the paper's primary contribution is theoretical lenses, historical/contextual argumentation, discourse, ethnography, interviews, archives, qualitative material, or humanities/social science interpretation.
 - **Interdisciplinary papers that use quantitative, computational, or experimental methods to answer a humanities/social-science question (e.g., molecular archaeology, genetic history, computational history, digital humanities, social network analysis of historical texts) must be classified as HSS.** The method is a tool; the question belongs to HSS.
 - Conversely, papers whose core contribution is a new algorithm, model, dataset, or engineering system must be classified as STEM, even if they mention social applications.
+
+## Hard red lines — Intent Reranking
+
+Apply these overrides after reading the Stage A profile. They take precedence over any method-heavy wording in the original snippets.
+
+1. **HSS lock**: If the `domain` indicates history, archaeology, social phenomenon explanation, cultural anthropology, linguistics, literature, area studies, or any humanities/social-science subject matter, **and** the `goal` is to establish a population evolution, ethnic migration, historical fact, social mechanism, cultural meaning, or real-world factual claim, classify as **HSS** regardless of how quantitative or technical the `tools` are. Genetic sequencing, statistical modeling, GIS, network analysis, simulation, or machine learning used in service of such a goal are still tools, not STEM contributions.
+2. **STEM lock**: Classify as **STEM** only when **both** the `goal` and the `domain` center on advancing hard science, mathematics, a theorem, an algorithm itself, an engineering artifact, or a performance/accuracy metric breakthrough. The paper must be fundamentally about making the technology, method, or system better, not about applying it to answer a humanistic or social question.
+3. If the `domain` and `goal` are ambiguous or contradictory, use `confidence` < 0.7 and explain the tension in `reason`. When in doubt, bias toward HSS if the ultimate object of explanation is human, social, cultural, linguistic, historical, or archaeological.
+
 - `confidence` must be a number between 0 and 1.
 - `reason` must mention concrete evidence from the supplied text and be no longer than two sentences. Explain why the research question's disciplinary home outweighs any quantitative or experimental methods mentioned.
 - **The `domain` field in the profile is the strongest signal.** If it says the conclusion advances a technology/algorithm, classify as STEM. If it says the conclusion solves/illuminates a historical, social, cultural, linguistic, archaeological, or real-world factual question, classify as HSS.
