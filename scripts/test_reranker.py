@@ -21,7 +21,6 @@ from dataclasses import dataclass
 from typing import Any
 
 import httpx
-
 from backend.config import get_settings
 
 

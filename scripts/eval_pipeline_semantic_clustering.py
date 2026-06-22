@@ -19,7 +19,6 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
-import shutil
 import time
 from collections import defaultdict
 from pathlib import Path
@@ -76,6 +75,8 @@ def _analyze_clustering(graph: UnifiedPaperGraph) -> dict:
     method_nodes = [n for n in graph.nodes if n.type == "Method"]
     dataset_nodes = [n for n in graph.nodes if n.type == "Dataset"]
     concept_nodes = [n for n in graph.nodes if n.type == "Concept"]
+    thesis_nodes = [n for n in graph.nodes if n.type == "Thesis"]
+    claim_nodes = [n for n in graph.nodes if n.type == "Claim"]
 
     suspicious_methods: list[dict] = []
     for node in method_nodes:
@@ -87,6 +88,24 @@ def _analyze_clustering(graph: UnifiedPaperGraph) -> dict:
             for right in labels[i + 1 :]:
                 if not set(_substantive_tokens(left)) & set(_substantive_tokens(right)):
                     suspicious_methods.append(
+                        {
+                            "root_id": node.id,
+                            "root_label": node.label,
+                            "alias_label": right,
+                            "reason": "no shared substantive tokens",
+                        }
+                    )
+
+    suspicious_theses: list[dict] = []
+    for node in thesis_nodes:
+        aliases = node.data.get("semantic_aliases", [])
+        if not aliases:
+            continue
+        labels = [node.label] + [a.get("label", "") for a in aliases]
+        for i, left in enumerate(labels):
+            for right in labels[i + 1 :]:
+                if not set(_substantive_tokens(left)) & set(_substantive_tokens(right)):
+                    suspicious_theses.append(
                         {
                             "root_id": node.id,
                             "root_label": node.label,
@@ -111,8 +130,21 @@ def _analyze_clustering(graph: UnifiedPaperGraph) -> dict:
         "method_nodes": len(method_nodes),
         "dataset_nodes": len(dataset_nodes),
         "concept_nodes": len(concept_nodes),
+        "thesis_nodes": len(thesis_nodes),
+        "claim_nodes": len(claim_nodes),
         "suspicious_method_merges": suspicious_methods,
+        "suspicious_thesis_merges": suspicious_theses,
         "unmerged_dataset_duplicates": unmerged_dataset_duplicates,
+        "thesis_clusters": [
+            {
+                "root_id": n.id,
+                "root_label": n.label,
+                "alias_count": len(n.data.get("semantic_aliases", [])),
+                "aliases": [a.get("label", "") for a in n.data.get("semantic_aliases", [])],
+            }
+            for n in thesis_nodes
+            if n.data.get("semantic_aliases")
+        ],
     }
 
 
@@ -158,9 +190,17 @@ async def _run_sample(paper_id: str, pdf_path: Path, service: PaperService) -> d
         "ingest_head": (
             {
                 "title": detail.ingest_head.title,
-                "abstract": detail.ingest_head.abstract[:200] + "..." if len(detail.ingest_head.abstract) > 200 else detail.ingest_head.abstract,
+                "abstract": (
+                    detail.ingest_head.abstract[:200] + "..."
+                    if len(detail.ingest_head.abstract) > 200
+                    else detail.ingest_head.abstract
+                ),
                 "keywords": detail.ingest_head.keywords,
-                "intro": detail.ingest_head.intro[:200] + "..." if len(detail.ingest_head.intro) > 200 else detail.ingest_head.intro,
+                "intro": (
+                    detail.ingest_head.intro[:200] + "..."
+                    if len(detail.ingest_head.intro) > 200
+                    else detail.ingest_head.intro
+                ),
             }
             if detail.ingest_head else None
         ),
@@ -220,6 +260,8 @@ def _format_report(records: list[dict]) -> str:
             lines.append(f"- Method nodes: {clustering['method_nodes']}")
             lines.append(f"- Dataset nodes: {clustering['dataset_nodes']}")
             lines.append(f"- Concept nodes: {clustering['concept_nodes']}")
+            lines.append(f"- Thesis nodes: {clustering['thesis_nodes']}")
+            lines.append(f"- Claim nodes: {clustering['claim_nodes']}")
         lines.append("")
 
         if r["extract_warnings"]:
@@ -240,9 +282,26 @@ def _format_report(records: list[dict]) -> str:
             lines.append("")
 
         if clustering:
+            lines.append("### Thesis clusters")
+            for item in clustering["thesis_clusters"]:
+                lines.append(
+                    f"- `{item['root_label']}` ({item['alias_count']} aliases): {item['aliases']}"
+                )
+            if not clustering["thesis_clusters"]:
+                lines.append("- None")
+            lines.append("")
+
             lines.append("### Potential over-merging (Method aliases with no shared tokens)")
             if clustering["suspicious_method_merges"]:
                 for item in clustering["suspicious_method_merges"]:
+                    lines.append(f"- `{item['root_label']}` <- `{item['alias_label']}` ({item['reason']})")
+            else:
+                lines.append("- None detected by the simple token-overlap heuristic.")
+            lines.append("")
+
+            lines.append("### Potential over-merging (Thesis aliases with no shared tokens)")
+            if clustering["suspicious_thesis_merges"]:
+                for item in clustering["suspicious_thesis_merges"]:
                     lines.append(f"- `{item['root_label']}` <- `{item['alias_label']}` ({item['reason']})")
             else:
                 lines.append("- None detected by the simple token-overlap heuristic.")
