@@ -25,6 +25,37 @@ DEFAULT_EMBEDDING_MODEL_THRESHOLDS: dict[str, dict[str, float]] = {
     },
 }
 
+# Per-paradigm, per-node-category similarity thresholds for semantic clustering.
+# A single global threshold causes over-merging for Method nodes (too loose) and
+# under-merging for Dataset nodes (too strict).  Categories are intentionally
+# coarse-grained so the matrix stays small and maintainable; unknown types fall
+# back to the "Concept" bucket.
+DYNAMIC_CLUSTERING_THRESHOLDS: dict[str, dict[str, float]] = {
+    "STEM": {
+        "Method": 0.92,
+        "Dataset": 0.82,
+        "Metric": 0.88,
+        "Baseline": 0.88,
+        "Concept": 0.88,
+    },
+    "HSS": {
+        "Method": 0.86,
+        "Dataset": 0.80,
+        "Concept": 0.82,
+    },
+}
+
+
+def _clustering_category(node_type: str) -> str:
+    """Map a concrete node type to its coarse threshold category."""
+    category_map: dict[str, str] = {
+        "Method": "Method",
+        "Dataset": "Dataset",
+        "Metric": "Metric",
+        "Baseline": "Baseline",
+    }
+    return category_map.get(node_type, "Concept")
+
 
 class Settings(BaseSettings):
     """Runtime configuration; values come from `.env` at repository root."""
@@ -196,6 +227,11 @@ class Settings(BaseSettings):
         le=1.0,
         validation_alias="SEMANTIC_SIMILARITY_THRESHOLD",
     )
+    semantic_clustering_dynamic_thresholds_enabled: bool = Field(
+        default=True,
+        validation_alias="SEMANTIC_CLUSTERING_DYNAMIC_THRESHOLDS_ENABLED",
+        description="Use per-paradigm, per-node-category thresholds instead of a single global threshold.",
+    )
     semantic_knn_threshold: float = Field(
         default=-1.0,
         ge=-1.0,
@@ -282,6 +318,38 @@ class Settings(BaseSettings):
             DEFAULT_EMBEDDING_MODEL_THRESHOLDS["default"],
         )
         return thresholds["similarity"]
+
+    def semantic_similarity_threshold_for(
+        self,
+        node_type_a: str,
+        node_type_b: str,
+        paradigm: str,
+    ) -> float:
+        """Return the pairwise merge threshold for two node types.
+
+        Priority:
+        1. Explicit ``SEMANTIC_SIMILARITY_THRESHOLD`` (global override).
+        2. Dynamic matrix when ``semantic_clustering_dynamic_thresholds_enabled``.
+        3. Per-model default fallback.
+
+        For cross-category pairs the stricter of the two category thresholds is
+        used, so a Method-Dataset pair uses the Method threshold.
+        """
+        if self.semantic_similarity_threshold >= 0:
+            return self.semantic_similarity_threshold
+
+        if self.semantic_clustering_dynamic_thresholds_enabled:
+            category_a = _clustering_category(node_type_a)
+            category_b = _clustering_category(node_type_b)
+            matrix = DYNAMIC_CLUSTERING_THRESHOLDS.get(
+                paradigm,
+                DYNAMIC_CLUSTERING_THRESHOLDS["STEM"],
+            )
+            threshold_a = matrix.get(category_a, matrix["Concept"])
+            threshold_b = matrix.get(category_b, matrix["Concept"])
+            return max(threshold_a, threshold_b)
+
+        return self.semantic_similarity_threshold_effective
 
     @property
     def semantic_knn_threshold_effective(self) -> float:

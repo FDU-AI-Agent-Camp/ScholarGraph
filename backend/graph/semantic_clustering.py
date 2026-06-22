@@ -429,7 +429,8 @@ async def semantic_cluster_and_merge(
     if len(embeddings) != len(graph.nodes):
         raise ValueError(f"Embedding count mismatch: {len(embeddings)} vectors for {len(graph.nodes)} nodes")
 
-    # 1. Pairwise similarity clustering with a dynamic type firewall.
+    # 1. Pairwise similarity clustering with a dynamic type firewall and
+    #    per-paradigm/per-category thresholds.
     node_ids = [node.id for node in graph.nodes]
     node_types = [node.type for node in graph.nodes]
     uf = _UnionFind()
@@ -445,7 +446,12 @@ async def semantic_cluster_and_merge(
                 else:
                     # Hard firewall for forbidden cross-type pairs.
                     similarity = 0.0
-            if similarity >= settings.semantic_similarity_threshold_effective:
+            threshold = settings.semantic_similarity_threshold_for(
+                node_types[i],
+                node_types[j],
+                graph.paradigm.value,
+            )
+            if similarity >= threshold:
                 uf.union(node_ids[i], node_ids[j])
 
     clusters: dict[str, set[str]] = defaultdict(set)

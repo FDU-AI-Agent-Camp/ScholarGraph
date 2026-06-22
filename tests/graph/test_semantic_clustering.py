@@ -78,12 +78,18 @@ class _FakeEmbeddingClient:
         return [self.vectors[self._extract_label(text)] for text in texts]
 
 
-def _settings(enabled: bool = True, sim: float = 0.92, knn: float = 0.85) -> Settings:
+def _settings(
+    enabled: bool = True,
+    sim: float = 0.92,
+    knn: float = 0.85,
+    dynamic_thresholds: bool = False,
+) -> Settings:
     return Settings(
         _env_file=None,
         llm_mode="mock",
         semantic_clustering_enabled=enabled,
         semantic_similarity_threshold=sim,
+        semantic_clustering_dynamic_thresholds_enabled=dynamic_thresholds,
         semantic_knn_threshold=knn,
     )
 
@@ -371,6 +377,97 @@ class TestTypeFirewall:
         types = {n.type for n in result.nodes}
         assert "ObjectOrData" in types
         assert "Claim" in types
+
+    @pytest.mark.asyncio
+    async def test_dynamic_threshold_method_stricter_than_dataset_in_stem(self) -> None:
+        """STEM Method threshold (0.92) should block merges that Dataset threshold (0.82) allows."""
+
+        class _TypedEmbeddingClient:
+            def __init__(self, vectors: dict[str, list[float]]) -> None:
+                self._vectors = vectors
+
+            async def embed_texts(self, texts: list[str]) -> list[list[float]]:
+                return [self._vectors[t] for t in texts]
+
+        # Two Method nodes at 0.90 similarity: below STEM Method threshold 0.92.
+        method_texts = [
+            "类型: Method | 细分类别: General | 核心概念: Adam Optimizer",
+            "类型: Method | 细分类别: General | 核心概念: Adam",
+        ]
+        method_vectors = dict(zip(method_texts, [[1.0, 0.0, 0.0], [0.90, 0.4359, 0.0]], strict=True))
+        method_graph = ExtractedGraph(
+            paper_id="p1",
+            title="T",
+            paradigm=Paradigm.STEM,
+            nodes=[
+                ExtractedNode(id="m1", label="Adam Optimizer", type="Method"),
+                ExtractedNode(id="m2", label="Adam", type="Method"),
+            ],
+            edges=[],
+        )
+        result_method = await semantic_cluster_and_merge(
+            method_graph,
+            _settings(sim=-1.0, dynamic_thresholds=True),
+            embedding_client=_TypedEmbeddingClient(method_vectors),
+        )
+        assert len(result_method.nodes) == 2, "STEM Method pair at 0.90 should not merge"
+
+        # Two Dataset nodes at 0.85 similarity: above STEM Dataset threshold 0.82.
+        dataset_texts = [
+            "类型: Dataset | 细分类别: General | 核心概念: Fangzhi Yunnan",
+            "类型: Dataset | 细分类别: General | 核心概念: Fangzhi Yunnan Data",
+        ]
+        dataset_vectors = dict(zip(dataset_texts, [[1.0, 0.0, 0.0], [0.85, 0.5268, 0.0]], strict=True))
+        dataset_graph = ExtractedGraph(
+            paper_id="p1",
+            title="T",
+            paradigm=Paradigm.STEM,
+            nodes=[
+                ExtractedNode(id="d1", label="Fangzhi Yunnan", type="Dataset"),
+                ExtractedNode(id="d2", label="Fangzhi Yunnan Data", type="Dataset"),
+            ],
+            edges=[],
+        )
+        result_dataset = await semantic_cluster_and_merge(
+            dataset_graph,
+            _settings(sim=-1.0, dynamic_thresholds=True),
+            embedding_client=_TypedEmbeddingClient(dataset_vectors),
+        )
+        assert len(result_dataset.nodes) == 1, "STEM Dataset pair at 0.85 should merge"
+
+    @pytest.mark.asyncio
+    async def test_explicit_similarity_threshold_overrides_dynamic_matrix(self) -> None:
+        """When SEMANTIC_SIMILARITY_THRESHOLD is set explicitly, dynamic matrix is ignored."""
+
+        class _TypedEmbeddingClient:
+            def __init__(self, vectors: dict[str, list[float]]) -> None:
+                self._vectors = vectors
+
+            async def embed_texts(self, texts: list[str]) -> list[list[float]]:
+                return [self._vectors[t] for t in texts]
+
+        texts = [
+            "类型: Method | 细分类别: General | 核心概念: Adam Optimizer",
+            "类型: Method | 细分类别: General | 核心概念: Adam",
+        ]
+        vectors = dict(zip(texts, [[1.0, 0.0, 0.0], [0.90, 0.4359, 0.0]], strict=True))
+        graph = ExtractedGraph(
+            paper_id="p1",
+            title="T",
+            paradigm=Paradigm.STEM,
+            nodes=[
+                ExtractedNode(id="m1", label="Adam Optimizer", type="Method"),
+                ExtractedNode(id="m2", label="Adam", type="Method"),
+            ],
+            edges=[],
+        )
+        # Explicit sim=0.85 is lower than STEM Method 0.92, so it should merge.
+        result = await semantic_cluster_and_merge(
+            graph,
+            _settings(sim=0.85, dynamic_thresholds=True),
+            embedding_client=_TypedEmbeddingClient(vectors),
+        )
+        assert len(result.nodes) == 1
 
 
 class _OrthogonalEmbeddingClient:
