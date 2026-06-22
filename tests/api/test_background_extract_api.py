@@ -14,11 +14,83 @@ from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+from backend.agents.extract_types import ExtractResult
+from backend.schemas.graph import GraphEdge, GraphNode, NodeType, UnifiedPaperGraph
+from backend.schemas.paradigm import Paradigm
 from httpx import AsyncClient
 from tests.api.conftest import assert_error_envelope, assert_success_envelope
 from tests.api.test_papers_upload import VALID_PDF
 
 pytestmark = pytest.mark.asyncio
+
+
+def _fake_graph(paper_id: str, paradigm: Paradigm) -> UnifiedPaperGraph:
+    """Return a small deterministic graph for HTTP contract tests."""
+    node_type = NodeType.THESIS if paradigm == Paradigm.HSS else NodeType.RESEARCH_QUESTION
+    return UnifiedPaperGraph(
+        paper_id=paper_id,
+        title="fake-graph",
+        paradigm=paradigm,
+        nodes=[GraphNode(id="n1", label="Fake node", type=node_type)],
+        edges=[],
+        summary="fake",
+    )
+
+
+def _full_fake_graph(paper_id: str, paradigm: Paradigm) -> UnifiedPaperGraph:
+    """Return a small deterministic graph produced by the background worker."""
+    node_type = NodeType.THESIS if paradigm == Paradigm.HSS else NodeType.RESEARCH_QUESTION
+    return UnifiedPaperGraph(
+        paper_id=paper_id,
+        title="full-fake-graph",
+        paradigm=paradigm,
+        nodes=[
+            GraphNode(id="n1", label="Fake node", type=node_type),
+            GraphNode(id="n2", label="Another fake node", type=node_type),
+        ],
+        edges=[GraphEdge(id="e1", source="n1", target="n2", label="supports", type="SUPPORTS")],
+        summary="full fake",
+    )
+
+
+async def _fake_extract_preview_and_schedule(
+    full_text: str,
+    paradigm: Paradigm,
+    *,
+    paper_id: str,
+    classification: object,
+    settings: object | None = None,
+) -> ExtractResult:
+    """Schedule the real background worker but return a deterministic preview."""
+    from backend.config import get_settings
+    from backend.services.extract_worker import schedule_full_extraction
+
+    cfg = settings or get_settings()
+    schedule_full_extraction(
+        paper_id,
+        full_text,
+        paradigm,
+        classification,
+        head_context=None,
+        settings=cfg,
+    )
+    return ExtractResult(graph=_fake_graph(paper_id, paradigm), warnings=[])
+
+
+def _slow_full_extraction(sleep_s: float):
+    """Patch replacement for ``_extract_chunked_two_phase`` that sleeps deterministically."""
+
+    async def _extract(
+        _full_text: str,
+        paradigm: Paradigm,
+        *,
+        paper_id: str,
+        **_kwargs: object,
+    ) -> ExtractResult:
+        await asyncio.sleep(sleep_s)
+        return ExtractResult(graph=_full_fake_graph(paper_id, paradigm), warnings=[])
+
+    return _extract
 
 
 async def _poll_status_until_terminal(
@@ -55,12 +127,6 @@ async def test_long_paper_upload_reaches_ready_via_background_extraction(
         },
     )
 
-    from backend.services.extract_worker import _extract_chunked_two_phase as _original_extract
-
-    async def slow_full_extraction(*args, **kwargs):
-        await asyncio.sleep(0.1)
-        return await _original_extract(*args, **kwargs)
-
     with (
         patch("backend.graph.nodes.get_ingest_service", return_value=ingest_svc),
         patch("backend.graph.nodes.ensure_head_refine_scheduled"),
@@ -70,8 +136,12 @@ async def test_long_paper_upload_reaches_ready_via_background_extraction(
         ),
         patch("backend.services.agent_service.should_run_background_extraction", return_value=True),
         patch(
+            "backend.agents.extractor_background.extract_preview_and_schedule_full",
+            new=_fake_extract_preview_and_schedule,
+        ),
+        patch(
             "backend.services.extract_worker._extract_chunked_two_phase",
-            new=slow_full_extraction,
+            new=_slow_full_extraction(0.1),
         ),
     ):
         create = await api_client.post(
@@ -127,12 +197,6 @@ async def test_graph_returns_409_while_background_extraction_runs(
         },
     )
 
-    from backend.services.extract_worker import _extract_chunked_two_phase as _original_extract
-
-    async def slow_full_extraction(*args, **kwargs):
-        await asyncio.sleep(0.3)
-        return await _original_extract(*args, **kwargs)
-
     with (
         patch("backend.graph.nodes.get_ingest_service", return_value=ingest_svc),
         patch("backend.graph.nodes.ensure_head_refine_scheduled"),
@@ -142,8 +206,12 @@ async def test_graph_returns_409_while_background_extraction_runs(
         ),
         patch("backend.services.agent_service.should_run_background_extraction", return_value=True),
         patch(
+            "backend.agents.extractor_background.extract_preview_and_schedule_full",
+            new=_fake_extract_preview_and_schedule,
+        ),
+        patch(
             "backend.services.extract_worker._extract_chunked_two_phase",
-            new=slow_full_extraction,
+            new=_slow_full_extraction(0.3),
         ),
     ):
         create = await api_client.post(
