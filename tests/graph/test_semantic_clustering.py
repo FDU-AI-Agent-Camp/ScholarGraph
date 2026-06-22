@@ -257,10 +257,14 @@ class TestTypeFirewall:
         )
         assert not _cross_type_merge_allowed("ObjectOrData", "Claim")
 
-    def test_allowed_child_parent_merge_is_permitted(self) -> None:
-        assert _cross_type_merge_allowed("SubArgument", "Claim")
-        assert _cross_type_merge_allowed("ResearchQuestion", "Thesis")
-        assert _cross_type_merge_allowed("Dataset", "Method")
+    def test_same_type_merge_is_permitted(self) -> None:
+        """The stage-1 firewall only allows comparisons within the exact same type."""
+        assert _cross_type_merge_allowed("Claim", "Claim")
+        assert _cross_type_merge_allowed("Method", "Method")
+        assert _cross_type_merge_allowed("Dataset", "Dataset")
+        assert not _cross_type_merge_allowed("SubArgument", "Claim")
+        assert not _cross_type_merge_allowed("ResearchQuestion", "Thesis")
+        assert not _cross_type_merge_allowed("Dataset", "Method")
 
     def test_evidence_is_isolated_from_claim_and_thesis(self) -> None:
         assert not _cross_type_merge_allowed("Evidence", "Claim")
@@ -293,59 +297,63 @@ class TestTypeFirewall:
         root = _elect_root({"claim1", "claim2"}, degrees, nodes_by_id)
         assert root == "claim2"
 
-        assert _cross_type_merge_allowed("Claim", "Claim")
-        assert _cross_type_merge_allowed("Method", "Method")
-
     @pytest.mark.asyncio
-    async def test_cross_type_penalty_tightens_merge_gate(self) -> None:
-        """SubArgument-Claim at 0.87 raw similarity should NOT merge after -0.05 penalty."""
+    async def test_hard_type_firewall_blocks_identical_cross_type_labels(self) -> None:
+        """Even with identical labels and high similarity, different types must not merge."""
 
-        from backend.graph.semantic_clustering import _node_text
-
-        class _PenaltyEmbeddingClient:
-            def __init__(self, vectors: dict[str, list[float]]) -> None:
-                self._vectors = vectors
+        class _IdenticalEmbeddingClient:
+            """Return the same vector for every text to simulate perfect similarity."""
 
             async def embed_texts(self, texts: list[str]) -> list[list[float]]:
-                return [self._vectors[t] for t in texts]
+                return [[1.0, 0.0, 0.0] for _ in texts]
 
-        # Low similarity pair: should remain separate.
-        nodes_low = [
-            ExtractedNode(id="sub_low", label="x", type="SubArgument"),
-            ExtractedNode(id="claim_low", label="x", type="Claim"),
+        nodes = [
+            ExtractedNode(id="n1", label="film industry", type="ObjectOrData"),
+            ExtractedNode(id="n2", label="film industry", type="Claim"),
+            ExtractedNode(id="n3", label="film industry", type="SubArgument"),
         ]
-        texts_low = [_node_text(n) for n in nodes_low]
-        vectors_low = dict(zip(texts_low, [[1.0, 0.0, 0.0], [0.87, 0.4931, 0.0]], strict=True))
-        graph_low = ExtractedGraph(
+        graph = ExtractedGraph(
             paper_id="p1",
             title="T",
             paradigm=Paradigm.HSS,
-            nodes=nodes_low,
+            nodes=nodes,
             edges=[],
         )
-        result_low = await semantic_cluster_and_merge(
-            graph_low, _settings(sim=0.85), embedding_client=_PenaltyEmbeddingClient(vectors_low)
+        result = await semantic_cluster_and_merge(
+            graph,
+            _settings(sim=0.5),
+            embedding_client=_IdenticalEmbeddingClient(),
         )
-        assert len(result_low.nodes) == 2
+        assert len(result.nodes) == 3
+        assert not any("SEMANTIC_CLUSTERS_MERGED" in w for w in result.warnings)
 
-        # High similarity pair: should merge.
-        nodes_high = [
-            ExtractedNode(id="sub_high", label="x", type="SubArgument"),
-            ExtractedNode(id="claim_high", label="x", type="Claim"),
+    @pytest.mark.asyncio
+    async def test_same_type_high_similarity_still_merges(self) -> None:
+        """The firewall must not break legitimate within-type synonym merging."""
+
+        class _IdenticalEmbeddingClient:
+            async def embed_texts(self, texts: list[str]) -> list[list[float]]:
+                return [[1.0, 0.0, 0.0] for _ in texts]
+
+        nodes = [
+            ExtractedNode(id="n1", label="Adam Optimizer", type="Method"),
+            ExtractedNode(id="n2", label="Adam", type="Method"),
+            ExtractedNode(id="n3", label="SGD", type="Method"),
         ]
-        texts_high = [_node_text(n) for n in nodes_high]
-        vectors_high = dict(zip(texts_high, [[1.0, 0.0, 0.0], [0.95, 0.3122, 0.0]], strict=True))
-        graph_high = ExtractedGraph(
+        graph = ExtractedGraph(
             paper_id="p1",
             title="T",
-            paradigm=Paradigm.HSS,
-            nodes=nodes_high,
+            paradigm=Paradigm.STEM,
+            nodes=nodes,
             edges=[],
         )
-        result_high = await semantic_cluster_and_merge(
-            graph_high, _settings(sim=0.85), embedding_client=_PenaltyEmbeddingClient(vectors_high)
+        result = await semantic_cluster_and_merge(
+            graph,
+            _settings(sim=0.5),
+            embedding_client=_IdenticalEmbeddingClient(),
         )
-        assert len(result_high.nodes) == 1
+        assert len(result.nodes) == 1
+        assert any("SEMANTIC_CLUSTERS_MERGED:1" in w for w in result.warnings)
 
     @pytest.mark.asyncio
     async def test_firewall_prevents_hub_merging(self) -> None:
@@ -373,10 +381,9 @@ class TestTypeFirewall:
             edges=edges.edges,
         )
         result = await semantic_cluster_and_merge(graph, _settings(), embedding_client=client)
-        # ObjectOrData must remain separate; SubArgument may merge into Claim.
+        # Hard type firewall: every distinct type must survive.
         types = {n.type for n in result.nodes}
-        assert "ObjectOrData" in types
-        assert "Claim" in types
+        assert types == {"ObjectOrData", "Claim", "SubArgument"}
 
     @pytest.mark.asyncio
     async def test_dynamic_threshold_method_stricter_than_dataset_in_stem(self) -> None:

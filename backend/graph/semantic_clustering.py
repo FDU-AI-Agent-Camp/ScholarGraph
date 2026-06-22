@@ -59,38 +59,14 @@ def _node_text(node: ExtractedNode) -> str:
     return text
 
 
-# Child node types that may be merged into their semantic parent types.
-# The key is the *absorbed* (subordinate) type; the value is the set of parent
-# types it is allowed to collapse into. All other cross-type pairs are blocked.
-# Keep this list conservative: central concept types (Claim/Method/Thesis) must
-# not absorb each other, otherwise broad topic terms become "super black holes".
-_CROSS_TYPE_MERGE_RULES: dict[str, set[str]] = {
-    "SubArgument": {"Claim"},
-    "Evidence": set(),  # Evidence is already folded; if it survives, keep it real.
-    "ObjectOrData": set(),  # Data objects must stay distinct from concepts.
-    "Dataset": {"Method"},
-    "Metric": {"Method"},
-    "Baseline": {"Method"},
-    "ResearchQuestion": {"Thesis"},
-    "AnalyticalLens": set(),
-    "IntellectualContext": set(),
-    "Claim": set(),
-    "Method": set(),
-    "Thesis": set(),
-}
-
-# When two different node types are allowed to merge, apply a similarity penalty
-# so the cross-type threshold is effectively higher (e.g. 0.85 -> 0.90).
-_CROSS_TYPE_PENALTY = 0.05
-
-
 def _cross_type_merge_allowed(type_a: str, type_b: str) -> bool:
-    """Return True if two different node types are allowed to merge."""
-    if type_a == type_b:
-        return True
-    allowed_for_a = _CROSS_TYPE_MERGE_RULES.get(type_a, set())
-    allowed_for_b = _CROSS_TYPE_MERGE_RULES.get(type_b, set())
-    return type_b in allowed_for_a or type_a in allowed_for_b
+    """Return True only when two nodes share the exact same type.
+
+    Stage-1 hard type firewall: cross-type comparisons are forbidden entirely.
+    This eliminates spurious overlaps in vector space (e.g. a ``Method`` named
+    after a ``Dataset``) and minimizes wasted embedding/reranker work.
+    """
+    return type_a == type_b
 
 
 # Root-election priority: lower number = preferred as the canonical root when a
@@ -429,8 +405,9 @@ async def semantic_cluster_and_merge(
     if len(embeddings) != len(graph.nodes):
         raise ValueError(f"Embedding count mismatch: {len(embeddings)} vectors for {len(graph.nodes)} nodes")
 
-    # 1. Pairwise similarity clustering with a dynamic type firewall and
-    #    per-paradigm/per-category thresholds.
+    # 1. Pairwise similarity clustering with a hard type firewall and
+    #    per-paradigm/per-category thresholds. Only nodes of the same type are
+    #    compared, so cross-type embeddings can never trigger a merge.
     node_ids = [node.id for node in graph.nodes]
     node_types = [node.type for node in graph.nodes]
     uf = _UnionFind()
@@ -438,14 +415,9 @@ async def semantic_cluster_and_merge(
         uf.find(node_ids[i])
     for i in range(len(node_ids)):
         for j in range(i + 1, len(node_ids)):
-            similarity = _cosine_similarity(embeddings[i], embeddings[j])
             if node_types[i] != node_types[j]:
-                if _cross_type_merge_allowed(node_types[i], node_types[j]):
-                    # Raise the bar for cross-type merges to avoid loose hubs.
-                    similarity = max(0.0, similarity - _CROSS_TYPE_PENALTY)
-                else:
-                    # Hard firewall for forbidden cross-type pairs.
-                    similarity = 0.0
+                continue
+            similarity = _cosine_similarity(embeddings[i], embeddings[j])
             threshold = settings.semantic_similarity_threshold_for(
                 node_types[i],
                 node_types[j],
