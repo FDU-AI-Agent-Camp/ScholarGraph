@@ -951,6 +951,59 @@ class TestRerankerFineFilter:
         assert len(result.nodes) == 1
         assert any("SEMANTIC_CLUSTERS_MERGED:1" in w for w in result.warnings)
 
+    @pytest.mark.asyncio
+    async def test_reranker_input_is_normalized_by_node_id(self) -> None:
+        """Asymmetric reranker must always receive (smaller_id, larger_id) order."""
+
+        class _IdenticalEmbeddingClient:
+            async def embed_texts(self, texts: list[str]) -> list[list[float]]:
+                return [[1.0, 0.0, 0.0] for _ in texts]
+
+        class _AsymmetricRerankerClient:
+            def __init__(self) -> None:
+                self.observed_pairs: list[tuple[str, str]] = []
+
+            async def rerank_pairs(self, pairs: list[tuple[str, str]]) -> list[float]:
+                self.observed_pairs.extend(pairs)
+                scores = []
+                for text_a, _text_b in pairs:
+                    # The stable direction (smaller id as query) scores high;
+                    # the reversed direction scores low.
+                    if "类型: Method | 细分类别: General | 核心概念: Adam" in text_a:
+                        scores.append(0.95)
+                    else:
+                        scores.append(0.30)
+                return scores
+
+        # Deliberately create ids where the first node has a larger id than the
+        # second, so the coarse-filter could return them in either order.
+        nodes = [
+            ExtractedNode(id="z_adam", label="Adam Optimizer", type="Method"),
+            ExtractedNode(id="a_adam", label="Adam", type="Method"),
+        ]
+        graph = ExtractedGraph(
+            paper_id="p1",
+            title="T",
+            paradigm=Paradigm.STEM,
+            nodes=nodes,
+            edges=[],
+        )
+        reranker = _AsymmetricRerankerClient()
+
+        result = await semantic_cluster_and_merge(
+            graph,
+            self._rerank_settings(),
+            embedding_client=_IdenticalEmbeddingClient(),
+            reranker_client=reranker,
+        )
+
+        assert len(result.nodes) == 1
+        assert len(reranker.observed_pairs) == 1
+        text_a, _text_b = reranker.observed_pairs[0]
+        # a_adam has the smaller id, so its text must be the query.
+        assert "核心概念: Adam" in text_a
+        assert "核心概念: Adam Optimizer" not in text_a
+
 
 class TestDescriptionFusion:
     def test_fuse_descriptions_deduplicates_and_joins(self) -> None:

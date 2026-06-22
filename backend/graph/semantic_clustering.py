@@ -525,11 +525,20 @@ async def semantic_cluster_and_merge(
     # 2. Stage 3 cloud reranker fine-filter (optional but recommended).
     #    Only pairs whose reranker score is strictly above the threshold are
     #    promoted to TRUE_HOMOGENEOUS and merged via union-find.
+    #
+    #    Cross-encoder rerankers can be asymmetric: rerank(A,B) != rerank(B,A).
+    #    To keep the gate deterministic, we always pass the node with the
+    #    lexicographically smaller id as the query and the larger id as the
+    #    document.  The merge decision itself still uses the original ids.
     client = reranker_client or RerankerClient(settings)
-    pair_texts = [
-        (_node_text(nodes_by_id[node_id_i]), _node_text(nodes_by_id[node_id_j]))
-        for node_id_i, node_id_j, _ in coarse_pairs
-    ]
+    pair_texts: list[tuple[str, str]] = []
+    for node_id_i, node_id_j, _ in coarse_pairs:
+        text_i = _node_text(nodes_by_id[node_id_i])
+        text_j = _node_text(nodes_by_id[node_id_j])
+        if node_id_i <= node_id_j:
+            pair_texts.append((text_i, text_j))
+        else:
+            pair_texts.append((text_j, text_i))
     try:
         rerank_scores = await client.rerank_pairs(pair_texts)
     except Exception as exc:
