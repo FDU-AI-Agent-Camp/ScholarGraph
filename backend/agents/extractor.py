@@ -23,7 +23,7 @@ from backend.agents.extract_types import ExtractResult
 from backend.agents.mock_agents import mock_extract
 from backend.config import Settings, get_settings
 from backend.schemas.extract_phase import ExtractedGraph
-from backend.schemas.graph import GraphEdge, GraphNode, UnifiedPaperGraph
+from backend.schemas.graph import GraphEdge, GraphNode, NodeType, UnifiedPaperGraph
 from backend.schemas.paradigm import Paradigm
 
 logger = logging.getLogger(__name__)
@@ -41,7 +41,7 @@ def _fallback_to_heuristic(
     *,
     paper_id: str,
     title: str,
-    reason: Exception | str,
+    reason: BaseException | str,
 ) -> ExtractResult:
     """Degrade to ``build_heuristic_graph`` and record fallback warnings.
 
@@ -125,7 +125,7 @@ def _to_unified_graph(
         paper_id=paper_id,
         title=extracted.title,
         paradigm=paradigm,
-        nodes=[GraphNode(id=n.id, label=n.label, type=n.type, data=n.data) for n in extracted.nodes],
+        nodes=[GraphNode(id=n.id, label=n.label, type=NodeType(n.type), data=n.data) for n in extracted.nodes],
         edges=[
             GraphEdge(
                 id=e.id,
@@ -346,7 +346,7 @@ async def _extract_chunked_two_phase(
         paper_id=paper_id,
         title=title,
         paradigm=paradigm,
-        nodes=[GraphNode(id=n.id, label=n.label, type=n.type, data=n.data) for n in extracted_graph.nodes],
+        nodes=[GraphNode(id=n.id, label=n.label, type=NodeType(n.type), data=n.data) for n in extracted_graph.nodes],
         edges=[
             GraphEdge(
                 id=e.id,

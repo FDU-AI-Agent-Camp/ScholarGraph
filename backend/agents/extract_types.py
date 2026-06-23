@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import NoReturn
+from typing import Any, NoReturn
 
 from backend.schemas.graph import UnifiedPaperGraph
 
@@ -52,7 +52,7 @@ def classify_extraction_error(exc: BaseException) -> NoReturn:
             RateLimitError,
         )
     except Exception:  # pragma: no cover - openai may not be installed in all tests
-        APIStatusError = APITimeoutError = BadRequestError = NotFoundError = RateLimitError = None  # type: ignore[misc, assignment]
+        APIStatusError = APITimeoutError = BadRequestError = NotFoundError = RateLimitError = None  # type: ignore
 
     # Transient: network / timeout / rate limit / server errors
     if isinstance(exc, httpx.TimeoutException):
@@ -66,14 +66,20 @@ def classify_extraction_error(exc: BaseException) -> NoReturn:
         if status_code >= 400:
             raise DeterministicExtractionError(f"LLM client error {status_code}: {exc}") from exc
 
-    if APIStatusError is not None:
-        if isinstance(exc, APITimeoutError):
-            raise TransientExtractionError(f"OpenAI timeout: {exc}") from exc
-        if isinstance(exc, RateLimitError):
-            raise TransientExtractionError(f"OpenAI rate limit: {exc}") from exc
-        if isinstance(exc, (BadRequestError, NotFoundError)):
+    openai_errors: tuple[Any, ...] = (
+        APITimeoutError,
+        RateLimitError,
+        BadRequestError,
+        NotFoundError,
+        APIStatusError,
+    )
+    openai_errors = tuple(e for e in openai_errors if e is not None)
+    if openai_errors and isinstance(exc, openai_errors):
+        if isinstance(exc, (APITimeoutError, RateLimitError)):  # type: ignore
+            raise TransientExtractionError(f"OpenAI timeout/rate limit: {exc}") from exc
+        if isinstance(exc, (BadRequestError, NotFoundError)):  # type: ignore
             raise DeterministicExtractionError(f"OpenAI client error: {exc}") from exc
-        if isinstance(exc, APIStatusError):
+        if isinstance(exc, APIStatusError):  # type: ignore
             status_code = getattr(exc, "status_code", 0)
             if status_code in {429, 502, 503, 504}:
                 raise TransientExtractionError(f"OpenAI status {status_code}: {exc}") from exc

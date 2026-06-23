@@ -197,7 +197,7 @@ async def fail_node(state: WorkflowState) -> WorkflowState:
     paper_id = state["paper_id"]
     message = state.get("error_message") or state.get("message") or "流水线失败"
     failed_during = state.get("stage")
-    failed_stage = failed_during if isinstance(failed_during, PipelineStage) else None
+    failed_stage: PipelineStage | None = failed_during if isinstance(failed_during, PipelineStage) else None
     error_code = state.get("error_code", PIPELINE_FAILED_CODE)
     get_pipeline_status_service().mark_failed(
         paper_id,

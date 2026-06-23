@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import TypeVar
 
 from langchain_core.messages import HumanMessage, SystemMessage
-from pydantic import BaseModel
+from pydantic import BaseModel, SecretStr
 
 from backend.agents.classifier_types import ClassifierProfile, CoreContributionAnalysis
 from backend.config import Settings, get_settings
@@ -57,8 +57,11 @@ def _extract_raw_json_from_error(exc: Exception) -> str | None:
     if not callable(errors):
         return None
     try:
-        for err in errors():
-            if err.get("type") == "json_invalid":
+        error_list = errors()
+        if not isinstance(error_list, list):
+            return None
+        for err in error_list:
+            if isinstance(err, dict) and err.get("type") == "json_invalid":
                 return err.get("input")
     except Exception:
         return None
@@ -75,7 +78,7 @@ def _build_chat_for_model(settings: Settings, model_name: str) -> LlmClient | No
     from langchain_openai import ChatOpenAI
 
     return ChatOpenAI(  # type: ignore[return-value]
-        api_key=api_key,
+        api_key=SecretStr(api_key),
         base_url=base_url,
         model=model_name,
         timeout=timeout,
@@ -134,7 +137,9 @@ async def _invoke_structured(
     user_content: str,
     response_model: type[T],
 ) -> T:
-    structured = chat.with_structured_output(response_model)
+    # _invoke_structured is only called with live ChatOpenAI instances in practice;
+    # the mock path goes through MockChat.with_structured_output instead.
+    structured = chat.with_structured_output(response_model)  # type: ignore[union-attr]
     messages = [
         SystemMessage(content=system_prompt),
         HumanMessage(content=user_content),

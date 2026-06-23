@@ -114,7 +114,7 @@ def _merge_clusters(
         if len(cluster) <= 1:
             continue
         root_id = id_map[next(iter(cluster))]
-        descriptions = [nodes_by_id[node_id].description for node_id in cluster if nodes_by_id[node_id].description]
+        descriptions = [desc for node_id in cluster if (desc := nodes_by_id[node_id].description) is not None]
         fused = _fuse_descriptions(descriptions)
         if fused:
             existing = new_nodes_by_id[root_id]

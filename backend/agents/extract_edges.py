@@ -218,12 +218,13 @@ async def _patch_source_spans(
         user_prompt = f"Rationales:\n{rationales_block}\n\nSource text:\n{text_for_patch}\n\nReturn the JSON array now."
 
         try:
-            response = await chat.ainvoke(
+            # _patch_source_spans is only used with live ChatOpenAI models.
+            response = await chat.ainvoke(  # type: ignore[union-attr]
                 [SystemMessage(content=system_prompt), HumanMessage(content=user_prompt)],
-                temperature=0.0,
+                temperature=0.0,  # type: ignore[reportCallIssue]
             )
-            content = response.content if hasattr(response, "content") else str(response)
-            content = content.strip()
+            raw_content = response.content if hasattr(response, "content") else str(response)
+            content = raw_content.strip() if isinstance(raw_content, str) else str(raw_content).strip()
             if content.startswith("```"):
                 content = content.removeprefix("```json").removeprefix("```").removesuffix("```").strip()
             patches = json.loads(content)

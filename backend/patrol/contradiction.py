@@ -13,11 +13,15 @@ CONTRADICTION_INSIGHT_ID = "ins-contradiction-001"
 CONTRADICTION_TITLE = "核心论点张力（Contradiction）"
 
 
-def thesis_nodes(graph: UnifiedPaperGraph) -> list[GraphNode]:
+def thesis_nodes(graph: UnifiedPaperGraph | None) -> list[GraphNode]:
+    if graph is None:
+        return []
     return [node for node in graph.nodes if node.type == THESIS_NODE_TYPE]
 
 
-def sub_argument_nodes(graph: UnifiedPaperGraph) -> list[GraphNode]:
+def sub_argument_nodes(graph: UnifiedPaperGraph | None) -> list[GraphNode]:
+    if graph is None:
+        return []
     return [node for node in graph.nodes if node.type == SUB_ARGUMENT_NODE_TYPE]
 
 
@@ -74,6 +78,7 @@ async def build_contradiction_insight(
     if not right_subs:
         missing_subargument_paper_ids.append(right_id)
     if missing_subargument_paper_ids:
+        assert left_thesis is not None and right_thesis is not None
         summary = (
             f"由于对比文献 {'、'.join(missing_subargument_paper_ids)} 中缺乏显式子论点（SubArgument）数据，"
             "无法生成矛盾巡检报告。建议补充文献内容或重新解析。"
@@ -91,6 +96,7 @@ async def build_contradiction_insight(
             ],
         )
 
+    assert left_thesis is not None and right_thesis is not None
     context = _build_contradiction_context(graphs, paper_ids)
     llm_summary = await generate_patrol_summary(
         PatrolMode.CONTRADICTION,

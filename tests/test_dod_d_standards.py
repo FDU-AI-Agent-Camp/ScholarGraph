@@ -90,9 +90,13 @@ def test_d02_pyproject_excludes_red_marker_by_default() -> None:
 
 def test_d01_d02_backend_ci_matches_check_backend_commands() -> None:
     workflow = BACKEND_WORKFLOW.read_text(encoding="utf-8")
-    assert "uv run ruff check backend tests scripts" in workflow
-    assert "uv run ruff format --check backend tests scripts" in workflow
-    assert 'pytest -q -m "not red and not live_mineru and not live_grobid"' in workflow
+    makefile = (REPO_ROOT / "Makefile").read_text(encoding="utf-8")
+    # CI workflow 使用 Makefile 作为一键入口；具体命令在 Makefile 中维护。
+    assert "make ci" in workflow
+    assert "uv run ruff check backend tests scripts" in makefile
+    assert "uv run ruff format --check backend tests scripts" in makefile
+    assert "pytest -q" in makefile
+    assert '-m "not red and not live_mineru and not live_grobid"' in makefile
 
 
 def test_d03_d04_frontend_ci_runs_check_not_only_typecheck() -> None:

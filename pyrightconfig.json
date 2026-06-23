@@ -1,0 +1,20 @@
+{
+  "include": ["backend"],
+  "exclude": [
+    "**/node_modules",
+    "**/__pycache__",
+    ".venv",
+    "backend/test",
+    "tests"
+  ],
+  "venvPath": ".",
+  "venv": ".venv",
+  "pythonVersion": "3.11",
+  "typeCheckingMode": "basic",
+  "reportMissingTypeStubs": "none",
+  "reportUnknownMemberType": "none",
+  "reportTypedDictNotRequiredAccess": "none",
+  "reportUnsupportedDunderAll": "none",
+  "reportGeneralTypeIssues": "error",
+  "reportOptionalMemberAccess": "error"
+}

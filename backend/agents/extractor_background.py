@@ -19,7 +19,7 @@ from backend.agents.extractor import (
     extract_title,
 )
 from backend.config import Settings, get_settings
-from backend.schemas.graph import GraphNode, UnifiedPaperGraph
+from backend.schemas.graph import GraphNode, NodeType, UnifiedPaperGraph
 from backend.schemas.paradigm import Paradigm, ParadigmClassification
 
 logger = logging.getLogger(__name__)
@@ -36,7 +36,7 @@ def should_run_background_extraction(full_text: str, settings: Settings) -> bool
 
 def _minimal_pending_graph(paper_id: str, title: str | None, paradigm: Paradigm) -> UnifiedPaperGraph:
     """Return a valid placeholder graph while background extraction runs."""
-    node_type = "Thesis" if paradigm == Paradigm.HSS else "ResearchQuestion"
+    node_type = NodeType.THESIS if paradigm == Paradigm.HSS else NodeType.RESEARCH_QUESTION
     return UnifiedPaperGraph(
         paper_id=paper_id,
         title=title,

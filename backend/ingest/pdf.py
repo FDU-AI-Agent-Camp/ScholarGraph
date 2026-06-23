@@ -53,7 +53,8 @@ def extract_pdf_text(file_path: Path, *, max_pages: int | None = None) -> str:
         limit = page_count if max_pages is None else min(page_count, max_pages)
         page_texts: list[str] = []
         for page_index in range(limit):
-            page_texts.append(document.load_page(page_index).get_text())
+            raw_text = document.load_page(page_index).get_text()
+            page_texts.append(raw_text if isinstance(raw_text, str) else str(raw_text))
 
     combined = normalize_whitespace("\n\n".join(page_texts))
     if not combined:

@@ -125,7 +125,7 @@ class RerankerClient:
             batch_scores = await asyncio.gather(*coros, return_exceptions=True)
 
             for score in batch_scores:
-                if isinstance(score, Exception):
+                if isinstance(score, BaseException):
                     logger.warning("rerank_pair_failed", extra={"error": str(score)})
                     # Treat failed pairs as non-homogeneous so we do not merge
                     # on uncertain evidence.

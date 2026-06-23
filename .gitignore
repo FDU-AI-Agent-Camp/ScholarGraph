@@ -29,6 +29,8 @@ __pycache__/
 htmlcov/
 .coverage
 .coverage.*
+coverage.xml
+pip-audit-report.json
 dist/
 build/
 *.egg-info/

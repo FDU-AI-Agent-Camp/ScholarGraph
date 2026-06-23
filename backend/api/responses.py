@@ -1,25 +1,23 @@
 """Helpers to build success envelopes."""
 
-from typing import TypeVar
+from typing import Any
 
 from backend.schemas.envelope import DataResponse, Meta, PaginatedData
 
-T = TypeVar("T")
 
-
-def success(data: T, request_id: str) -> dict:
+def success(data: Any, request_id: str) -> dict[str, Any]:
     envelope = DataResponse(data=data, meta=Meta(request_id=request_id))
     return envelope.model_dump(mode="json")
 
 
 def paginated(
-    items: list[T],
+    items: list[Any],
     *,
     total: int,
     offset: int,
     limit: int,
     request_id: str,
-) -> dict:
+) -> dict[str, Any]:
     payload = PaginatedData(
         items=items,
         total=total,

@@ -44,7 +44,7 @@ def validate_status_contract(
         return
 
     if status == PaperStatus.PROCESSING:
-        if stage not in PROCESSING_STAGES:
+        if stage is None or stage not in PROCESSING_STAGES:
             msg = f"status=processing 时 stage 必须为 {sorted(s.value for s in PROCESSING_STAGES)} 之一"
             raise ValueError(msg)
         expected_percent = STAGE_PERCENT[stage]
