@@ -8,6 +8,7 @@ import httpx
 import pytest
 from backend.config import Settings
 from backend.llm.embeddings import EmbeddingClient
+from pydantic import SecretStr
 
 
 def _settings(
@@ -44,7 +45,7 @@ async def test_openai_provider_calls_aembed_documents() -> None:
 
     assert result == [[0.1, 0.2], [0.3, 0.4]]
     mock_cls.assert_called_once_with(
-        api_key="test-key",
+        api_key=SecretStr("test-key"),
         base_url="https://api.example.com/v1",
         model="bge-m3",
     )
@@ -69,7 +70,7 @@ async def test_openai_provider_uses_llm_key_as_fallback() -> None:
     with patch("backend.llm.embeddings.OpenAIEmbeddings", return_value=mock_instance) as mock_cls:
         await client.embed_texts(["x"])
 
-    assert mock_cls.call_args.kwargs["api_key"] == "fallback-key"
+    assert mock_cls.call_args.kwargs["api_key"] == SecretStr("fallback-key")
 
 
 @pytest.mark.asyncio

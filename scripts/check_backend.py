@@ -7,12 +7,13 @@
 
 在仓库根目录执行::
 
-    uv run python scripts/check_backend.py
+    uv run python scripts/check_backend.py          # 仅检查，不修改文件
+    uv run python scripts/check_backend.py --fix    # 自动修复并格式化
     uv run python scripts/check_backend.py --lint-only
 
 执行顺序（前一步失败则停止）：
-1. ruff check --fix  （自动修复可修复的 lint 问题）
-2. ruff format       （自动格式化代码）
+1. ruff check        （默认不自动修复）
+2. ruff format --check
 3. pyright backend   （静态类型检查）
 4. pytest            （动态单元测试）
 """
@@ -47,9 +48,14 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         help="Run ruff and pyright only (skip pytest).",
     )
     parser.add_argument(
+        "--fix",
+        action="store_true",
+        help="Auto-fix ruff issues and format files instead of just checking.",
+    )
+    parser.add_argument(
         "--no-fix",
         action="store_true",
-        help="Run ruff check without --fix (CI mode).",
+        help="Deprecated: default behavior is already check-only.",
     )
     return parser.parse_args(argv)
 
@@ -57,14 +63,16 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
 
-    ruff_check_cmd = ["ruff", "check"]
-    if not args.no_fix:
-        ruff_check_cmd.append("--fix")
-    ruff_check_cmd.extend(RUFF_TARGETS)
+    if args.fix:
+        ruff_check_cmd = ["ruff", "check", "--fix", *RUFF_TARGETS]
+        ruff_format_cmd = ["ruff", "format", *RUFF_TARGETS]
+    else:
+        ruff_check_cmd = ["ruff", "check", *RUFF_TARGETS]
+        ruff_format_cmd = ["ruff", "format", "--check", *RUFF_TARGETS]
 
     steps: list[tuple[str, list[str]]] = [
         ("ruff check", ruff_check_cmd),
-        ("ruff format", ["ruff", "format", *RUFF_TARGETS]),
+        ("ruff format", ruff_format_cmd),
         ("pyright", ["pyright", "backend"]),
     ]
     if not args.lint_only:
