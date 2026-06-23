@@ -65,7 +65,67 @@
 
 ---
 
-## 7. 增量开发原则 (Incremental Development)
+## 7. 类型系统与静态检查 (Type Systems & Static Checking)
+
+类型检查不是为了让代码「看起来专业」，而是为了在运行前暴露接口误用、减少运行时崩溃、降低协作成本。它是代码的**静态契约**，与单元测试形成互补：测试验证「行为正确」，类型验证「接口一致」。
+
+### 7.1 通用精神
+
+* **类型是契约，不是装饰**
+  类型注解首先是给调用方看的接口说明，其次才是给类型检查器看的。写清楚参数类型、返回值类型、可选值边界，就是在为团队成员节省阅读代码的时间。
+
+* **静态检查是守门员，不是枷锁**
+  类型检查的目的是拦截真正的风险（如类型不匹配、`None` 解引用、错误的参数顺序），而不是逼迫代码变成类型体操。当静态推导与语言/框架动态特性冲突时，允许理性妥协。
+
+* **渐进式推进，不追求 100%**
+  老代码可以逐步补注解，新代码必须写好注解。优先保证核心模块的类型安全，工具脚本和一次性实验代码可以放宽。
+
+* **静态与动态平衡**
+  动态能力（反射、鸭子类型、框架元编程）是语言优势。类型检查应当守护边界，而不是消灭动态性。对于强动态库，允许使用类型断言、类型守卫或局部忽略进行妥协。
+
+* **为重构护航**
+  类型检查最大的长期价值在于：当你改一个函数签名或 Schema 字段时，能快速定位所有受影响调用点。没有类型覆盖的代码，重构成本会指数级上升。
+
+### 7.2 前后端统一认知
+
+| 前端 | 后端（Python） | 守护对象 |
+|---|---|---|
+| `eslint` | `ruff check` | 代码风格、简单语法错误 |
+| `prettier` | `ruff format` | 格式一致性 |
+| **`tsc --noEmit`** | **`pyright` / `mypy`** | **类型契约** |
+| `vitest` / `jest` | `pytest` | 运行时行为正确性 |
+
+* 前端用 TypeScript 守住组件 Props 和 API 响应的 Schema。
+* 后端用静态类型检查 + Pydantic 守住 API 请求/响应、数据库模型和核心领域对象的 Schema。
+* **类型检查在 CI 中必须绿**，与 lint、测试同等重要。
+
+### 7.3 使用原则
+
+1. **函数签名必须完整**：参数、返回值、可能的 `Optional` / `Nullable` 边界必须标注。
+2. **Schema 字段类型必须准确**：枚举、联合类型、列表元素类型、可为空的字段要显式声明。
+3. **优先修复真实风险**：传参错误、返回值不匹配、`None` 成员访问等必须修。
+4. **允许理性妥协**：遇到无法静态推导的第三方库或框架动态特性时，可以使用 `cast`、类型守卫或带解释的 `# type: ignore`。
+5. **禁止运行时 hack**：不允许为了消除类型错误而修改运行时行为或引入实际不会使用的代码路径。
+6. **同步修复调用点**：修改公共函数或公共 Schema 签名后，必须同步检查并修复所有调用点。
+
+### 7.4 与动态特性共存的三种手段
+
+遇到无法静态推导的场景时，按以下优先级使用：
+
+1. **类型断言（`cast`）**
+   当你比类型检查器更清楚运行时真实类型时使用，运行期零开销。
+
+2. **类型守卫（Type Guard）**
+   用显式判空或 `isinstance` 帮助类型检查器收窄类型范围。
+
+3. **带解释的 `# type: ignore`**
+   第三方库或框架动态特性导致无法解决时使用，**必须附带注释说明原因**。
+
+**禁止**：不加注释的裸 `# type: ignore`、为了类型而通过运行时 hack 改变代码行为。
+
+---
+
+## 8. 增量开发原则 (Incremental Development)
 
 1.  **纵向切片 (Vertical Slicing)**：
     
@@ -76,11 +136,11 @@
 
 ---
 
-## 8. Git Commit Message 规范 (Conventional Commits)
+## 9. Git Commit Message 规范 (Conventional Commits)
 
 提交说明采用 **Conventional Commits** 风格，整体分为 **header**、**body**、**footer** 三部分。
 
-### 8.1 完整格式
+### 9.1 完整格式
 
 ```text
 <type>(<scope>): <subject>
@@ -94,7 +154,7 @@
 * **body**：对本次提交的详细说明，可多行；与 header、footer 之间各空一行。
 * **footer**：重大变更、Breaking changes、关联 Issue 等；与 body 之间空一行。若改动显著影响其他模块，应写明。
 
-### 8.2 Header 字段说明
+### 9.2 Header 字段说明
 
 **（1）type（必填）**
 
@@ -122,7 +182,7 @@
 
 用一句话概括提交目的；建议 **不超过 50 个字符**（英文可按词计数习惯把握），避免冗长。
 
-### 8.3 示例
+### 9.3 示例
 
 仅 header、无 body/footer 的常见写法：
 
@@ -143,7 +203,7 @@ docs(README.md): 完善 README.md
 
 ---
 
-## 9. 点分式产品版本号命名 (Dotted Version Numbering)
+## 10. 点分式产品版本号命名 (Dotted Version Numbering)
 
 对外发布的产品版本号采用**点分式**命名，格式为：
 
@@ -153,7 +213,7 @@ M.S.F.B([SP][C])
 
 方括号 `[]` 表示可选部分；`SP` 与 `C` 仅在发布补丁包或补丁时追加。
 
-### 9.1 各段含义
+### 10.1 各段含义
 
 | 段 | 名称 | 说明 |
 |----|------|------|
@@ -164,7 +224,7 @@ M.S.F.B([SP][C])
 | **SP** | 补丁包版本号（可选） | 标识累计一段时间的补丁打包版本 |
 | **C** | 补丁版本号（可选） | 标识补丁包内的单次补丁 |
 
-### 9.2 递增原则
+### 10.2 递增原则
 
 * **M**：平台或整体架构重构、不兼容的重大方向调整时递增，低位段归零。
 * **S**：局部架构或重大特性发布、对外接口发生不兼容变更时递增，**F**、**B** 及可选段归零。
@@ -173,7 +233,7 @@ M.S.F.B([SP][C])
 * **SP**：将一段时间内累计的补丁合并为补丁包发布时递增，**C** 归零。
 * **C**：在已有补丁包（或基线版本）上发布单个补丁时递增。
 
-### 9.3 示例
+### 10.3 示例
 
 ```text
 1.0.0.1          # 首个正式构建
@@ -183,7 +243,7 @@ M.S.F.B([SP][C])
 1.2.1.5.SP1.C2   # 上述补丁包内的第 2 个补丁
 ```
 
-### 9.4 使用约定
+### 10.4 使用约定
 
 * 版本号各段均为**非负整数**，不使用前导零（写作 `1.2.3.4`，而非 `01.02.03.04`）。
 * 发布说明、变更日志、安装包文件名、API 文档与运行时对外暴露的版本标识应**保持一致**。
@@ -232,48 +292,18 @@ ScholarGraph 是面向科研阅读的 **AI Agent** 项目：编排（如 LangGra
 
 ---
 
-## 10. 类型检查指南（Type Checking）
+### Pyright 类型检查（本项目具体实践）
 
-类型检查不是为了让代码「看起来专业」，而是为了在运行前暴露接口误用、减少运行时崩溃、降低协作成本。它是代码的**静态契约**，与单元测试形成互补：测试验证「行为正确」，类型验证「接口一致」。
+本项目后端统一使用 **Pyright** 作为 Python 静态类型检查工具。通用原则见第 7 节《类型系统与静态检查》；本节只记录与本项目运行、配置、流程相关的具体约定。
 
-### 10.1 通用精神
-
-* **类型是契约，不是装饰**
-  类型注解首先是给调用方看的接口说明，其次才是给类型检查器看的。写清楚参数类型、返回值类型、Optional 边界，就是在为团队成员节省阅读代码的时间。
-
-* **静态检查是守门员，不是枷锁**
-  类型检查的目的是拦截真正的风险（如把 `str` 传给需要 `int` 的函数、`None` 解引用），而不是逼迫代码变成类型体操。当静态推导与框架动态特性冲突时，允许理性妥协。
-
-* **渐进式推进，不追求 100%**
-  老代码可以逐步补注解，新代码必须写好注解。优先保证核心模块（agents、services、schemas、graph）的类型安全，工具脚本和一次性实验代码可以放宽。
-
-* **静态与动态平衡**
-  Python 的动态能力是其优势（如反射、鸭子类型、框架元编程）。类型检查应当守护边界，而不是消灭动态性。对于 LangGraph、NetworkX、MinerU 等强动态库，允许使用 `cast`、类型守卫或 `# type: ignore` 进行局部妥协。
-
-* **为重构护航**
-  类型检查最大的长期价值在于：当你改一个函数签名或 Schema 字段时，能快速定位所有受影响调用点。没有类型覆盖的代码，重构成本会指数级上升。
-
-### 10.2 前后端统一认知
-
-| 前端 | 后端 | 守护对象 |
-|---|---|---|
-| `eslint` | `ruff check` | 代码风格、简单语法错误 |
-| `prettier` | `ruff format` | 格式一致性 |
-| **`tsc --noEmit`** | **`pyright backend`** | **类型契约** |
-| `vitest` / `jest` | `pytest` | 运行时行为正确性 |
-
-* 前端用 TypeScript 守住组件 Props 和 API 响应的 Schema。
-* 后端用 Pyright + Pydantic 守住 LangGraph State、API 请求/响应和数据库模型的 Schema。
-* **类型检查在 CI 中必须绿**，与 lint、测试同等重要。
-
-### 10.3 Python / Pyright 运行方式
+#### 运行方式
 
 * 本地完整检查：`uv run pyright backend`
 * 本地一键门禁（推荐 Windows）：`uv run python scripts/check_backend.py`
 * 线上 CI / Ubuntu：`make ci`（Makefile 主要用于 CI 环境一键执行）
 * CI：`.github/workflows/backend.yml` 已集成，PR 必须绿。
 
-### 10.4 配置原则
+#### 配置约定
 
 配置集中在 `pyrightconfig.json`，不追求极度严格：
 
@@ -281,7 +311,24 @@ ScholarGraph 是面向科研阅读的 **AI Agent** 项目：编排（如 LangGra
 * **排除噪音**：测试目录、临时脚本、第三方库缺失 stub 不报错。
 * **保留核心规则**：`reportGeneralTypeIssues` 与 `reportOptionalMemberAccess` 保持 `error`，卡住函数传参错误和 `None` 成员访问。
 
-### 10.5 与动态库共存的三种妥协手段
+当前生效配置示例：
+
+```json
+{
+  "include": ["backend"],
+  "exclude": ["**/node_modules", "**/__pycache__", ".venv", "backend/test", "tests"],
+  "venvPath": ".", "venv": ".venv", "pythonVersion": "3.11",
+  "typeCheckingMode": "basic",
+  "reportMissingTypeStubs": "none",
+  "reportUnknownMemberType": "none",
+  "reportTypedDictNotRequiredAccess": "none",
+  "reportUnsupportedDunderAll": "none",
+  "reportGeneralTypeIssues": "error",
+  "reportOptionalMemberAccess": "error"
+}
+```
+
+#### 与 LangGraph / NetworkX / MinerU 等动态库共存的三种手段
 
 遇到 LangGraph `TypedDict(total=False)`、NetworkX、MinerU 等无法静态推导的场景时，优先使用以下三种手段，**不要为了 0 error 过度重构运行时行为**：
 
@@ -301,8 +348,8 @@ ScholarGraph 是面向科研阅读的 **AI Agent** 项目：编排（如 LangGra
        failed_stage = failed_during
    ```
 
-3. **极简 `# type: ignore`**
-   第三方库或框架动态特性导致无法解决时，行尾加 ignore，**必须附带解释注释**。
+3. **带解释的 `# type: ignore`**
+   第三方库或框架动态特性导致无法解决时，行尾加 ignore，**必须附带注释说明原因**。
    ```python
    # ainvoke_structured is only used with live ChatOpenAI models.
    response = await chat.ainvoke(messages)  # type: ignore[union-attr]
@@ -310,7 +357,7 @@ ScholarGraph 是面向科研阅读的 **AI Agent** 项目：编排（如 LangGra
 
 **禁止**：不加注释的裸 `# type: ignore`、为了类型而通过运行时 hack 改变代码行为。
 
-### 10.6 使用原则 checklist
+#### 提交前 checklist
 
 新增或修改代码时，按以下顺序自测：
 
@@ -320,7 +367,7 @@ ScholarGraph 是面向科研阅读的 **AI Agent** 项目：编排（如 LangGra
 4. **本地跑 `scripts/check_backend.py --lint-only` 是否通过？**
 5. **CI 中 `make ci` 是否通过？**
 
-### 10.7 红线
+#### 红线
 
 * **不允许**在核心模块（agents、services、schemas、graph）中使用裸 `Any` 绕过类型检查，除非第三方库强制要求。
 * **不允许**为了消除 Pyright 错误而修改运行时行为（如给 MockChat 添加实际不会使用的方法）。
