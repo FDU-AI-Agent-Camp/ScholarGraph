@@ -122,7 +122,8 @@ async def ainvoke_structured(
     follow OpenAI's JSON schema mode.
     """
     chat = client.fallback_chat if use_fallback_model and client.fallback_chat is not None else client.chat
-    response = await chat.ainvoke(messages)
+    # ainvoke_structured is only used with live ChatOpenAI models; mock path uses with_structured_output.
+    response = await chat.ainvoke(messages)  # type: ignore[union-attr]
     content = response.content
     if not isinstance(content, str):
         content = str(content)

@@ -6,7 +6,7 @@ import re
 from collections.abc import AsyncIterator, Sequence
 from typing import Any
 
-from langchain_core.messages import AIMessage, BaseMessage
+from langchain_core.messages import BaseMessage
 
 from backend.llm.qa_scale import detect_question_scale, preferred_node_types
 from backend.schemas.paradigm import Paradigm
@@ -50,10 +50,6 @@ class MockChat:
         text = _mock_qa_response(prompt)
         for index in range(0, len(text), _MOCK_CHUNK_SIZE):
             yield MockChunk(text[index : index + _MOCK_CHUNK_SIZE])
-
-    async def ainvoke(self, messages: Sequence[BaseMessage]) -> AIMessage:
-        prompt = _human_content(messages)
-        return AIMessage(content=_mock_qa_response(prompt))
 
     def with_structured_output(self, schema: type[Any]) -> MockStructuredOutput:
         return MockStructuredOutput(schema)

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
-from typing import Any, TypeVar
+from typing import TypeVar
 
 from langchain_core.messages import HumanMessage, SystemMessage
 from pydantic import BaseModel, SecretStr
@@ -131,13 +131,15 @@ def _format_profile_user_content(
 
 
 async def _invoke_structured(
-    chat: Any,
+    chat: object,
     *,
     system_prompt: str,
     user_content: str,
     response_model: type[T],
 ) -> T:
-    structured = chat.with_structured_output(response_model)
+    # _invoke_structured is only called with live ChatOpenAI instances in practice;
+    # the mock path goes through MockChat.with_structured_output instead.
+    structured = chat.with_structured_output(response_model)  # type: ignore[union-attr]
     messages = [
         SystemMessage(content=system_prompt),
         HumanMessage(content=user_content),
