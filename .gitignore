@@ -43,6 +43,7 @@ data/*
 data/corpus/*.pdf
 data/corpus/*.txt
 data/out/
+output/
 uploads/*
 !uploads/.gitkeep
 *.db
