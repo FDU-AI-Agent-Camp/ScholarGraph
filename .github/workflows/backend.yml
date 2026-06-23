@@ -1,4 +1,4 @@
-# 后端门禁：ruff + pytest（与 docs/v1/pr-checklist.md、scripts/check_backend.py 一致）
+# 后端门禁：ruff + pytest + 安全扫描 + 覆盖率（与 docs/v1/pr-checklist.md、scripts/check_backend.py 一致）
 name: Backend
 
 on:
@@ -42,5 +42,22 @@ jobs:
       - name: Ruff format check
         run: uv run ruff format --check backend tests scripts
 
-      - name: Pytest
-        run: uv run pytest -q -m "not red and not live_mineru and not live_grobid"
+      - name: Dependency security audit
+        run: uv run pip-audit --desc --format=json --local --path=.venv > pip-audit-report.json || true
+
+      - name: Upload pip-audit report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pip-audit-report
+          path: pip-audit-report.json
+
+      - name: Pytest with coverage
+        run: uv run python -m pytest -q --tb=short --cov=backend --cov-report=xml --cov-report=term-missing -m "not red and not live_mineru and not live_grobid"
+
+      - name: Upload coverage report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: coverage.xml
