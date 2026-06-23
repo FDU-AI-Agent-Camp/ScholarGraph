@@ -91,6 +91,7 @@ class TestTypeFirewallHoldsOnCorpusFixtures:
                 )
 
 
+@pytest.mark.red
 class TestReportArtifactsExist:
     """Ensure the validation script produced the expected outputs."""
 

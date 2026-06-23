@@ -8,7 +8,7 @@ import pytest
 from backend.agents.classifier import classify
 from backend.agents.classifier_constants import CLASSIFIER_HEURISTIC_FALLBACK_CODE
 from backend.agents.classifier_llm import classify_with_llm, judge_with_llm
-from backend.agents.classifier_types import ClassifierProfile
+from backend.agents.classifier_types import ClassifierProfile, CoreContributionAnalysis
 from backend.llm.client import LlmClient
 from backend.schemas.paradigm import Paradigm, ParadigmClassification
 from pydantic import ValidationError
@@ -83,9 +83,17 @@ async def test_g21_classify_with_llm_returns_paradigm_classification(live_classi
 
     chat = MagicMock()
 
+    core = CoreContributionAnalysis(
+        core_contribution_summary="A new benchmarking method.",
+        substitution_test="Value holds after replacing the dataset, pointing to STEM.",
+        target_journal_test="Accepted for the method, implying STEM.",
+    )
+
     def _with_structured(model: type[object]) -> MagicMock:
         if model is ClassifierProfile:
             return _make_runnable(profile)
+        if model is CoreContributionAnalysis:
+            return _make_runnable(core)
         if model is ParadigmClassification:
             return _make_runnable(expected)
         raise ValueError(f"Unexpected model: {model}")
@@ -103,6 +111,7 @@ async def test_g21_classify_with_llm_returns_paradigm_classification(live_classi
     assert 0.0 <= result.confidence <= 1.0
     assert result.reason.strip()
     chat.with_structured_output.assert_any_call(ClassifierProfile)
+    chat.with_structured_output.assert_any_call(CoreContributionAnalysis)
     chat.with_structured_output.assert_any_call(ParadigmClassification)
 
 

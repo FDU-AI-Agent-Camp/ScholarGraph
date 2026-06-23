@@ -9,7 +9,7 @@ import pytest
 from backend.agents.classifier import classify
 from backend.agents.classifier_constants import CLASSIFIER_HEURISTIC_FALLBACK_CODE
 from backend.agents.classifier_llm import classify_with_llm
-from backend.agents.classifier_types import ClassifierProfile, ClassifyResult
+from backend.agents.classifier_types import ClassifierProfile, ClassifyResult, CoreContributionAnalysis
 from backend.config import get_settings
 from backend.llm.client import LlmClient, reset_llm_client_cache
 from backend.schemas.paradigm import Paradigm, ParadigmClassification
@@ -43,9 +43,17 @@ async def test_g7_classify_with_llm_structured_success(live_classify_env: None) 
 
     chat = MagicMock()
 
+    core = CoreContributionAnalysis(
+        core_contribution_summary="A new benchmarking method.",
+        substitution_test="Value holds after replacing the dataset, pointing to STEM.",
+        target_journal_test="Accepted for the method, implying STEM.",
+    )
+
     def _with_structured(model: type[object]) -> MagicMock:
         if model is ClassifierProfile:
             return _make_runnable(profile)
+        if model is CoreContributionAnalysis:
+            return _make_runnable(core)
         if model is ParadigmClassification:
             return _make_runnable(expected)
         raise ValueError(f"Unexpected model: {model}")
@@ -59,6 +67,7 @@ async def test_g7_classify_with_llm_structured_success(live_classify_env: None) 
     result = await classify_with_llm(STEM_SAMPLE, llm_client=client)
     assert result.paradigm == Paradigm.STEM
     chat.with_structured_output.assert_any_call(ClassifierProfile)
+    chat.with_structured_output.assert_any_call(CoreContributionAnalysis)
     chat.with_structured_output.assert_any_call(ParadigmClassification)
 
     with patch(
