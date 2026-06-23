@@ -42,6 +42,9 @@ jobs:
       - name: Ruff format check
         run: uv run ruff format --check backend tests scripts
 
+      - name: Pyright type check
+        run: uv run pyright backend
+
       - name: Dependency security audit
         run: uv run pip-audit --desc --format=json --local --path=.venv > pip-audit-report.json || true
 
