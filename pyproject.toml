@@ -1,6 +1,6 @@
 [project]
 name = "scholargraph"
-version = "0.1.0"
+version = "0.3.0.1"
 description = "ScholarGraph — 学术论文逻辑解构与共同体发现 Agent（后端）"
 readme = "README.md"
 requires-python = ">=3.11,<3.14"
