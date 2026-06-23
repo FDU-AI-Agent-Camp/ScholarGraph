@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from backend.graph.store import GraphStore
-from backend.schemas.graph import GraphEdge, GraphNode, UnifiedPaperGraph
+from backend.schemas.graph import GraphEdge, GraphNode, NodeType, UnifiedPaperGraph
 from backend.schemas.paradigm import Paradigm
 
 CORPUS_HSS_PAPER_IDS: tuple[str, str] = ("hss-001", "hss-002")
@@ -26,8 +26,8 @@ def build_hss_graph_with_lens(
         paper_id=paper_id,
         paradigm=Paradigm.HSS,
         nodes=[
-            GraphNode(id="n_thesis", label="核心论点", type="Thesis", data={}),
-            GraphNode(id=lens_id, label=lens_label, type="AnalyticalLens", data={}),
+            GraphNode(id="n_thesis", label="核心论点", type=NodeType.THESIS, data={}),
+            GraphNode(id=lens_id, label=lens_label, type=NodeType.ANALYTICAL_LENS, data={}),
         ],
         edges=[
             GraphEdge(

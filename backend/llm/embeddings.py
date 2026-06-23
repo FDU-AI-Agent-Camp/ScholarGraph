@@ -7,6 +7,7 @@ from functools import lru_cache
 
 import httpx
 from langchain_openai import OpenAIEmbeddings
+from pydantic import SecretStr
 
 from backend.config import Settings, get_settings
 
@@ -81,7 +82,7 @@ class EmbeddingClient:
     def _openai_client(self) -> OpenAIEmbeddings:
         if self._openai is None:
             self._openai = OpenAIEmbeddings(
-                api_key=self._settings.embedding_api_key_effective,
+                api_key=SecretStr(self._settings.embedding_api_key_effective),
                 base_url=self._settings.embedding_api_base_url_effective,
                 model=self._settings.embedding_model,
             )

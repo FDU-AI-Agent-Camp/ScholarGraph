@@ -12,7 +12,7 @@ from backend.agents.extract_heuristic import extract_title
 from backend.agents.extract_types import ExtractResult
 from backend.config import get_settings
 from backend.graph.head_store import HeadStore
-from backend.schemas.graph import GraphEdge, GraphNode, UnifiedPaperGraph
+from backend.schemas.graph import GraphEdge, GraphNode, NodeType, UnifiedPaperGraph
 from backend.schemas.paradigm import Paradigm
 
 logger = logging.getLogger(__name__)
@@ -214,7 +214,7 @@ def validate_node(state: ExtractSubgraphState) -> ExtractSubgraphState:
         paper_id=paper_id,
         title=title,
         paradigm=paradigm,
-        nodes=[GraphNode(id=n.id, label=n.label, type=n.type, data=n.data) for n in extracted_graph.nodes],
+        nodes=[GraphNode(id=n.id, label=n.label, type=NodeType(n.type), data=n.data) for n in extracted_graph.nodes],
         edges=[
             GraphEdge(
                 id=e.id,

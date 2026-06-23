@@ -462,5 +462,5 @@ def _should_ignore_dotenv() -> bool:
 @lru_cache
 def get_settings() -> Settings:
     if _should_ignore_dotenv():
-        return Settings(_env_file=None)
+        return Settings.model_validate({})
     return Settings()

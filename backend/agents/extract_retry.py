@@ -7,6 +7,8 @@ retry policy, exception taxonomy and warning-code mapping in one place.
 
 from __future__ import annotations
 
+from collections.abc import Callable
+
 from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_exponential
 
 from backend.agents.extract_constants import (
@@ -37,7 +39,7 @@ _RETRY_CONFIG = {
 }
 
 
-def warning_code_for_error(exc: BaseException) -> str:
+def warning_code_for_error(exc: BaseException | str) -> str:
     """Map an extraction failure to a fine-grained machine-readable warning code."""
     msg = str(exc).lower()
     if "rate limit" in msg or "429" in msg:
@@ -58,7 +60,7 @@ def handle_extract_failure(
     *,
     settings: Settings,
     paper_id: str,
-    fallback_action: callable,
+    fallback_action: Callable[[BaseException], ExtractResult],
 ) -> ExtractResult:
     """Classify an extraction failure and degrade to heuristic fallback.
 

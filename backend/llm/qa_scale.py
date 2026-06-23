@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Literal
+from typing import Literal, cast
 
 from backend.schemas.paradigm import Paradigm
 
@@ -70,10 +70,10 @@ def detect_question_scale(question: str, *, paradigm: Paradigm | None = None) ->
         if "分论点" in text or "支撑" in text:
             scores["detail"] += 1.0
 
-    best_scale = max(scores, key=scores.get)
+    best_scale = max(scores, key=lambda k: scores[k])
     if scores[best_scale] == 0:
-        return "summary"
-    return best_scale  # type: ignore[return-value]
+        return cast(QuestionScale, "summary")
+    return cast(QuestionScale, best_scale)
 
 
 def preferred_node_types(scale: QuestionScale, *, paradigm: Paradigm) -> tuple[str, ...]:

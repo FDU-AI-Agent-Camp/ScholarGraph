@@ -4,10 +4,10 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
-from typing import TypeVar
+from typing import Any, TypeVar
 
 from langchain_core.messages import HumanMessage, SystemMessage
-from pydantic import BaseModel
+from pydantic import BaseModel, SecretStr
 
 from backend.agents.classifier_types import ClassifierProfile, CoreContributionAnalysis
 from backend.config import Settings, get_settings
@@ -57,8 +57,11 @@ def _extract_raw_json_from_error(exc: Exception) -> str | None:
     if not callable(errors):
         return None
     try:
-        for err in errors():
-            if err.get("type") == "json_invalid":
+        error_list = errors()
+        if not isinstance(error_list, list):
+            return None
+        for err in error_list:
+            if isinstance(err, dict) and err.get("type") == "json_invalid":
                 return err.get("input")
     except Exception:
         return None
@@ -75,7 +78,7 @@ def _build_chat_for_model(settings: Settings, model_name: str) -> LlmClient | No
     from langchain_openai import ChatOpenAI
 
     return ChatOpenAI(  # type: ignore[return-value]
-        api_key=api_key,
+        api_key=SecretStr(api_key),
         base_url=base_url,
         model=model_name,
         timeout=timeout,
@@ -128,7 +131,7 @@ def _format_profile_user_content(
 
 
 async def _invoke_structured(
-    chat: object,
+    chat: Any,
     *,
     system_prompt: str,
     user_content: str,

@@ -2,7 +2,7 @@
 
 from functools import lru_cache
 from pathlib import Path
-from typing import Literal
+from typing import Literal, cast
 
 from langgraph.graph import END, START, StateGraph
 
@@ -22,7 +22,7 @@ from backend.services.errors import PIPELINE_FAILED_CODE
 from backend.services.paper_service import get_paper_service
 from backend.services.pipeline_status_service import get_pipeline_status_service
 
-RouteKey = Literal["continue", "fail"]
+RouteKey = Literal["continue", "fail", "background"]
 
 
 def _route_after_step(state: WorkflowState) -> RouteKey:
@@ -123,7 +123,10 @@ async def run_paper_pipeline(paper_id: str, pdf_path: Path) -> WorkflowState:
     get_pipeline_status_service().start_processing(paper_id)
 
     initial = initial_workflow_state(paper_id=paper_id, pdf_path=str(pdf_path))
-    final_state: WorkflowState = await get_compiled_paper_pipeline().ainvoke(initial)
+    final_state: WorkflowState = cast(
+        WorkflowState,
+        await get_compiled_paper_pipeline().ainvoke(initial),
+    )
 
     if final_state.get("failed"):
         await _ensure_failed_status_persisted(paper_id, final_state)

@@ -148,8 +148,11 @@ def _extract_raw_json_from_error(exc: Exception) -> str | None:
     if not callable(errors):
         return None
     try:
-        for err in errors():
-            if err.get("type") == "json_invalid":
+        error_list = errors()
+        if not isinstance(error_list, list):
+            return None
+        for err in error_list:
+            if isinstance(err, dict) and err.get("type") == "json_invalid":
                 return err.get("input")
     except Exception:
         return None

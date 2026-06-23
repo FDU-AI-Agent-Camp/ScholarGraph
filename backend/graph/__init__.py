@@ -31,6 +31,7 @@ def __getattr__(name: str) -> object:
     raise AttributeError(msg)
 
 
+# pyright: ignore[reportUnsupportedDunderAll]
 __all__ = [
     "build_paper_pipeline_graph",
     "get_compiled_paper_pipeline",

@@ -220,10 +220,10 @@ async def _patch_source_spans(
         try:
             response = await chat.ainvoke(
                 [SystemMessage(content=system_prompt), HumanMessage(content=user_prompt)],
-                temperature=0.0,
+                temperature=0.0,  # type: ignore[reportCallIssue]
             )
-            content = response.content if hasattr(response, "content") else str(response)
-            content = content.strip()
+            raw_content = response.content if hasattr(response, "content") else str(response)
+            content = raw_content.strip() if isinstance(raw_content, str) else str(raw_content).strip()
             if content.startswith("```"):
                 content = content.removeprefix("```json").removeprefix("```").removesuffix("```").strip()
             patches = json.loads(content)

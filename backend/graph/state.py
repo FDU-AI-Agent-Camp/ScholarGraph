@@ -45,7 +45,7 @@ class WorkflowState(TypedDict, total=False):
 
     error_code: str
     error_message: str
-    failed_during: PipelineStage
+    failed_during: PipelineStage | None
 
     full_text: str
     classifier_input: str
