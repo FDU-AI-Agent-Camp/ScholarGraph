@@ -629,10 +629,7 @@ class TestGroupNodesByType:
 
 class TestCoarseFilterPairs:
     def _nodes(self, count: int) -> list[ExtractedNode]:
-        return [
-            ExtractedNode(id=f"n{i}", label=f"node {i}", type="Method")
-            for i in range(count)
-        ]
+        return [ExtractedNode(id=f"n{i}", label=f"node {i}", type="Method") for i in range(count)]
 
     def test_returns_pairs_above_threshold(self) -> None:
         nodes = self._nodes(3)
@@ -874,9 +871,7 @@ class TestRerankerFineFilter:
             edges=[],
         )
 
-        reranker = _MockRerankerClient(
-            {(_node_text(nodes[0]), _node_text(nodes[1])): 0.95}
-        )
+        reranker = _MockRerankerClient({(_node_text(nodes[0]), _node_text(nodes[1])): 0.95})
 
         result = await semantic_cluster_and_merge(
             graph,

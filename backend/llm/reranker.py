@@ -77,8 +77,7 @@ class RerankerClient:
         """
         if not self._settings.reranker_enabled:
             logger.warning(
-                "reranker_disabled: semantic merge fidelity is degraded; "
-                "all candidate pairs rejected conservatively"
+                "reranker_disabled: semantic merge fidelity is degraded; all candidate pairs rejected conservatively"
             )
             return 0.0
 

@@ -89,7 +89,7 @@ def test_extract_meta_info_hss_sample() -> None:
 
 
 def test_extract_meta_info_funding_prefers_quoted_project() -> None:
-    text = '基金项目：某省科技厅重点研发计划项目“古代DNA与考古学整合研究”资助。'
+    text = "基金项目：某省科技厅重点研发计划项目“古代DNA与考古学整合研究”资助。"
     meta = extract_meta_info(text)
     assert "古代DNA与考古学整合研究" in meta["funding"]
 

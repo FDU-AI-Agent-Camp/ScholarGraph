@@ -174,12 +174,7 @@ def test_parse_classifier_sections_recover_all_fields() -> None:
 
 
 def test_build_classifier_input_with_full_text_extracts_conclusion() -> None:
-    head = (
-        "Memory Study\n\n"
-        "Abstract\nWe study memory.\n\n"
-        "Keywords\nmemory\n\n"
-        "Introduction\nPrior work exists."
-    )
+    head = "Memory Study\n\nAbstract\nWe study memory.\n\nKeywords\nmemory\n\nIntroduction\nPrior work exists."
     full = (
         "Memory Study\n\n"
         "Abstract\nWe study memory.\n\n"

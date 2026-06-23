@@ -153,12 +153,12 @@ async def test_merge_with_llm_recovers_from_markdown_fenced_json() -> None:
     snippets = HeadCandidate(title="Snippet", source="pymupdf")
     path_b = HeadCandidate(title="Path B", source="grobid")
     raw_json = (
-        '```json\n'
+        "```json\n"
         '{"title": "Fenced Title", "abstract": "Fenced abstract", "keywords": "", '
         '"intro": "", "conclusion": "", "journal": "", "funding": "", '
         '"affiliation": "", "research_object": "object", "methodology_tool": "tool", '
         '"core_intellectual_contribution": "finding"}\n'
-        '```'
+        "```"
     )
 
     class _JsonInvalidError(Exception):

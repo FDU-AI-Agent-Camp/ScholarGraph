@@ -110,9 +110,7 @@ async def semantic_cluster_and_merge(
             warnings.append(f"SEMANTIC_CLUSTERING_RERANK_SKIPPED:{type(exc).__name__}")
             return graph.model_copy(update={"warnings": warnings})
 
-        for (node_id_i, node_id_j, _coarse_score), rerank_score in zip(
-            coarse_pairs, rerank_scores, strict=True
-        ):
+        for (node_id_i, node_id_j, _coarse_score), rerank_score in zip(coarse_pairs, rerank_scores, strict=True):
             if rerank_score > settings.reranker_threshold:
                 uf.union(node_id_i, node_id_j)
     else:

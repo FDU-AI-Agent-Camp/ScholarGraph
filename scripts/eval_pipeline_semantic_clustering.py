@@ -118,9 +118,7 @@ def _analyze_clustering(graph: UnifiedPaperGraph) -> dict:
     for node in dataset_nodes:
         normalized = _normalize_dataset_label(node.label)
         dataset_label_groups[normalized].append(node.label)
-    unmerged_dataset_duplicates = {
-        norm: labels for norm, labels in dataset_label_groups.items() if len(labels) > 1
-    }
+    unmerged_dataset_duplicates = {norm: labels for norm, labels in dataset_label_groups.items() if len(labels) > 1}
 
     return {
         "total_nodes": len(graph.nodes),
@@ -202,7 +200,8 @@ async def _run_sample(paper_id: str, pdf_path: Path, service: PaperService) -> d
                     else detail.ingest_head.intro
                 ),
             }
-            if detail.ingest_head else None
+            if detail.ingest_head
+            else None
         ),
         "graph": None,
         "clustering": None,
@@ -214,14 +213,8 @@ async def _run_sample(paper_id: str, pdf_path: Path, service: PaperService) -> d
             record["graph"] = {
                 "node_count": len(graph.nodes),
                 "edge_count": len(graph.edges),
-                "nodes": [
-                    {"id": n.id, "label": n.label, "type": n.type, "data": n.data}
-                    for n in graph.nodes
-                ],
-                "edges": [
-                    {"id": e.id, "source": e.source, "target": e.target, "type": e.type}
-                    for e in graph.edges
-                ],
+                "nodes": [{"id": n.id, "label": n.label, "type": n.type, "data": n.data} for n in graph.nodes],
+                "edges": [{"id": e.id, "source": e.source, "target": e.target, "type": e.type} for e in graph.edges],
             }
             record["clustering"] = _analyze_clustering(graph)
 
@@ -284,9 +277,7 @@ def _format_report(records: list[dict]) -> str:
         if clustering:
             lines.append("### Thesis clusters")
             for item in clustering["thesis_clusters"]:
-                lines.append(
-                    f"- `{item['root_label']}` ({item['alias_count']} aliases): {item['aliases']}"
-                )
+                lines.append(f"- `{item['root_label']}` ({item['alias_count']} aliases): {item['aliases']}")
             if not clustering["thesis_clusters"]:
                 lines.append("- None")
             lines.append("")

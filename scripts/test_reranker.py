@@ -96,11 +96,7 @@ def _extract_scores(raw: dict[str, Any], num_docs: int) -> list[dict[str, Any]]:
             normalized.append({"index": index, "score": score})
 
     if not normalized and "scores" in raw:
-        normalized = [
-            {"index": i, "score": score}
-            for i, score in enumerate(raw["scores"])
-            if i < num_docs
-        ]
+        normalized = [{"index": i, "score": score} for i, score in enumerate(raw["scores"]) if i < num_docs]
 
     return sorted(normalized, key=lambda x: x["score"] or 0.0, reverse=True)
 
