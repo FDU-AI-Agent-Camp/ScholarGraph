@@ -1,4 +1,4 @@
-"""Paradigm classifier — LLM structured output with heuristic fallback (Phase G)."""
+"""Paradigm classifier — two-stage LLM with heuristic fallback (Phase G)."""
 
 from __future__ import annotations
 
@@ -41,15 +41,16 @@ async def _classify_live(classifier_input: str, *, settings: Settings) -> Classi
 
     try:
         classification = await classify_with_llm(classifier_input, settings=settings)
-        return ClassifyResult(classification=classification, warnings=[])
     except Exception as exc:
         if not settings.classifier_heuristic_fallback:
             raise ServiceError(PIPELINE_FAILED_CODE, f"范式 LLM 分类失败: {exc}") from exc
         return _fallback_to_heuristic(classifier_input, reason=exc)
 
+    return ClassifyResult(classification=classification, warnings=[])
+
 
 async def classify(classifier_input: str) -> ClassifyResult:
-    """Classify a paper snippet; live mode prefers LLM with heuristic fallback."""
+    """Classify a paper snippet; live mode prefers two-stage LLM with heuristic fallback."""
     settings = get_settings()
     if settings.is_llm_mock:
         return ClassifyResult(classification=mock_classify(classifier_input), warnings=[])

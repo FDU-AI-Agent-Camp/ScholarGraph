@@ -238,6 +238,7 @@ function buildPatrolCorpusReport(): PatrolReport {
         insight_id: 'ins-lens-clash-001',
         title: '理论视角冲突（Lens Clash）',
         summary: '【Mock 巡检摘要】基于两篇论文的图谱节点差异生成摘要。',
+        status: 'ready',
         paper_ids: ['hss-001', 'hss-002'],
         node_refs: [...PATROL_CORPUS_NODE_REFS],
       },

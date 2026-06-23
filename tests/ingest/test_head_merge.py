@@ -66,6 +66,32 @@ def test_merge_with_rules_falls_back_to_snippets_when_path_b_missing() -> None:
     assert merged.sources["title"] == "pymupdf"
 
 
+def test_merge_with_rules_carries_core_contribution_fields() -> None:
+    snippets = HeadCandidate(
+        title="A",
+        research_object="ancient populations",
+        methodology_tool="GIS",
+        core_intellectual_contribution="historical migration pattern",
+        source="pymupdf",
+    )
+    grobid = HeadCandidate(
+        title="B",
+        abstract="abs",
+        research_object="",
+        methodology_tool="",
+        core_intellectual_contribution="",
+        source="grobid",
+    )
+    merged = merge_with_rules(snippets, grobid, is_short=False)
+    assert merged.title == "B"
+    assert merged.research_object == "ancient populations"
+    assert merged.methodology_tool == "GIS"
+    assert merged.core_intellectual_contribution == "historical migration pattern"
+    assert "Research Object:" in merged.to_classifier_input()
+    assert "Methodology/Tool:" in merged.to_classifier_input()
+    assert "Core Intellectual Contribution:" in merged.to_classifier_input()
+
+
 @pytest.mark.asyncio
 async def test_merge_head_candidates_uses_rules_in_mock_mode() -> None:
     from backend.config import Settings

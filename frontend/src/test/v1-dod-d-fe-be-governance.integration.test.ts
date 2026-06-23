@@ -139,6 +139,7 @@ describe('V1 DoD D-07 — FE uses api modules, not private HTTP wiring', () => {
           insight_id: 'ins-1',
           title: 'Lens',
           summary: 'ok',
+          status: 'ready',
           paper_ids: ['hss-001', 'hss-002'],
           node_refs: [],
         },

@@ -7,6 +7,8 @@
         "insight_id": "ins-001",
         "title": "理论视角冲突（Lens Clash）",
         "summary": "两篇论文研究对象均为平台零工经济劳动者，但理论框架存在潜在学派冲突。",
+        "status": "ready",
+        "has_contradiction": null,
         "paper_ids": ["hss-001", "hss-002"],
         "node_refs": [
           { "paper_id": "hss-001", "node_id": "n_lens_a", "label": "消费社会" },

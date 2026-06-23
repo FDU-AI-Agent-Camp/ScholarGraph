@@ -2,12 +2,17 @@
 
 from __future__ import annotations
 
+import numpy as np
 import pytest
 from backend.config import Settings
 from backend.graph.semantic_clustering import (
+    _coarse_filter_pairs,
     _cross_type_merge_allowed,
     _deduplicate_edges_by_type,
     _elect_root,
+    _fuse_descriptions,
+    _group_nodes_by_type,
+    _merge_clusters,
     _node_text,
     semantic_cluster_and_merge,
 )
@@ -64,7 +69,7 @@ class _FakeEmbeddingClient:
         }
 
     def _extract_label(self, text: str) -> str:
-        prefix = "核心标签: "
+        prefix = "核心概念: "
         start = text.find(prefix)
         if start == -1:
             return text
@@ -78,12 +83,18 @@ class _FakeEmbeddingClient:
         return [self.vectors[self._extract_label(text)] for text in texts]
 
 
-def _settings(enabled: bool = True, sim: float = 0.92, knn: float = 0.85) -> Settings:
+def _settings(
+    enabled: bool = True,
+    sim: float = 0.92,
+    knn: float = 0.85,
+    dynamic_thresholds: bool = False,
+) -> Settings:
     return Settings(
         _env_file=None,
         llm_mode="mock",
         semantic_clustering_enabled=enabled,
         semantic_similarity_threshold=sim,
+        semantic_clustering_dynamic_thresholds_enabled=dynamic_thresholds,
         semantic_knn_threshold=knn,
     )
 
@@ -196,18 +207,40 @@ class TestEdgeDeduplication:
 
 
 class TestNodeText:
-    def test_includes_type_label_and_truncated_source_span(self) -> None:
+    def test_includes_type_subtype_label_and_definition(self) -> None:
         node = ExtractedNode(
             id="n1",
             label="情感共鸣转向",
             type="Claim",
-            source_span="这是一个非常长的补充说明" * 10,
+            sub_type="Argument",
+            description="情感从个体转向集体共鸣的过程",
+            source_span="这是一个非常长的原文片段，不应影响 embedding 输入" * 10,
         )
         text = _node_text(node)
-        assert text.startswith("[类型: Claim] 核心标签: 情感共鸣转向 | 补充说明:")
-        evidence = text.split("补充说明:")[1].strip()
-        assert len(evidence) <= 100
-        assert "这是一个非常长的补充说明" in text
+        assert text.startswith("类型: Claim | 细分类别: Argument | 核心概念: 情感共鸣转向")
+        assert "语义定义: 情感从个体转向集体共鸣的过程" in text
+        assert "原文片段" not in text
+
+    def test_falls_back_to_general_subtype_when_missing(self) -> None:
+        node = ExtractedNode(
+            id="n1",
+            label="情感共鸣转向",
+            type="Claim",
+        )
+        text = _node_text(node)
+        assert "细分类别: General" in text
+        assert "语义定义" not in text
+
+    def test_reads_subtype_and_definition_from_data(self) -> None:
+        node = ExtractedNode(
+            id="n1",
+            label="情感共鸣转向",
+            type="Claim",
+            data={"sub_type": "Cultural", "description": "defined in data"},
+        )
+        text = _node_text(node)
+        assert "细分类别: Cultural" in text
+        assert "语义定义: defined in data" in text
 
 
 class TestTypeFirewall:
@@ -229,10 +262,14 @@ class TestTypeFirewall:
         )
         assert not _cross_type_merge_allowed("ObjectOrData", "Claim")
 
-    def test_allowed_child_parent_merge_is_permitted(self) -> None:
-        assert _cross_type_merge_allowed("SubArgument", "Claim")
-        assert _cross_type_merge_allowed("ResearchQuestion", "Thesis")
-        assert _cross_type_merge_allowed("Dataset", "Method")
+    def test_same_type_merge_is_permitted(self) -> None:
+        """The stage-1 firewall only allows comparisons within the exact same type."""
+        assert _cross_type_merge_allowed("Claim", "Claim")
+        assert _cross_type_merge_allowed("Method", "Method")
+        assert _cross_type_merge_allowed("Dataset", "Dataset")
+        assert not _cross_type_merge_allowed("SubArgument", "Claim")
+        assert not _cross_type_merge_allowed("ResearchQuestion", "Thesis")
+        assert not _cross_type_merge_allowed("Dataset", "Method")
 
     def test_evidence_is_isolated_from_claim_and_thesis(self) -> None:
         assert not _cross_type_merge_allowed("Evidence", "Claim")
@@ -265,59 +302,63 @@ class TestTypeFirewall:
         root = _elect_root({"claim1", "claim2"}, degrees, nodes_by_id)
         assert root == "claim2"
 
-        assert _cross_type_merge_allowed("Claim", "Claim")
-        assert _cross_type_merge_allowed("Method", "Method")
-
     @pytest.mark.asyncio
-    async def test_cross_type_penalty_tightens_merge_gate(self) -> None:
-        """SubArgument-Claim at 0.87 raw similarity should NOT merge after -0.05 penalty."""
+    async def test_hard_type_firewall_blocks_identical_cross_type_labels(self) -> None:
+        """Even with identical labels and high similarity, different types must not merge."""
 
-        from backend.graph.semantic_clustering import _node_text
-
-        class _PenaltyEmbeddingClient:
-            def __init__(self, vectors: dict[str, list[float]]) -> None:
-                self._vectors = vectors
+        class _IdenticalEmbeddingClient:
+            """Return the same vector for every text to simulate perfect similarity."""
 
             async def embed_texts(self, texts: list[str]) -> list[list[float]]:
-                return [self._vectors[t] for t in texts]
+                return [[1.0, 0.0, 0.0] for _ in texts]
 
-        # Low similarity pair: should remain separate.
-        nodes_low = [
-            ExtractedNode(id="sub_low", label="x", type="SubArgument"),
-            ExtractedNode(id="claim_low", label="x", type="Claim"),
+        nodes = [
+            ExtractedNode(id="n1", label="film industry", type="ObjectOrData"),
+            ExtractedNode(id="n2", label="film industry", type="Claim"),
+            ExtractedNode(id="n3", label="film industry", type="SubArgument"),
         ]
-        texts_low = [_node_text(n) for n in nodes_low]
-        vectors_low = dict(zip(texts_low, [[1.0, 0.0, 0.0], [0.87, 0.4931, 0.0]], strict=True))
-        graph_low = ExtractedGraph(
+        graph = ExtractedGraph(
             paper_id="p1",
             title="T",
             paradigm=Paradigm.HSS,
-            nodes=nodes_low,
+            nodes=nodes,
             edges=[],
         )
-        result_low = await semantic_cluster_and_merge(
-            graph_low, _settings(sim=0.85), embedding_client=_PenaltyEmbeddingClient(vectors_low)
+        result = await semantic_cluster_and_merge(
+            graph,
+            _settings(sim=0.5),
+            embedding_client=_IdenticalEmbeddingClient(),
         )
-        assert len(result_low.nodes) == 2
+        assert len(result.nodes) == 3
+        assert not any("SEMANTIC_CLUSTERS_MERGED" in w for w in result.warnings)
 
-        # High similarity pair: should merge.
-        nodes_high = [
-            ExtractedNode(id="sub_high", label="x", type="SubArgument"),
-            ExtractedNode(id="claim_high", label="x", type="Claim"),
+    @pytest.mark.asyncio
+    async def test_same_type_high_similarity_still_merges(self) -> None:
+        """The firewall must not break legitimate within-type synonym merging."""
+
+        class _IdenticalEmbeddingClient:
+            async def embed_texts(self, texts: list[str]) -> list[list[float]]:
+                return [[1.0, 0.0, 0.0] for _ in texts]
+
+        nodes = [
+            ExtractedNode(id="n1", label="Adam Optimizer", type="Method"),
+            ExtractedNode(id="n2", label="Adam", type="Method"),
+            ExtractedNode(id="n3", label="SGD", type="Method"),
         ]
-        texts_high = [_node_text(n) for n in nodes_high]
-        vectors_high = dict(zip(texts_high, [[1.0, 0.0, 0.0], [0.95, 0.3122, 0.0]], strict=True))
-        graph_high = ExtractedGraph(
+        graph = ExtractedGraph(
             paper_id="p1",
             title="T",
-            paradigm=Paradigm.HSS,
-            nodes=nodes_high,
+            paradigm=Paradigm.STEM,
+            nodes=nodes,
             edges=[],
         )
-        result_high = await semantic_cluster_and_merge(
-            graph_high, _settings(sim=0.85), embedding_client=_PenaltyEmbeddingClient(vectors_high)
+        result = await semantic_cluster_and_merge(
+            graph,
+            _settings(sim=0.5),
+            embedding_client=_IdenticalEmbeddingClient(),
         )
-        assert len(result_high.nodes) == 1
+        assert len(result.nodes) == 1
+        assert any("SEMANTIC_CLUSTERS_MERGED:1" in w for w in result.warnings)
 
     @pytest.mark.asyncio
     async def test_firewall_prevents_hub_merging(self) -> None:
@@ -345,10 +386,100 @@ class TestTypeFirewall:
             edges=edges.edges,
         )
         result = await semantic_cluster_and_merge(graph, _settings(), embedding_client=client)
-        # ObjectOrData must remain separate; SubArgument may merge into Claim.
+        # Hard type firewall: every distinct type must survive.
         types = {n.type for n in result.nodes}
-        assert "ObjectOrData" in types
-        assert "Claim" in types
+        assert types == {"ObjectOrData", "Claim", "SubArgument"}
+
+    @pytest.mark.asyncio
+    async def test_dynamic_threshold_method_stricter_than_dataset_in_stem(self) -> None:
+        """STEM Method threshold (0.92) should block merges that Dataset threshold (0.82) allows."""
+
+        class _TypedEmbeddingClient:
+            def __init__(self, vectors: dict[str, list[float]]) -> None:
+                self._vectors = vectors
+
+            async def embed_texts(self, texts: list[str]) -> list[list[float]]:
+                return [self._vectors[t] for t in texts]
+
+        # Two Method nodes at 0.90 similarity: below STEM Method threshold 0.92.
+        method_texts = [
+            "类型: Method | 细分类别: General | 核心概念: Adam Optimizer",
+            "类型: Method | 细分类别: General | 核心概念: Adam",
+        ]
+        method_vectors = dict(zip(method_texts, [[1.0, 0.0, 0.0], [0.90, 0.4359, 0.0]], strict=True))
+        method_graph = ExtractedGraph(
+            paper_id="p1",
+            title="T",
+            paradigm=Paradigm.STEM,
+            nodes=[
+                ExtractedNode(id="m1", label="Adam Optimizer", type="Method"),
+                ExtractedNode(id="m2", label="Adam", type="Method"),
+            ],
+            edges=[],
+        )
+        result_method = await semantic_cluster_and_merge(
+            method_graph,
+            _settings(sim=-1.0, dynamic_thresholds=True),
+            embedding_client=_TypedEmbeddingClient(method_vectors),
+        )
+        assert len(result_method.nodes) == 2, "STEM Method pair at 0.90 should not merge"
+
+        # Two Dataset nodes at 0.85 similarity: above STEM Dataset threshold 0.82.
+        dataset_texts = [
+            "类型: Dataset | 细分类别: General | 核心概念: Fangzhi Yunnan",
+            "类型: Dataset | 细分类别: General | 核心概念: Fangzhi Yunnan Data",
+        ]
+        dataset_vectors = dict(zip(dataset_texts, [[1.0, 0.0, 0.0], [0.85, 0.5268, 0.0]], strict=True))
+        dataset_graph = ExtractedGraph(
+            paper_id="p1",
+            title="T",
+            paradigm=Paradigm.STEM,
+            nodes=[
+                ExtractedNode(id="d1", label="Fangzhi Yunnan", type="Dataset"),
+                ExtractedNode(id="d2", label="Fangzhi Yunnan Data", type="Dataset"),
+            ],
+            edges=[],
+        )
+        result_dataset = await semantic_cluster_and_merge(
+            dataset_graph,
+            _settings(sim=-1.0, dynamic_thresholds=True),
+            embedding_client=_TypedEmbeddingClient(dataset_vectors),
+        )
+        assert len(result_dataset.nodes) == 1, "STEM Dataset pair at 0.85 should merge"
+
+    @pytest.mark.asyncio
+    async def test_explicit_similarity_threshold_overrides_dynamic_matrix(self) -> None:
+        """When SEMANTIC_SIMILARITY_THRESHOLD is set explicitly, dynamic matrix is ignored."""
+
+        class _TypedEmbeddingClient:
+            def __init__(self, vectors: dict[str, list[float]]) -> None:
+                self._vectors = vectors
+
+            async def embed_texts(self, texts: list[str]) -> list[list[float]]:
+                return [self._vectors[t] for t in texts]
+
+        texts = [
+            "类型: Method | 细分类别: General | 核心概念: Adam Optimizer",
+            "类型: Method | 细分类别: General | 核心概念: Adam",
+        ]
+        vectors = dict(zip(texts, [[1.0, 0.0, 0.0], [0.90, 0.4359, 0.0]], strict=True))
+        graph = ExtractedGraph(
+            paper_id="p1",
+            title="T",
+            paradigm=Paradigm.STEM,
+            nodes=[
+                ExtractedNode(id="m1", label="Adam Optimizer", type="Method"),
+                ExtractedNode(id="m2", label="Adam", type="Method"),
+            ],
+            edges=[],
+        )
+        # Explicit sim=0.85 is lower than STEM Method 0.92, so it should merge.
+        result = await semantic_cluster_and_merge(
+            graph,
+            _settings(sim=0.85, dynamic_thresholds=True),
+            embedding_client=_TypedEmbeddingClient(vectors),
+        )
+        assert len(result.nodes) == 1
 
 
 class _OrthogonalEmbeddingClient:
@@ -472,3 +603,493 @@ class TestEdgeIdUniqueness:
         assert len(edge_ids) == len(set(edge_ids))
         # All output edges should be valid UnifiedPaperGraph material.
         assert all(edge.id.startswith("e") for edge in result.edges)
+
+
+class TestGroupNodesByType:
+    def test_groups_by_type_and_preserves_indices(self) -> None:
+        nodes = [
+            ExtractedNode(id="n1", label="Adam", type="Method"),
+            ExtractedNode(id="n2", label="CNN", type="Method"),
+            ExtractedNode(id="n3", label="IMDb", type="Dataset"),
+            ExtractedNode(id="n4", label="Survey", type="Dataset"),
+        ]
+        groups = _group_nodes_by_type(nodes)
+        assert set(groups.keys()) == {"Method", "Dataset"}
+        assert groups["Method"] == [(0, nodes[0]), (1, nodes[1])]
+        assert groups["Dataset"] == [(2, nodes[2]), (3, nodes[3])]
+
+    def test_empty_nodes_returns_empty_groups(self) -> None:
+        assert _group_nodes_by_type([]) == {}
+
+    def test_single_node_group(self) -> None:
+        nodes = [ExtractedNode(id="n1", label="Adam", type="Method")]
+        groups = _group_nodes_by_type(nodes)
+        assert groups == {"Method": [(0, nodes[0])]}
+
+
+class TestCoarseFilterPairs:
+    def _nodes(self, count: int) -> list[ExtractedNode]:
+        return [ExtractedNode(id=f"n{i}", label=f"node {i}", type="Method") for i in range(count)]
+
+    def test_returns_pairs_above_threshold(self) -> None:
+        nodes = self._nodes(3)
+        # Three orthogonal unit vectors; only (0, 1) is close.
+        embeddings = np.array(
+            [
+                [1.0, 0.0, 0.0],
+                [0.95, 0.31, 0.0],
+                [0.0, 1.0, 0.0],
+            ],
+            dtype=np.float32,
+        )
+        pairs = _coarse_filter_pairs(nodes, embeddings, threshold=0.90)
+        assert len(pairs) == 1
+        assert pairs[0][0] == "n0"
+        assert pairs[0][1] == "n1"
+        assert pairs[0][2] > 0.90
+
+    def test_excludes_self_pairs_and_duplicates(self) -> None:
+        nodes = self._nodes(3)
+        embeddings = np.array(
+            [
+                [1.0, 0.0, 0.0],
+                [1.0, 0.0, 0.0],
+                [1.0, 0.0, 0.0],
+            ],
+            dtype=np.float32,
+        )
+        pairs = _coarse_filter_pairs(nodes, embeddings, threshold=0.99)
+        # Only (0,1), (0,2), (1,2); no (i,i) and no (j,i).
+        assert len(pairs) == 3
+        pair_ids = {(a, b) for a, b, _ in pairs}
+        assert pair_ids == {("n0", "n1"), ("n0", "n2"), ("n1", "n2")}
+
+    def test_threshold_boundary_is_exclusive(self) -> None:
+        nodes = self._nodes(2)
+        embeddings = np.array(
+            [
+                [1.0, 0.0, 0.0],
+                [0.90, 0.4359, 0.0],  # cosine ~= 0.90
+            ],
+            dtype=np.float32,
+        )
+        # score > 0.90 (strict) should yield zero pairs.
+        assert _coarse_filter_pairs(nodes, embeddings, threshold=0.90) == []
+        # score > 0.89 should yield one pair.
+        pairs = _coarse_filter_pairs(nodes, embeddings, threshold=0.89)
+        assert len(pairs) == 1
+
+    def test_zero_vectors_produce_no_pairs(self) -> None:
+        nodes = self._nodes(2)
+        embeddings = np.zeros((2, 4), dtype=np.float32)
+        pairs = _coarse_filter_pairs(nodes, embeddings, threshold=0.0)
+        assert pairs == []
+
+    def test_empty_and_single_node_inputs(self) -> None:
+        assert _coarse_filter_pairs([], np.zeros((0, 4)), threshold=0.0) == []
+        node = self._nodes(1)
+        assert _coarse_filter_pairs(node, np.zeros((1, 4)), threshold=0.0) == []
+
+    def test_l2_normalization_matches_cosine(self) -> None:
+        """Un-normalized input vectors must still produce cosine scores."""
+        nodes = self._nodes(2)
+        # Same direction, different magnitudes.
+        embeddings = np.array(
+            [
+                [2.0, 0.0, 0.0],
+                [5.0, 0.0, 0.0],
+            ],
+            dtype=np.float32,
+        )
+        pairs = _coarse_filter_pairs(nodes, embeddings, threshold=0.99)
+        assert len(pairs) == 1
+        assert pairs[0][2] == pytest.approx(1.0, abs=1e-6)
+
+    def test_mismatched_embedding_count_returns_empty(self) -> None:
+        nodes = self._nodes(2)
+        embeddings = np.zeros((3, 4), dtype=np.float32)
+        assert _coarse_filter_pairs(nodes, embeddings, threshold=0.0) == []
+
+    @pytest.mark.asyncio
+    async def test_integration_matrix_filter_matches_legacy_loop(self) -> None:
+        """The NumPy coarse-filter must produce the same merges as the old loop."""
+
+        class _MatrixEmbeddingClient:
+            """Vectors keyed by label so the matrix filter can exercise grouping."""
+
+            vectors = {
+                "Adam Optimizer": [1.0, 0.0, 0.0],
+                "Adam": [0.95, 0.32, 0.0],
+                "SGD": [0.0, 1.0, 0.0],
+                "CNN": [0.0, 0.0, 1.0],
+                "Survey": [0.45, 0.0, 0.9],
+            }
+
+            async def embed_texts(self, texts: list[str]) -> list[list[float]]:
+                prefix = "核心概念: "
+                result = []
+                for text in texts:
+                    start = text.find(prefix) + len(prefix)
+                    end = text.find(" |", start)
+                    label = text[start:end] if end != -1 else text[start:]
+                    result.append(self.vectors[label])
+                return result
+
+        graph = _graph()
+        result = await semantic_cluster_and_merge(
+            graph,
+            _settings(),
+            embedding_client=_MatrixEmbeddingClient(),
+        )
+        labels = {n.label for n in result.nodes}
+        assert "Adam Optimizer" in labels or "Adam" in labels
+        assert len(result.nodes) == 4
+        assert any("SEMANTIC_CLUSTERS_MERGED:1" in w for w in result.warnings)
+
+    @pytest.mark.asyncio
+    async def test_all_distinct_types_produce_no_merge_pairs(self) -> None:
+        """When every node has a different type, the matrix filter is never invoked."""
+
+        class _IdenticalEmbeddingClient:
+            async def embed_texts(self, texts: list[str]) -> list[list[float]]:
+                return [[1.0, 0.0, 0.0] for _ in texts]
+
+        nodes = [
+            ExtractedNode(id="n1", label="x", type="Method"),
+            ExtractedNode(id="n2", label="x", type="Dataset"),
+            ExtractedNode(id="n3", label="x", type="Claim"),
+        ]
+        graph = ExtractedGraph(
+            paper_id="p1",
+            title="T",
+            paradigm=Paradigm.STEM,
+            nodes=nodes,
+            edges=[],
+        )
+        result = await semantic_cluster_and_merge(
+            graph,
+            _settings(sim=0.5),
+            embedding_client=_IdenticalEmbeddingClient(),
+        )
+        assert len(result.nodes) == 3
+        assert not any("SEMANTIC_CLUSTERS_MERGED" in w for w in result.warnings)
+
+
+class _MockRerankerClient:
+    """Deterministic reranker scores keyed by (text_a, text_b) tuples."""
+
+    def __init__(self, scores: dict[tuple[str, str], float]) -> None:
+        self._scores = scores
+
+    async def rerank_pairs(self, pairs: list[tuple[str, str]]) -> list[float]:
+        return [self._scores.get(pair, 0.5) for pair in pairs]
+
+
+class TestRerankerFineFilter:
+    def _rerank_settings(
+        self,
+        enabled: bool = True,
+        threshold: float = 0.85,
+        sim: float = 0.5,
+    ) -> Settings:
+        return Settings(
+            _env_file=None,
+            llm_mode="mock",
+            semantic_clustering_enabled=True,
+            semantic_similarity_threshold=sim,
+            reranker_enabled=enabled,
+            reranker_model="bge-reranker-v2-m3",
+            reranker_api_base_url="https://api.example.com/v1",
+            reranker_api_key="fake-key",
+            reranker_threshold=threshold,
+        )
+
+    @pytest.mark.asyncio
+    async def test_reranker_blocks_false_synonyms(self) -> None:
+        """数学分析 vs 内容分析 should be rejected by the reranker fine-filter."""
+
+        class _IdenticalEmbeddingClient:
+            async def embed_texts(self, texts: list[str]) -> list[list[float]]:
+                return [[1.0, 0.0, 0.0] for _ in texts]
+
+        nodes = [
+            ExtractedNode(id="n1", label="数学分析", type="Method"),
+            ExtractedNode(id="n2", label="内容分析", type="Method"),
+            ExtractedNode(id="n3", label="PCA", type="Method"),
+            ExtractedNode(id="n4", label="Principal Component Analysis", type="Method"),
+        ]
+        graph = ExtractedGraph(
+            paper_id="p1",
+            title="T",
+            paradigm=Paradigm.STEM,
+            nodes=nodes,
+            edges=[],
+        )
+
+        reranker = _MockRerankerClient(
+            {
+                (_node_text(nodes[0]), _node_text(nodes[1])): 0.30,  # 数学分析 vs 内容分析
+                (_node_text(nodes[0]), _node_text(nodes[2])): 0.30,
+                (_node_text(nodes[0]), _node_text(nodes[3])): 0.30,
+                (_node_text(nodes[1]), _node_text(nodes[2])): 0.30,
+                (_node_text(nodes[1]), _node_text(nodes[3])): 0.30,
+                (_node_text(nodes[2]), _node_text(nodes[3])): 0.95,  # PCA synonym
+            }
+        )
+
+        result = await semantic_cluster_and_merge(
+            graph,
+            self._rerank_settings(),
+            embedding_client=_IdenticalEmbeddingClient(),
+            reranker_client=reranker,
+        )
+
+        labels = {n.label for n in result.nodes}
+        assert "PCA" in labels or "Principal Component Analysis" in labels
+        assert "数学分析" in labels
+        assert "内容分析" in labels
+        assert len(result.nodes) == 3
+        assert any("SEMANTIC_CLUSTERS_MERGED:1" in w for w in result.warnings)
+
+    @pytest.mark.asyncio
+    async def test_reranker_accepts_true_synonyms(self) -> None:
+        """Two phrasings of the same concept should pass the reranker and merge."""
+
+        class _IdenticalEmbeddingClient:
+            async def embed_texts(self, texts: list[str]) -> list[list[float]]:
+                return [[1.0, 0.0, 0.0] for _ in texts]
+
+        nodes = [
+            ExtractedNode(id="n1", label="PCA", type="Method"),
+            ExtractedNode(id="n2", label="Principal Component Analysis", type="Method"),
+        ]
+        graph = ExtractedGraph(
+            paper_id="p1",
+            title="T",
+            paradigm=Paradigm.STEM,
+            nodes=nodes,
+            edges=[],
+        )
+
+        reranker = _MockRerankerClient({(_node_text(nodes[0]), _node_text(nodes[1])): 0.95})
+
+        result = await semantic_cluster_and_merge(
+            graph,
+            self._rerank_settings(),
+            embedding_client=_IdenticalEmbeddingClient(),
+            reranker_client=reranker,
+        )
+
+        assert len(result.nodes) == 1
+        assert any("SEMANTIC_CLUSTERS_MERGED:1" in w for w in result.warnings)
+
+    @pytest.mark.asyncio
+    async def test_reranker_failure_skips_merging(self) -> None:
+        """If the reranker raises, clustering is skipped and a warning is emitted."""
+
+        class _FailingRerankerClient:
+            async def rerank_pairs(self, pairs: list[tuple[str, str]]) -> list[float]:
+                raise RuntimeError("reranker unavailable")
+
+        class _IdenticalEmbeddingClient:
+            async def embed_texts(self, texts: list[str]) -> list[list[float]]:
+                return [[1.0, 0.0, 0.0] for _ in texts]
+
+        nodes = [
+            ExtractedNode(id="n1", label="PCA", type="Method"),
+            ExtractedNode(id="n2", label="Principal Component Analysis", type="Method"),
+        ]
+        graph = ExtractedGraph(
+            paper_id="p1",
+            title="T",
+            paradigm=Paradigm.STEM,
+            nodes=nodes,
+            edges=[],
+        )
+
+        result = await semantic_cluster_and_merge(
+            graph,
+            self._rerank_settings(),
+            embedding_client=_IdenticalEmbeddingClient(),
+            reranker_client=_FailingRerankerClient(),
+        )
+
+        assert len(result.nodes) == 2
+        assert any("SEMANTIC_CLUSTERING_RERANK_SKIPPED" in w for w in result.warnings)
+
+    @pytest.mark.asyncio
+    async def test_disabled_reranker_uses_coarse_filter_only(self) -> None:
+        """When reranker is disabled, coarse-filter pairs pass through unchanged.
+
+        This is a fidelity-degraded fallback and emits a strong warning log.
+        The RerankerClient itself no longer returns 1.0 when disabled;
+        semantic_cluster_and_merge simply bypasses the fine-filter stage.
+        """
+
+        class _IdenticalEmbeddingClient:
+            async def embed_texts(self, texts: list[str]) -> list[list[float]]:
+                return [[1.0, 0.0, 0.0] for _ in texts]
+
+        nodes = [
+            ExtractedNode(id="n1", label="数学分析", type="Method"),
+            ExtractedNode(id="n2", label="内容分析", type="Method"),
+        ]
+        graph = ExtractedGraph(
+            paper_id="p1",
+            title="T",
+            paradigm=Paradigm.STEM,
+            nodes=nodes,
+            edges=[],
+        )
+
+        result = await semantic_cluster_and_merge(
+            graph,
+            self._rerank_settings(enabled=False),
+            embedding_client=_IdenticalEmbeddingClient(),
+        )
+
+        assert len(result.nodes) == 1
+        assert any("SEMANTIC_CLUSTERS_MERGED:1" in w for w in result.warnings)
+
+    @pytest.mark.asyncio
+    async def test_reranker_input_is_normalized_by_node_id(self) -> None:
+        """Asymmetric reranker must always receive (smaller_id, larger_id) order."""
+
+        class _IdenticalEmbeddingClient:
+            async def embed_texts(self, texts: list[str]) -> list[list[float]]:
+                return [[1.0, 0.0, 0.0] for _ in texts]
+
+        class _AsymmetricRerankerClient:
+            def __init__(self) -> None:
+                self.observed_pairs: list[tuple[str, str]] = []
+
+            async def rerank_pairs(self, pairs: list[tuple[str, str]]) -> list[float]:
+                self.observed_pairs.extend(pairs)
+                scores = []
+                for text_a, _text_b in pairs:
+                    # The stable direction (smaller id as query) scores high;
+                    # the reversed direction scores low.
+                    if "类型: Method | 细分类别: General | 核心概念: Adam" in text_a:
+                        scores.append(0.95)
+                    else:
+                        scores.append(0.30)
+                return scores
+
+        # Deliberately create ids where the first node has a larger id than the
+        # second, so the coarse-filter could return them in either order.
+        nodes = [
+            ExtractedNode(id="z_adam", label="Adam Optimizer", type="Method"),
+            ExtractedNode(id="a_adam", label="Adam", type="Method"),
+        ]
+        graph = ExtractedGraph(
+            paper_id="p1",
+            title="T",
+            paradigm=Paradigm.STEM,
+            nodes=nodes,
+            edges=[],
+        )
+        reranker = _AsymmetricRerankerClient()
+
+        result = await semantic_cluster_and_merge(
+            graph,
+            self._rerank_settings(),
+            embedding_client=_IdenticalEmbeddingClient(),
+            reranker_client=reranker,
+        )
+
+        assert len(result.nodes) == 1
+        assert len(reranker.observed_pairs) == 1
+        text_a, _text_b = reranker.observed_pairs[0]
+        # a_adam has the smaller id, so its text must be the query.
+        assert "核心概念: Adam" in text_a
+        assert "核心概念: Adam Optimizer" not in text_a
+
+
+class TestDescriptionFusion:
+    def test_fuse_descriptions_deduplicates_and_joins(self) -> None:
+        result = _fuse_descriptions(["desc A", "desc B", "desc A"])
+        assert result == "desc A | desc B"
+
+    def test_fuse_descriptions_single_returns_unchanged(self) -> None:
+        assert _fuse_descriptions(["only one"]) == "only one"
+
+    def test_fuse_descriptions_empty_returns_empty(self) -> None:
+        assert _fuse_descriptions([]) == ""
+        assert _fuse_descriptions(["", "  "]) == ""
+
+    def test_merge_clusters_fuses_descriptions_into_root(self) -> None:
+        nodes = [
+            ExtractedNode(id="a", label="A", type="Method", description="Root description"),
+            ExtractedNode(id="b", label="B", type="Method", description="Alias description one"),
+            ExtractedNode(id="c", label="C", type="Method", description="Alias description two"),
+        ]
+        merged_nodes, _, _, _ = _merge_clusters(nodes, [], clusters=[{"a", "b", "c"}])
+        assert len(merged_nodes) == 1
+        root = merged_nodes[0]
+        assert "Root description" in (root.description or "")
+        assert "Alias description one" in (root.description or "")
+        assert "Alias description two" in (root.description or "")
+
+    def test_merge_clusters_keeps_original_description_for_singleton(self) -> None:
+        nodes = [
+            ExtractedNode(id="a", label="A", type="Method", description="Singleton description"),
+        ]
+        merged_nodes, _, _, _ = _merge_clusters(nodes, [], clusters=[{"a"}])
+        assert len(merged_nodes) == 1
+        assert merged_nodes[0].description == "Singleton description"
+
+    def test_merge_clusters_tolerates_missing_descriptions(self) -> None:
+        nodes = [
+            ExtractedNode(id="a", label="A", type="Method"),
+            ExtractedNode(id="b", label="B", type="Method", description="Only this"),
+        ]
+        merged_nodes, _, _, _ = _merge_clusters(nodes, [], clusters=[{"a", "b"}])
+        assert len(merged_nodes) == 1
+        assert merged_nodes[0].description == "Only this"
+
+
+class TestUnionFindTransitivity:
+    @pytest.mark.asyncio
+    async def test_transitive_pairs_merge_into_single_cluster(self) -> None:
+        """A~B and B~C through reranker should merge A, B, C into one node."""
+
+        class _IdenticalEmbeddingClient:
+            async def embed_texts(self, texts: list[str]) -> list[list[float]]:
+                return [[1.0, 0.0, 0.0] for _ in texts]
+
+        class _TransitiveRerankerClient:
+            async def rerank_pairs(self, pairs: list[tuple[str, str]]) -> list[float]:
+                return [0.95] * len(pairs)
+
+        nodes = [
+            ExtractedNode(id="n1", label="Adam", type="Method"),
+            ExtractedNode(id="n2", label="Adam Optimizer", type="Method"),
+            ExtractedNode(id="n3", label="Adaptive Moment Estimation", type="Method"),
+        ]
+        graph = ExtractedGraph(
+            paper_id="p1",
+            title="T",
+            paradigm=Paradigm.STEM,
+            nodes=nodes,
+            edges=[],
+        )
+        result = await semantic_cluster_and_merge(
+            graph,
+            Settings(
+                _env_file=None,
+                llm_mode="mock",
+                semantic_clustering_enabled=True,
+                semantic_similarity_threshold=0.5,
+                reranker_enabled=True,
+                reranker_model="bge-reranker-v2-m3",
+                reranker_api_base_url="https://api.example.com/v1",
+                reranker_api_key="fake-key",
+                reranker_threshold=0.85,
+            ),
+            embedding_client=_IdenticalEmbeddingClient(),
+            reranker_client=_TransitiveRerankerClient(),
+        )
+        assert len(result.nodes) == 1
+        root = result.nodes[0]
+        assert len(root.data.get("semantic_aliases", [])) == 2
+        assert any("SEMANTIC_CLUSTERS_MERGED:1" in w for w in result.warnings)

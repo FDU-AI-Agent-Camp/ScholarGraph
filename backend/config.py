@@ -25,6 +25,37 @@ DEFAULT_EMBEDDING_MODEL_THRESHOLDS: dict[str, dict[str, float]] = {
     },
 }
 
+# Per-paradigm, per-node-category similarity thresholds for semantic clustering.
+# A single global threshold causes over-merging for Method nodes (too loose) and
+# under-merging for Dataset nodes (too strict).  Categories are intentionally
+# coarse-grained so the matrix stays small and maintainable; unknown types fall
+# back to the "Concept" bucket.
+DYNAMIC_CLUSTERING_THRESHOLDS: dict[str, dict[str, float]] = {
+    "STEM": {
+        "Method": 0.92,
+        "Dataset": 0.82,
+        "Metric": 0.88,
+        "Baseline": 0.88,
+        "Concept": 0.88,
+    },
+    "HSS": {
+        "Method": 0.86,
+        "Dataset": 0.80,
+        "Concept": 0.82,
+    },
+}
+
+
+def _clustering_category(node_type: str) -> str:
+    """Map a concrete node type to its coarse threshold category."""
+    category_map: dict[str, str] = {
+        "Method": "Method",
+        "Dataset": "Dataset",
+        "Metric": "Metric",
+        "Baseline": "Baseline",
+    }
+    return category_map.get(node_type, "Concept")
+
 
 class Settings(BaseSettings):
     """Runtime configuration; values come from `.env` at repository root."""
@@ -87,6 +118,7 @@ class Settings(BaseSettings):
         default=600,
         validation_alias="INGEST_MINERU_TIMEOUT_SECONDS",
     )
+    mineru_api_url: str = Field(default="", validation_alias="MINERU_API_URL")
 
     grobid_url: str = Field(default="http://127.0.0.1:8070", validation_alias="GROBID_URL")
     grobid_timeout_seconds: int = Field(default=300, validation_alias="GROBID_TIMEOUT_SECONDS")
@@ -196,6 +228,11 @@ class Settings(BaseSettings):
         le=1.0,
         validation_alias="SEMANTIC_SIMILARITY_THRESHOLD",
     )
+    semantic_clustering_dynamic_thresholds_enabled: bool = Field(
+        default=True,
+        validation_alias="SEMANTIC_CLUSTERING_DYNAMIC_THRESHOLDS_ENABLED",
+        description="Use per-paradigm, per-node-category thresholds instead of a single global threshold.",
+    )
     semantic_knn_threshold: float = Field(
         default=-1.0,
         ge=-1.0,
@@ -223,6 +260,38 @@ class Settings(BaseSettings):
         validation_alias="EMBEDDING_OLLAMA_URL",
     )
 
+    # ------------------------------------------------------------------
+    # Cloud reranker for fine-grained semantic merge verification
+    # ------------------------------------------------------------------
+    reranker_enabled: bool = Field(
+        default=False,
+        validation_alias="RERANKER_ENABLED",
+    )
+    reranker_model: str = Field(
+        default="",
+        validation_alias="RERANKER_MODEL",
+    )
+    reranker_api_base_url: str | None = Field(
+        default=None,
+        validation_alias="RERANKER_API_BASE_URL",
+    )
+    reranker_api_key: str = Field(
+        default="",
+        validation_alias="RERANKER_API_KEY",
+    )
+    reranker_batch_size: int = Field(
+        default=32,
+        ge=1,
+        le=256,
+        validation_alias="RERANKER_BATCH_SIZE",
+    )
+    reranker_threshold: float = Field(
+        default=0.85,
+        ge=0.0,
+        le=1.0,
+        validation_alias="RERANKER_THRESHOLD",
+    )
+
     extract_repair_max_retries: int = Field(
         default=2,
         ge=0,
@@ -234,6 +303,25 @@ class Settings(BaseSettings):
     classifier_heuristic_fallback: bool = Field(
         default=True,
         validation_alias="CLASSIFIER_HEURISTIC_FALLBACK",
+    )
+    classifier_two_phase_enabled: bool = Field(
+        default=True,
+        validation_alias="CLASSIFIER_TWO_PHASE_ENABLED",
+        description="Run profile generation (Stage A) before paradigm judgment (Stage B).",
+    )
+    classifier_core_contribution_enabled: bool = Field(
+        default=True,
+        validation_alias="CLASSIFIER_CORE_CONTRIBUTION_ENABLED",
+        description="Run core-contribution interrogation (Stage B.1) between profile and final judgment.",
+    )
+    classifier_profile_llm_model: str = Field(
+        default="",
+        validation_alias="CLASSIFIER_PROFILE_LLM_MODEL",
+        description="Lightweight model for Stage A profile generation; empty means use primary model.",
+    )
+    classifier_profile_llm_timeout_seconds: int = Field(
+        default=60,
+        validation_alias="CLASSIFIER_PROFILE_LLM_TIMEOUT_SECONDS",
     )
 
     @field_validator("cors_origins", mode="before")
@@ -269,6 +357,14 @@ class Settings(BaseSettings):
         return self.embedding_api_base_url or self.llm_api_base_url or None
 
     @property
+    def reranker_api_base_url_effective(self) -> str | None:
+        return self.reranker_api_base_url or self.llm_api_base_url or None
+
+    @property
+    def reranker_api_key_effective(self) -> str:
+        return self.reranker_api_key.strip() or self.require_llm_key()
+
+    @property
     def semantic_similarity_threshold_effective(self) -> float:
         """Return the entity-resolution threshold.
 
@@ -282,6 +378,38 @@ class Settings(BaseSettings):
             DEFAULT_EMBEDDING_MODEL_THRESHOLDS["default"],
         )
         return thresholds["similarity"]
+
+    def semantic_similarity_threshold_for(
+        self,
+        node_type_a: str,
+        node_type_b: str,
+        paradigm: str,
+    ) -> float:
+        """Return the pairwise merge threshold for two node types.
+
+        Priority:
+        1. Explicit ``SEMANTIC_SIMILARITY_THRESHOLD`` (global override).
+        2. Dynamic matrix when ``semantic_clustering_dynamic_thresholds_enabled``.
+        3. Per-model default fallback.
+
+        For cross-category pairs the stricter of the two category thresholds is
+        used, so a Method-Dataset pair uses the Method threshold.
+        """
+        if self.semantic_similarity_threshold >= 0:
+            return self.semantic_similarity_threshold
+
+        if self.semantic_clustering_dynamic_thresholds_enabled:
+            category_a = _clustering_category(node_type_a)
+            category_b = _clustering_category(node_type_b)
+            matrix = DYNAMIC_CLUSTERING_THRESHOLDS.get(
+                paradigm,
+                DYNAMIC_CLUSTERING_THRESHOLDS["STEM"],
+            )
+            threshold_a = matrix.get(category_a, matrix["Concept"])
+            threshold_b = matrix.get(category_b, matrix["Concept"])
+            return max(threshold_a, threshold_b)
+
+        return self.semantic_similarity_threshold_effective
 
     @property
     def semantic_knn_threshold_effective(self) -> float:

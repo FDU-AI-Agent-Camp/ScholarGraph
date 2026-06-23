@@ -9,6 +9,8 @@ from pathlib import Path
 from backend.ingest.pdf import CLASSIFIER_HEAD_PAGE_LIMIT, extract_pdf_text
 from backend.ingest.snippets import (
     ClassifierSections,
+    extract_conclusion_tail,
+    extract_meta_info,
     extract_sections_from_text,
     normalize_for_sections,
     normalize_whitespace,
@@ -42,6 +44,13 @@ class HeadCandidate:
     abstract: str = ""
     keywords: str = ""
     intro: str = ""
+    conclusion: str = ""
+    journal: str = ""
+    funding: str = ""
+    affiliation: str = ""
+    research_object: str = ""
+    methodology_tool: str = ""
+    core_intellectual_contribution: str = ""
     source: str = "pymupdf"
 
     @classmethod
@@ -51,6 +60,13 @@ class HeadCandidate:
             abstract=sections.abstract,
             keywords=sections.keywords,
             intro=sections.intro,
+            conclusion=sections.conclusion,
+            journal=sections.journal,
+            funding=sections.funding,
+            affiliation=sections.affiliation,
+            research_object=sections.research_object,
+            methodology_tool=sections.methodology_tool,
+            core_intellectual_contribution=sections.core_intellectual_contribution,
             source=source,
         )
 
@@ -98,10 +114,16 @@ def parse_mineru_markdown(md_text: str) -> HeadCandidate:
     abstract = _first_md_match(_MD_ABSTRACT_PATTERNS, text) or ""
     keywords = _first_md_match(_MD_KEYWORDS_PATTERNS, text) or ""
     intro = _extract_markdown_intro(text)
+    meta = extract_meta_info(text)
+    conclusion = extract_conclusion_tail(md_text) if md_text else ""
     return HeadCandidate(
         title=title,
         abstract=abstract,
         keywords=keywords,
         intro=intro,
+        conclusion=conclusion,
+        journal=meta.get("journal", ""),
+        funding=meta.get("funding", ""),
+        affiliation=meta.get("affiliation", ""),
         source="mineru",
     )

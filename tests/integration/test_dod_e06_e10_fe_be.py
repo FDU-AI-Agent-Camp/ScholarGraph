@@ -85,11 +85,11 @@ async def test_e06_patrol_insufficient_lens_422_patrol_insufficient_data(
 
 
 @pytest.mark.asyncio
-async def test_e06_patrol_contradiction_insufficient_thesis_422(
+async def test_e06_patrol_contradiction_insufficient_data_returns_200(
     api_client: AsyncClient,
     mock_llm_env: Path,
 ) -> None:
-    """E-06 红灯：contradiction 缺 Thesis → 422 PATROL_INSUFFICIENT_DATA."""
+    """E-06 绿灯：contradiction 缺 Thesis → 200 + status=insufficient_data."""
     store = GraphStore(base_dir=mock_llm_env)
     store.save(build_hss_graph_without_thesis(READY_ID))
     store.save(
@@ -104,8 +104,13 @@ async def test_e06_patrol_contradiction_insufficient_thesis_422(
         "/api/v1/patrol",
         json={"paper_ids": [READY_ID, PROCESSING_ID], "mode": "contradiction"},
     )
-    assert response.status_code == 422
-    assert_error_envelope(response.json(), code="PATROL_INSUFFICIENT_DATA")
+    assert response.status_code == 200
+    body = response.json()
+    assert_success_envelope(body)
+    insight = body["data"]["insights"][0]
+    assert insight["insight_id"] == "ins-contradiction-001"
+    assert insight["status"] == "insufficient_data"
+    assert insight["has_contradiction"] is False
 
 
 @pytest.mark.asyncio

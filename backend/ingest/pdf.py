@@ -73,9 +73,9 @@ async def ingest_pdf(file_path: Path, paper_id: str | None = None) -> IngestResu
         resolved,
         max_pages=CLASSIFIER_HEAD_PAGE_LIMIT,
     )
-    classifier_input = build_classifier_input(head_text)
+    classifier_input = build_classifier_input(head_text, full_text=full_text)
     if not classifier_input.strip():
-        classifier_input = build_classifier_input(full_text[:50_000])
+        classifier_input = build_classifier_input(full_text[:50_000], full_text=full_text)
 
     return IngestResult(
         paper_id=resolved_id,

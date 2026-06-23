@@ -35,10 +35,19 @@ class ExtractedNode(BaseModel):
         description="Concise phrase faithful to the paper text.",
     )
     type: str = Field(min_length=1, description="Node type from the paradigm whitelist.")
+    sub_type: str | None = Field(
+        default=None,
+        description="Fine-grained subtype for semantic clustering (e.g. 'Prompting', 'Storage').",
+    )
+    description: str | None = Field(
+        default=None,
+        max_length=500,
+        description="Short semantic definition used for clustering instead of raw source_span.",
+    )
     source_span: str | None = Field(
         default=None,
         max_length=500,
-        description="Textual evidence from the paper supporting this node.",
+        description="Textual evidence from the paper supporting this node (not used for embeddings).",
     )
     confidence: float = Field(default=1.0, ge=0.0, le=1.0)
     data: dict[str, Any] = Field(default_factory=dict)

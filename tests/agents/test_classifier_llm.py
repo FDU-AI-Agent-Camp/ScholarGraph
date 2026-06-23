@@ -5,12 +5,20 @@ from __future__ import annotations
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
+from backend.agents.classifier import classify
+from backend.agents.classifier_constants import CLASSIFIER_HEURISTIC_FALLBACK_CODE
 from backend.agents.classifier_llm import (
+    CLASSIFIER_PROFILE_PROMPT_PATH,
     CLASSIFIER_PROMPT_PATH,
     _validate_llm_classification,
     classify_with_llm,
+    generate_profile_with_llm,
+    judge_with_llm,
+    load_classifier_profile_prompt,
     load_classifier_prompt,
 )
+from backend.agents.classifier_types import ClassifierProfile, CoreContributionAnalysis
+from backend.config import get_settings
 from backend.llm.client import LlmClient
 from backend.schemas.paradigm import Paradigm, ParadigmClassification
 from pydantic import ValidationError
@@ -21,12 +29,76 @@ STEM_SAMPLE = (
 )
 
 
+def _mock_two_stage_client(
+    *,
+    profile: ClassifierProfile,
+    judge: ParadigmClassification,
+    core: CoreContributionAnalysis | None = None,
+    profile_side_effect: Exception | None = None,
+) -> LlmClient:
+    """Build a mock client for the three-stage classifier pipeline."""
+
+    def _make_runnable(response: object, side_effect: Exception | None = None) -> MagicMock:
+        runnable = MagicMock()
+        if side_effect is not None:
+            runnable.ainvoke = AsyncMock(side_effect=side_effect)
+        else:
+            runnable.ainvoke = AsyncMock(return_value=response)
+        return runnable
+
+    profile_runnable = _make_runnable(profile, profile_side_effect)
+    judge_runnable = _make_runnable(judge)
+    core_runnable = _make_runnable(core or CoreContributionAnalysis())
+
+    chat = MagicMock()
+
+    def _with_structured(model: type[object]) -> MagicMock:
+        if model is ClassifierProfile:
+            return profile_runnable
+        if model is CoreContributionAnalysis:
+            return core_runnable
+        if model is ParadigmClassification:
+            return judge_runnable
+        raise ValueError(f"Unexpected structured output model: {model}")
+
+    chat.with_structured_output.side_effect = _with_structured
+
+    client = LlmClient()
+    client._chat = chat
+    client._fallback_chat = None
+    return client
+
+
 def test_load_classifier_prompt_reads_markdown_file() -> None:
     prompt = load_classifier_prompt()
     assert CLASSIFIER_PROMPT_PATH.is_file()
     assert "STEM" in prompt
     assert "HSS" in prompt
     assert len(prompt.strip()) > 50
+
+
+def test_classifier_prompt_contains_core_contribution_red_lines() -> None:
+    prompt = load_classifier_prompt().lower()
+    assert "core contribution" in prompt
+    assert "substitution test" in prompt
+    assert "stem lock" in prompt
+    assert "hss lock" in prompt
+    assert "research object" in prompt
+    assert "flashlight" in prompt or "illuminating" in prompt
+    assert "technology, tool, method, or theory" in prompt
+    assert "specific object" in prompt
+    assert "historical fact" in prompt
+    assert "social phenomenon" in prompt
+    assert "cultural thread" in prompt
+
+
+def test_load_classifier_profile_prompt_reads_markdown_file() -> None:
+    prompt = load_classifier_profile_prompt()
+    assert CLASSIFIER_PROFILE_PROMPT_PATH.is_file()
+    assert "goal" in prompt.lower()
+    assert "tools" in prompt.lower()
+    assert "domain" in prompt.lower()
+    assert "not" in prompt.lower() and "to classify" in prompt.lower()
 
 
 def test_validate_llm_classification_rejects_empty_reason() -> None:
@@ -43,33 +115,104 @@ def test_paradigm_classification_pydantic_bounds() -> None:
 
 
 @pytest.mark.asyncio
-async def test_classify_with_llm_raises_when_both_models_fail(live_classify_env: None) -> None:
+async def test_generate_profile_with_llm_returns_profile(live_classify_env: None) -> None:
     _ = live_classify_env
-    primary_runnable = MagicMock()
-    primary_runnable.ainvoke = AsyncMock(side_effect=RuntimeError("primary failed"))
-    fallback_runnable = MagicMock()
-    fallback_runnable.ainvoke = AsyncMock(side_effect=RuntimeError("fallback failed"))
-
-    primary_chat = MagicMock()
-    primary_chat.with_structured_output.return_value = primary_runnable
-    fallback_chat = MagicMock()
-    fallback_chat.with_structured_output.return_value = fallback_runnable
+    expected = ClassifierProfile(
+        goal="Evaluate agents on benchmark datasets.",
+        tools="Accuracy, F1, ablation experiments.",
+        domain="Computer science / machine learning.",
+    )
+    structured_runnable = MagicMock()
+    structured_runnable.ainvoke = AsyncMock(return_value=expected)
+    chat = MagicMock()
+    chat.with_structured_output.return_value = structured_runnable
 
     client = LlmClient()
-    client._chat = primary_chat
-    client._fallback_chat = fallback_chat
+    client._chat = chat
+    client._fallback_chat = None
 
-    with pytest.raises(RuntimeError, match="fallback failed"):
-        await classify_with_llm(STEM_SAMPLE, llm_client=client)
+    result = await generate_profile_with_llm(STEM_SAMPLE, llm_client=client)
+    assert result == expected
+    chat.with_structured_output.assert_called_once_with(ClassifierProfile)
 
 
 @pytest.mark.asyncio
-async def test_classify_with_llm_primary_success(live_classify_env: None) -> None:
+async def test_generate_profile_with_llm_rejects_empty_profile(live_classify_env: None) -> None:
     _ = live_classify_env
+    bad = ClassifierProfile(goal="   ", tools="x", domain="y")
+    structured_runnable = MagicMock()
+    structured_runnable.ainvoke = AsyncMock(return_value=bad)
+    chat = MagicMock()
+    chat.with_structured_output.return_value = structured_runnable
+
+    client = LlmClient()
+    client._chat = chat
+    client._fallback_chat = None
+
+    with pytest.raises(ValueError, match="Profile goal is empty"):
+        await generate_profile_with_llm(STEM_SAMPLE, llm_client=client)
+
+
+@pytest.mark.asyncio
+async def test_classify_with_llm_two_stage_uses_generated_profile(live_classify_env: None) -> None:
+    _ = live_classify_env
+    profile = ClassifierProfile(
+        goal="Benchmark agent frameworks.",
+        tools="Datasets, accuracy, F1, ablations.",
+        domain="Artificial intelligence / NLP.",
+    )
+    core = CoreContributionAnalysis(
+        core_contribution_summary="A new benchmarking method for agent frameworks.",
+        substitution_test="The method would still hold if the dataset were replaced, pointing toward STEM.",
+        target_journal_test="The journal would accept it for the method, implying STEM.",
+    )
     expected = ParadigmClassification(
         paradigm=Paradigm.STEM,
         confidence=0.92,
         reason="Benchmark and dataset paper.",
+    )
+    client = _mock_two_stage_client(profile=profile, judge=expected, core=core)
+
+    result = await classify_with_llm(STEM_SAMPLE, llm_client=client)
+
+    assert result.paradigm == Paradigm.STEM
+    assert client._chat.with_structured_output.call_count == 3
+    client._chat.with_structured_output.assert_any_call(ClassifierProfile)
+    client._chat.with_structured_output.assert_any_call(CoreContributionAnalysis)
+    client._chat.with_structured_output.assert_any_call(ParadigmClassification)
+
+
+@pytest.mark.asyncio
+async def test_classify_with_llm_profile_failure_propagates(live_classify_env: None) -> None:
+    _ = live_classify_env
+    expected = ParadigmClassification(
+        paradigm=Paradigm.STEM,
+        confidence=0.9,
+        reason="ok",
+    )
+    client = _mock_two_stage_client(
+        profile=ClassifierProfile(),
+        judge=expected,
+        profile_side_effect=RuntimeError("profile stage failed"),
+    )
+
+    with pytest.raises(RuntimeError, match="profile stage failed"):
+        await classify_with_llm(STEM_SAMPLE, llm_client=client)
+
+
+@pytest.mark.asyncio
+async def test_classify_with_llm_single_stage_when_disabled(
+    live_classify_env: None,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _ = live_classify_env
+    monkeypatch.setenv("CLASSIFIER_TWO_PHASE_ENABLED", "false")
+    get_settings.cache_clear()
+
+    expected = ParadigmClassification(
+        paradigm=Paradigm.STEM,
+        confidence=0.91,
+        reason="Quantitative benchmark paper.",
     )
     structured_runnable = MagicMock()
     structured_runnable.ainvoke = AsyncMock(return_value=expected)
@@ -87,7 +230,51 @@ async def test_classify_with_llm_primary_success(live_classify_env: None) -> Non
 
 
 @pytest.mark.asyncio
-async def test_classify_with_llm_retries_fallback_model(live_classify_env: None) -> None:
+async def test_judge_with_llm_raises_when_both_models_fail(live_classify_env: None) -> None:
+    _ = live_classify_env
+    primary_runnable = MagicMock()
+    primary_runnable.ainvoke = AsyncMock(side_effect=RuntimeError("primary failed"))
+    fallback_runnable = MagicMock()
+    fallback_runnable.ainvoke = AsyncMock(side_effect=RuntimeError("fallback failed"))
+
+    primary_chat = MagicMock()
+    primary_chat.with_structured_output.return_value = primary_runnable
+    fallback_chat = MagicMock()
+    fallback_chat.with_structured_output.return_value = fallback_runnable
+
+    client = LlmClient()
+    client._chat = primary_chat
+    client._fallback_chat = fallback_chat
+
+    with pytest.raises(RuntimeError, match="fallback failed"):
+        await judge_with_llm(STEM_SAMPLE, ClassifierProfile(), llm_client=client)
+
+
+@pytest.mark.asyncio
+async def test_judge_with_llm_primary_success(live_classify_env: None) -> None:
+    _ = live_classify_env
+    expected = ParadigmClassification(
+        paradigm=Paradigm.STEM,
+        confidence=0.92,
+        reason="Benchmark and dataset paper.",
+    )
+    structured_runnable = MagicMock()
+    structured_runnable.ainvoke = AsyncMock(return_value=expected)
+    chat = MagicMock()
+    chat.with_structured_output.return_value = structured_runnable
+
+    client = LlmClient()
+    client._chat = chat
+    client._fallback_chat = None
+
+    result = await judge_with_llm(STEM_SAMPLE, ClassifierProfile(), llm_client=client)
+
+    assert result.paradigm == Paradigm.STEM
+    chat.with_structured_output.assert_called_once_with(ParadigmClassification)
+
+
+@pytest.mark.asyncio
+async def test_judge_with_llm_retries_fallback_model(live_classify_env: None) -> None:
     _ = live_classify_env
     expected = ParadigmClassification(
         paradigm=Paradigm.HSS,
@@ -108,8 +295,9 @@ async def test_classify_with_llm_retries_fallback_model(live_classify_env: None)
     client._chat = primary_chat
     client._fallback_chat = fallback_chat
 
-    result = await classify_with_llm(
+    result = await judge_with_llm(
         "Title: Historical ethnography. We analyze archives and interviews.",
+        ClassifierProfile(),
         llm_client=client,
     )
 
@@ -119,7 +307,7 @@ async def test_classify_with_llm_retries_fallback_model(live_classify_env: None)
 
 
 @pytest.mark.asyncio
-async def test_classify_with_llm_recovers_from_markdown_fenced_json(
+async def test_judge_with_llm_recovers_from_markdown_fenced_json(
     live_classify_env: None,
 ) -> None:
     """If with_structured_output chokes on ```json fences, parse the raw text."""
@@ -149,7 +337,7 @@ async def test_classify_with_llm_recovers_from_markdown_fenced_json(
     client._chat = primary_chat
     client._fallback_chat = fallback_chat
 
-    result = await classify_with_llm(STEM_SAMPLE, llm_client=client)
+    result = await judge_with_llm(STEM_SAMPLE, ClassifierProfile(), llm_client=client)
     assert result.paradigm == Paradigm.STEM
     assert result.confidence == 0.85
 
@@ -166,7 +354,7 @@ async def test_classify_with_llm_recovers_from_markdown_fenced_json(
     ids=["plain", "fenced", "embedded", "trailing_comma", "whitespace"],
 )
 @pytest.mark.asyncio
-async def test_classify_with_llm_parses_various_string_outputs(
+async def test_judge_with_llm_parses_various_string_outputs(
     live_classify_env: None,
     raw_output: str,
 ) -> None:
@@ -181,7 +369,7 @@ async def test_classify_with_llm_parses_various_string_outputs(
     client._chat = chat
     client._fallback_chat = None
 
-    result = await classify_with_llm(STEM_SAMPLE, llm_client=client)
+    result = await judge_with_llm(STEM_SAMPLE, ClassifierProfile(), llm_client=client)
     assert result.paradigm == Paradigm.STEM
     assert result.confidence == 0.9
 
@@ -196,7 +384,7 @@ async def test_classify_with_llm_parses_various_string_outputs(
     ids=["missing_paradigm", "invalid_paradigm", "non_json"],
 )
 @pytest.mark.asyncio
-async def test_classify_with_llm_rejects_invalid_outputs(
+async def test_judge_with_llm_rejects_invalid_outputs(
     live_classify_env: None,
     raw_output: str,
 ) -> None:
@@ -212,4 +400,20 @@ async def test_classify_with_llm_rejects_invalid_outputs(
     client._fallback_chat = None
 
     with pytest.raises((ValidationError, ValueError)):
-        await classify_with_llm(STEM_SAMPLE, llm_client=client)
+        await judge_with_llm(STEM_SAMPLE, ClassifierProfile(), llm_client=client)
+
+
+@pytest.mark.asyncio
+async def test_classify_two_stage_profile_failure_falls_back_to_heuristic(live_classify_env: None) -> None:
+    """If Stage A profile generation fails, classify() degrades to heuristic."""
+    from unittest.mock import patch
+
+    _ = live_classify_env
+    with patch(
+        "backend.agents.classifier_llm.generate_profile_with_llm",
+        new=AsyncMock(side_effect=RuntimeError("profile stage failed")),
+    ):
+        result = await classify(STEM_SAMPLE)
+
+    assert CLASSIFIER_HEURISTIC_FALLBACK_CODE in result.warnings
+    assert result.classification.paradigm == Paradigm.STEM

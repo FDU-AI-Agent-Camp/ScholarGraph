@@ -613,9 +613,18 @@ components:
         label:
           type: string
 
+    PatrolInsightStatus:
+      type: string
+      enum: [ready, insufficient_data]
+      description: |
+        Insight readiness status.
+        `ready` means the insight was produced from a full LLM analysis.
+        `insufficient_data` means the graphs lacked required node types (Thesis/SubArgument)
+        and a deterministic template response was returned instead.
+
     PatrolInsight:
       type: object
-      required: [insight_id, title, summary, paper_ids, node_refs]
+      required: [insight_id, title, summary, status, paper_ids, node_refs]
       properties:
         insight_id:
           type: string
@@ -623,6 +632,12 @@ components:
           type: string
         summary:
           type: string
+        status:
+          $ref: "#/components/schemas/PatrolInsightStatus"
+        has_contradiction:
+          type: boolean
+          nullable: true
+          description: Whether a contradiction was detected. Only meaningful when status='ready'.
         paper_ids:
           type: array
           items:

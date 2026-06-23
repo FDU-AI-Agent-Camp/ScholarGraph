@@ -148,6 +148,54 @@ async def test_merge_with_llm_falls_back_to_rules_on_structured_failure() -> Non
 
 
 @pytest.mark.asyncio
+async def test_merge_with_llm_recovers_from_markdown_fenced_json() -> None:
+    """LLM wrapped JSON in ```json fences should be parsed by the shared cleaner."""
+    snippets = HeadCandidate(title="Snippet", source="pymupdf")
+    path_b = HeadCandidate(title="Path B", source="grobid")
+    raw_json = (
+        "```json\n"
+        '{"title": "Fenced Title", "abstract": "Fenced abstract", "keywords": "", '
+        '"intro": "", "conclusion": "", "journal": "", "funding": "", '
+        '"affiliation": "", "research_object": "object", "methodology_tool": "tool", '
+        '"core_intellectual_contribution": "finding"}\n'
+        "```"
+    )
+
+    class _JsonInvalidError(Exception):
+        def errors(self) -> list[dict[str, Any]]:
+            return [{"type": "json_invalid", "input": raw_json}]
+
+    class _FencedStructured:
+        async def ainvoke(self, messages: list[Any]) -> IngestHeadLlmOutput:
+            raise _JsonInvalidError("json invalid")
+
+    class _FencedChat:
+        def with_structured_output(self, schema: type[Any]) -> _FencedStructured:
+            return _FencedStructured()
+
+    settings = Settings(
+        _env_file=None,
+        llm_mode="live",
+        scholargraph_api_key="unit-test-key",
+        ingest_head_llm_enabled=True,
+    )
+
+    class _FencedClient:
+        chat = _FencedChat()
+        fallback_chat = None
+        is_mock = False
+
+    with patch("backend.ingest.head_merge.get_llm_client", return_value=_FencedClient()):
+        merged = await merge_with_llm(snippets, path_b, is_short=False, settings=settings)
+
+    assert merged.title == "Fenced Title"
+    assert merged.research_object == "object"
+    assert merged.methodology_tool == "tool"
+    assert merged.core_intellectual_contribution == "finding"
+    assert all(source == "llm" for source in merged.sources.values())
+
+
+@pytest.mark.asyncio
 async def test_merge_head_candidates_skips_llm_when_disabled() -> None:
     from backend.ingest.head_merge import merge_head_candidates
 
@@ -197,7 +245,8 @@ async def test_merge_with_llm_live_cloud_returns_structured_head(
     assert merged.abstract.strip()
     assert merged.sources.get("title") == "llm"
     combined = merged.to_classifier_input()
-    assert combined.startswith("Title:")
+    assert combined.startswith(("Meta-Information:", "Title:"))
+    assert "Title:" in combined
     assert "Abstract:" in combined
     title_lower = merged.title.lower()
     abstract_lower = merged.abstract.lower()

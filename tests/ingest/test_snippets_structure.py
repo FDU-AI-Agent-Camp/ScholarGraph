@@ -7,6 +7,7 @@ from backend.ingest.snippets import (
     build_classifier_input,
     normalize_for_sections,
     normalize_whitespace,
+    parse_classifier_sections,
 )
 
 NATURE_STYLE = """
@@ -67,7 +68,7 @@ def test_normalize_for_sections_keeps_line_breaks_for_headers() -> None:
 def test_build_classifier_input_nature_style_implicit_abstract() -> None:
     result = build_classifier_input(NATURE_STYLE)
 
-    assert result.startswith("Title:")
+    assert "Title:" in result
     assert "Crystal Property Prediction" in result
     assert "Abstract:" in result
     assert "CGCNN" in result or "ALIGNN" in result
@@ -132,3 +133,92 @@ Introduction
 
 def test_normalize_whitespace_on_multiline_block() -> None:
     assert normalize_whitespace("  hello   world  \n\n\n\n  foo ") == "hello world\n\nfoo"
+
+
+ENRICHED_INPUT = """
+Title: Sample Paper
+
+Abstract: We study social memory using interviews.
+
+Keywords: memory, society
+
+Introduction: Previous work debated this topic.
+
+Conclusion:
+This work advances historical understanding.
+Future studies should examine archives.
+
+Meta-Information:
+Journal: Social History Review
+Funding: National Humanities Grant
+Affiliation: Department of History, Example University
+Research Object: social memory in post-war communities
+Methodology/Tool: oral history interviews
+Core Intellectual Contribution: reveals how collective memory shapes identity
+"""
+
+
+def test_parse_classifier_sections_recover_all_fields() -> None:
+    sections = parse_classifier_sections(ENRICHED_INPUT)
+    assert sections.title == "Sample Paper"
+    assert "social memory" in sections.abstract
+    assert sections.keywords == "memory, society"
+    assert "Previous work" in sections.intro
+    assert "historical understanding" in sections.conclusion
+    assert sections.journal == "Social History Review"
+    assert sections.funding == "National Humanities Grant"
+    assert sections.affiliation == "Department of History, Example University"
+    assert sections.research_object == "social memory in post-war communities"
+    assert sections.methodology_tool == "oral history interviews"
+    assert "collective memory shapes identity" in sections.core_intellectual_contribution
+
+
+def test_build_classifier_input_with_full_text_extracts_conclusion() -> None:
+    head = "Memory Study\n\nAbstract\nWe study memory.\n\nKeywords\nmemory\n\nIntroduction\nPrior work exists."
+    full = (
+        "Memory Study\n\n"
+        "Abstract\nWe study memory.\n\n"
+        "Keywords\nmemory\n\n"
+        "Introduction\nPrior work exists.\n\n"
+        "Methods\nWe interviewed people.\n\n"
+        "Conclusion\nThis advances our understanding of collective memory.\n\n"
+        "References\n[1] Author."
+    )
+    result = build_classifier_input(head, full_text=full)
+    assert "Conclusion:" in result
+    assert "collective memory" in result
+    # Conclusion should appear before Introduction to survive truncation.
+    assert result.index("Conclusion:") < result.index("Introduction:")
+
+
+def test_build_classifier_input_includes_meta_information() -> None:
+    text = (
+        "Social History Review\n\n"
+        "Memory Study\n\n"
+        "Author: Alice, Department of History, Example University\n\n"
+        'Funding: National Humanities Grant "Oral Histories Project"\n\n'
+        "Abstract\nWe study memory."
+    )
+    result = build_classifier_input(text)
+    assert "Meta-Information:" in result
+    assert "Social History Review" in result
+    assert "Department of History" in result
+    assert "Oral Histories Project" in result
+
+
+def test_format_classifier_input_includes_core_contribution_fields() -> None:
+    from backend.ingest.snippets import format_classifier_input
+
+    result = format_classifier_input(
+        title="Sherpa Phylogeography",
+        abstract="We analyze Sherpa Y-chromosome data.",
+        journal="Human Genetics",
+        research_object="Sherpa male-line ancestry",
+        methodology_tool="Y-chromosome sequencing",
+        core_intellectual_contribution="argues the Dangxiang Qiang are Sherpa ancestors",
+    )
+    assert result.startswith("Meta-Information:")
+    assert "Research Object: Sherpa male-line ancestry" in result
+    assert "Methodology/Tool: Y-chromosome sequencing" in result
+    assert "Core Intellectual Contribution: argues the Dangxiang Qiang are Sherpa ancestors" in result
+    assert "Title: Sherpa Phylogeography" in result

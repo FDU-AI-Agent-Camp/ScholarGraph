@@ -43,6 +43,7 @@ const contradictionReport: DataResponse<PatrolReport> = {
         insight_id: 'ins-002',
         title: '核心论点矛盾',
         summary: '两篇论文论点不一致。',
+        status: 'ready',
         paper_ids: ['hss-001', 'hss-002'],
         node_refs: [],
       },
@@ -61,6 +62,7 @@ const patrolReport: DataResponse<PatrolReport> = {
         insight_id: 'ins-001',
         title: '理论视角冲突',
         summary: '两篇论文理论框架存在潜在冲突。',
+        status: 'ready',
         paper_ids: ['hss-001', 'hss-002'],
         node_refs: [
           { paper_id: 'hss-001', node_id: 'n_lens_a', label: '消费社会' },

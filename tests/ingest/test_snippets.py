@@ -1,6 +1,8 @@
 """Unit tests for classifier input slicing (BE-1)."""
 
-from backend.ingest.snippets import build_classifier_input, normalize_whitespace
+from backend.ingest.classifier_signals import extract_conclusion_tail, extract_meta_info
+from backend.ingest.snippets import build_classifier_input
+from backend.ingest.text_utils import normalize_whitespace
 
 STEM_SAMPLE = """
 Article
@@ -73,3 +75,74 @@ def test_build_classifier_input_empty_returns_empty() -> None:
 def test_build_classifier_input_fallback_without_markers() -> None:
     plain = "Only a short document without section headers."
     assert build_classifier_input(plain) == plain
+
+
+CONCLUSION_SAMPLE = """
+Title
+
+Abstract
+We study the social impact of migration.
+
+Keywords
+migration, history, ethnography
+
+Introduction
+Previous work has debated this for decades.
+
+Methods
+We interviewed 50 families.
+
+Conclusion
+This research deepens our understanding of collective memory.
+Future work should explore regional archives.
+
+References
+[1] Author, Journal, 2020.
+"""
+
+
+def test_extract_conclusion_tail_returns_final_paragraphs() -> None:
+    conclusion = extract_conclusion_tail(CONCLUSION_SAMPLE)
+    assert "collective memory" in conclusion
+    assert "regional archives" in conclusion
+    assert "References" not in conclusion
+
+
+def test_build_classifier_input_with_full_text_includes_conclusion() -> None:
+    head_text = CONCLUSION_SAMPLE[: CONCLUSION_SAMPLE.index("Methods")]
+    result = build_classifier_input(head_text, full_text=CONCLUSION_SAMPLE)
+    assert "Conclusion:" in result
+    assert "collective memory" in result
+
+
+META_SAMPLE = """
+西夏研究
+
+再探夏尔巴人父系历史
+
+作者简介：洛桑塔杰，男，复旦大学文物与博物馆学系本科生。
+
+基金项目：宁夏古代人类与动物骨骼考古新方法的应用示范研究
+（项目批准号：2020BFG02008）
+"""
+
+
+def test_extract_meta_info_hss_sample() -> None:
+    meta = extract_meta_info(META_SAMPLE)
+    assert meta["journal"] == "西夏研究"
+    assert "文物与博物馆学系" in meta["affiliation"]
+    assert "古代人类与动物骨骼考古新方法" in meta["funding"]
+
+
+def test_extract_meta_info_skips_generic_titles() -> None:
+    stem_head = """
+Nature Communications
+
+Transformer-generated atomic embeddings to enhance prediction accuracy
+
+1Department of Materials Science, MIT
+"""
+    meta = extract_meta_info(stem_head)
+    # "Nature Communications" has an explicit journal marker, so it is kept.
+    assert meta["journal"] == "Nature Communications"
+    assert "MIT" in meta["affiliation"]
