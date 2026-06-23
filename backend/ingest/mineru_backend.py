@@ -17,25 +17,69 @@ from backend.ingest.head_candidates import HeadCandidate, parse_mineru_markdown
 logger = logging.getLogger(__name__)
 
 MINERU_BINARY = "mineru"
+MINERU_MODULE = "mineru.cli.client"
 _CJK_RE = re.compile(r"[\u4e00-\u9fff]")
+
+
+def _can_run_mineru_binary(binary: str) -> bool:
+    """Validate that the ``mineru`` executable can actually start.
+
+    On Windows the pip-installed ``mineru.exe`` launcher may fail with
+    ``Failed to canonicalize script path`` even though the package is present.
+    """
+    try:
+        completed = subprocess.run(
+            [binary, "--version"],
+            capture_output=True,
+            text=True,
+            timeout=10,
+            check=False,
+        )
+    except (subprocess.TimeoutExpired, OSError):
+        return False
+    if completed.returncode != 0:
+        return False
+    return "Failed to canonicalize script path" not in (completed.stderr or "")
+
+
+def _resolve_mineru_module_command() -> list[str] | None:
+    """Return ``[sys.executable, '-m', 'mineru.cli.client']`` when the module is importable."""
+    try:
+        __import__(MINERU_MODULE)
+    except ImportError:
+        return None
+    return [sys.executable, "-m", MINERU_MODULE]
 
 
 def resolve_mineru_binary() -> str | None:
     """Return ``mineru`` executable path (PATH or active ``.venv`` Scripts)."""
     found = shutil.which(MINERU_BINARY)
-    if found:
+    if found and _can_run_mineru_binary(found):
         return found
     venv_scripts = Path(sys.executable).resolve().parent
     for name in (f"{MINERU_BINARY}.exe", MINERU_BINARY):
         candidate = venv_scripts / name
-        if candidate.is_file():
+        if candidate.is_file() and _can_run_mineru_binary(str(candidate)):
             return str(candidate)
     return None
 
 
+def resolve_mineru_command() -> list[str] | None:
+    """Return a runnable MinerU command prefix (binary or Python module).
+
+    Prefers the ``mineru`` console script when it works; otherwise falls back to
+    ``python -m mineru.cli.client``, which is required on Windows where the
+    packaged ``mineru.exe`` can be broken.
+    """
+    binary = resolve_mineru_binary()
+    if binary is not None:
+        return [binary]
+    return _resolve_mineru_module_command()
+
+
 def is_mineru_available() -> bool:
-    """Return True when ``mineru`` CLI is installed (``uv sync --extra mineru``)."""
-    return resolve_mineru_binary() is not None
+    """Return True when a runnable MinerU CLI is installed (``uv sync --extra mineru``)."""
+    return resolve_mineru_command() is not None
 
 
 def resolve_mineru_lang(pdf_path: Path, *, settings: Settings | None = None) -> str:
@@ -75,8 +119,8 @@ def run_mineru_pipeline(
 
     Returns None when MinerU is unavailable or subprocess fails.
     """
-    mineru_bin = resolve_mineru_binary()
-    if mineru_bin is None:
+    mineru_cmd = resolve_mineru_command()
+    if mineru_cmd is None:
         logger.info("MinerU CLI not found; skipping path B for %s", pdf_path.name)
         return None
 
@@ -87,10 +131,14 @@ def run_mineru_pipeline(
     if cfg.ingest_mineru_model_source.strip():
         env["MINERU_MODEL_SOURCE"] = cfg.ingest_mineru_model_source.strip()
 
+    api_url = cfg.mineru_api_url.strip()
+    if api_url:
+        env["MINERU_API_URL"] = api_url
+
     with tempfile.TemporaryDirectory(prefix="scholargraph-mineru-") as tmp:
         output_dir = Path(tmp)
         command = [
-            mineru_bin,
+            *mineru_cmd,
             "-b",
             "pipeline",
             "-m",
@@ -106,6 +154,8 @@ def run_mineru_pipeline(
             "-p",
             str(resolved),
         ]
+        if api_url:
+            command.extend(["--api-url", api_url])
         try:
             completed = subprocess.run(
                 command,
