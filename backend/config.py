@@ -118,6 +118,7 @@ class Settings(BaseSettings):
         default=600,
         validation_alias="INGEST_MINERU_TIMEOUT_SECONDS",
     )
+    mineru_api_url: str = Field(default="", validation_alias="MINERU_API_URL")
 
     grobid_url: str = Field(default="http://127.0.0.1:8070", validation_alias="GROBID_URL")
     grobid_timeout_seconds: int = Field(default=300, validation_alias="GROBID_TIMEOUT_SECONDS")
