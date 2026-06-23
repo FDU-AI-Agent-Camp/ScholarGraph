@@ -53,7 +53,7 @@ jobs:
           path: pip-audit-report.json
 
       - name: Pytest with coverage
-        run: uv run python -m pytest -q --tb=short --cov=backend --cov-report=xml --cov-report=term-missing -m "not red and not live_mineru and not live_grobid"
+        run: uv run python -m pytest -q --tb=short --cov=backend --cov-report=xml --cov-report=term-missing --cov-fail-under=30 -m "not red and not live_mineru and not live_grobid"
 
       - name: Upload coverage report
         if: always()
