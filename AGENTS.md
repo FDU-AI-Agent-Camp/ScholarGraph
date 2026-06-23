@@ -229,3 +229,52 @@ ScholarGraph 是面向科研阅读的 **AI Agent** 项目：编排（如 LangGra
 仅当前端排期严重不足时，可用 Gradio / Streamlit（uv 安装）做答辩备份；**产品主路径仍为 Vue 3 工作台**。
 
 在执行 **Python 脚本**、**安装或更新依赖**、**启动 Agent / API 服务** 前，请确认已在仓库根目录完成 `uv sync`（及按需 `--group dev` / `--extra mysql` / **`--extra mineru`**），避免误用全局 Python 或未安装依赖的环境。
+
+---
+
+## 10. Python 类型检查指南（Pyright）
+
+后端使用 **Pyright** 作为静态类型守门员，定位等价于前端的 `tsc --noEmit`：守住 LangGraph State、Pydantic Schema 和 API 契约的类型安全。
+
+### 10.1 运行方式
+
+* 本地完整检查：`uv run pyright backend`
+* 本地一键门禁：`make check` 或 `uv run python scripts/check_backend.py`
+* CI：`.github/workflows/backend.yml` 已集成，PR 必须绿。
+
+### 10.2 配置原则
+
+配置集中在 `pyrightconfig.json`，不追求极度严格：
+
+* **聚焦核心业务逻辑**：`backend/` 源码。
+* **排除噪音**：测试目录、临时脚本、第三方库缺失 stub 不报错。
+* **保留核心规则**：`reportGeneralTypeIssues` 与 `reportOptionalMemberAccess` 保持 `error`，卡住函数传参错误和 `None` 成员访问。
+
+### 10.3 与动态库共存的三种妥协手段
+
+遇到 LangGraph `TypedDict(total=False)`、NetworkX、MinerU 等无法静态推导的场景时，优先使用以下三种手段，**不要为了 0 error 过度重构运行时行为**：
+
+1. **类型断言 `typing.cast`**
+   当你比 Pyright 更清楚运行时真实类型时使用，运行期零开销。
+   ```python
+   final_state: WorkflowState = cast(
+       WorkflowState,
+       await get_compiled_paper_pipeline().ainvoke(initial),
+   )
+   ```
+
+2. **类型守卫（Type Guard）**
+   用显式判空/判类型帮助 Pyright 收窄类型。
+   ```python
+   if failed_during is not None and isinstance(failed_during, PipelineStage):
+       failed_stage = failed_during
+   ```
+
+3. **极简 `# type: ignore`**
+   第三方库或框架动态特性导致无法解决时，行尾加 ignore，**必须附带解释注释**。
+   ```python
+   # ainvoke_structured is only used with live ChatOpenAI models.
+   response = await chat.ainvoke(messages)  # type: ignore[union-attr]
+   ```
+
+**禁止**：不加注释的裸 `# type: ignore`、为了类型而通过运行时 hack 改变代码行为。
