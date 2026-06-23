@@ -9,7 +9,7 @@ from typing import TypeVar
 from langchain_core.messages import HumanMessage, SystemMessage
 from pydantic import BaseModel
 
-from backend.agents.classifier_types import ClassifierProfile
+from backend.agents.classifier_types import ClassifierProfile, CoreContributionAnalysis
 from backend.config import Settings, get_settings
 from backend.llm.client import LlmClient, get_llm_client
 from backend.llm.mock_chat import MockChat
@@ -21,6 +21,7 @@ logger = logging.getLogger(__name__)
 PROMPTS_DIR = Path(__file__).resolve().parents[1] / "prompts"
 CLASSIFIER_PROMPT_PATH = PROMPTS_DIR / "classifier.md"
 CLASSIFIER_PROFILE_PROMPT_PATH = PROMPTS_DIR / "classifier_profile.md"
+CLASSIFIER_CORE_CONTRIBUTION_PROMPT_PATH = PROMPTS_DIR / "classifier_core_contribution.md"
 
 T = TypeVar("T", bound=BaseModel)
 
@@ -38,6 +39,15 @@ def load_classifier_profile_prompt() -> str:
         return CLASSIFIER_PROFILE_PROMPT_PATH.read_text(encoding="utf-8")
     raise FileNotFoundError(
         f"Missing classifier profile prompt: {CLASSIFIER_PROFILE_PROMPT_PATH}",
+    )
+
+
+def load_classifier_core_contribution_prompt() -> str:
+    """Load Stage B.1 system prompt from ``backend/prompts/classifier_core_contribution.md``."""
+    if CLASSIFIER_CORE_CONTRIBUTION_PROMPT_PATH.is_file():
+        return CLASSIFIER_CORE_CONTRIBUTION_PROMPT_PATH.read_text(encoding="utf-8")
+    raise FileNotFoundError(
+        f"Missing classifier core contribution prompt: {CLASSIFIER_CORE_CONTRIBUTION_PROMPT_PATH}",
     )
 
 
@@ -90,14 +100,31 @@ def _resolve_profile_chat(client: LlmClient, settings: Settings) -> MockChat | o
 def _format_profile_user_content(
     profile: ClassifierProfile,
     classifier_input: str,
+    core_contribution: CoreContributionAnalysis | None = None,
 ) -> str:
-    return (
-        f"Profile:\n"
-        f"Goal: {profile.goal}\n"
-        f"Tools: {profile.tools}\n"
-        f"Domain: {profile.domain}\n\n"
-        f"Original paper snippets:\n{classifier_input.strip()}"
+    parts = [
+        "Profile:",
+        f"Goal: {profile.goal}",
+        f"Tools: {profile.tools}",
+        f"Domain: {profile.domain}",
+    ]
+    if core_contribution is not None:
+        parts.extend(
+            [
+                "",
+                "Core Contribution Interrogation:",
+                f"Summary: {core_contribution.core_contribution_summary}",
+                f"Substitution Test: {core_contribution.substitution_test}",
+                f"Target Journal Test: {core_contribution.target_journal_test}",
+            ]
+        )
+    parts.extend(
+        [
+            "",
+            f"Original paper snippets:\n{classifier_input.strip()}",
+        ]
     )
+    return "\n".join(parts)
 
 
 async def _invoke_structured(
@@ -172,20 +199,47 @@ async def generate_profile_with_llm(
     return profile
 
 
+async def interrogate_core_contribution_with_llm(
+    classifier_input: str,
+    *,
+    settings: Settings | None = None,
+    llm_client: LlmClient | None = None,
+) -> CoreContributionAnalysis:
+    """Stage B.1: interrogate the core contribution before final judgment."""
+    cfg = settings or get_settings()
+    client = llm_client or get_llm_client()
+    cfg.require_llm_key()
+
+    system_prompt = load_classifier_core_contribution_prompt()
+    user_content = classifier_input.strip()
+
+    chat = _resolve_profile_chat(client, cfg)
+    analysis = await _invoke_structured(
+        chat,
+        system_prompt=system_prompt,
+        user_content=user_content,
+        response_model=CoreContributionAnalysis,
+    )
+    if not analysis.core_contribution_summary.strip():
+        raise ValueError("Core contribution summary is empty.")
+    return analysis
+
+
 async def judge_with_llm(
     classifier_input: str,
     profile: ClassifierProfile,
     *,
     settings: Settings | None = None,
     llm_client: LlmClient | None = None,
+    core_contribution: CoreContributionAnalysis | None = None,
 ) -> ParadigmClassification:
-    """Stage B: paradigm judgment given the Stage A profile."""
+    """Stage B/Stage C: paradigm judgment given the Stage A profile and optional Stage B.1 interrogation."""
     cfg = settings or get_settings()
     client = llm_client or get_llm_client()
     cfg.require_llm_key()
 
     system_prompt = load_classifier_prompt()
-    user_content = _format_profile_user_content(profile, classifier_input)
+    user_content = _format_profile_user_content(profile, classifier_input, core_contribution)
 
     last_error: Exception | None = None
     for use_fallback in (False, True):
@@ -222,9 +276,10 @@ async def classify_with_llm(
     """
     Classify via structured LLM.
 
-    When ``profile`` is supplied, run Stage B (judge) directly.
+    When ``profile`` is supplied, run Stage C (judge) directly.
     When ``profile`` is None and two-phase mode is enabled in settings,
-    run Stage A (profile generation) then Stage B (judgment).
+    run Stage A (profile generation), optional Stage B.1 (core contribution
+    interrogation), then Stage C (judgment).
     Otherwise fall back to a single-stage judgment call.
     """
     cfg = settings or get_settings()
@@ -251,9 +306,19 @@ async def classify_with_llm(
         settings=cfg,
         llm_client=client,
     )
+
+    core_contribution: CoreContributionAnalysis | None = None
+    if cfg.classifier_core_contribution_enabled:
+        core_contribution = await interrogate_core_contribution_with_llm(
+            classifier_input,
+            settings=cfg,
+            llm_client=client,
+        )
+
     return await judge_with_llm(
         classifier_input,
         generated_profile,
         settings=cfg,
         llm_client=client,
+        core_contribution=core_contribution,
     )

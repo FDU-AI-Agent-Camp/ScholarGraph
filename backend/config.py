@@ -309,6 +309,11 @@ class Settings(BaseSettings):
         validation_alias="CLASSIFIER_TWO_PHASE_ENABLED",
         description="Run profile generation (Stage A) before paradigm judgment (Stage B).",
     )
+    classifier_core_contribution_enabled: bool = Field(
+        default=True,
+        validation_alias="CLASSIFIER_CORE_CONTRIBUTION_ENABLED",
+        description="Run core-contribution interrogation (Stage B.1) between profile and final judgment.",
+    )
     classifier_profile_llm_model: str = Field(
         default="",
         validation_alias="CLASSIFIER_PROFILE_LLM_MODEL",

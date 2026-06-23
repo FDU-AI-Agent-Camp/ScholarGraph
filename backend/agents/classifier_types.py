@@ -29,6 +29,23 @@ class ClassifierProfile(BaseModel):
     )
 
 
+class CoreContributionAnalysis(BaseModel):
+    """Stage B core-contribution interrogation output."""
+
+    core_contribution_summary: str = Field(
+        default="",
+        description="Restatement of the paper's core intellectual contribution in one sentence.",
+    )
+    substitution_test: str = Field(
+        default="",
+        description="Result of the substitution test and its implied direction (STEM or HSS).",
+    )
+    target_journal_test: str = Field(
+        default="",
+        description="Whether the target journal would accept the paper primarily for the method or the finding.",
+    )
+
+
 @dataclass(frozen=True)
 class ClassifyResult:
     """Classifier output plus optional degrade warnings."""

@@ -17,7 +17,7 @@ from backend.agents.classifier_llm import (
     load_classifier_profile_prompt,
     load_classifier_prompt,
 )
-from backend.agents.classifier_types import ClassifierProfile
+from backend.agents.classifier_types import ClassifierProfile, CoreContributionAnalysis
 from backend.config import get_settings
 from backend.llm.client import LlmClient
 from backend.schemas.paradigm import Paradigm, ParadigmClassification
@@ -33,9 +33,10 @@ def _mock_two_stage_client(
     *,
     profile: ClassifierProfile,
     judge: ParadigmClassification,
+    core: CoreContributionAnalysis | None = None,
     profile_side_effect: Exception | None = None,
 ) -> LlmClient:
-    """Build a mock client where Stage A returns ``profile`` and Stage B returns ``judge``."""
+    """Build a mock client where Stage A returns ``profile``, Stage B.1 returns ``core``, and Stage C returns ``judge``."""
 
     def _make_runnable(response: object, side_effect: Exception | None = None) -> MagicMock:
         runnable = MagicMock()
@@ -47,12 +48,15 @@ def _mock_two_stage_client(
 
     profile_runnable = _make_runnable(profile, profile_side_effect)
     judge_runnable = _make_runnable(judge)
+    core_runnable = _make_runnable(core or CoreContributionAnalysis())
 
     chat = MagicMock()
 
     def _with_structured(model: type[object]) -> MagicMock:
         if model is ClassifierProfile:
             return profile_runnable
+        if model is CoreContributionAnalysis:
+            return core_runnable
         if model is ParadigmClassification:
             return judge_runnable
         raise ValueError(f"Unexpected structured output model: {model}")
@@ -157,18 +161,24 @@ async def test_classify_with_llm_two_stage_uses_generated_profile(live_classify_
         tools="Datasets, accuracy, F1, ablations.",
         domain="Artificial intelligence / NLP.",
     )
+    core = CoreContributionAnalysis(
+        core_contribution_summary="A new benchmarking method for agent frameworks.",
+        substitution_test="The method would still hold if the dataset were replaced, pointing toward STEM.",
+        target_journal_test="The journal would accept it for the method, implying STEM.",
+    )
     expected = ParadigmClassification(
         paradigm=Paradigm.STEM,
         confidence=0.92,
         reason="Benchmark and dataset paper.",
     )
-    client = _mock_two_stage_client(profile=profile, judge=expected)
+    client = _mock_two_stage_client(profile=profile, judge=expected, core=core)
 
     result = await classify_with_llm(STEM_SAMPLE, llm_client=client)
 
     assert result.paradigm == Paradigm.STEM
-    assert client._chat.with_structured_output.call_count == 2
+    assert client._chat.with_structured_output.call_count == 3
     client._chat.with_structured_output.assert_any_call(ClassifierProfile)
+    client._chat.with_structured_output.assert_any_call(CoreContributionAnalysis)
     client._chat.with_structured_output.assert_any_call(ParadigmClassification)
 
 
