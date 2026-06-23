@@ -2,6 +2,9 @@
 """
 后端静态检查与测试门禁（ruff + pyright + pytest）。
 
+此脚本面向本地开发，尤其是 Windows 环境（没有 make 时）。
+线上 Ubuntu CI 使用 Makefile 的 ``make ci`` 目标一键执行。
+
 在仓库根目录执行::
 
     uv run python scripts/check_backend.py
