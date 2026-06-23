@@ -26,8 +26,8 @@ _ABSTRACT_PATTERNS: tuple[re.Pattern[str], ...] = (
         r"introduction|\d+\s*[\.\)]\s*introduction|references|acknowledgments)\b|\Z)",
     ),
     re.compile(
-        r"(?is)摘\s*要\s*[：:]\s*(.+?)(?=\n(?:关键词|关键字|引言|前言|一[、．.\s]|"
-        r"1[\s、．.]|参考文献)\b|\Z)",
+        r"(?is)(?:\[\s*摘\s*要\s*\]|摘\s*要\s*[：:])\s*(.+?)(?=\n(?:\[?\s*关键词|关键字|引言|前言|一[、．.\s]|"
+        r"1[\s、．.]|参考文献)|\Z)",
     ),
 )
 
@@ -37,7 +37,7 @@ _KEYWORDS_PATTERNS: tuple[re.Pattern[str], ...] = (
         r"references|acknowledgments)\b|\Z)",
     ),
     re.compile(
-        r"(?is)关\s*键\s*词\s*[：:]\s*(.+?)(?=\n(?:引言|前言|一[、．.\s]|1[\s、．.]|参考文献)\b|\Z)",
+        r"(?is)(?:\[\s*关\s*键\s*词\s*\]|关\s*键\s*词\s*[：:])\s*(.+?)(?=\n(?:\[\s*作者|\[\s*基金|\[\s*中图|引言|前言|一[、．.\s]|1[\s、．.]|参考文献)|\Z)",
     ),
 )
 
