@@ -1,4 +1,5 @@
-# 后端门禁：ruff + pytest + 安全扫描 + 覆盖率（与 docs/v1/pr-checklist.md、scripts/check_backend.py 一致）
+# 后端门禁：ruff + pyright + pytest + 安全扫描 + 覆盖率
+# 与 docs/v1/pr-checklist.md、scripts/check_backend.py、Makefile 保持一致
 name: Backend
 
 on:
@@ -12,6 +13,8 @@ on:
       - 'pyproject.toml'
       - 'uv.lock'
       - '.github/workflows/backend.yml'
+      - 'pyrightconfig.json'
+      - 'Makefile'
   pull_request:
     branches: [develop, main]
     paths:
@@ -22,6 +25,8 @@ on:
       - 'pyproject.toml'
       - 'uv.lock'
       - '.github/workflows/backend.yml'
+      - 'pyrightconfig.json'
+      - 'Makefile'
 
 jobs:
   gate:
@@ -36,25 +41,18 @@ jobs:
       - name: Sync dependencies
         run: uv sync --frozen --group dev
 
+      # 1. 格式化（最快）
       - name: Ruff lint
         run: uv run ruff check backend tests scripts
 
       - name: Ruff format check
         run: uv run ruff format --check backend tests scripts
 
+      # 2. 类型检查（次之）
       - name: Pyright type check
         run: uv run pyright backend
 
-      - name: Dependency security audit
-        run: uv run pip-audit --desc --format=json --local --path=.venv > pip-audit-report.json || true
-
-      - name: Upload pip-audit report
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: pip-audit-report
-          path: pip-audit-report.json
-
+      # 3. 测试（最慢）
       - name: Pytest with coverage
         run: uv run python -m pytest -q --tb=short --cov=backend --cov-report=xml --cov-report=term-missing --cov-fail-under=30 -m "not red and not live_mineru and not live_grobid"
 
@@ -64,3 +62,14 @@ jobs:
         with:
           name: coverage-report
           path: coverage.xml
+
+      # 4. 安全审计（补充）
+      - name: Dependency security audit
+        run: uv run pip-audit --desc --format=json --local --path=.venv > pip-audit-report.json || true
+
+      - name: Upload pip-audit report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pip-audit-report
+          path: pip-audit-report.json
