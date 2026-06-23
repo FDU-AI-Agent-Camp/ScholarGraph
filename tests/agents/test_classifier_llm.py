@@ -36,7 +36,7 @@ def _mock_two_stage_client(
     core: CoreContributionAnalysis | None = None,
     profile_side_effect: Exception | None = None,
 ) -> LlmClient:
-    """Build a mock client where Stage A returns ``profile``, Stage B.1 returns ``core``, and Stage C returns ``judge``."""
+    """Build a mock client for the three-stage classifier pipeline."""
 
     def _make_runnable(response: object, side_effect: Exception | None = None) -> MagicMock:
         runnable = MagicMock()

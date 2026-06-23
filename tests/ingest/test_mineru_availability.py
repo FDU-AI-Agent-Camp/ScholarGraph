@@ -10,7 +10,6 @@ from unittest.mock import patch
 import pytest
 from backend.ingest.mineru_backend import (
     MINERU_BINARY,
-    _can_run_mineru_binary,
     is_mineru_available,
     resolve_mineru_binary,
     resolve_mineru_command,

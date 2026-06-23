@@ -13,17 +13,14 @@ import sys
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
+from backend.config import Settings
+from backend.services.head_refine_service import refine_head_async
+
 # Windows Git Bash 控制台默认 GBK；强制 stdout 用 UTF-8，避免打印 Unicode 字符失败。
 if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8")
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-if str(REPO_ROOT) not in sys.path:
-    sys.path.insert(0, str(REPO_ROOT))
-
-from backend.config import Settings
-from backend.services.head_refine_service import refine_head_async
-
 PAPER_IDS = ["hss-001", "hss-002", "hss-003", "stem-001", "stem-002", "stem-003"]
 CORPUS_DIR = REPO_ROOT / "data" / "corpus"
 OUTPUT_PATH = REPO_ROOT / "data" / "tmp-test-graphs" / "head_refine_six_full_logic.json"
