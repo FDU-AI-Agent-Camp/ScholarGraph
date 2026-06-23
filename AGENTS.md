@@ -232,18 +232,48 @@ ScholarGraph 是面向科研阅读的 **AI Agent** 项目：编排（如 LangGra
 
 ---
 
-## 10. Python 类型检查指南（Pyright）
+## 10. 类型检查指南（Type Checking）
 
-后端使用 **Pyright** 作为静态类型守门员，定位等价于前端的 `tsc --noEmit`：守住 LangGraph State、Pydantic Schema 和 API 契约的类型安全。
+类型检查不是为了让代码「看起来专业」，而是为了在运行前暴露接口误用、减少运行时崩溃、降低协作成本。它是代码的**静态契约**，与单元测试形成互补：测试验证「行为正确」，类型验证「接口一致」。
 
-### 10.1 运行方式
+### 10.1 通用精神
+
+* **类型是契约，不是装饰**
+  类型注解首先是给调用方看的接口说明，其次才是给类型检查器看的。写清楚参数类型、返回值类型、Optional 边界，就是在为团队成员节省阅读代码的时间。
+
+* **静态检查是守门员，不是枷锁**
+  类型检查的目的是拦截真正的风险（如把 `str` 传给需要 `int` 的函数、`None` 解引用），而不是逼迫代码变成类型体操。当静态推导与框架动态特性冲突时，允许理性妥协。
+
+* **渐进式推进，不追求 100%**
+  老代码可以逐步补注解，新代码必须写好注解。优先保证核心模块（agents、services、schemas、graph）的类型安全，工具脚本和一次性实验代码可以放宽。
+
+* **静态与动态平衡**
+  Python 的动态能力是其优势（如反射、鸭子类型、框架元编程）。类型检查应当守护边界，而不是消灭动态性。对于 LangGraph、NetworkX、MinerU 等强动态库，允许使用 `cast`、类型守卫或 `# type: ignore` 进行局部妥协。
+
+* **为重构护航**
+  类型检查最大的长期价值在于：当你改一个函数签名或 Schema 字段时，能快速定位所有受影响调用点。没有类型覆盖的代码，重构成本会指数级上升。
+
+### 10.2 前后端统一认知
+
+| 前端 | 后端 | 守护对象 |
+|---|---|---|
+| `eslint` | `ruff check` | 代码风格、简单语法错误 |
+| `prettier` | `ruff format` | 格式一致性 |
+| **`tsc --noEmit`** | **`pyright backend`** | **类型契约** |
+| `vitest` / `jest` | `pytest` | 运行时行为正确性 |
+
+* 前端用 TypeScript 守住组件 Props 和 API 响应的 Schema。
+* 后端用 Pyright + Pydantic 守住 LangGraph State、API 请求/响应和数据库模型的 Schema。
+* **类型检查在 CI 中必须绿**，与 lint、测试同等重要。
+
+### 10.3 Python / Pyright 运行方式
 
 * 本地完整检查：`uv run pyright backend`
 * 本地一键门禁（推荐 Windows）：`uv run python scripts/check_backend.py`
 * 线上 CI / Ubuntu：`make ci`（Makefile 主要用于 CI 环境一键执行）
 * CI：`.github/workflows/backend.yml` 已集成，PR 必须绿。
 
-### 10.2 配置原则
+### 10.4 配置原则
 
 配置集中在 `pyrightconfig.json`，不追求极度严格：
 
@@ -251,7 +281,7 @@ ScholarGraph 是面向科研阅读的 **AI Agent** 项目：编排（如 LangGra
 * **排除噪音**：测试目录、临时脚本、第三方库缺失 stub 不报错。
 * **保留核心规则**：`reportGeneralTypeIssues` 与 `reportOptionalMemberAccess` 保持 `error`，卡住函数传参错误和 `None` 成员访问。
 
-### 10.3 与动态库共存的三种妥协手段
+### 10.5 与动态库共存的三种妥协手段
 
 遇到 LangGraph `TypedDict(total=False)`、NetworkX、MinerU 等无法静态推导的场景时，优先使用以下三种手段，**不要为了 0 error 过度重构运行时行为**：
 
@@ -279,3 +309,21 @@ ScholarGraph 是面向科研阅读的 **AI Agent** 项目：编排（如 LangGra
    ```
 
 **禁止**：不加注释的裸 `# type: ignore`、为了类型而通过运行时 hack 改变代码行为。
+
+### 10.6 使用原则 checklist
+
+新增或修改代码时，按以下顺序自测：
+
+1. **函数签名是否完整？** 参数、返回值、可能的 `Optional` 是否标注。
+2. **Pydantic Schema 字段类型是否准确？** 特别是 `str | None`、`list[...]`、`Enum` 等边界。
+3. **是否引入新的 `# type: ignore`？** 如果有，是否附带解释注释。
+4. **本地跑 `scripts/check_backend.py --lint-only` 是否通过？**
+5. **CI 中 `make ci` 是否通过？**
+
+### 10.7 红线
+
+* **不允许**在核心模块（agents、services、schemas、graph）中使用裸 `Any` 绕过类型检查，除非第三方库强制要求。
+* **不允许**为了消除 Pyright 错误而修改运行时行为（如给 MockChat 添加实际不会使用的方法）。
+* **不允许**提交不加注释的 `# type: ignore`。
+* **不允许**在 CI 中关闭已启用的核心错误规则。
+* **必须**在修改公共函数签名后，同步检查并修复所有调用点。
