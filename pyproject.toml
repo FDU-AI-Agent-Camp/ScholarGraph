@@ -21,6 +21,7 @@ dependencies = [
     "json-repair>=0.35.0",
     "tenacity>=9.0.0",
     "numpy>=1.26.0",
+    "chromadb>=0.5.0",
 ]
 
 [project.optional-dependencies]
@@ -76,7 +77,7 @@ markers = [
     "three_branch: FE + platform + ingest 三分支联调（语料缺失时 skip）",
     "smoke: 快速冒烟（import / 路由 / 契约字段）",
 ]
-addopts = "-m 'not red and not live_mineru and not live_grobid and not live_benchmark'"
+addopts = "-m 'not red and not live_mineru and not live_grobid and not live_benchmark and not live_e10'"
 
 [tool.ruff]
 line-length = 120

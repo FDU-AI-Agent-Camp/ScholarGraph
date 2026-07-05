@@ -56,6 +56,7 @@ def live_invalid_key_env(monkeypatch: pytest.MonkeyPatch) -> None:
     reset_llm_client_cache()
 
 
+@pytest.mark.live_e10
 def test_e10_live_maas_invalid_key_returns_401() -> None:
     """无效 Key：直连 MaaS 返回 401 / ModelArts.81003."""
     response = httpx.post(
