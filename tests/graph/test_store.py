@@ -106,6 +106,12 @@ class TestSaveLoad:
     def test_load_unknown_returns_none(self, store: GraphStore) -> None:
         assert store.load("nonexistent") is None
 
+    def test_delete_removes_persisted_graph(self, store: GraphStore, hss_graph: UnifiedPaperGraph) -> None:
+        store.save(hss_graph)
+        assert store.delete("hss-001") is True
+        assert store.load("hss-001") is None
+        assert store.delete("hss-001") is False
+
     def test_save_is_json_serializable(self, store: GraphStore, hss_graph: UnifiedPaperGraph, tmp_path: Path) -> None:
         store.save(hss_graph)
         path = tmp_path / "hss-001.json"

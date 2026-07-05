@@ -69,14 +69,15 @@ def _seed_status_for_detail(service: PaperService, detail: PaperDetail) -> None:
         return
 
     updated_at = detail.updated_at or detail.created_at
-    if detail.status == PaperStatus.READY:
+    if detail.status in (PaperStatus.READY, PaperStatus.READY_WITH_WARNINGS):
         service._status[detail.paper_id] = PaperStatusData(
             paper_id=detail.paper_id,
-            status=PaperStatus.READY,
+            status=detail.status,
             percent=100,
             stage=PipelineStage.READY,
-            message="建图完成",
+            message="建图完成" if detail.status == PaperStatus.READY else "建图完成，但置信度未达门控",
             updated_at=updated_at,
+            preview_available=detail.preview_available,
         )
     elif detail.status == PaperStatus.PROCESSING:
         service._status[detail.paper_id] = PaperStatusData(
@@ -86,6 +87,7 @@ def _seed_status_for_detail(service: PaperService, detail: PaperDetail) -> None:
             stage=PipelineStage.CLASSIFYING,
             message="正在识别范式与理论视角…",
             updated_at=updated_at,
+            preview_available=detail.preview_available,
         )
     elif detail.status == PaperStatus.PENDING:
         service._status[detail.paper_id] = PaperStatusData(
@@ -95,4 +97,5 @@ def _seed_status_for_detail(service: PaperService, detail: PaperDetail) -> None:
             stage=None,
             message="任务已创建，请轮询 status 接口",
             updated_at=updated_at,
+            preview_available=False,
         )

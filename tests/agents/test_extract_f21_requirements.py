@@ -17,7 +17,6 @@ from backend.agents.extract_types import ExtractResult
 from backend.agents.extractor import extract
 from backend.config import get_settings
 from backend.llm.client import LlmClient, reset_llm_client_cache
-from backend.schemas.graph import UnifiedPaperGraph
 from backend.schemas.ingest_head import IngestHead
 from backend.schemas.paradigm import Paradigm
 from tests.agents.conftest import minimal_valid_llm_graph
@@ -39,13 +38,11 @@ def live_extract_env(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 @pytest.mark.asyncio
-async def test_x1_live_extract_invokes_with_structured_output(live_extract_env) -> None:
+async def test_x1_live_extract_invokes_llm_and_parses_json(live_extract_env) -> None:
     _ = live_extract_env
     llm_graph = minimal_valid_llm_graph()
-    structured_runnable = MagicMock()
-    structured_runnable.ainvoke = AsyncMock(return_value=llm_graph)
     chat = MagicMock()
-    chat.with_structured_output.return_value = structured_runnable
+    chat.ainvoke = AsyncMock(return_value=MagicMock(content=llm_graph.model_dump_json()))
 
     client = LlmClient()
     client._chat = chat
@@ -58,8 +55,7 @@ async def test_x1_live_extract_invokes_with_structured_output(live_extract_env) 
         llm_client=client,
     )
 
-    chat.with_structured_output.assert_called_once_with(UnifiedPaperGraph)
-    structured_runnable.ainvoke.assert_awaited_once()
+    chat.ainvoke.assert_awaited_once()
     assert graph.paper_id == "paper-x1"
 
     get_settings.cache_clear()
@@ -249,16 +245,12 @@ async def test_x6_extractor_resolves_head_from_head_store(live_extract_env, tmp_
 async def test_x7_primary_failure_retries_fallback_chat(live_extract_env) -> None:
     _ = live_extract_env
     valid_graph = minimal_valid_llm_graph(paper_id="p7")
-
-    primary_runnable = MagicMock()
-    primary_runnable.ainvoke = AsyncMock(side_effect=RuntimeError("primary down"))
-    fallback_runnable = MagicMock()
-    fallback_runnable.ainvoke = AsyncMock(return_value=valid_graph)
+    valid_json = valid_graph.model_dump_json()
 
     primary_chat = MagicMock()
-    primary_chat.with_structured_output.return_value = primary_runnable
+    primary_chat.ainvoke = AsyncMock(side_effect=RuntimeError("primary down"))
     fallback_chat = MagicMock()
-    fallback_chat.with_structured_output.return_value = fallback_runnable
+    fallback_chat.ainvoke = AsyncMock(return_value=MagicMock(content=valid_json))
 
     client = LlmClient()
     client._chat = primary_chat
@@ -267,8 +259,8 @@ async def test_x7_primary_failure_retries_fallback_chat(live_extract_env) -> Non
     graph = await extract_with_llm("body", Paradigm.HSS, paper_id="p7", llm_client=client)
 
     assert graph.nodes
-    primary_runnable.ainvoke.assert_awaited_once()
-    fallback_runnable.ainvoke.assert_awaited_once()
+    primary_chat.ainvoke.assert_awaited_once()
+    fallback_chat.ainvoke.assert_awaited_once()
 
     get_settings.cache_clear()
     reset_llm_client_cache()

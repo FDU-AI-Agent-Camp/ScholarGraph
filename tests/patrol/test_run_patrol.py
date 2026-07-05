@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 from backend.patrol.errors import PatrolError
 from backend.patrol.service import run_patrol
-from backend.schemas.patrol import PatrolMode
+from backend.schemas.patrol import PatrolInsightStatus, PatrolMode
 from tests.helpers.patrol_graphs import build_hss_graph_with_lens, seed_patrol_graphs
 
 
@@ -99,8 +99,18 @@ async def test_run_patrol_contradiction_success() -> None:
     from tests.helpers.patrol_graphs import build_hss_graph_with_thesis
 
     graphs = {
-        "hss-001": build_hss_graph_with_thesis("hss-001", thesis_id="n_a", thesis_label="论点 A"),
-        "hss-002": build_hss_graph_with_thesis("hss-002", thesis_id="n_b", thesis_label="论点 B"),
+        "hss-001": build_hss_graph_with_thesis(
+            "hss-001",
+            thesis_id="n_a",
+            thesis_label="论点 A",
+            sub_arguments=[("n_sub_a", "分论点 A")],
+        ),
+        "hss-002": build_hss_graph_with_thesis(
+            "hss-002",
+            thesis_id="n_b",
+            thesis_label="论点 B",
+            sub_arguments=[("n_sub_b", "分论点 B")],
+        ),
     }
     report = await run_patrol(
         ["hss-001", "hss-002"],
@@ -110,6 +120,7 @@ async def test_run_patrol_contradiction_success() -> None:
     assert report.mode == PatrolMode.CONTRADICTION
     assert len(report.insights) == 1
     assert report.insights[0].insight_id == "ins-contradiction-001"
+    assert report.insights[0].status == PatrolInsightStatus.READY
 
 
 async def test_run_patrol_contradiction_insufficient_thesis() -> None:
@@ -119,10 +130,12 @@ async def test_run_patrol_contradiction_insufficient_thesis() -> None:
         "hss-001": build_hss_graph_without_thesis("hss-001"),
         "hss-002": build_hss_graph_with_thesis("hss-002", thesis_id="n_b", thesis_label="B"),
     }
-    with pytest.raises(PatrolError) as exc_info:
-        await run_patrol(
-            ["hss-001", "hss-002"],
-            PatrolMode.CONTRADICTION,
-            graph_loader=graphs.get,
-        )
-    assert exc_info.value.code == "PATROL_INSUFFICIENT_DATA"
+    report = await run_patrol(
+        ["hss-001", "hss-002"],
+        PatrolMode.CONTRADICTION,
+        graph_loader=graphs.get,
+    )
+    assert report.mode == PatrolMode.CONTRADICTION
+    assert len(report.insights) == 1
+    assert report.insights[0].status == PatrolInsightStatus.INSUFFICIENT_DATA
+    assert report.insights[0].has_contradiction is False

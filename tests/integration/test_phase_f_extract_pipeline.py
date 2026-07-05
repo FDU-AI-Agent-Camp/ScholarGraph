@@ -9,7 +9,7 @@ import pytest
 from backend.agents.extract_constants import EXTRACT_HEURISTIC_FALLBACK_CODE
 from backend.agents.extract_types import ExtractResult
 from backend.graph.workflow import run_paper_pipeline
-from backend.schemas.graph import GraphNode, UnifiedPaperGraph
+from backend.schemas.graph import GraphEdge, GraphNode, UnifiedPaperGraph
 from backend.schemas.paper import PaperStatus, PipelineStage
 from backend.schemas.paradigm import Paradigm
 from backend.services.paper_service import get_paper_service
@@ -52,8 +52,20 @@ async def test_pipeline_extract_success_has_no_extract_warnings(integration_pape
     graph = UnifiedPaperGraph(
         paper_id=paper_id,
         paradigm=Paradigm.HSS,
-        nodes=[GraphNode(id="n1", label="Thesis", type="Thesis")],
-        edges=[],
+        nodes=[
+            GraphNode(id="n1", label="Sub", type="SubArgument"),
+            GraphNode(id="n2", label="Thesis", type="Thesis"),
+        ],
+        edges=[
+            GraphEdge(
+                id="e1",
+                source="n1",
+                target="n2",
+                label="SUPPORTS",
+                type="SUPPORTS",
+                rationale="n1 supports n2",
+            ),
+        ],
     )
 
     with mock_pipeline_node_services(paper_id) as mocks:

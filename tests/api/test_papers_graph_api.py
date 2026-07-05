@@ -26,6 +26,20 @@ async def test_graph_ready_paper_returns_200_unified_graph(api_client: AsyncClie
 
 
 @pytest.mark.asyncio
+async def test_graph_skeleton_view_returns_downsampled_graph(api_client: AsyncClient) -> None:
+    response = await api_client.get(f"/api/v1/papers/{READY_PAPER_ID}/graph?view=skeleton")
+    assert response.status_code == 200
+    body = response.json()
+    assert_success_envelope(body)
+    data = body["data"]
+    assert data["paper_id"] == READY_PAPER_ID
+    assert isinstance(data["nodes"], list)
+    assert isinstance(data["edges"], list)
+    # hss-001 fixture has 3 nodes, so skeleton should keep all of them.
+    assert len(data["nodes"]) >= 1
+
+
+@pytest.mark.asyncio
 async def test_graph_processing_paper_returns_409_graph_not_ready(api_client: AsyncClient) -> None:
     response = await api_client.get(f"/api/v1/papers/{PROCESSING_PAPER_ID}/graph")
     assert response.status_code == 409

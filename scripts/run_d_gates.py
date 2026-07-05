@@ -23,10 +23,24 @@ from __future__ import annotations
 
 import argparse
 import importlib.util
+import os
 import subprocess
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
+
+
+def _configure_windows_utf8() -> None:
+    """Force UTF-8 for stdout/stderr on Windows to avoid mojibake in CI logs."""
+    if sys.platform == "win32":
+        try:
+            sys.stdout.reconfigure(encoding="utf-8")
+            sys.stderr.reconfigure(encoding="utf-8")
+        except Exception:  # pragma: no cover - best-effort for exotic terminals
+            pass
+
+
+_configure_windows_utf8()
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 FRONTEND_DIR = REPO_ROOT / "frontend"
@@ -78,7 +92,9 @@ class GateReport:
 
 def run_cmd(name: str, cmd: list[str], *, cwd: Path | None = None) -> GateStep:
     print(f">> {' '.join(cmd)}")
-    completed = subprocess.run(cmd, cwd=cwd or REPO_ROOT, check=False)
+    env = os.environ.copy()
+    env.setdefault("PYTHONIOENCODING", "utf-8")
+    completed = subprocess.run(cmd, cwd=cwd or REPO_ROOT, env=env, check=False)
     return GateStep(name=name, ok=completed.returncode == 0, detail=f"exit {completed.returncode}")
 
 

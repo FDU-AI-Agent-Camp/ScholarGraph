@@ -5,6 +5,13 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 
+from backend.ingest.classifier_signals import (
+    _looks_like_journal_line,
+    extract_conclusion_tail,
+    extract_meta_info,
+)
+from backend.ingest.text_utils import normalize_for_sections, normalize_whitespace
+
 # collaboration §4.1 / README: 标题、摘要、关键词、引言前几段
 MAX_CLASSIFIER_INPUT_CHARS = 12_000
 MAX_TITLE_CHARS = 800
@@ -13,17 +20,14 @@ MAX_INTRO_BODY_CHARS = 4_000
 MIN_IMPLICIT_ABSTRACT_CHARS = 100
 INTRO_SENTENCE_LIMIT = 8
 
-_WHITESPACE_RE = re.compile(r"[ \t\u00a0]+")
-_BLANK_LINES_RE = re.compile(r"\n{3,}")
-
 _ABSTRACT_PATTERNS: tuple[re.Pattern[str], ...] = (
     re.compile(
         r"(?is)\babstract\b\s*[:\-]?\s*(.+?)(?=\n(?:keywords?|key\s*words|index\s*terms|"
         r"introduction|\d+\s*[\.\)]\s*introduction|references|acknowledgments)\b|\Z)",
     ),
     re.compile(
-        r"(?is)摘\s*要\s*[：:]\s*(.+?)(?=\n(?:关键词|关键字|引言|前言|一[、．.\s]|"
-        r"1[\s、．.]|参考文献)\b|\Z)",
+        r"(?is)(?:\[\s*摘\s*要\s*\]|摘\s*要\s*[：:])\s*(.+?)(?=\n(?:\[?\s*关键词|关键字|引言|前言|一[、．.\s]|"
+        r"1[\s、．.]|参考文献)|\Z)",
     ),
 )
 
@@ -33,7 +37,7 @@ _KEYWORDS_PATTERNS: tuple[re.Pattern[str], ...] = (
         r"references|acknowledgments)\b|\Z)",
     ),
     re.compile(
-        r"(?is)关\s*键\s*词\s*[：:]\s*(.+?)(?=\n(?:引言|前言|一[、．.\s]|1[\s、．.]|参考文献)\b|\Z)",
+        r"(?is)(?:\[\s*关\s*键\s*词\s*\]|关\s*键\s*词\s*[：:])\s*(.+?)(?=\n(?:\[\s*作者|\[\s*基金|\[\s*中图|引言|前言|一[、．.\s]|1[\s、．.]|参考文献)|\Z)",
     ),
 )
 
@@ -50,33 +54,21 @@ _INTRO_PATTERNS: tuple[re.Pattern[str], ...] = (
 )
 
 
-def normalize_for_sections(text: str) -> str:
-    """Preserve line breaks for section headers while trimming horizontal noise."""
-    if not text:
-        return ""
-    lines: list[str] = []
-    for raw_line in text.replace("\r\n", "\n").replace("\r", "\n").split("\n"):
-        line = _WHITESPACE_RE.sub(" ", raw_line).strip()
-        if line:
-            lines.append(line)
-    return "\n".join(lines)
-
-
-def normalize_whitespace(text: str) -> str:
-    """Collapse runs of spaces and excessive blank lines (full-text export)."""
-    section_text = normalize_for_sections(text)
-    if not section_text:
-        return ""
-    return _BLANK_LINES_RE.sub("\n\n", section_text.replace("\n", "\n\n")).strip()
-
-
 def _looks_like_author_line(line: str) -> bool:
-    return bool(
-        re.search(
-            r"(?:\d+,\d+|&|\bUniversity\b|\bCollege\b|\bDepartment\b|\bChina\.|\bet al\b|\^[0-9])",
-            line,
-        )
-    )
+    stripped = line.strip().lstrip("□")
+    # Do not mistake a short journal name (e.g., "西夏研究") for an author line.
+    if _looks_like_journal_line(line):
+        return False
+    # Western-style author lines.
+    if re.search(
+        r"(?:\d+,\d+|&|\bUniversity\b|\bCollege\b|\bDepartment\b|\bChina\.|\bet al\b|\^[0-9])",
+        line,
+    ):
+        return True
+    # Chinese author names: a short line of 2-4 Chinese characters (optional □ marker).
+    if re.match(r"^[\u4e00-\u9fa5]{2,4}$", stripped):
+        return True
+    return False
 
 
 def _looks_like_body_start(line: str) -> bool:
@@ -185,24 +177,56 @@ def _trim_intro_paragraphs(body: str, *, max_paragraphs: int = 3) -> str:
 
 @dataclass(frozen=True)
 class ClassifierSections:
-    """Structured title / abstract / keywords / intro for head merge."""
+    """Structured title / abstract / keywords / intro / conclusion / meta / core contribution for head merge."""
 
     title: str = ""
     abstract: str = ""
     keywords: str = ""
     intro: str = ""
+    conclusion: str = ""
+    journal: str = ""
+    funding: str = ""
+    affiliation: str = ""
+    research_object: str = ""
+    methodology_tool: str = ""
+    core_intellectual_contribution: str = ""
 
 
 _TITLE_SECTION_RE = re.compile(
-    r"(?is)\ATitle:\s*(.+?)(?=\n\nAbstract:|\n\nKeywords:|\n\nIntroduction:|\Z)",
+    r"(?is)\ATitle:\s*(.+?)(?=\n\nAbstract:|\n\nKeywords:|\n\nIntroduction:|\n\nConclusion:|\n\nMeta-Information:|\Z)",
 )
 _ABSTRACT_SECTION_RE = re.compile(
-    r"(?is)\n\nAbstract:\s*(.+?)(?=\n\nKeywords:|\n\nIntroduction:|\Z)",
+    r"(?is)\n\nAbstract:\s*(.+?)(?=\n\nKeywords:|\n\nIntroduction:|\n\nConclusion:|\n\nMeta-Information:|\Z)",
 )
 _KEYWORDS_SECTION_RE = re.compile(
-    r"(?is)\n\nKeywords:\s*(.+?)(?=\n\nIntroduction:|\Z)",
+    r"(?is)\n\nKeywords:\s*(.+?)(?=\n\nIntroduction:|\n\nConclusion:|\n\nMeta-Information:|\Z)",
 )
-_INTRO_SECTION_RE = re.compile(r"(?is)\n\nIntroduction:\s*(.+)\Z")
+_INTRO_SECTION_RE = re.compile(
+    r"(?is)\n\nIntroduction:\s*(.+?)(?=\n\nConclusion:|\n\nMeta-Information:|\Z)",
+)
+_CONCLUSION_SECTION_RE = re.compile(
+    r"(?is)\n\nConclusion:\s*(.+?)(?=\n\nMeta-Information:|\Z)",
+)
+_META_SECTION_RE = re.compile(r"(?is)\n\nMeta-Information:\s*(.+)\Z")
+
+
+def _parse_meta_block(meta_text: str) -> dict[str, str]:
+    """Parse labeled meta lines such as ``Journal: ...`` from the formatted block."""
+    mapping: dict[str, str] = {}
+    if not meta_text:
+        return mapping
+    for line in meta_text.split("\n"):
+        line = line.strip()
+        if ":" not in line:
+            continue
+        key, _, value = line.partition(":")
+        key_clean = key.strip().lower()
+        value_clean = value.strip()
+        if key_clean in {"journal", "funding", "affiliation"} and value_clean:
+            mapping[key_clean] = value_clean
+        if key_clean in {"research object", "methodology/tool", "core intellectual contribution"} and value_clean:
+            mapping[key_clean.replace("/", "_").replace(" ", "_")] = value_clean
+    return mapping
 
 
 def parse_classifier_sections(classifier_input: str) -> ClassifierSections:
@@ -214,18 +238,29 @@ def parse_classifier_sections(classifier_input: str) -> ClassifierSections:
     abstract_match = _ABSTRACT_SECTION_RE.search(text)
     keywords_match = _KEYWORDS_SECTION_RE.search(text)
     intro_match = _INTRO_SECTION_RE.search(text)
-    if not any((title_match, abstract_match, keywords_match, intro_match)):
+    conclusion_match = _CONCLUSION_SECTION_RE.search(text)
+    meta_match = _META_SECTION_RE.search(text)
+    if not any((title_match, abstract_match, keywords_match, intro_match, conclusion_match, meta_match)):
         return ClassifierSections()
+
+    meta = _parse_meta_block(meta_match.group(1)) if meta_match else {}
     return ClassifierSections(
         title=normalize_whitespace(title_match.group(1)) if title_match else "",
         abstract=normalize_whitespace(abstract_match.group(1)) if abstract_match else "",
         keywords=normalize_whitespace(keywords_match.group(1)) if keywords_match else "",
         intro=intro_match.group(1).strip() if intro_match else "",
+        conclusion=conclusion_match.group(1).strip() if conclusion_match else "",
+        journal=meta.get("journal", ""),
+        funding=meta.get("funding", ""),
+        affiliation=meta.get("affiliation", ""),
+        research_object=meta.get("research_object", ""),
+        methodology_tool=meta.get("methodology_tool", ""),
+        core_intellectual_contribution=meta.get("core_intellectual_contribution", ""),
     )
 
 
 def extract_sections_from_text(full_text: str) -> ClassifierSections:
-    """Extract header sections from plain PDF text using snippet heuristics."""
+    """Extract header sections and lightweight meta signals from plain PDF text."""
     text = normalize_for_sections(full_text)
     if not text:
         return ClassifierSections()
@@ -237,12 +272,43 @@ def extract_sections_from_text(full_text: str) -> ClassifierSections:
         intro_raw = _infer_intro_after_abstract(text, abstract)
 
     intro = _trim_intro_paragraphs(intro_raw) if intro_raw else ""
+    meta = extract_meta_info(text)
     return ClassifierSections(
         title=_extract_title(text),
         abstract=abstract or "",
         keywords=keywords or "",
         intro=intro,
+        journal=meta.get("journal", ""),
+        funding=meta.get("funding", ""),
+        affiliation=meta.get("affiliation", ""),
     )
+
+
+def _format_meta_block(
+    *,
+    journal: str = "",
+    funding: str = "",
+    affiliation: str = "",
+    research_object: str = "",
+    methodology_tool: str = "",
+    core_intellectual_contribution: str = "",
+) -> str:
+    lines: list[str] = []
+    if journal.strip():
+        lines.append(f"Journal: {journal.strip()}")
+    if affiliation.strip():
+        lines.append(f"Affiliation: {affiliation.strip()}")
+    if funding.strip():
+        lines.append(f"Funding: {funding.strip()}")
+    if research_object.strip():
+        lines.append(f"Research Object: {research_object.strip()}")
+    if methodology_tool.strip():
+        lines.append(f"Methodology/Tool: {methodology_tool.strip()}")
+    if core_intellectual_contribution.strip():
+        lines.append(f"Core Intellectual Contribution: {core_intellectual_contribution.strip()}")
+    if not lines:
+        return ""
+    return "Meta-Information:\n" + "\n".join(lines)
 
 
 def format_classifier_input(
@@ -251,15 +317,36 @@ def format_classifier_input(
     abstract: str = "",
     keywords: str = "",
     intro: str = "",
+    conclusion: str = "",
+    journal: str = "",
+    funding: str = "",
+    affiliation: str = "",
+    research_object: str = "",
+    methodology_tool: str = "",
+    core_intellectual_contribution: str = "",
 ) -> str:
     """Compose labeled classifier input aligned with paradigm classification prompts."""
     parts: list[str] = []
+    meta_block = _format_meta_block(
+        journal=journal,
+        funding=funding,
+        affiliation=affiliation,
+        research_object=research_object,
+        methodology_tool=methodology_tool,
+        core_intellectual_contribution=core_intellectual_contribution,
+    )
+    if meta_block:
+        parts.append(meta_block)
     if title.strip():
         parts.append(f"Title: {title.strip()}")
     if abstract.strip():
         parts.append(f"Abstract: {abstract.strip()}")
     if keywords.strip():
         parts.append(f"Keywords: {keywords.strip()}")
+    # Conclusion is placed before the often-lengthy introduction so that truncation
+    # preserves this high-value paradigm signal.
+    if conclusion.strip():
+        parts.append(f"Conclusion:\n{conclusion.strip()}")
     if intro.strip():
         parts.append(f"Introduction:\n{intro.strip()}")
 
@@ -271,15 +358,19 @@ def format_classifier_input(
     return combined
 
 
-def build_classifier_input(full_text: str) -> str:
+def build_classifier_input(head_text: str, *, full_text: str | None = None) -> str:
     """
-    Compose title + abstract + keywords + introduction opening for paradigm classification.
+    Compose title + abstract + keywords + introduction + conclusion + meta for classification.
 
     Falls back to the document head when section markers are missing (e.g. cover pages).
+    When ``full_text`` is supplied, the conclusion section is anchor-extracted from the tail.
     """
-    sections = extract_sections_from_text(full_text)
-    if not any((sections.abstract, sections.keywords, sections.intro)):
-        text = normalize_for_sections(full_text)
+    sections = extract_sections_from_text(head_text)
+    conclusion = extract_conclusion_tail(full_text) if full_text else ""
+
+    has_core = any((sections.abstract, sections.keywords, sections.intro, conclusion))
+    if not has_core:
+        text = normalize_for_sections(head_text)
         return text[:MAX_CLASSIFIER_INPUT_CHARS].strip() if text else ""
 
     return format_classifier_input(
@@ -287,4 +378,8 @@ def build_classifier_input(full_text: str) -> str:
         abstract=sections.abstract,
         keywords=sections.keywords,
         intro=sections.intro,
+        conclusion=conclusion,
+        journal=sections.journal,
+        funding=sections.funding,
+        affiliation=sections.affiliation,
     )

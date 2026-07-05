@@ -247,6 +247,7 @@ describe('V1 DoD E-10 — mock patrol / QA functional feedback', () => {
           insight_id: 'ins-lens-clash-001',
           title: '理论视角冲突（Lens Clash）',
           summary: `${MOCK_PATROL_PREFIX}基于两篇论文的图谱节点差异生成摘要。${MOCK_DISCLAIMER}`,
+          status: 'ready',
           paper_ids: ['hss-001', 'hss-002'],
           node_refs: [],
         },

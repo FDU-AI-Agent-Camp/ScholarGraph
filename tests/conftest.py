@@ -13,6 +13,7 @@ from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+from backend.config import get_settings
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 RUN_PIPELINE_SCRIPT = REPO_ROOT / "scripts" / "run_pipeline.py"
@@ -67,6 +68,17 @@ def benchmark_dual_route_module():
     return module
 
 
+@pytest.fixture(autouse=True)
+def _disable_two_phase_extraction_for_legacy_tests(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Default tests to the single-phase extraction path to preserve existing mocks.
+
+    New tests for the two-phase sub-graph should explicitly re-enable it with
+    ``monkeypatch.setenv('EXTRACT_TWO_PHASE_ENABLED', 'true')``.
+    """
+    monkeypatch.setenv("EXTRACT_TWO_PHASE_ENABLED", "false")
+    get_settings.cache_clear()
+
+
 @pytest.fixture
 def minimal_pdf(tmp_path: Path) -> Path:
     path = tmp_path / "minimal.pdf"
@@ -119,6 +131,8 @@ def mock_pipeline_node_services(
     agent_svc = MagicMock()
     agent_svc.classify_paradigm = AsyncMock(return_value=ClassifyResult(classification=classification, warnings=[]))
     agent_svc.extract_graph = AsyncMock(return_value=extract_result)
+    agent_svc.extract_graph_background = AsyncMock(return_value=extract_result)
+    agent_svc.should_extract_in_background = MagicMock(return_value=False)
 
     with patch("backend.services.graph_persistence_service.GraphStore") as store_cls:
         store_cls.return_value.save = MagicMock()
@@ -128,6 +142,7 @@ def mock_pipeline_node_services(
         with (
             patch("backend.graph.nodes.get_ingest_service", return_value=ingest_svc),
             patch("backend.graph.nodes.get_agent_service", return_value=agent_svc),
+            patch("backend.services.agent_service.get_agent_service", return_value=agent_svc),
             patch(
                 "backend.graph.nodes.get_pipeline_completion_service",
                 return_value=completion_svc,
@@ -186,6 +201,9 @@ def mock_agent_services_only(
                 target="n1",
                 label="SUPPORTS",
                 type="SUPPORTS",
+                rationale="Mock self-supporting edge to satisfy quality gate coverage.",
+                source_span="Mock textual anchor.",
+                confidence="HIGH",
             ),
         ],
     )
@@ -194,6 +212,8 @@ def mock_agent_services_only(
     agent_svc = MagicMock()
     agent_svc.classify_paradigm = AsyncMock(return_value=ClassifyResult(classification=classification, warnings=[]))
     agent_svc.extract_graph = AsyncMock(return_value=extract_result)
+    agent_svc.extract_graph_background = AsyncMock(return_value=extract_result)
+    agent_svc.should_extract_in_background = MagicMock(return_value=False)
 
     with patch("backend.services.graph_persistence_service.GraphStore") as store_cls:
         store_cls.return_value.save = MagicMock()
@@ -202,6 +222,7 @@ def mock_agent_services_only(
 
         with (
             patch("backend.graph.nodes.get_agent_service", return_value=agent_svc),
+            patch("backend.services.agent_service.get_agent_service", return_value=agent_svc),
             patch(
                 "backend.graph.nodes.get_pipeline_completion_service",
                 return_value=completion_svc,

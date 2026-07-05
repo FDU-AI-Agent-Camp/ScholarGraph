@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 from datetime import UTC, datetime
+from unittest.mock import patch
 
 import pytest
 from backend.schemas.paper import PaperDetail, PaperStatus
@@ -42,16 +43,17 @@ def upload_dir(tmp_path, monkeypatch):
 @pytest.mark.asyncio
 async def test_upload_poll_status_then_graph_matrix(api_client, upload_dir) -> None:
     """Happy path: POST → pending status → graph 409 until ready."""
-    create = await api_client.post(
-        "/api/v1/papers",
-        files={"file": ("route.pdf", VALID_PDF, "application/pdf")},
-    )
-    assert create.status_code == 201
-    paper_id = create.json()["data"]["paper_id"]
+    with patch("backend.services.paper_service.schedule_paper_pipeline"):
+        create = await api_client.post(
+            "/api/v1/papers",
+            files={"file": ("route.pdf", VALID_PDF, "application/pdf")},
+        )
+        assert create.status_code == 201
+        paper_id = create.json()["data"]["paper_id"]
 
-    status = await api_client.get(f"/api/v1/papers/{paper_id}/status")
-    assert status.status_code == 200
-    assert status.json()["data"]["status"] in ("pending", "processing")
+        status = await api_client.get(f"/api/v1/papers/{paper_id}/status")
+        assert status.status_code == 200
+        assert status.json()["data"]["status"] in ("pending", "processing")
 
     graph = await api_client.get(f"/api/v1/papers/{paper_id}/graph")
     assert graph.status_code == 409

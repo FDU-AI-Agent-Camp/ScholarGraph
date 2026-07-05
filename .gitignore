@@ -1,5 +1,6 @@
 # ── 个人进度（勿提交）──────────────────────────────────
 progress.md
+progress-v2.md
 problems.md
 ui-design-progress.md
 
@@ -28,6 +29,8 @@ __pycache__/
 htmlcov/
 .coverage
 .coverage.*
+coverage.xml
+pip-audit-report.json
 dist/
 build/
 *.egg-info/
@@ -42,6 +45,7 @@ data/*
 data/corpus/*.pdf
 data/corpus/*.txt
 data/out/
+output/
 uploads/*
 !uploads/.gitkeep
 *.db

@@ -44,7 +44,7 @@ def validate_status_contract(
         return
 
     if status == PaperStatus.PROCESSING:
-        if stage not in PROCESSING_STAGES:
+        if stage is None or stage not in PROCESSING_STAGES:
             msg = f"status=processing 时 stage 必须为 {sorted(s.value for s in PROCESSING_STAGES)} 之一"
             raise ValueError(msg)
         expected_percent = STAGE_PERCENT[stage]
@@ -56,6 +56,11 @@ def validate_status_contract(
     if status == PaperStatus.READY:
         if stage != PipelineStage.READY or percent != 100:
             raise ValueError("status=ready 时 stage=ready 且 percent=100")
+        return
+
+    if status == PaperStatus.READY_WITH_WARNINGS:
+        if stage != PipelineStage.READY or percent != 100:
+            raise ValueError("status=ready_with_warnings 时 stage=ready 且 percent=100")
         return
 
     if status == PaperStatus.FAILED:
@@ -131,6 +136,20 @@ class PipelineStatusService:
             stage=PipelineStage.READY,
             percent=STAGE_PERCENT[PipelineStage.READY],
             message=message or DEFAULT_STAGE_MESSAGES[PipelineStage.READY],
+        )
+
+    def mark_ready_with_warnings(
+        self,
+        paper_id: str,
+        *,
+        message: str | None = None,
+    ) -> PaperStatusData:
+        return self._apply(
+            paper_id,
+            status=PaperStatus.READY_WITH_WARNINGS,
+            stage=PipelineStage.READY,
+            percent=STAGE_PERCENT[PipelineStage.READY],
+            message=message or "建图完成，但图谱置信度未达门控，请复核",
         )
 
     def mark_failed(

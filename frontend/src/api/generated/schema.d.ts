@@ -84,6 +84,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/papers/{paper_id}/reextract": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * 强制重新抽取图谱（逃生舱）
+         * @description 当上一轮回抽取因 LLM 超时/限流等原因降级为启发式 fallback 时，
+         *     调用此接口清空已有图谱、预览和 warnings，重置状态为 pending 并重新入队流水线。
+         */
+        post: operations["forceReextractPaper"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/papers/{paper_id}/qa/stream": {
         parameters: {
             query?: never;
@@ -122,8 +143,14 @@ export interface components {
     schemas: {
         /** @enum {string} */
         Paradigm: "STEM" | "HSS";
-        /** @enum {string} */
-        PaperStatus: "pending" | "processing" | "ready" | "failed";
+        /**
+         * @description `ready_with_warnings` means the graph is available but failed the
+         *     confidence gate (e.g. low SUPPORTS rationale coverage, too many
+         *     isolated nodes, or a high ratio of generic fallback edges such as
+         *     RELATES_TO). The client should render a yellow warning border.
+         * @enum {string}
+         */
+        PaperStatus: "pending" | "processing" | "ready" | "ready_with_warnings" | "failed";
         /** @enum {string} */
         PipelineStage: "ingesting" | "head_refining" | "classifying" | "extracting" | "storing" | "ready" | "failed";
         /**
@@ -217,8 +244,20 @@ export interface components {
             /** @description Async dual(rules) merged document head with per-field sources. */
             ingest_head?: components["schemas"]["IngestHead"] | null;
             /**
-             * @description Machine-readable graph-extract degrade codes (e.g. extract_heuristic_fallback).
-             * @example []
+             * @description True when an MVP skeleton graph is available for preview QA/graph.
+             * @default false
+             */
+            preview_available: boolean;
+            /**
+             * @description Machine-readable graph-extract degrade codes. Always includes the coarse
+             *     `extract_heuristic_fallback` when heuristic fallback is triggered. Fine-grained
+             *     root-cause codes may precede it: `extract_llm_timeout`,
+             *     `extract_llm_rate_limited`, `extract_llm_json_invalid`,
+             *     `extract_schema_validation_failed`, `extract_context_window_exceeded`.
+             * @example [
+             *       "extract_llm_timeout",
+             *       "extract_heuristic_fallback"
+             *     ]
              */
             extract_warnings?: string[];
             /**
@@ -240,6 +279,11 @@ export interface components {
             /** Format: date-time */
             updated_at: string;
             /**
+             * @description True when an MVP skeleton graph can be queried for preview QA/graph.
+             * @default false
+             */
+            preview_available: boolean;
+            /**
              * @description Machine-readable code when status=failed.
              * @example LLM_JSON_INVALID
              */
@@ -252,8 +296,15 @@ export interface components {
              */
             head_refine_warnings?: string[];
             /**
-             * @description Machine-readable graph-extract degrade codes (e.g. extract_heuristic_fallback).
-             * @example []
+             * @description Machine-readable graph-extract degrade codes. Always includes the coarse
+             *     `extract_heuristic_fallback` when heuristic fallback is triggered. Fine-grained
+             *     root-cause codes may precede it: `extract_llm_timeout`,
+             *     `extract_llm_rate_limited`, `extract_llm_json_invalid`,
+             *     `extract_schema_validation_failed`, `extract_context_window_exceeded`.
+             * @example [
+             *       "extract_llm_timeout",
+             *       "extract_heuristic_fallback"
+             *     ]
              */
             extract_warnings?: string[];
             /**
@@ -280,6 +331,15 @@ export interface components {
             target: string;
             label: string;
             type: string;
+            /** @description Logical justification for the relationship. */
+            rationale?: string | null;
+            /** @description Verbatim textual evidence from the paper. */
+            source_span?: string | null;
+            /**
+             * @description Confidence tier for the relation.
+             * @enum {string|null}
+             */
+            confidence?: "HIGH" | "MEDIUM" | "LOW" | null;
         };
         GraphResponse: {
             data?: {
@@ -304,10 +364,21 @@ export interface components {
             node_id: string;
             label?: string;
         };
+        /**
+         * @description Insight readiness status.
+         *     `ready` means the insight was produced from a full LLM analysis.
+         *     `insufficient_data` means the graphs lacked required node types (Thesis/SubArgument)
+         *     and a deterministic template response was returned instead.
+         * @enum {string}
+         */
+        PatrolInsightStatus: "ready" | "insufficient_data";
         PatrolInsight: {
             insight_id: string;
             title: string;
             summary: string;
+            status: components["schemas"]["PatrolInsightStatus"];
+            /** @description Whether a contradiction was detected. Only meaningful when status='ready'. */
+            has_contradiction?: boolean | null;
             paper_ids: string[];
             node_refs: components["schemas"]["NodeRef"][];
         };
@@ -495,6 +566,47 @@ export interface operations {
             404: components["responses"]["NotFound"];
             /** @description GRAPH_NOT_READY */
             409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    forceReextractPaper: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                paper_id: components["parameters"]["PaperId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 已重新入队，返回当前 pending 状态 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PaperStatusResponse"];
+                };
+            };
+            404: components["responses"]["NotFound"];
+            /** @description PAPER_ALREADY_PROCESSING */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description PDF_NOT_FOUND */
+            422: {
                 headers: {
                     [name: string]: unknown;
                 };

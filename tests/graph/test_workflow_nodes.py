@@ -265,6 +265,7 @@ async def test_extract_node_delegates_to_agent_service(
 
     agent_svc = MagicMock()
     agent_svc.extract_graph = AsyncMock(return_value=ExtractResult(graph=graph, warnings=[]))
+    agent_svc.should_extract_in_background = MagicMock(return_value=False)
     with patch("backend.graph.nodes.get_agent_service", return_value=agent_svc):
         out = await nodes.extract_node(post_classify_state)
 
@@ -292,6 +293,7 @@ async def test_extract_node_records_extract_warnings(
     agent_svc.extract_graph = AsyncMock(
         return_value=ExtractResult(graph=graph, warnings=[EXTRACT_HEURISTIC_FALLBACK_CODE]),
     )
+    agent_svc.should_extract_in_background = MagicMock(return_value=False)
     paper_svc = MagicMock()
 
     with (

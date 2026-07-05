@@ -38,6 +38,14 @@ class GraphStore:
             return None
         return UnifiedPaperGraph.model_validate_json(path.read_text(encoding="utf-8"))
 
+    def delete(self, paper_id: str) -> bool:
+        """Remove persisted graph if it exists; return whether a file was removed."""
+        path = self._path(paper_id)
+        if not path.is_file():
+            return False
+        path.unlink()
+        return True
+
     # ------------------------------------------------------------------
     # presentation helpers
     # ------------------------------------------------------------------

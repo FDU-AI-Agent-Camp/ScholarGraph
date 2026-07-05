@@ -45,7 +45,7 @@ class WorkflowState(TypedDict, total=False):
 
     error_code: str
     error_message: str
-    failed_during: PipelineStage
+    failed_during: PipelineStage | None
 
     full_text: str
     classifier_input: str
@@ -58,6 +58,9 @@ class WorkflowState(TypedDict, total=False):
     head_refine_warnings: list[str]
     classify_warnings: list[str]
     extract_warnings: list[str]
+
+    # Slice 2: long papers schedule full extraction in the background.
+    background_extraction_scheduled: bool
 
     failed: bool
 

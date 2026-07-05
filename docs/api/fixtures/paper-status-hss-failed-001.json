@@ -8,6 +8,7 @@
     "updated_at": "2026-05-19T10:15:00Z",
     "error_code": "LLM_JSON_INVALID",
     "failed_during": "classifying",
+    "preview_available": false,
     "classify_warnings": []
   },
   "meta": { "request_id": "mock-status-failed-001" }

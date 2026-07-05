@@ -1,11 +1,18 @@
 """Unified paper graph schema with paradigm-specific validation (G6 via GraphStore)."""
 
+import re
 from enum import StrEnum
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from backend.schemas.paradigm import Paradigm
+
+# Dynamic relation verbs invented by the LLM must use SCREAMING_SNAKE_CASE.
+_DYNAMIC_EDGE_TYPE_PATTERN = re.compile(r"^[A-Z][A-Z0-9_]*$")
+
+# Explicitly banned edge types even if they match the dynamic pattern.
+_FORBIDDEN_EDGE_TYPES = frozenset({"SUPPORTED_BY"})
 
 
 class NodeType(StrEnum):
@@ -59,9 +66,11 @@ STEM_EDGE_TYPES = frozenset(
         "MEASURED_BY",
         "COMPARES_TO",
         "SUPPORTS",
-        "SUPPORTED_BY",
         "PRODUCES",
         "RELATES_TO",
+        # NOTE: SUPPORTED_BY was intentionally removed to keep the evidence flow
+        # unidirectional: Evidence --SUPPORTS--> Claim. This avoids LLM confusion
+        # over which node carries the textual anchor (source_span).
     }
 )
 HSS_EDGE_TYPES = frozenset(
@@ -98,6 +107,12 @@ class GraphEdge(BaseModel):
     target: str = Field(min_length=1)
     label: str = Field(min_length=1)
     type: str = Field(min_length=1)
+    rationale: str | None = Field(default=None, description="Logical justification for the relationship.")
+    source_span: str | None = Field(
+        default=None,
+        description="Verbatim textual evidence from the paper supporting this relation.",
+    )
+    confidence: Literal["HIGH", "MEDIUM", "LOW"] | None = Field(default=None, description="Confidence tier.")
     data: dict[str, Any] = Field(default_factory=dict)
 
 
@@ -131,8 +146,18 @@ class UnifiedPaperGraph(BaseModel):
         if forbidden_nodes:
             raise ValueError(f"{self.paradigm} graph contains forbidden node types: {forbidden_nodes}")
 
+        # Predefined edge types are preferred, but the LLM may invent specific verbs
+        # in SCREAMING_SNAKE_CASE when none of the predefined types fit.
         allowed_edge_types = HSS_EDGE_TYPES if self.paradigm == Paradigm.HSS else STEM_EDGE_TYPES
-        forbidden_edges = [edge.type for edge in self.edges if edge.type not in allowed_edge_types]
-        if forbidden_edges:
-            raise ValueError(f"{self.paradigm} graph contains forbidden edge types: {forbidden_edges}")
+        invalid_edges = [
+            edge.type
+            for edge in self.edges
+            if edge.type in _FORBIDDEN_EDGE_TYPES
+            or (edge.type not in allowed_edge_types and not _DYNAMIC_EDGE_TYPE_PATTERN.match(edge.type))
+        ]
+        if invalid_edges:
+            raise ValueError(
+                f"{self.paradigm} graph contains forbidden edge types: {invalid_edges}. "
+                "Use a predefined type or a SCREAMING_SNAKE_CASE verb."
+            )
         return self

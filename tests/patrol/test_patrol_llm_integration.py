@@ -4,7 +4,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 from backend.graph.store import GraphStore
 from backend.patrol.service import run_patrol
-from backend.schemas.patrol import PatrolMode
+from backend.schemas.patrol import PatrolInsightStatus, PatrolMode
 from backend.schemas.patrol_llm import PatrolSummaryOutput
 from tests.helpers.patrol_graphs import build_hss_graph_with_lens, build_hss_graph_with_thesis, seed_patrol_graphs
 
@@ -38,8 +38,18 @@ async def test_run_patrol_lens_clash_with_structured_llm(tmp_path) -> None:
 
 async def test_run_patrol_contradiction_with_structured_llm() -> None:
     graphs = {
-        "hss-001": build_hss_graph_with_thesis("hss-001", thesis_id="n_a", thesis_label="论点 A"),
-        "hss-002": build_hss_graph_with_thesis("hss-002", thesis_id="n_b", thesis_label="论点 B"),
+        "hss-001": build_hss_graph_with_thesis(
+            "hss-001",
+            thesis_id="n_a",
+            thesis_label="论点 A",
+            sub_arguments=[("n_sub_a", "分论点 A")],
+        ),
+        "hss-002": build_hss_graph_with_thesis(
+            "hss-002",
+            thesis_id="n_b",
+            thesis_label="论点 B",
+            sub_arguments=[("n_sub_b", "分论点 B")],
+        ),
     }
     llm_summary = "集成 LLM 摘要：两篇论文的核心论点在证据链与解释框架上存在潜在矛盾。"
     report = await run_patrol(
@@ -49,6 +59,7 @@ async def test_run_patrol_contradiction_with_structured_llm() -> None:
         llm_client=_mock_llm_client(llm_summary),
     )
     assert report.mode == PatrolMode.CONTRADICTION
+    assert report.insights[0].status == PatrolInsightStatus.READY
     assert report.insights[0].summary == llm_summary
 
 

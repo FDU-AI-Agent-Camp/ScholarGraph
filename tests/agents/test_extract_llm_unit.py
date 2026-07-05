@@ -126,15 +126,12 @@ async def test_extract_with_llm_retries_fallback_chat(monkeypatch: pytest.Monkey
         edges=[GraphEdge(id="e1", source="n1", target="n1", label="REF", type="REF")],
     )
 
-    primary_runnable = MagicMock()
-    primary_runnable.ainvoke = AsyncMock(side_effect=RuntimeError("primary failed"))
-    fallback_runnable = MagicMock()
-    fallback_runnable.ainvoke = AsyncMock(return_value=valid_graph)
+    valid_json = valid_graph.model_dump_json()
 
     primary_chat = MagicMock()
-    primary_chat.with_structured_output.return_value = primary_runnable
+    primary_chat.ainvoke = AsyncMock(side_effect=RuntimeError("primary failed"))
     fallback_chat = MagicMock()
-    fallback_chat.with_structured_output.return_value = fallback_runnable
+    fallback_chat.ainvoke = AsyncMock(return_value=MagicMock(content=valid_json))
 
     client = LlmClient()
     client._chat = primary_chat
@@ -149,8 +146,8 @@ async def test_extract_with_llm_retries_fallback_chat(monkeypatch: pytest.Monkey
 
     assert graph.paper_id == "p1"
     assert graph.nodes[0].type == "Thesis"
-    primary_runnable.ainvoke.assert_awaited_once()
-    fallback_runnable.ainvoke.assert_awaited_once()
+    primary_chat.ainvoke.assert_awaited_once()
+    fallback_chat.ainvoke.assert_awaited_once()
 
     get_settings.cache_clear()
     reset_llm_client_cache()

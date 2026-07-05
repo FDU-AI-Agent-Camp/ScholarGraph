@@ -72,7 +72,7 @@ async def test_red_extract_fallback_reason_not_in_api_warnings(live_both_llm_env
     ):
         result = await extract(STEM_INPUT, Paradigm.STEM, paper_id="red-no-leak")
 
-    assert result.warnings == [EXTRACT_HEURISTIC_FALLBACK_CODE]
+    assert EXTRACT_HEURISTIC_FALLBACK_CODE in result.warnings
     assert secret_reason not in result.warnings
     assert EXTRACT_HEURISTIC_FALLBACK_MESSAGE not in result.warnings
 

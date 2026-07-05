@@ -138,8 +138,20 @@ def mock_pipeline_dependencies() -> Iterator[dict[str, MagicMock]]:
     graph = UnifiedPaperGraph(
         paper_id="wf-test-paper",
         paradigm=Paradigm.HSS,
-        nodes=[GraphNode(id="n1", label="N", type="Thesis")],
-        edges=[],
+        nodes=[
+            GraphNode(id="n1", label="Sub", type="SubArgument"),
+            GraphNode(id="n2", label="Thesis", type="Thesis"),
+        ],
+        edges=[
+            GraphEdge(
+                id="e1",
+                source="n1",
+                target="n2",
+                label="SUPPORTS",
+                type="SUPPORTS",
+                rationale="SubArgument n1 supports Thesis n2.",
+            ),
+        ],
     )
 
     ingest_svc = MagicMock()
@@ -157,6 +169,8 @@ def mock_pipeline_dependencies() -> Iterator[dict[str, MagicMock]]:
 
     agent_svc.classify_paradigm = AsyncMock(return_value=ClassifyResult(classification=classification, warnings=[]))
     agent_svc.extract_graph = AsyncMock(return_value=ExtractResult(graph=graph, warnings=[]))
+    agent_svc.extract_graph_background = AsyncMock(return_value=ExtractResult(graph=graph, warnings=[]))
+    agent_svc.should_extract_in_background = MagicMock(return_value=False)
 
     with patch("backend.services.graph_persistence_service.GraphStore") as store_cls:
         store_cls.return_value.save = MagicMock()

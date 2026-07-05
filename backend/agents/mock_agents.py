@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from backend.schemas.graph import GraphEdge, GraphNode, UnifiedPaperGraph
+from backend.schemas.graph import GraphEdge, GraphNode, NodeType, UnifiedPaperGraph
 from backend.schemas.paradigm import Paradigm, ParadigmClassification
 
 FIXTURES_DIR = Path(__file__).resolve().parents[2] / "docs" / "api" / "fixtures"
@@ -66,10 +66,10 @@ def mock_extract(full_text: str, paradigm: Paradigm) -> UnifiedPaperGraph:
         paper_id="mock-stem",
         paradigm=Paradigm.STEM,
         nodes=[
-            GraphNode(id="n_rq", label="晶体性质预测问题", type="ResearchQuestion", data={}),
-            GraphNode(id="n_method", label="Transformer 原子嵌入", type="Method", data={}),
-            GraphNode(id="n_claim", label="优于 GNN 基线", type="Claim", data={}),
-            GraphNode(id="n_evidence", label="Materials Project 基准实验", type="Evidence", data={}),
+            GraphNode(id="n_rq", label="晶体性质预测问题", type=NodeType.RESEARCH_QUESTION, data={}),
+            GraphNode(id="n_method", label="Transformer 原子嵌入", type=NodeType.METHOD, data={}),
+            GraphNode(id="n_claim", label="优于 GNN 基线", type=NodeType.CLAIM, data={}),
+            GraphNode(id="n_evidence", label="Materials Project 基准实验", type=NodeType.EVIDENCE, data={}),
         ],
         edges=[
             GraphEdge(
@@ -78,6 +78,9 @@ def mock_extract(full_text: str, paradigm: Paradigm) -> UnifiedPaperGraph:
                 target="n_claim",
                 label="SUPPORTS",
                 type="SUPPORTS",
+                rationale="Transformer 原子嵌入方法为性能优于 GNN 基线的主张提供技术依据。",
+                source_span="我们提出基于 Transformer 的原子嵌入方法。",
+                confidence="HIGH",
             ),
             GraphEdge(
                 id="e2",
@@ -85,6 +88,9 @@ def mock_extract(full_text: str, paradigm: Paradigm) -> UnifiedPaperGraph:
                 target="n_claim",
                 label="SUPPORTS",
                 type="SUPPORTS",
+                rationale="Materials Project 基准实验验证了该方法优于 GNN 基线。",
+                source_span="在 Materials Project 基准上，模型平均性能超过当前最优 GNN 方法。",
+                confidence="HIGH",
             ),
         ],
     )

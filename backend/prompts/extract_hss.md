@@ -9,8 +9,8 @@ Return strict JSON with:
 - `paper_id`
 - `title`
 - `paradigm`: `HSS`
-- `nodes`: array of `{ "id", "label", "type", "data" }`
-- `edges`: array of `{ "id", "source", "target", "label", "type" }`
+- `nodes`: array of `{ "id", "label", "type", "source_span", "confidence", "data" }`
+- `edges`: array of `{ "id", "source", "target", "label", "type", "rationale", "source_span", "confidence", "data" }`
 - `summary`
 
 ---
@@ -65,8 +65,57 @@ Only these `type` values are valid for HSS graphs:
 | type | Semantics | source → target |
 |------|-----------|-----------------|
 | `CONTEXTUALIZES` | Prior scholarship provides background without direct challenge | `IntellectualContext` → `Thesis` or `SubArgument` |
-| `RELATES_TO` | Semantically related nodes when no specific edge above applies | any → any |
 | `REF` | Citation or textual reference link between nodes | any → any |
+
+#### Dynamic relation invention
+
+If none of the predefined edge types fits a relationship precisely, **do not lazily use `RELATES_TO`**. Instead, invent a concise, specific relation verb in `SCREAMING_SNAKE_CASE` (e.g., `DERIVES_FROM`, `LIMITS`, `EXTENDS`, `QUALIFIES`). `RELATES_TO` is allowed only as a last resort.
+
+---
+
+## Edge attribute requirements
+
+Edges may carry three additional fields: `rationale`, `source_span`, and `confidence`.
+
+### `rationale` (logic path)
+
+- **Required** for core argument edges: `SUPPORTS`, `CONTRADICTS`, `EXPLAINS`.
+- **Optional** for all other edge types.
+- Must explain **why** the source relates to the target in 1–2 sentences.
+- Must contain concrete logical evidence. Do **not** write tautologies like "A supports B".
+- Chinese ≤ 80 characters; English ≤ 30 words.
+
+### CRITICAL RULE for `source_span`
+
+You are functioning as an **exact text extractor**, not a summarizer.
+
+- **Required** for `SUPPORTS`, `CONTRADICTS`, and `EXPLAINS`.
+- MUST be a **verbatim, continuous substring** copied directly from the paper text.
+- **DO NOT summarize. DO NOT paraphrase. DO NOT leave it empty.**
+- For every `SUPPORTS` or `CONTRADICTS` edge, locate the exact sentence that justifies it and copy it into `source_span`.
+
+### `confidence` (quality tier)
+
+- Optional for all edges.
+- Use `"HIGH"` when the relation is explicitly stated in the text.
+- Use `"MEDIUM"` when the relation is strongly implied.
+- Use `"LOW"` when the relation is speculative or inferred.
+
+### Example
+
+```json
+{
+  "id": "e_supports_1",
+  "source": "n_evidence_1",
+  "target": "n_thesis",
+  "label": "SUPPORTS",
+  "type": "SUPPORTS",
+  "rationale": "The archival records demonstrate the persistence of lineage rituals, directly substantiating the thesis about communal memory.",
+  "source_span": "Village genealogies and ritual calendars kept by lineage halls show that...",
+  "confidence": "HIGH",
+  "data": {}
+}
+```
 
 ---
 

@@ -75,7 +75,9 @@ async def test_x11_live_fallback_pipeline_reaches_ready(
 
     status = await get_paper_service().get_status(paper_id)
     assert status.status == PaperStatus.READY
-    assert status.extract_warnings == [EXTRACT_HEURISTIC_FALLBACK_CODE]
+    assert EXTRACT_HEURISTIC_FALLBACK_CODE in status.extract_warnings
+    # Fine-grained root-cause code is surfaced alongside the generic fallback code.
+    assert any("extract_llm_" in code for code in status.extract_warnings)
 
 
 @pytest.mark.asyncio

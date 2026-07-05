@@ -1,4 +1,5 @@
 import { flushPromises, mount } from '@vue/test-utils'
+import { reactive } from 'vue'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import type { PaperDetail, QaStreamCitationData, UnifiedPaperGraph } from '@/api/types'
@@ -16,13 +17,13 @@ const mockFetchDetail = vi.fn()
 const mockFetchGraph = vi.fn()
 const mockPush = vi.fn()
 
-const paperStoreState: {
+const paperStoreState = reactive<{
   loading: boolean
   currentPaper: PaperDetail
   currentGraph: UnifiedPaperGraph
   fetchDetail: typeof mockFetchDetail
   fetchGraph: typeof mockFetchGraph
-} = {
+}>({
   loading: false,
   currentPaper: {
     paper_id: 'hss-001',
@@ -42,7 +43,7 @@ const paperStoreState: {
   },
   fetchDetail: mockFetchDetail,
   fetchGraph: mockFetchGraph,
-}
+})
 
 vi.mock('@/api/qaStream', () => ({
   streamPaperQa: (...args: unknown[]) => mockStreamPaperQa(...args),
@@ -501,6 +502,213 @@ describe('PaperDetailView', () => {
       expect(wrapper.find('.paper-graph-stub').exists()).toBe(false)
       const askButton = wrapper.findAll('button').find((button) => button.text() === '提问')
       expect((askButton?.element as HTMLButtonElement).disabled).toBe(true)
+    })
+  })
+
+  describe('§1.4.5 preview state (Slice 1)', () => {
+    it('shows MVP warning alerts in QA and graph sections when preview_available', async () => {
+      paperStoreState.currentPaper = {
+        paper_id: 'preview-001',
+        title: 'Preview Paper',
+        status: 'processing',
+        paradigm: 'HSS',
+        preview_available: true,
+        created_at: '2026-05-19T10:00:00Z',
+      }
+
+      const wrapper = mount(PaperDetailView, {
+        props: { paperId: 'preview-001' },
+        global: { stubs: globalStubs },
+      })
+
+      await flushPromises()
+
+      const qaMvpAlert = wrapper.find('.detail-qa__alert--mvp')
+      expect(qaMvpAlert.exists()).toBe(true)
+      expect(qaMvpAlert.attributes('data-title')).toBe(DETAIL_BASELINE_COPY.mvpPreviewAlert)
+      expect(qaMvpAlert.attributes('data-type')).toBe('warning')
+
+      const graphMvpAlert = wrapper.find('.detail-graph__mvp-alert')
+      expect(graphMvpAlert.exists()).toBe(true)
+      expect(graphMvpAlert.attributes('data-title')).toBe(DETAIL_BASELINE_COPY.mvpGraphAlert)
+      expect(graphMvpAlert.attributes('data-type')).toBe('warning')
+    })
+
+    it('does not show not-ready info alert when preview_available', async () => {
+      paperStoreState.currentPaper = {
+        paper_id: 'preview-002',
+        title: 'Preview Paper',
+        status: 'processing',
+        paradigm: 'HSS',
+        preview_available: true,
+        created_at: '2026-05-19T10:00:00Z',
+      }
+
+      const wrapper = mount(PaperDetailView, {
+        props: { paperId: 'preview-002' },
+        global: { stubs: globalStubs },
+      })
+
+      await flushPromises()
+
+      const notReadyAlert = wrapper
+        .findAll('.detail-qa__alert')
+        .find((node) => node.attributes('data-title') === DETAIL_BASELINE_COPY.notReadyAlert)
+      expect(notReadyAlert).toBeUndefined()
+    })
+
+    it('enables QA textarea and ask button when preview_available', async () => {
+      paperStoreState.currentPaper = {
+        paper_id: 'preview-003',
+        title: 'Preview Paper',
+        status: 'processing',
+        paradigm: 'HSS',
+        preview_available: true,
+        created_at: '2026-05-19T10:00:00Z',
+      }
+
+      const wrapper = mount(PaperDetailView, {
+        props: { paperId: 'preview-003' },
+        global: { stubs: globalStubs },
+      })
+
+      await flushPromises()
+
+      expect((wrapper.find('.qa-textarea').element as HTMLTextAreaElement).disabled).toBe(false)
+      const askButton = wrapper.findAll('button').find((button) => button.text() === '提问')
+      expect((askButton?.element as HTMLButtonElement).disabled).toBe(false)
+    })
+
+    it('renders compact graph when preview_available and currentGraph exists', async () => {
+      paperStoreState.currentPaper = {
+        paper_id: 'preview-004',
+        title: 'Preview Paper',
+        status: 'processing',
+        paradigm: 'HSS',
+        preview_available: true,
+        created_at: '2026-05-19T10:00:00Z',
+      }
+      paperStoreState.currentGraph = {
+        paper_id: 'preview-004',
+        paradigm: 'HSS',
+        nodes: [{ id: 'n1', label: 'Thesis', type: 'Thesis', data: {} }],
+        edges: [],
+      }
+
+      const wrapper = mount(PaperDetailView, {
+        props: { paperId: 'preview-004' },
+        global: { stubs: globalStubs },
+      })
+
+      await flushPromises()
+
+      expect(wrapper.find('.detail-graph__placeholder').exists()).toBe(false)
+      expect(wrapper.find('.paper-graph-stub').exists()).toBe(true)
+    })
+
+    it('calls fetchGraph when preview_available becomes true via status watch', async () => {
+      paperStoreState.currentPaper = {
+        paper_id: 'preview-005',
+        title: 'Preview Paper',
+        status: 'processing',
+        paradigm: 'HSS',
+        preview_available: false,
+        created_at: '2026-05-19T10:00:00Z',
+      }
+      paperStoreState.currentGraph = null as unknown as UnifiedPaperGraph
+
+      const wrapper = mount(PaperDetailView, {
+        props: { paperId: 'preview-005' },
+        global: { stubs: globalStubs },
+      })
+      await flushPromises()
+      expect(mockFetchGraph).not.toHaveBeenCalledWith('preview-005')
+
+      paperStoreState.currentPaper = {
+        ...paperStoreState.currentPaper,
+        preview_available: true,
+      }
+      await flushPromises()
+      // Trigger the watch by updating a reactive property the watch depends on.
+      await wrapper.vm.$nextTick()
+
+      expect(mockFetchGraph).toHaveBeenCalledWith('preview-005')
+    })
+
+    it('keeps QA and graph disabled when processing without preview_available', async () => {
+      paperStoreState.currentPaper = {
+        paper_id: 'preview-006',
+        title: 'Not Preview Paper',
+        status: 'processing',
+        paradigm: 'HSS',
+        preview_available: false,
+        created_at: '2026-05-19T10:00:00Z',
+      }
+
+      const wrapper = mount(PaperDetailView, {
+        props: { paperId: 'preview-006' },
+        global: { stubs: globalStubs },
+      })
+
+      await flushPromises()
+
+      expect((wrapper.find('.qa-textarea').element as HTMLTextAreaElement).disabled).toBe(true)
+      const askButton = wrapper.findAll('button').find((button) => button.text() === '提问')
+      expect((askButton?.element as HTMLButtonElement).disabled).toBe(true)
+      expect(wrapper.find('.paper-graph-stub').exists()).toBe(false)
+      expect(wrapper.find('.detail-graph__placeholder').exists()).toBe(true)
+    })
+
+    it('streams QA answer over preview graph', async () => {
+      paperStoreState.currentPaper = {
+        paper_id: 'preview-007',
+        title: 'Preview Paper',
+        status: 'processing',
+        paradigm: 'HSS',
+        preview_available: true,
+        created_at: '2026-05-19T10:00:00Z',
+      }
+      paperStoreState.currentGraph = {
+        paper_id: 'preview-007',
+        paradigm: 'HSS',
+        nodes: [{ id: 'n1', label: 'Thesis', type: 'Thesis', data: {} }],
+        edges: [],
+      }
+
+      mockStreamPaperQa.mockImplementation(
+        async (
+          _paperId: string,
+          _question: string,
+          handlers: {
+            onMessage?: (data: { delta: string }) => void
+            onDone?: (data: { answer_id: string; answer?: string }) => void
+          },
+        ) => {
+          handlers.onMessage?.({ delta: '宏观' })
+          handlers.onDone?.({ answer_id: 'ans-preview', answer: '宏观答案' })
+        },
+      )
+
+      const wrapper = mount(PaperDetailView, {
+        props: { paperId: 'preview-007' },
+        global: { stubs: globalStubs },
+      })
+
+      await flushPromises()
+      await wrapper.find('.qa-textarea').setValue('核心论点是什么？')
+      await wrapper
+        .findAll('button')
+        .find((button) => button.text() === '提问')
+        ?.trigger('click')
+      await flushPromises()
+
+      expect(mockStreamPaperQa).toHaveBeenCalledWith(
+        'preview-007',
+        '核心论点是什么？',
+        expect.any(Object),
+        expect.any(AbortSignal),
+      )
+      expect(wrapper.find('.detail-qa__answer-text').text()).toBe('宏观答案')
     })
   })
 

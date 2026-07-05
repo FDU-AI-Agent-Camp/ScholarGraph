@@ -101,12 +101,16 @@ def test_phase_f_extract_result_dataclass() -> None:
     assert result.warnings == [EXTRACT_HEURISTIC_FALLBACK_CODE]
 
 
-def test_phase_f_extractor_live_path_calls_extract_with_llm() -> None:
+def test_phase_f_extractor_live_path_has_extraction_paths() -> None:
     from backend.agents import extractor
 
     live_source = inspect.getsource(extractor._extract_live)
-    assert "extract_with_llm" in live_source
+    assert "_extract_single_phase" in live_source
+    assert "_extract_two_phase" in live_source
     assert "_fallback_to_heuristic" in live_source
+
+    single_phase_source = inspect.getsource(extractor._extract_single_phase)
+    assert "extract_with_llm" in single_phase_source
     assert "EXTRACT_HEURISTIC_FALLBACK_CODE" in inspect.getsource(extractor._fallback_to_heuristic)
 
 

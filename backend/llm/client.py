@@ -5,6 +5,7 @@ from __future__ import annotations
 from functools import lru_cache
 
 from langchain_openai import ChatOpenAI
+from pydantic import SecretStr
 
 from backend.config import Settings, get_settings
 from backend.llm.mock_chat import MockChat
@@ -55,7 +56,7 @@ class LlmClient:
         timeout: int,
     ) -> ChatOpenAI:
         return ChatOpenAI(
-            api_key=api_key,
+            api_key=SecretStr(api_key),
             base_url=base_url,
             model=model,
             timeout=timeout,

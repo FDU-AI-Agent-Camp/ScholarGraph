@@ -11,12 +11,33 @@ from backend.config import Settings, get_settings
 from backend.ingest.grobid_client import fetch_grobid_tei
 from backend.ingest.head_candidates import HeadCandidate, build_pymupdf_head_candidate
 from backend.ingest.mineru_backend import run_mineru_pipeline
+from backend.ingest.pdf import extract_pdf_text
 from backend.ingest.router import IngestRouteKind, get_pdf_page_count, is_short_pdf, resolve_ingest_route
+from backend.ingest.snippets import extract_conclusion_tail, extract_meta_info
 from backend.ingest.tei_parser import parse_tei_to_head_candidate
 from backend.schemas.ingest_head import IngestHead
 from backend.services.head_merge_service import get_head_merge_service
 
 logger = logging.getLogger(__name__)
+
+
+def _enrich_with_full_text_signals(merged: IngestHead, full_text: str) -> IngestHead:
+    """Fill missing conclusion / journal / funding / affiliation from full-text regex heuristics."""
+    update: dict[str, str] = {}
+
+    if not merged.conclusion.strip():
+        conclusion = extract_conclusion_tail(full_text)
+        if conclusion:
+            update["conclusion"] = conclusion
+
+    meta = extract_meta_info(full_text)
+    for meta_field in ("journal", "funding", "affiliation"):
+        if not getattr(merged, meta_field).strip() and meta.get(meta_field, "").strip():
+            update[meta_field] = meta[meta_field].strip()
+
+    if not update:
+        return merged
+    return merged.model_copy(update=update)
 
 
 @dataclass
@@ -95,6 +116,19 @@ async def refine_head_async(
         path_b,
         is_short=is_short_pdf(page_count, settings=cfg),
     )
+
+    # Enrich merged head with meta-information and conclusion extracted from full text.
+    # Head-only extraction misses the conclusion and sometimes drops meta signals; this
+    # is a low-cost regex pass that fills gaps without re-merging via LLM.
+    try:
+        full_text = await asyncio.to_thread(extract_pdf_text, resolved)
+    except Exception:
+        logger.exception("Full-text extraction failed for meta enrichment %s", paper_id)
+        full_text = ""
+
+    if full_text:
+        merged = _enrich_with_full_text_signals(merged, full_text)
+
     classifier_input = merged.to_classifier_input()
     if not classifier_input.strip():
         classifier_input = snippets.title or ""

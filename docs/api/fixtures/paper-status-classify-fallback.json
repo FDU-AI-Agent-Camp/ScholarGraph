@@ -6,6 +6,7 @@
     "stage": "ready",
     "message": "建图完成",
     "updated_at": "2026-05-19T10:05:00Z",
+    "preview_available": true,
     "extract_warnings": [],
     "classify_warnings": ["classifier_heuristic_fallback"]
   },

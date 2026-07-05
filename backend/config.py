@@ -7,6 +7,55 @@ from typing import Literal
 from pydantic import AliasChoices, Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+# Different embedding models train with different vector-space densities.
+# Hard-coding a single threshold would break when switching models, so we keep
+# per-model defaults and allow explicit env overrides.
+DEFAULT_EMBEDDING_MODEL_THRESHOLDS: dict[str, dict[str, float]] = {
+    "bge-m3": {
+        "similarity": 0.85,
+        "knn": 0.75,
+    },
+    "text-embedding-3-small": {
+        "similarity": 0.65,
+        "knn": 0.55,
+    },
+    "default": {
+        "similarity": 0.80,
+        "knn": 0.70,
+    },
+}
+
+# Per-paradigm, per-node-category similarity thresholds for semantic clustering.
+# A single global threshold causes over-merging for Method nodes (too loose) and
+# under-merging for Dataset nodes (too strict).  Categories are intentionally
+# coarse-grained so the matrix stays small and maintainable; unknown types fall
+# back to the "Concept" bucket.
+DYNAMIC_CLUSTERING_THRESHOLDS: dict[str, dict[str, float]] = {
+    "STEM": {
+        "Method": 0.92,
+        "Dataset": 0.82,
+        "Metric": 0.88,
+        "Baseline": 0.88,
+        "Concept": 0.88,
+    },
+    "HSS": {
+        "Method": 0.86,
+        "Dataset": 0.80,
+        "Concept": 0.82,
+    },
+}
+
+
+def _clustering_category(node_type: str) -> str:
+    """Map a concrete node type to its coarse threshold category."""
+    category_map: dict[str, str] = {
+        "Method": "Method",
+        "Dataset": "Dataset",
+        "Metric": "Metric",
+        "Baseline": "Baseline",
+    }
+    return category_map.get(node_type, "Concept")
+
 
 class Settings(BaseSettings):
     """Runtime configuration; values come from `.env` at repository root."""
@@ -69,6 +118,7 @@ class Settings(BaseSettings):
         default=600,
         validation_alias="INGEST_MINERU_TIMEOUT_SECONDS",
     )
+    mineru_api_url: str = Field(default="", validation_alias="MINERU_API_URL")
 
     grobid_url: str = Field(default="http://127.0.0.1:8070", validation_alias="GROBID_URL")
     grobid_timeout_seconds: int = Field(default=300, validation_alias="GROBID_TIMEOUT_SECONDS")
@@ -87,11 +137,191 @@ class Settings(BaseSettings):
         default=True,
         validation_alias="EXTRACT_HEURISTIC_FALLBACK",
     )
+    extract_two_phase_enabled: bool = Field(
+        default=True,
+        validation_alias="EXTRACT_TWO_PHASE_ENABLED",
+    )
+    extract_chunked_enabled: bool = Field(
+        default=True,
+        validation_alias="EXTRACT_CHUNKED_ENABLED",
+    )
+    extract_chunk_max_chars: int = Field(
+        default=12_000,
+        ge=1_000,
+        validation_alias="EXTRACT_CHUNK_MAX_CHARS",
+    )
+    extract_chunk_overlap_ratio: float = Field(
+        default=0.12,
+        ge=0.0,
+        le=0.5,
+        validation_alias="EXTRACT_CHUNK_OVERLAP_RATIO",
+        description="Sliding-window overlap between consecutive chunks (0.0 = no overlap).",
+    )
+    extract_chunk_concurrency: int = Field(
+        default=2,
+        ge=1,
+        le=10,
+        validation_alias="EXTRACT_CHUNK_CONCURRENCY",
+    )
+    extract_chunk_max_chunks: int = Field(
+        default=1000,
+        ge=1,
+        validation_alias="EXTRACT_CHUNK_MAX_CHUNKS",
+    )
+    extract_chunk_rpm_limit: int = Field(
+        default=60,
+        ge=0,
+        validation_alias="EXTRACT_CHUNK_RPM_LIMIT",
+    )
+    extract_chunk_tpm_limit: int = Field(
+        default=1_000_000,
+        ge=0,
+        validation_alias="EXTRACT_CHUNK_TPM_LIMIT",
+    )
+    extract_chunk_retry_attempts: int = Field(
+        default=3,
+        ge=0,
+        validation_alias="EXTRACT_CHUNK_RETRY_ATTEMPTS",
+    )
+    extract_chunk_retry_delay_s: float = Field(
+        default=3.0,
+        ge=0,
+        validation_alias="EXTRACT_CHUNK_RETRY_DELAY_S",
+    )
+    extract_structured_output_repair: bool = Field(
+        default=True,
+        validation_alias="EXTRACT_STRUCTURED_OUTPUT_REPAIR",
+    )
+    extract_min_supports_rationale_coverage: float = Field(
+        default=0.5,
+        ge=0.0,
+        le=1.0,
+        validation_alias="EXTRACT_MIN_SUPPORTS_RATIONALE_COVERAGE",
+    )
+    extract_max_isolated_node_ratio: float = Field(
+        default=0.4,
+        ge=0.0,
+        le=1.0,
+        validation_alias="EXTRACT_MAX_ISOLATED_NODE_RATIO",
+    )
+    extract_max_generic_edge_ratio: float = Field(
+        default=1.0,
+        ge=0.0,
+        le=1.0,
+        validation_alias="EXTRACT_MAX_GENERIC_EDGE_RATIO",
+        description="Maximum allowed fraction of generic RELATES_TO-like edges. "
+        "1.0 disables the check; set lower (e.g. 0.25) to enforce dynamic relation invention.",
+    )
+
+    # ------------------------------------------------------------------
+    # Semantic clustering / graph dehydration (Slice 2 second-order)
+    # ------------------------------------------------------------------
+    semantic_clustering_enabled: bool = Field(
+        default=False,
+        validation_alias="SEMANTIC_CLUSTERING_ENABLED",
+    )
+    # When negative, fall back to model-specific defaults defined below.
+    # Explicit env values always take precedence.
+    semantic_similarity_threshold: float = Field(
+        default=-1.0,
+        ge=-1.0,
+        le=1.0,
+        validation_alias="SEMANTIC_SIMILARITY_THRESHOLD",
+    )
+    semantic_clustering_dynamic_thresholds_enabled: bool = Field(
+        default=True,
+        validation_alias="SEMANTIC_CLUSTERING_DYNAMIC_THRESHOLDS_ENABLED",
+        description="Use per-paradigm, per-node-category thresholds instead of a single global threshold.",
+    )
+    semantic_knn_threshold: float = Field(
+        default=-1.0,
+        ge=-1.0,
+        le=1.0,
+        validation_alias="SEMANTIC_KNN_THRESHOLD",
+    )
+    embedding_provider: Literal["openai", "ollama"] = Field(
+        default="openai",
+        validation_alias="EMBEDDING_PROVIDER",
+    )
+    embedding_model: str = Field(
+        default="bge-m3",
+        validation_alias="EMBEDDING_MODEL",
+    )
+    embedding_api_base_url: str | None = Field(
+        default=None,
+        validation_alias="EMBEDDING_API_BASE_URL",
+    )
+    embedding_api_key: str = Field(
+        default="",
+        validation_alias="EMBEDDING_API_KEY",
+    )
+    embedding_ollama_url: str = Field(
+        default="http://localhost:11434",
+        validation_alias="EMBEDDING_OLLAMA_URL",
+    )
+
+    # ------------------------------------------------------------------
+    # Cloud reranker for fine-grained semantic merge verification
+    # ------------------------------------------------------------------
+    reranker_enabled: bool = Field(
+        default=False,
+        validation_alias="RERANKER_ENABLED",
+    )
+    reranker_model: str = Field(
+        default="",
+        validation_alias="RERANKER_MODEL",
+    )
+    reranker_api_base_url: str | None = Field(
+        default=None,
+        validation_alias="RERANKER_API_BASE_URL",
+    )
+    reranker_api_key: str = Field(
+        default="",
+        validation_alias="RERANKER_API_KEY",
+    )
+    reranker_batch_size: int = Field(
+        default=32,
+        ge=1,
+        le=256,
+        validation_alias="RERANKER_BATCH_SIZE",
+    )
+    reranker_threshold: float = Field(
+        default=0.85,
+        ge=0.0,
+        le=1.0,
+        validation_alias="RERANKER_THRESHOLD",
+    )
+
+    extract_repair_max_retries: int = Field(
+        default=2,
+        ge=0,
+        le=5,
+        validation_alias="EXTRACT_REPAIR_MAX_RETRIES",
+    )
 
     classifier_llm_enabled: bool = Field(default=True, validation_alias="CLASSIFIER_LLM_ENABLED")
     classifier_heuristic_fallback: bool = Field(
         default=True,
         validation_alias="CLASSIFIER_HEURISTIC_FALLBACK",
+    )
+    classifier_two_phase_enabled: bool = Field(
+        default=True,
+        validation_alias="CLASSIFIER_TWO_PHASE_ENABLED",
+        description="Run profile generation (Stage A) before paradigm judgment (Stage B).",
+    )
+    classifier_core_contribution_enabled: bool = Field(
+        default=True,
+        validation_alias="CLASSIFIER_CORE_CONTRIBUTION_ENABLED",
+        description="Run core-contribution interrogation (Stage B.1) between profile and final judgment.",
+    )
+    classifier_profile_llm_model: str = Field(
+        default="",
+        validation_alias="CLASSIFIER_PROFILE_LLM_MODEL",
+        description="Lightweight model for Stage A profile generation; empty means use primary model.",
+    )
+    classifier_profile_llm_timeout_seconds: int = Field(
+        default=60,
+        validation_alias="CLASSIFIER_PROFILE_LLM_TIMEOUT_SECONDS",
     )
 
     @field_validator("cors_origins", mode="before")
@@ -117,6 +347,84 @@ class Settings(BaseSettings):
     @property
     def is_llm_live(self) -> bool:
         return self.llm_mode == "live"
+
+    @property
+    def embedding_api_key_effective(self) -> str:
+        return self.embedding_api_key.strip() or self.require_llm_key()
+
+    @property
+    def embedding_api_base_url_effective(self) -> str | None:
+        return self.embedding_api_base_url or self.llm_api_base_url or None
+
+    @property
+    def reranker_api_base_url_effective(self) -> str | None:
+        return self.reranker_api_base_url or self.llm_api_base_url or None
+
+    @property
+    def reranker_api_key_effective(self) -> str:
+        return self.reranker_api_key.strip() or self.require_llm_key()
+
+    @property
+    def semantic_similarity_threshold_effective(self) -> float:
+        """Return the entity-resolution threshold.
+
+        Explicit ``SEMANTIC_SIMILARITY_THRESHOLD`` values win; otherwise we
+        look up a per-model default.
+        """
+        if self.semantic_similarity_threshold >= 0:
+            return self.semantic_similarity_threshold
+        thresholds = DEFAULT_EMBEDDING_MODEL_THRESHOLDS.get(
+            self.embedding_model,
+            DEFAULT_EMBEDDING_MODEL_THRESHOLDS["default"],
+        )
+        return thresholds["similarity"]
+
+    def semantic_similarity_threshold_for(
+        self,
+        node_type_a: str,
+        node_type_b: str,
+        paradigm: str,
+    ) -> float:
+        """Return the pairwise merge threshold for two node types.
+
+        Priority:
+        1. Explicit ``SEMANTIC_SIMILARITY_THRESHOLD`` (global override).
+        2. Dynamic matrix when ``semantic_clustering_dynamic_thresholds_enabled``.
+        3. Per-model default fallback.
+
+        For cross-category pairs the stricter of the two category thresholds is
+        used, so a Method-Dataset pair uses the Method threshold.
+        """
+        if self.semantic_similarity_threshold >= 0:
+            return self.semantic_similarity_threshold
+
+        if self.semantic_clustering_dynamic_thresholds_enabled:
+            category_a = _clustering_category(node_type_a)
+            category_b = _clustering_category(node_type_b)
+            matrix = DYNAMIC_CLUSTERING_THRESHOLDS.get(
+                paradigm,
+                DYNAMIC_CLUSTERING_THRESHOLDS["STEM"],
+            )
+            threshold_a = matrix.get(category_a, matrix["Concept"])
+            threshold_b = matrix.get(category_b, matrix["Concept"])
+            return max(threshold_a, threshold_b)
+
+        return self.semantic_similarity_threshold_effective
+
+    @property
+    def semantic_knn_threshold_effective(self) -> float:
+        """Return the K-NN island-bridging threshold.
+
+        Explicit ``SEMANTIC_KNN_THRESHOLD`` values win; otherwise we look up a
+        per-model default.
+        """
+        if self.semantic_knn_threshold >= 0:
+            return self.semantic_knn_threshold
+        thresholds = DEFAULT_EMBEDDING_MODEL_THRESHOLDS.get(
+            self.embedding_model,
+            DEFAULT_EMBEDDING_MODEL_THRESHOLDS["default"],
+        )
+        return thresholds["knn"]
 
     @property
     def llm_model_fallback_effective(self) -> str | None:
@@ -154,5 +462,5 @@ def _should_ignore_dotenv() -> bool:
 @lru_cache
 def get_settings() -> Settings:
     if _should_ignore_dotenv():
-        return Settings(_env_file=None)
+        return Settings.model_validate({})
     return Settings()

@@ -148,6 +148,7 @@ async def test_patrol_api_contradiction_mode_success(
             "hss-001",
             thesis_id="n_t_a",
             thesis_label="夏尔巴父系源流具有多元融合特征",
+            sub_arguments=[("n_sub_a", "分论点：分子证据支持混合来源")],
         ),
     )
     store.save(
@@ -155,6 +156,7 @@ async def test_patrol_api_contradiction_mode_success(
             "hss-002",
             thesis_id="n_t_b",
             thesis_label="电影政治传播强化主流意识形态建构",
+            sub_arguments=[("n_sub_b", "分论点：叙事策略随政策周期变化")],
         ),
     )
     response = await api_client.post(
@@ -165,11 +167,13 @@ async def test_patrol_api_contradiction_mode_success(
     data = response.json()["data"]
     assert data["mode"] == "contradiction"
     assert len(data["insights"]) >= 1
-    assert data["insights"][0]["insight_id"] == "ins-contradiction-001"
+    insight = data["insights"][0]
+    assert insight["insight_id"] == "ins-contradiction-001"
+    assert insight["status"] == "ready"
 
 
 @pytest.mark.asyncio
-async def test_patrol_api_contradiction_insufficient_thesis_returns_422(
+async def test_patrol_api_contradiction_insufficient_data_returns_200(
     api_client: AsyncClient,
     patrol_graph_dir,
 ) -> None:
@@ -183,5 +187,33 @@ async def test_patrol_api_contradiction_insufficient_thesis_returns_422(
         "/api/v1/patrol",
         json={"paper_ids": ["hss-001", "hss-002"], "mode": "contradiction"},
     )
-    assert response.status_code == 422
-    assert response.json()["error"]["code"] == "PATROL_INSUFFICIENT_DATA"
+    assert response.status_code == 200
+    data = response.json()["data"]
+    assert data["mode"] == "contradiction"
+    insight = data["insights"][0]
+    assert insight["insight_id"] == "ins-contradiction-001"
+    assert insight["status"] == "insufficient_data"
+    assert insight["has_contradiction"] is False
+
+
+@pytest.mark.asyncio
+async def test_patrol_api_contradiction_both_papers_lack_subarguments_returns_insufficient_data(
+    api_client: AsyncClient,
+    patrol_graph_dir,
+) -> None:
+    from backend.graph.store import GraphStore
+    from tests.helpers.patrol_graphs import build_hss_graph_with_thesis
+
+    store = GraphStore(base_dir=patrol_graph_dir)
+    store.save(build_hss_graph_with_thesis("hss-001", thesis_id="n_a", thesis_label="论点 A"))
+    store.save(build_hss_graph_with_thesis("hss-002", thesis_id="n_b", thesis_label="论点 B"))
+    response = await api_client.post(
+        "/api/v1/patrol",
+        json={"paper_ids": ["hss-001", "hss-002"], "mode": "contradiction"},
+    )
+    assert response.status_code == 200
+    data = response.json()["data"]
+    insight = data["insights"][0]
+    assert insight["status"] == "insufficient_data"
+    assert "hss-001" in insight["summary"]
+    assert "hss-002" in insight["summary"]

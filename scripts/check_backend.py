@@ -1,11 +1,21 @@
 #!/usr/bin/env python3
 """
-后端静态检查与测试门禁（ruff + pytest）。
+后端静态检查与测试门禁（ruff + pyright + pytest）。
+
+此脚本面向本地开发，尤其是 Windows 环境（没有 make 时）。
+线上 Ubuntu CI 使用 Makefile 的 ``make ci`` 目标一键执行。
 
 在仓库根目录执行::
 
-    uv run python scripts/check_backend.py
+    uv run python scripts/check_backend.py          # 仅检查，不修改文件
+    uv run python scripts/check_backend.py --fix    # 自动修复并格式化
     uv run python scripts/check_backend.py --lint-only
+
+执行顺序（前一步失败则停止）：
+1. ruff check        （默认不自动修复）
+2. ruff format --check
+3. pyright backend   （静态类型检查）
+4. pytest            （动态单元测试）
 """
 
 from __future__ import annotations
@@ -31,23 +41,56 @@ def run_step(label: str, command: Sequence[str]) -> int:
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Backend lint, format, and pytest gate.")
+    parser = argparse.ArgumentParser(description="Backend lint, type check, and pytest gate.")
     parser.add_argument(
         "--lint-only",
         action="store_true",
-        help="Run ruff only (skip pytest).",
+        help="Run ruff and pyright only (skip pytest).",
+    )
+    parser.add_argument(
+        "--fix",
+        action="store_true",
+        help="Auto-fix ruff issues and format files instead of just checking.",
+    )
+    parser.add_argument(
+        "--no-fix",
+        action="store_true",
+        help="Deprecated: default behavior is already check-only.",
     )
     return parser.parse_args(argv)
 
 
 def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
+
+    if args.fix:
+        ruff_check_cmd = ["ruff", "check", "--fix", *RUFF_TARGETS]
+        ruff_format_cmd = ["ruff", "format", *RUFF_TARGETS]
+    else:
+        ruff_check_cmd = ["ruff", "check", *RUFF_TARGETS]
+        ruff_format_cmd = ["ruff", "format", "--check", *RUFF_TARGETS]
+
     steps: list[tuple[str, list[str]]] = [
-        ("ruff check", ["ruff", "check", *RUFF_TARGETS]),
-        ("ruff format --check", ["ruff", "format", "--check", *RUFF_TARGETS]),
+        ("ruff check", ruff_check_cmd),
+        ("ruff format", ruff_format_cmd),
+        ("pyright", ["pyright", "backend"]),
     ]
     if not args.lint_only:
-        steps.append(("pytest", ["pytest", "-q", "-m", DEFAULT_PYTEST_MARKER]))
+        # Use ``python -m pytest`` to avoid Windows entry-point canonicalisation issues.
+        steps.append(
+            (
+                "pytest",
+                [
+                    sys.executable,
+                    "-m",
+                    "pytest",
+                    "-q",
+                    "--tb=short",
+                    "-m",
+                    DEFAULT_PYTEST_MARKER,
+                ],
+            )
+        )
 
     for label, command in steps:
         if run_step(label, command) != EXIT_SUCCESS:

@@ -1,4 +1,5 @@
-# 后端门禁：ruff + pytest（与 docs/v1/pr-checklist.md、scripts/check_backend.py 一致）
+# 后端门禁：Makefile 一键 CI（ruff + pyright + pytest + 安全扫描 + 覆盖率）
+# 与 docs/v1/pr-checklist.md、scripts/check_backend.py、AGENTS.md 保持一致
 name: Backend
 
 on:
@@ -12,6 +13,8 @@ on:
       - 'pyproject.toml'
       - 'uv.lock'
       - '.github/workflows/backend.yml'
+      - 'pyrightconfig.json'
+      - 'Makefile'
   pull_request:
     branches: [develop, main]
     paths:
@@ -22,6 +25,8 @@ on:
       - 'pyproject.toml'
       - 'uv.lock'
       - '.github/workflows/backend.yml'
+      - 'pyrightconfig.json'
+      - 'Makefile'
 
 jobs:
   gate:
@@ -36,11 +41,21 @@ jobs:
       - name: Sync dependencies
         run: uv sync --frozen --group dev
 
-      - name: Ruff lint
-        run: uv run ruff check backend tests scripts
+      # Makefile 用于线上 Ubuntu CI 一键执行完整门禁。
+      # Windows 本地开发请直接使用：uv run python scripts/check_backend.py
+      - name: Backend CI gate
+        run: make ci
 
-      - name: Ruff format check
-        run: uv run ruff format --check backend tests scripts
+      - name: Upload coverage report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: coverage.xml
 
-      - name: Pytest
-        run: uv run pytest -q -m "not red and not live_mineru and not live_grobid"
+      - name: Upload pip-audit report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pip-audit-report
+          path: pip-audit-report.json

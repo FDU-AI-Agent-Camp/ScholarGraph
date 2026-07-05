@@ -9,6 +9,9 @@ export const DETAIL_BASELINE_COPY = {
   resumeRefresh: '继续自动刷新',
   pauseRefresh: '暂停自动刷新',
   notReadyAlert: '论文尚未 ready，问答与图谱预览将在流水线完成后可用。',
+  mvpPreviewAlert:
+    'SYSTEM NOTIFICATION: 当前加载为 MVP 宏观骨架，深度实验节点正在后台组装。问答引擎已自动切换至【宏观摘要尺度】。',
+  mvpGraphAlert: 'SYSTEM NOTIFICATION: 当前图谱为 MVP 宏观骨架，深度节点与关系正在后台全量解构中。',
   qaSectionTitle: '多尺度问答',
   qaPlaceholder: '这篇论文的核心论点是什么？',
   qaPlaceholderAlt: '作者用了哪些分析视角？',
