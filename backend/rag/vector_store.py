@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
+from functools import partial
 from typing import TYPE_CHECKING, Any, Protocol, cast
 
 from backend.rag.models import (
@@ -241,18 +243,22 @@ class VectorStore:
         """Delete all indexed evidence for one paper from all collections."""
 
         where: ChromaWhere = {"paper_id": paper_id}
-        self._chunk_collection.delete(where=where)
-        self._entity_collection.delete(where=where)
-        self._relation_collection.delete(where=where)
+        await asyncio.gather(
+            asyncio.to_thread(partial(self._chunk_collection.delete, where=where)),
+            asyncio.to_thread(partial(self._entity_collection.delete, where=where)),
+            asyncio.to_thread(partial(self._relation_collection.delete, where=where)),
+        )
 
     async def exists(self, paper_id: str) -> bool:
         """Return true when any indexed evidence exists for the paper."""
 
         where: ChromaWhere = {"paper_id": paper_id}
-        return any(
-            _result_has_ids(collection.get(where=where, limit=1, include=[]))
-            for collection in (self._chunk_collection, self._entity_collection, self._relation_collection)
+        results = await asyncio.gather(
+            asyncio.to_thread(partial(self._chunk_collection.get, where=where, limit=1, include=[])),
+            asyncio.to_thread(partial(self._entity_collection.get, where=where, limit=1, include=[])),
+            asyncio.to_thread(partial(self._relation_collection.get, where=where, limit=1, include=[])),
         )
+        return any(_result_has_ids(result) for result in results)
 
     async def _upsert(
         self,
@@ -267,7 +273,15 @@ class VectorStore:
         embeddings = await self._embedding_client.embed_texts(documents)
         if len(embeddings) != len(documents):
             raise ValueError("Embedding client returned a different number of vectors than input documents.")
-        collection.upsert(ids=ids, documents=documents, embeddings=embeddings, metadatas=metadatas)
+        await asyncio.to_thread(
+            partial(
+                collection.upsert,
+                ids=ids,
+                documents=documents,
+                embeddings=embeddings,
+                metadatas=metadatas,
+            )
+        )
 
     async def _query(
         self,
@@ -283,11 +297,14 @@ class VectorStore:
 
         query_embeddings = await self._embedding_client.embed_texts([query_text])
         where: ChromaWhere | None = {"paper_id": paper_id} if paper_id is not None else None
-        raw_result = collection.query(
-            query_embeddings=query_embeddings,
-            n_results=top_k,
-            where=where,
-            include=["documents", "metadatas", "distances"],
+        raw_result = await asyncio.to_thread(
+            partial(
+                collection.query,
+                query_embeddings=query_embeddings,
+                n_results=top_k,
+                where=where,
+                include=["documents", "metadatas", "distances"],
+            )
         )
         return _parse_query_results(raw_result, evidence_type=evidence_type)
 
