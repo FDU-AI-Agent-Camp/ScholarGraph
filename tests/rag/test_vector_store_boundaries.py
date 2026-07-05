@@ -1,0 +1,247 @@
+"""Boundary and edge-case unit tests for VectorStore and helpers."""
+
+from __future__ import annotations
+
+from typing import Any
+
+import pytest
+from backend.rag.models import PaperChunk, VectorEvidenceType
+from backend.rag.vector_store import VectorStore, clean_metadata
+
+
+class FakeEmbeddingClient:
+    async def embed_texts(self, texts: list[str]) -> list[list[float]]:
+        return [[float(len(text)), 0.0] for text in texts]
+
+
+class FakeCollection:
+    def __init__(self) -> None:
+        self.records: dict[str, dict[str, Any]] = {}
+        self.upsert_calls: int = 0
+        self.query_calls: int = 0
+        self.delete_calls: int = 0
+        self.get_calls: int = 0
+
+    def upsert(
+        self,
+        *,
+        ids: list[str],
+        documents: list[str],
+        embeddings: list[list[float]],
+        metadatas: list[dict[str, Any]],
+    ) -> None:
+        self.upsert_calls += 1
+        for index, record_id in enumerate(ids):
+            self.records[record_id] = {
+                "document": documents[index],
+                "embedding": embeddings[index],
+                "metadata": metadatas[index],
+            }
+
+    def query(
+        self,
+        *,
+        query_embeddings: list[list[float]],
+        n_results: int,
+        where: dict[str, Any] | None = None,
+        include: list[str] | None = None,
+    ) -> dict[str, Any]:
+        self.query_calls += 1
+        rows = [
+            (record_id, record)
+            for record_id, record in self.records.items()
+            if _matches_where(record["metadata"], where)
+        ][:n_results]
+        return {
+            "ids": [[record_id for record_id, _record in rows]],
+            "documents": [[record["document"] for _record_id, record in rows]],
+            "metadatas": [[record["metadata"] for _record_id, record in rows]],
+            "distances": [[float(index) for index, _row in enumerate(rows)]],
+        }
+
+    def get(
+        self,
+        *,
+        where: dict[str, Any] | None = None,
+        limit: int | None = None,
+        include: list[str] | None = None,
+    ) -> dict[str, Any]:
+        self.get_calls += 1
+        ids = [record_id for record_id, record in self.records.items() if _matches_where(record["metadata"], where)]
+        return {"ids": ids[:limit]}
+
+    def delete(self, *, where: dict[str, Any] | None = None) -> None:
+        self.delete_calls += 1
+        for record_id, record in list(self.records.items()):
+            if _matches_where(record["metadata"], where):
+                del self.records[record_id]
+
+
+def _matches_where(metadata: dict[str, Any], where: dict[str, Any] | None) -> bool:
+    if where is None:
+        return True
+    return all(metadata.get(key) == value for key, value in where.items())
+
+
+def _store() -> tuple[VectorStore, FakeCollection, FakeCollection, FakeCollection]:
+    chunk_collection = FakeCollection()
+    entity_collection = FakeCollection()
+    relation_collection = FakeCollection()
+    store = VectorStore(
+        embedding_client=FakeEmbeddingClient(),
+        chunk_collection=chunk_collection,
+        entity_collection=entity_collection,
+        relation_collection=relation_collection,
+    )
+    return store, chunk_collection, entity_collection, relation_collection
+
+
+def _chunk(paper_id: str, chunk_index: int, text: str) -> PaperChunk:
+    return PaperChunk(
+        chunk_id=f"{paper_id}:chunk:{chunk_index}",
+        paper_id=paper_id,
+        text=text,
+        section="methods",
+        chunk_index=chunk_index,
+        source="pymupdf",
+        char_start=chunk_index * 100,
+        char_end=chunk_index * 100 + len(text),
+    )
+
+
+@pytest.mark.asyncio
+async def test_index_empty_lists_does_not_call_embedding_or_upsert() -> None:
+    store, chunks, entities, relations = _store()
+
+    await store.index_chunks([])
+    await store.index_entities([])
+    await store.index_relations([])
+
+    assert chunks.upsert_calls == 0
+    assert entities.upsert_calls == 0
+    assert relations.upsert_calls == 0
+
+
+@pytest.mark.asyncio
+async def test_query_with_blank_text_returns_empty() -> None:
+    store, _chunks, _entities, _relations = _store()
+    await store.index_chunks([_chunk("paper-1", 0, "text")])
+
+    results = await store.query_chunks("   ", paper_id="paper-1", top_k=5)
+    assert results == []
+
+
+@pytest.mark.asyncio
+async def test_query_with_zero_top_k_returns_empty() -> None:
+    store, _chunks, _entities, _relations = _store()
+    await store.index_chunks([_chunk("paper-1", 0, "text")])
+
+    results = await store.query_chunks("text", paper_id="paper-1", top_k=0)
+    assert results == []
+
+
+@pytest.mark.asyncio
+async def test_exists_returns_false_for_unknown_paper() -> None:
+    store, _chunks, _entities, _relations = _store()
+    assert await store.exists("unknown-paper") is False
+
+
+@pytest.mark.asyncio
+async def test_delete_by_paper_is_safe_when_no_records_exist() -> None:
+    store, chunks, entities, relations = _store()
+
+    await store.delete_by_paper("unknown-paper")
+
+    assert chunks.delete_calls == 1
+    assert entities.delete_calls == 1
+    assert relations.delete_calls == 1
+
+
+@pytest.mark.asyncio
+async def test_query_without_paper_id_returns_all_records_across_papers() -> None:
+    store, _chunks, _entities, _relations = _store()
+    await store.index_chunks([_chunk("paper-1", 0, "alpha"), _chunk("paper-2", 0, "beta")])
+
+    results = await store.query_chunks("alpha", paper_id=None, top_k=5)
+
+    assert len(results) == 2
+
+
+@pytest.mark.asyncio
+async def test_clean_metadata_handles_empty_and_nested_values() -> None:
+    assert clean_metadata({}) == {}
+    assert clean_metadata({"none": None, "empty": ""}) == {"empty": ""}
+    assert clean_metadata({"list": [1, 2, 3]}) == {"list": "[1, 2, 3]"}
+
+
+@pytest.mark.asyncio
+async def test_replace_paper_index_with_empty_entities_and_relations_still_indexes_chunks() -> None:
+    store, chunks, entities, relations = _store()
+
+    await store.replace_paper_index(
+        "paper-1",
+        chunks=[_chunk("paper-1", 0, "chunk text")],
+        entities=[],
+        relations=[],
+    )
+
+    assert "paper-1:chunk:0" in chunks.records
+    assert entities.upsert_calls == 0
+    assert relations.upsert_calls == 0
+
+
+@pytest.mark.asyncio
+async def test_embedding_count_mismatch_raises_value_error() -> None:
+    class MisbehavingEmbeddingClient:
+        async def embed_texts(self, texts: list[str]) -> list[list[float]]:
+            return [[1.0, 2.0]]  # one vector fewer than input
+
+    store = VectorStore(
+        embedding_client=MisbehavingEmbeddingClient(),
+        chunk_collection=FakeCollection(),
+        entity_collection=FakeCollection(),
+        relation_collection=FakeCollection(),
+    )
+
+    with pytest.raises(ValueError, match="different number of vectors"):
+        await store.index_chunks([_chunk("paper-1", 0, "text"), _chunk("paper-1", 1, "more")])
+
+
+@pytest.mark.asyncio
+async def test_query_result_parses_missing_distance_as_none() -> None:
+    class NoDistanceCollection(FakeCollection):
+        def query(
+            self,
+            *,
+            query_embeddings: list[list[float]],
+            n_results: int,
+            where: dict[str, Any] | None = None,
+            include: list[str] | None = None,
+        ) -> dict[str, Any]:
+            del query_embeddings, include
+            rows = [
+                (record_id, record)
+                for record_id, record in self.records.items()
+                if _matches_where(record["metadata"], where)
+            ][:n_results]
+            return {
+                "ids": [[record_id for record_id, _record in rows]],
+                "documents": [[record["document"] for _record_id, record in rows]],
+                "metadatas": [[record["metadata"] for _record_id, record in rows]],
+                "distances": [None],  # malformed response
+            }
+
+    chunk_collection = NoDistanceCollection()
+    store = VectorStore(
+        embedding_client=FakeEmbeddingClient(),
+        chunk_collection=chunk_collection,
+        entity_collection=FakeCollection(),
+        relation_collection=FakeCollection(),
+    )
+    await store.index_chunks([_chunk("paper-1", 0, "text")])
+
+    results = await store.query_chunks("text", paper_id="paper-1", top_k=5)
+
+    assert len(results) == 1
+    assert results[0].distance is None
+    assert results[0].evidence_type == VectorEvidenceType.CHUNK
