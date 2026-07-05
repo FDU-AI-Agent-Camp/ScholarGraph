@@ -218,3 +218,203 @@ def test_clean_metadata_removes_none_and_serializes_nested_values() -> None:
         "nested": '{"node": "n1"}',
         "count": 3,
     }
+
+
+# ---------------------------------------------------------------------------
+# Async thread-pool behavior tests
+# ---------------------------------------------------------------------------
+
+import asyncio  # noqa: E402
+import time  # noqa: E402
+
+
+class SlowFakeCollection(FakeCollection):
+    """Fake collection that blocks the calling thread for a fixed delay."""
+
+    def __init__(self, delay_seconds: float = 0.05) -> None:
+        super().__init__()
+        self.delay_seconds = delay_seconds
+        self.delete_calls = 0
+        self.get_calls = 0
+        self.upsert_calls = 0
+        self.query_calls = 0
+
+    def delete(self, *, where: ChromaWhere | None = None) -> None:
+        self.delete_calls += 1
+        time.sleep(self.delay_seconds)
+        super().delete(where=where)
+
+    def get(
+        self,
+        *,
+        where: ChromaWhere | None = None,
+        limit: int | None = None,
+        include: list[str] | None = None,
+    ) -> dict[str, Any]:
+        self.get_calls += 1
+        time.sleep(self.delay_seconds)
+        return super().get(where=where, limit=limit, include=include)
+
+    def upsert(
+        self,
+        *,
+        ids: list[str],
+        documents: list[str],
+        embeddings: list[list[float]],
+        metadatas: list[ChromaMetadata],
+    ) -> None:
+        self.upsert_calls += 1
+        time.sleep(self.delay_seconds)
+        super().upsert(ids=ids, documents=documents, embeddings=embeddings, metadatas=metadatas)
+
+    def query(
+        self,
+        *,
+        query_embeddings: list[list[float]],
+        n_results: int,
+        where: ChromaWhere | None = None,
+        include: list[str] | None = None,
+    ) -> dict[str, Any]:
+        self.query_calls += 1
+        time.sleep(self.delay_seconds)
+        return super().query(
+            query_embeddings=query_embeddings,
+            n_results=n_results,
+            where=where,
+            include=include,
+        )
+
+
+def _slow_store(
+    delay_seconds: float = 0.05,
+) -> tuple[VectorStore, SlowFakeCollection, SlowFakeCollection, SlowFakeCollection, FakeEmbeddingClient]:
+    chunk_collection = SlowFakeCollection(delay_seconds=delay_seconds)
+    entity_collection = SlowFakeCollection(delay_seconds=delay_seconds)
+    relation_collection = SlowFakeCollection(delay_seconds=delay_seconds)
+    embedding_client = FakeEmbeddingClient()
+    store = VectorStore(
+        embedding_client=embedding_client,
+        chunk_collection=chunk_collection,
+        entity_collection=entity_collection,
+        relation_collection=relation_collection,
+    )
+    return store, chunk_collection, entity_collection, relation_collection, embedding_client
+
+
+@pytest.mark.asyncio
+async def test_delete_by_paper_does_not_block_event_loop() -> None:
+    """If delete_by_paper ran synchronously, the background coroutine could not finish first."""
+
+    store, chunks, entities, relations, _embedding_client = _slow_store(delay_seconds=0.05)
+    await store.index_chunks([_chunk("paper-1", 0, "text")])
+
+    marker: list[str] = []
+
+    async def background_task() -> None:
+        marker.append("started")
+        await asyncio.sleep(0.005)
+        marker.append("done")
+
+    task = asyncio.create_task(background_task())
+    await store.delete_by_paper("paper-1")
+    await task
+
+    assert "done" in marker
+    assert chunks.records == {}
+    # entities/relations have no records but were still queried for deletion.
+    assert entities.delete_calls >= 1
+    assert relations.delete_calls >= 1
+
+
+@pytest.mark.asyncio
+async def test_delete_by_paper_runs_collection_deletes_concurrently() -> None:
+    """Three slow deletes should complete in roughly one delay, not three."""
+
+    store, chunks, entities, relations, _embedding_client = _slow_store(delay_seconds=0.05)
+    await store.index_chunks([_chunk("paper-1", 0, "text")])
+
+    start = time.perf_counter()
+    await store.delete_by_paper("paper-1")
+    elapsed = time.perf_counter() - start
+
+    # Concurrent: should be < 0.12s even with scheduling overhead; sequential would be ~0.15s.
+    assert elapsed < 0.12
+    assert chunks.delete_calls >= 1
+    assert entities.delete_calls >= 1
+    assert relations.delete_calls >= 1
+
+
+@pytest.mark.asyncio
+async def test_exists_does_not_block_event_loop() -> None:
+    store, chunks, entities, relations, _embedding_client = _slow_store(delay_seconds=0.05)
+    await store.replace_paper_index("paper-1", chunks=[_chunk("paper-1", 0, "text")], entities=[], relations=[])
+
+    marker: list[str] = []
+
+    async def background_task() -> None:
+        marker.append("started")
+        await asyncio.sleep(0.005)
+        marker.append("done")
+
+    task = asyncio.create_task(background_task())
+    result = await store.exists("paper-1")
+    await task
+
+    assert result is True
+    assert "done" in marker
+    assert chunks.get_calls == 1
+    assert entities.get_calls == 1
+    assert relations.get_calls == 1
+
+
+@pytest.mark.asyncio
+async def test_exists_runs_collection_gets_concurrently() -> None:
+    store, chunks, _entities, _relations, _embedding_client = _slow_store(delay_seconds=0.05)
+    await store.replace_paper_index("paper-1", chunks=[_chunk("paper-1", 0, "text")], entities=[], relations=[])
+
+    start = time.perf_counter()
+    await store.exists("paper-1")
+    elapsed = time.perf_counter() - start
+
+    assert elapsed < 0.12
+    assert chunks.get_calls == 1
+
+
+@pytest.mark.asyncio
+async def test_query_runs_in_thread_and_does_not_block_event_loop() -> None:
+    store, _chunks, _entities, _relations, _embedding_client = _slow_store(delay_seconds=0.05)
+    await store.index_chunks([_chunk("paper-1", 0, "queryable text")])
+
+    marker: list[str] = []
+
+    async def background_task() -> None:
+        marker.append("started")
+        await asyncio.sleep(0.005)
+        marker.append("done")
+
+    task = asyncio.create_task(background_task())
+    results = await store.query_chunks("query", paper_id="paper-1", top_k=5)
+    await task
+
+    assert len(results) == 1
+    assert "done" in marker
+
+
+@pytest.mark.asyncio
+async def test_upsert_runs_in_thread_and_does_not_block_event_loop() -> None:
+    store, chunks, _entities, _relations, _embedding_client = _slow_store(delay_seconds=0.05)
+
+    marker: list[str] = []
+
+    async def background_task() -> None:
+        marker.append("started")
+        await asyncio.sleep(0.005)
+        marker.append("done")
+
+    task = asyncio.create_task(background_task())
+    await store.index_chunks([_chunk("paper-1", 0, "text")])
+    await task
+
+    assert "paper-1:chunk:0" in chunks.records
+    assert chunks.upsert_calls == 1
+    assert "done" in marker
