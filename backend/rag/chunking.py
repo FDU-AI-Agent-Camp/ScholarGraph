@@ -10,6 +10,7 @@ from backend.rag.models import PaperChunk
 DEFAULT_CHUNK_SIZE_CHARS = 1500
 DEFAULT_CHUNK_OVERLAP_RATIO = 0.20
 DEFAULT_MIN_CHUNK_CHARS = 200
+DEFAULT_MIN_SOFT_BOUNDARY_WINDOW_CHARS = 200
 DEFAULT_SOURCE = "pymupdf"
 
 SECTION_ALIASES: dict[str, str] = {
@@ -62,6 +63,7 @@ def chunk_text(
     chunk_size_chars: int = DEFAULT_CHUNK_SIZE_CHARS,
     chunk_overlap_ratio: float = DEFAULT_CHUNK_OVERLAP_RATIO,
     min_chunk_chars: int = DEFAULT_MIN_CHUNK_CHARS,
+    min_soft_boundary_window_chars: int = DEFAULT_MIN_SOFT_BOUNDARY_WINDOW_CHARS,
     include_references: bool = False,
 ) -> list[PaperChunk]:
     """Split paper text into deterministic, section-aware RAG chunks."""
@@ -71,6 +73,7 @@ def chunk_text(
         return []
 
     _validate_chunk_options(chunk_size_chars, chunk_overlap_ratio, min_chunk_chars)
+    _validate_soft_boundary_window(min_soft_boundary_window_chars, chunk_size_chars)
     sections = _section_slices(normalized_text)
     raw_chunks: list[_TextSlice] = []
     for section_slice in sections:
@@ -82,6 +85,7 @@ def chunk_text(
                 section_slice,
                 chunk_size_chars=chunk_size_chars,
                 chunk_overlap_ratio=chunk_overlap_ratio,
+                min_soft_boundary_window_chars=min_soft_boundary_window_chars,
             )
         )
 
@@ -116,6 +120,12 @@ def _validate_chunk_options(chunk_size_chars: int, chunk_overlap_ratio: float, m
         raise ValueError("chunk_overlap_ratio must be in [0, 1).")
     if min_chunk_chars < 0:
         raise ValueError("min_chunk_chars must be non-negative.")
+
+
+def _validate_soft_boundary_window(min_soft_boundary_window_chars: int, chunk_size_chars: int) -> None:
+    del chunk_size_chars  # validated implicitly by _find_soft_boundary clamping
+    if min_soft_boundary_window_chars <= 0:
+        raise ValueError("min_soft_boundary_window_chars must be positive.")
 
 
 def _chunk_id(paper_id: str, chunk_index: int) -> str:
@@ -163,6 +173,7 @@ def _split_slice(
     *,
     chunk_size_chars: int,
     chunk_overlap_ratio: float,
+    min_soft_boundary_window_chars: int,
 ) -> list[_TextSlice]:
     if text_slice.end - text_slice.start <= chunk_size_chars:
         return [text_slice]
@@ -173,7 +184,13 @@ def _split_slice(
     start = text_slice.start
     while start < text_slice.end:
         target_end = min(start + chunk_size_chars, text_slice.end)
-        end = _find_soft_boundary(text, start, target_end, text_slice.end)
+        end = _find_soft_boundary(
+            text,
+            start,
+            target_end,
+            text_slice.end,
+            min_soft_boundary_window_chars=min_soft_boundary_window_chars,
+        )
         trimmed_start, trimmed_end = _trim_bounds(text, start, end)
         if trimmed_start < trimmed_end:
             chunks.append(_TextSlice(section=text_slice.section, start=trimmed_start, end=trimmed_end))
@@ -183,11 +200,18 @@ def _split_slice(
     return chunks
 
 
-def _find_soft_boundary(text: str, start: int, target_end: int, hard_end: int) -> int:
+def _find_soft_boundary(
+    text: str,
+    start: int,
+    target_end: int,
+    hard_end: int,
+    *,
+    min_soft_boundary_window_chars: int,
+) -> int:
     if target_end >= hard_end:
         return hard_end
 
-    min_end = min(start + max(200, (target_end - start) // 2), target_end)
+    min_end = min(start + max(min_soft_boundary_window_chars, (target_end - start) // 2), target_end)
     boundary_chars = ("\n\n", ". ", "\u3002", "? ", "! ", "\uff1f", "\uff01", "\n")
     window = text[min_end:target_end]
     for marker in boundary_chars:

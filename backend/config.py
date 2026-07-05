@@ -260,29 +260,17 @@ class Settings(BaseSettings):
         validation_alias="EMBEDDING_OLLAMA_URL",
     )
 
+    # RAG / ChromaDB settings
     chromadb_path: str = Field(default="./data/chroma", validation_alias="CHROMADB_PATH")
-    chromadb_chunk_collection: str = Field(
-        default="paper_chunks",
-        validation_alias="CHROMADB_CHUNK_COLLECTION",
-    )
-    chromadb_entity_collection: str = Field(
-        default="paper_entities",
-        validation_alias="CHROMADB_ENTITY_COLLECTION",
-    )
+    chromadb_chunk_collection: str = Field(default="paper_chunks", validation_alias="CHROMADB_CHUNK_COLLECTION")
+    chromadb_entity_collection: str = Field(default="paper_entities", validation_alias="CHROMADB_ENTITY_COLLECTION")
     chromadb_relation_collection: str = Field(
-        default="paper_relations",
-        validation_alias="CHROMADB_RELATION_COLLECTION",
+        default="paper_relations", validation_alias="CHROMADB_RELATION_COLLECTION"
     )
-    rag_chunk_size_chars: int = Field(
-        default=1500,
-        ge=200,
-        validation_alias="RAG_CHUNK_SIZE_CHARS",
-    )
-    rag_chunk_overlap_ratio: float = Field(
-        default=0.20,
-        ge=0.0,
-        lt=1.0,
-        validation_alias="RAG_CHUNK_OVERLAP_RATIO",
+    rag_chunk_size_chars: int = Field(default=1500, ge=200, validation_alias="RAG_CHUNK_SIZE_CHARS")
+    rag_chunk_overlap_ratio: float = Field(default=0.20, ge=0.0, lt=1.0, validation_alias="RAG_CHUNK_OVERLAP_RATIO")
+    rag_chunk_min_soft_boundary_window_chars: int = Field(
+        default=200, ge=50, validation_alias="RAG_CHUNK_MIN_SOFT_BOUNDARY_WINDOW_CHARS"
     )
     rag_top_k_chunks: int = Field(default=5, ge=1, validation_alias="RAG_TOP_K_CHUNKS")
     rag_top_k_entities: int = Field(default=5, ge=1, validation_alias="RAG_TOP_K_ENTITIES")

@@ -56,3 +56,98 @@ def test_graph_to_relations_preserves_edge_ids_and_labels_context() -> None:
     assert relation.relation_type == "SUPPORTS"
     assert "Ablation table --[SUPPORTS]--> Improves evidence retrieval" in relation.description
     assert "citation precision" in relation.description
+
+
+def test_graph_to_entities_uses_label_and_type_as_minimal_fallback() -> None:
+    graph = UnifiedPaperGraph(
+        paper_id="paper-empty",
+        paradigm=Paradigm.STEM,
+        nodes=[GraphNode(id="n_claim", label="Improves retrieval", type=NodeType.CLAIM, data={})],
+        edges=[],
+    )
+
+    entities = graph_to_entities("paper-empty", graph)
+
+    assert entities[0].description == "Improves retrieval (type: Claim)."
+
+
+def test_graph_to_entities_excludes_noise_fields_from_description() -> None:
+    """source_span and structural metadata must not pollute the embedding text."""
+
+    graph = UnifiedPaperGraph(
+        paper_id="paper-noise",
+        paradigm=Paradigm.STEM,
+        nodes=[
+            GraphNode(
+                id="n_method",
+                label="PCA",
+                type=NodeType.METHOD,
+                data={
+                    "rationale": "Reduces dimensionality.",
+                    "source_span": "We apply PCA to reduce dimensions.",
+                    "bbox": {"x": 10, "y": 20},
+                    "coords": [1, 2, 3],
+                },
+            )
+        ],
+        edges=[],
+    )
+
+    entity = graph_to_entities("paper-noise", graph)[0]
+
+    assert "Reduces dimensionality." in entity.description
+    assert "source_span" not in entity.description
+    assert "bbox" not in entity.description
+    assert "coords" not in entity.description
+    assert "{" not in entity.description  # no raw JSON
+
+
+def test_graph_to_entities_deduplicates_repeated_text() -> None:
+    graph = UnifiedPaperGraph(
+        paper_id="paper-dedup",
+        paradigm=Paradigm.STEM,
+        nodes=[
+            GraphNode(
+                id="n_method",
+                label="PCA",
+                type=NodeType.METHOD,
+                data={
+                    "rationale": "Reduces dimensionality.",
+                    "description": "Reduces dimensionality.",
+                    "summary": "Reduces dimensionality.",
+                },
+            )
+        ],
+        edges=[],
+    )
+
+    entity = graph_to_entities("paper-dedup", graph)[0]
+
+    # The sentence should appear exactly once, not three times.
+    assert entity.description.count("Reduces dimensionality.") == 1
+
+
+def test_graph_to_entities_prioritizes_whitelisted_semantic_keys() -> None:
+    graph = UnifiedPaperGraph(
+        paper_id="paper-priority",
+        paradigm=Paradigm.STEM,
+        nodes=[
+            GraphNode(
+                id="n_method",
+                label="PCA",
+                type=NodeType.METHOD,
+                data={
+                    "description": "Principal Component Analysis.",
+                    "summary": "A linear dimensionality reduction technique.",
+                    "evidence": "Used in Table 1.",
+                },
+            )
+        ],
+        edges=[],
+    )
+
+    entity = graph_to_entities("paper-priority", graph)[0]
+
+    assert "Principal Component Analysis." in entity.description
+    assert "A linear dimensionality reduction technique." in entity.description
+    assert "Used in Table 1." in entity.description

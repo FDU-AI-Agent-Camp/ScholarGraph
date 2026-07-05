@@ -70,3 +70,35 @@ def test_chunk_text_validates_options() -> None:
 
     with pytest.raises(ValueError, match="chunk_overlap_ratio"):
         chunk_text("paper-bad", "text", chunk_overlap_ratio=1.0)
+
+
+def test_chunk_text_validates_soft_boundary_window() -> None:
+    with pytest.raises(ValueError, match="min_soft_boundary_window_chars"):
+        chunk_text("paper-bad", "text", min_soft_boundary_window_chars=0)
+
+    # A window larger than the chunk is silently clamped; no error is raised.
+    chunks = chunk_text("paper-ok", "text", chunk_size_chars=3, min_soft_boundary_window_chars=10)
+    assert chunks
+
+
+def test_chunk_text_uses_custom_soft_boundary_window() -> None:
+    text = "Methods\n" + "word " * 100  # long section
+
+    default_chunks = chunk_text(
+        "paper-default",
+        text,
+        chunk_size_chars=200,
+        min_soft_boundary_window_chars=50,
+    )
+    large_window_chunks = chunk_text(
+        "paper-large-window",
+        text,
+        chunk_size_chars=200,
+        min_soft_boundary_window_chars=150,
+    )
+
+    assert default_chunks
+    assert large_window_chunks
+    # A larger minimum window generally pushes boundaries later, so the first chunk
+    # should not be shorter than with the default window.
+    assert len(large_window_chunks[0].text) >= len(default_chunks[0].text)
