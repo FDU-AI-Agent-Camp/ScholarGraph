@@ -490,5 +490,8 @@ def _should_ignore_dotenv() -> bool:
 @lru_cache
 def get_settings() -> Settings:
     if _should_ignore_dotenv():
-        return Settings.model_validate({})
+        # _env_file=None prevents pydantic-settings from loading repository .env
+        # during tests, so monkeypatched environment variables stay deterministic.
+        # pydantic_settings accepts _env_file at runtime but pyright cannot see it.
+        return Settings(_env_file=None)  # type: ignore[call-arg]
     return Settings()
