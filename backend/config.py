@@ -259,6 +259,12 @@ class Settings(BaseSettings):
         default="http://localhost:11434",
         validation_alias="EMBEDDING_OLLAMA_URL",
     )
+    embedding_batch_size: int = Field(
+        default=32,
+        ge=1,
+        le=1024,
+        validation_alias="EMBEDDING_BATCH_SIZE",
+    )
 
     # RAG / ChromaDB settings
     chromadb_path: str = Field(default="./data/chroma", validation_alias="CHROMADB_PATH")

@@ -245,3 +245,77 @@ async def test_query_result_parses_missing_distance_as_none() -> None:
     assert len(results) == 1
     assert results[0].distance is None
     assert results[0].evidence_type == VectorEvidenceType.CHUNK
+
+
+class BatchRecordingEmbeddingClient:
+    """Records each embed_texts call so batching behavior can be asserted."""
+
+    def __init__(self, batch_size: int) -> None:
+        self._batch_size = batch_size
+        self.calls: list[list[str]] = []
+
+    async def embed_texts(self, texts: list[str]) -> list[list[float]]:
+        if len(texts) > self._batch_size:
+            raise RuntimeError(f"batch size exceeded: {len(texts)} > {self._batch_size}")
+        self.calls.append(texts)
+        return [[float(len(text)), 0.0] for text in texts]
+
+
+@pytest.mark.asyncio
+async def test_upsert_batches_embedding_calls_by_configured_batch_size() -> None:
+    """Long document lists are split into embedding batches to respect API limits."""
+
+    batch_size = 3
+    embedding_client = BatchRecordingEmbeddingClient(batch_size=batch_size)
+    chunk_collection = FakeCollection()
+    store = VectorStore(
+        embedding_client=embedding_client,
+        chunk_collection=chunk_collection,
+        entity_collection=FakeCollection(),
+        relation_collection=FakeCollection(),
+        settings=_settings_with_embedding_batch_size(batch_size),
+    )
+
+    documents = [f"doc-{index}" for index in range(7)]
+    chunks = [_chunk("paper-1", index, text) for index, text in enumerate(documents)]
+    await store.index_chunks(chunks)
+
+    assert len(embedding_client.calls) == 3  # 3 + 3 + 1
+    assert [len(call) for call in embedding_client.calls] == [3, 3, 1]
+    assert sum(len(call) for call in embedding_client.calls) == 7
+    assert chunk_collection.upsert_calls == 1
+    assert len(chunk_collection.records) == 7
+
+
+@pytest.mark.asyncio
+async def test_upsert_single_batch_when_documents_fit() -> None:
+    """No unnecessary batching when the document count is below the batch size."""
+
+    batch_size = 10
+    embedding_client = BatchRecordingEmbeddingClient(batch_size=batch_size)
+    chunk_collection = FakeCollection()
+    store = VectorStore(
+        embedding_client=embedding_client,
+        chunk_collection=chunk_collection,
+        entity_collection=FakeCollection(),
+        relation_collection=FakeCollection(),
+        settings=_settings_with_embedding_batch_size(batch_size),
+    )
+
+    await store.index_chunks([_chunk("paper-1", 0, "short")])
+
+    assert len(embedding_client.calls) == 1
+    assert chunk_collection.upsert_calls == 1
+
+
+def _settings_with_embedding_batch_size(batch_size: int):
+    """Build a Settings instance with a custom embedding batch size for tests."""
+
+    from backend.config import Settings
+
+    return Settings.model_validate(
+        {
+            "embedding_provider": "openai",
+            "embedding_batch_size": batch_size,
+        }
+    )

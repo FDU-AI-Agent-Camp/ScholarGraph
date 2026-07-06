@@ -64,15 +64,15 @@ class VectorStore:
         self._embedding_client = embedding_client or _default_embedding_client(settings)
         self._paper_service = paper_service
         self._pending_cleanups: dict[str, set[asyncio.Task[None]]] = {}
+        from backend.config import get_settings
+
+        self._settings = settings or get_settings()
         if chunk_collection is not None and entity_collection is not None and relation_collection is not None:
             self._chunk_collection = chunk_collection
             self._entity_collection = entity_collection
             self._relation_collection = relation_collection
             return
 
-        from backend.config import get_settings
-
-        self._settings = settings or get_settings()
         resolved_chroma_path = chroma_path or self._settings.chromadb_path
         if chroma_path is None and "pytest" in sys.modules:
             raise RuntimeError(
@@ -388,7 +388,7 @@ class VectorStore:
     ) -> None:
         if not ids:
             return
-        embeddings = await self._embedding_client.embed_texts(documents)
+        embeddings = await self._embed_in_batches(documents)
         if len(embeddings) != len(documents):
             raise ValueError("Embedding client returned a different number of vectors than input documents.")
         await asyncio.to_thread(
@@ -400,6 +400,20 @@ class VectorStore:
                 metadatas=metadatas,
             )
         )
+
+    async def _embed_in_batches(self, documents: list[str]) -> list[list[float]]:
+        """Embed documents in configurable batches to avoid API token/throughput limits."""
+
+        batch_size = getattr(self._settings, "embedding_batch_size", 32)
+        if len(documents) <= batch_size:
+            return await self._embedding_client.embed_texts(documents)
+
+        embeddings: list[list[float]] = []
+        for index in range(0, len(documents), batch_size):
+            batch = documents[index : index + batch_size]
+            batch_embeddings = await self._embedding_client.embed_texts(batch)
+            embeddings.extend(batch_embeddings)
+        return embeddings
 
     async def _query(
         self,
