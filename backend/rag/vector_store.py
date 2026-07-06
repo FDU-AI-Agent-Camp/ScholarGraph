@@ -491,5 +491,3 @@ class VectorStore:
             )
         )
         return _parse_query_results(raw_result, evidence_type=evidence_type)
-
-

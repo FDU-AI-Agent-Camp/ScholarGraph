@@ -40,6 +40,7 @@ async def _embed_in_batches(
         embeddings.extend(batch_embeddings)
     return embeddings
 
+
 ChromaMetadataValue = str | int | float | bool
 ChromaMetadata = dict[str, ChromaMetadataValue]
 RawMetadata = dict[str, Any]
