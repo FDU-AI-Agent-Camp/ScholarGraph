@@ -162,13 +162,22 @@ async def test_query_with_invalid_paper_id_raises_value_error() -> None:
     store, _chunks, _entities, _relations = _store()
     await store.index_chunks([_chunk("paper-1", 0, "alpha")])
 
-    invalid_values: list[Any] = [None, "", 123, []]
+    invalid_values: list[Any] = [None, "", "   ", 123, []]
     for invalid_value in invalid_values:
         with pytest.raises(
             ValueError,
             match="单篇 QA 路径下严禁泄露全库检索权限",
         ):
             await store.query_chunks("alpha", paper_id=invalid_value, top_k=5)
+
+
+@pytest.mark.asyncio
+async def test_query_entities_and_relations_also_reject_invalid_paper_id() -> None:
+    store, _chunks, _entities, _relations = _store()
+
+    for method in (store.query_entities, store.query_relations):
+        with pytest.raises(ValueError, match="单篇 QA 路径下严禁泄露全库检索权限"):
+            await method("x", paper_id=None)  # type: ignore[arg-type]
 
 
 @pytest.mark.asyncio
@@ -254,6 +263,58 @@ async def test_replace_paper_index_rejects_cross_paper_evidence() -> None:
             entities=[],
             relations=[relation],
         )
+
+
+@pytest.mark.asyncio
+async def test_replace_paper_index_accepts_all_empty_evidence_lists() -> None:
+    """Replacing with no evidence is a valid no-op for the vector store."""
+
+    store, chunks, entities, relations = _store()
+
+    await store.replace_paper_index("paper-1", chunks=[], entities=[], relations=[])
+
+    assert chunks.upsert_calls == 0
+    assert entities.upsert_calls == 0
+    assert relations.upsert_calls == 0
+
+
+@pytest.mark.asyncio
+async def test_replace_paper_index_rejects_mixed_legal_and_foreign_chunks() -> None:
+    """A single foreign item in an otherwise valid batch must block the whole replace."""
+
+    store, chunks, entities, relations = _store()
+
+    with pytest.raises(ValueError, match="chunk paper_id mismatch"):
+        await store.replace_paper_index(
+            "paper-1",
+            chunks=[_chunk("paper-1", 0, "local"), _chunk("paper-2", 1, "foreign"), _chunk("paper-1", 2, "local")],
+            entities=[],
+            relations=[],
+        )
+
+    # Validate short-circuit behavior: no collection wrote anything.
+    assert chunks.upsert_calls == 0
+    assert entities.upsert_calls == 0
+    assert relations.upsert_calls == 0
+
+
+@pytest.mark.asyncio
+async def test_replace_paper_index_without_paper_service_validates_paper_ids() -> None:
+    """The legacy fallback path must also enforce paper_id consistency."""
+
+    store, chunks, entities, relations = _store()
+
+    with pytest.raises(ValueError, match="chunk paper_id mismatch"):
+        await store.replace_paper_index(
+            "paper-1",
+            chunks=[_chunk("paper-2", 0, "foreign chunk")],
+            entities=[],
+            relations=[],
+        )
+
+    assert chunks.upsert_calls == 0
+    assert entities.upsert_calls == 0
+    assert relations.upsert_calls == 0
 
 
 @pytest.mark.asyncio
@@ -372,6 +433,85 @@ async def test_upsert_single_batch_when_documents_fit() -> None:
 
     assert len(embedding_client.calls) == 1
     assert chunk_collection.upsert_calls == 1
+
+
+@pytest.mark.asyncio
+async def test_validate_evidence_paper_ids_boundary_cases() -> None:
+    """Direct unit tests for the paper_id consistency helper."""
+
+    from backend.rag.vector_store import _validate_evidence_paper_ids
+
+    local_chunk = _chunk("paper-1", 0, "local")
+    local_entity = PaperEntity(
+        entity_id="n1",
+        paper_id="paper-1",
+        label="X",
+        node_type="Method",
+        description="x",
+    )
+    local_relation = PaperRelation(
+        relation_id="e1",
+        paper_id="paper-1",
+        source_id="n1",
+        target_id="n2",
+        relation_type="SUPPORTS",
+        description="x",
+    )
+
+    # Empty evidence lists are trivially consistent.
+    _validate_evidence_paper_ids("paper-1", [], [], [])
+
+    # All matching items pass.
+    _validate_evidence_paper_ids(
+        "paper-1",
+        [local_chunk],
+        [local_entity],
+        [local_relation],
+    )
+
+    # Foreign chunk is caught immediately.
+    with pytest.raises(ValueError, match="chunk paper_id mismatch"):
+        _validate_evidence_paper_ids(
+            "paper-1",
+            [_chunk("paper-2", 0, "foreign"), local_chunk],
+            [],
+            [],
+        )
+
+    # Foreign entity is caught even when chunks are fine.
+    with pytest.raises(ValueError, match="entity paper_id mismatch"):
+        _validate_evidence_paper_ids(
+            "paper-1",
+            [local_chunk],
+            [
+                PaperEntity(
+                    entity_id="n_bad",
+                    paper_id="paper-2",
+                    label="Bad",
+                    node_type="Method",
+                    description="bad",
+                )
+            ],
+            [],
+        )
+
+    # Foreign relation is caught even when chunks and entities are fine.
+    with pytest.raises(ValueError, match="relation paper_id mismatch"):
+        _validate_evidence_paper_ids(
+            "paper-1",
+            [local_chunk],
+            [local_entity],
+            [
+                PaperRelation(
+                    relation_id="e_bad",
+                    paper_id="paper-2",
+                    source_id="n1",
+                    target_id="n2",
+                    relation_type="SUPPORTS",
+                    description="bad",
+                )
+            ],
+        )
 
 
 def _settings_with_embedding_batch_size(batch_size: int):

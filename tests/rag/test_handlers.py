@@ -104,8 +104,10 @@ async def test_index_paper_for_rag_rejects_mismatched_graph_paper_id(
     mock_paper_service.record_extract_warnings.assert_not_called()
 
 
+@pytest.mark.parametrize("invalid_paper_id", [None, "", "   ", 123])
 @pytest.mark.asyncio
 async def test_index_paper_for_rag_rejects_invalid_paper_id(
+    invalid_paper_id: Any,
     sample_graph: UnifiedPaperGraph,
     mock_paper_service: MagicMock,
 ) -> None:
@@ -113,9 +115,34 @@ async def test_index_paper_for_rag_rejects_invalid_paper_id(
 
     with pytest.raises(ValueError, match="paper_id must be a non-empty string"):
         await index_paper_for_rag(
-            "",
+            invalid_paper_id,  # type: ignore[arg-type]
             full_text="Methods\nWe propose a hybrid chunker.",
             graph=sample_graph,
+            vector_store=store,
+        )
+
+    assert not store.indexed
+    mock_paper_service.record_extract_warnings.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_index_paper_for_rag_rejects_mismatched_graph_paper_id_variants(
+    sample_graph: UnifiedPaperGraph,
+    mock_paper_service: MagicMock,
+) -> None:
+    store = FakeVectorStore()
+
+    mismatched_graph = UnifiedPaperGraph(
+        paper_id="other-paper",
+        paradigm=sample_graph.paradigm,
+        nodes=list(sample_graph.nodes),
+        edges=list(sample_graph.edges),
+    )
+    with pytest.raises(ValueError, match="graph.paper_id .* does not match paper_id"):
+        await index_paper_for_rag(
+            "paper-1",
+            full_text="Methods\nWe propose a hybrid chunker.",
+            graph=mismatched_graph,
             vector_store=store,
         )
 
