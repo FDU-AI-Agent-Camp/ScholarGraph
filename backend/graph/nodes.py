@@ -219,6 +219,7 @@ async def _index_paper_for_rag_async(
     from backend.config import get_settings
     from backend.rag.handlers import index_paper_for_rag
     from backend.rag.vector_store import VectorStore
+    from backend.services.paper_service import get_paper_service
 
     _mark_progress(
         WorkflowState(paper_id=paper_id),
@@ -226,7 +227,10 @@ async def _index_paper_for_rag_async(
         message=RAG_INDEX_STAGE_MESSAGE,
     )
     settings = get_settings()
-    vector_store = VectorStore(chroma_path=settings.chromadb_path)
+    vector_store = VectorStore(
+        chroma_path=settings.chromadb_path,
+        paper_service=get_paper_service(),
+    )
     await index_paper_for_rag(
         paper_id,
         full_text=full_text,

@@ -32,7 +32,7 @@ async def index_paper_for_rag(
 
     from backend.config import get_settings
 
-    store = vector_store or VectorStore()
+    store = vector_store or VectorStore(paper_service=get_paper_service())
     try:
         settings = get_settings()
         chunks = chunk_text(
