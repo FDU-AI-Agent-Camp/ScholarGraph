@@ -17,6 +17,8 @@ from backend.rag.models import (
 )
 
 if TYPE_CHECKING:
+    from chromadb.api import ClientAPI
+
     from backend.config import Settings
 
 ChromaMetadataValue = str | int | float | bool
@@ -331,12 +333,15 @@ def _relation_chroma_id(paper_id: str, relation_id: str) -> str:
     return f"{paper_id}:relation:{relation_id}"
 
 
-def _persistent_chroma_client(path: str) -> Any:
+def _persistent_chroma_client(path: str) -> ClientAPI:
+    """Create a local persistent Chroma client with a strongly typed return."""
     try:
         import chromadb
     except ImportError as exc:
         raise RuntimeError("chromadb is required for VectorStore; install project dependencies first.") from exc
-    return chromadb.PersistentClient(path=path)
+    # PersistentClient returns a concrete ClientAPI implementation, but pyright
+    # cannot infer the return type from the dynamic chromadb package.
+    return chromadb.PersistentClient(path=path)  # type: ignore[return-value]
 
 
 def _default_embedding_client(settings: Settings | None) -> EmbeddingClientProtocol:
