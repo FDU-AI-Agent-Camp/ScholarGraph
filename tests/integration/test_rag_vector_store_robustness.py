@@ -25,9 +25,34 @@ def temp_chroma_path() -> Any:
 
 @pytest.fixture
 async def store(temp_chroma_path: Path) -> VectorStore:
+    from backend.services.paper_service import PaperService
+
+    service = PaperService()
+    from datetime import UTC, datetime
+
+    from backend.schemas.paper import PaperDetail, PaperStatus
+    from backend.schemas.paradigm import Paradigm
+
+    paper_ids = (
+        "paper-1",
+        "paper-large",
+        "paper-empty",
+        "paper-concurrent",
+        "paper-minimal",
+    ) + tuple(f"paper-{i}" for i in range(10))
+    for paper_id in paper_ids:
+        service._papers[paper_id] = PaperDetail(
+            paper_id=paper_id,
+            title="test",
+            status=PaperStatus.READY,
+            created_at=datetime.now(UTC),
+            updated_at=datetime.now(UTC),
+            paradigm=Paradigm.STEM,
+        )
     return VectorStore(
         embedding_client=FakeEmbeddingClient(),
         chroma_path=str(temp_chroma_path),
+        paper_service=service,
     )
 
 
@@ -79,7 +104,10 @@ async def test_large_text_indexing_does_not_crash(store: VectorStore) -> None:
 async def test_empty_chunks_entities_relations_can_be_indexed(store: VectorStore) -> None:
     await store.replace_paper_index("paper-empty", chunks=[], entities=[], relations=[])
 
-    assert await store.exists("paper-empty") is False
+    # An activated run with zero evidence is a valid index state.
+    assert await store.exists("paper-empty") is True
+    results = await store.query_chunks("anything", paper_id="paper-empty", top_k=5)
+    assert results == []
 
 
 @pytest.mark.asyncio
@@ -95,6 +123,14 @@ async def test_concurrent_indexing_of_same_paper_is_safe(store: VectorStore) -> 
     await asyncio.gather(*(index_batch(i) for i in range(5)))
 
     assert await store.exists("paper-concurrent") is True
+
+    # After racing writes, exactly one active run should remain with a single chunk.
+    results = await store.query_chunks("batch", paper_id="paper-concurrent", top_k=10)
+    assert len(results) == 1, f"expected a single active chunk, got {len(results)}"
+    indexed_text = results[0].text
+    assert indexed_text.startswith("batch ")
+    # The winning batch must be one of the contenders.
+    assert indexed_text in {f"batch {i}" for i in range(5)}
 
 
 @pytest.mark.asyncio

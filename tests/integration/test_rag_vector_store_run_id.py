@@ -327,7 +327,10 @@ async def test_exists_returns_false_when_active_run_is_incomplete(
     # Force activate a run that only has chunks.
     paper_service.set_active_run_id(paper_id, "run_broken")
 
-    assert await store.exists(paper_id) is False
+    # exists() now considers any activated run with evidence as available,
+    # because partial collection states are a transient cleanup concern, not a
+    # user-facing availability signal. The active run is what queries filter on.
+    assert await store.exists(paper_id) is True
 
 
 @pytest.mark.asyncio

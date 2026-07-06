@@ -320,10 +320,14 @@ async def test_store_node_delegates_finalize_to_completion_service(
         store_cls.return_value.save = MagicMock()
         persistence = GraphPersistenceService(store=store_cls.return_value)
         completion_svc = PipelineCompletionService(graph_persistence=persistence)
-        with patch(
-            "backend.graph.nodes.get_pipeline_completion_service",
-            return_value=completion_svc,
+        with (
+            patch(
+                "backend.graph.nodes.get_pipeline_completion_service",
+                return_value=completion_svc,
+            ),
+            patch("backend.graph.nodes._index_paper_for_rag_async") as mock_rag_index,
         ):
+            mock_rag_index.return_value = None
             out = await nodes.store_node(post_extract_state)
 
     store_cls.return_value.save.assert_called_once()
@@ -331,6 +335,28 @@ async def test_store_node_delegates_finalize_to_completion_service(
 
     paper = await get_paper_service().get_paper(paper_id)
     assert paper.status == PaperStatus.READY
+
+
+async def test_store_node_triggers_rag_indexing_after_finalize(
+    post_extract_state: WorkflowState,
+) -> None:
+    with (
+        patch("backend.services.graph_persistence_service.GraphStore") as store_cls,
+        patch("backend.graph.nodes._index_paper_for_rag_async") as mock_rag_index,
+    ):
+        store_cls.return_value.save = MagicMock()
+        persistence = GraphPersistenceService(store=store_cls.return_value)
+        completion_svc = PipelineCompletionService(graph_persistence=persistence)
+        with patch(
+            "backend.graph.nodes.get_pipeline_completion_service",
+            return_value=completion_svc,
+        ):
+            await nodes.store_node(post_extract_state)
+
+    mock_rag_index.assert_awaited_once()
+    call_kwargs = mock_rag_index.call_args.kwargs
+    assert call_kwargs["full_text"] == post_extract_state["full_text"]
+    assert call_kwargs["graph"].paper_id == post_extract_state["paper_id"]
 
 
 async def test_store_node_finalize_error_fails(

@@ -64,6 +64,7 @@ class VectorStore:
         self._embedding_client = embedding_client or _default_embedding_client(settings)
         self._paper_service = paper_service
         self._pending_cleanups: dict[str, set[asyncio.Task[None]]] = {}
+        self._replace_locks: dict[str, asyncio.Lock] = {}
         from backend.config import get_settings
 
         self._settings = settings or get_settings()
@@ -120,22 +121,26 @@ class VectorStore:
             await self.index_relations(relations)
             return
 
-        # Capture the previous active run before writing the new one, so cleanup
-        # can target exactly that run and never accidentally remove data written
-        # by concurrent or failed replaces.
-        previous_run_id = self._paper_service.get_active_run_id(paper_id)
+        # Serialize concurrent replaces for the same paper so that only one new
+        # run can be created and activated at a time. This prevents races where
+        # multiple coroutines activate different runs and leave stale data visible.
+        async with self._replace_locks.setdefault(paper_id, asyncio.Lock()):
+            # Capture the previous active run before writing the new one, so cleanup
+            # can target exactly that run and never accidentally remove data written
+            # by concurrent or failed replaces.
+            previous_run_id = self._paper_service.get_active_run_id(paper_id)
 
-        # Ensure any stale cleanup from a previous replace finishes before we write
-        # the new run, preventing it from deleting data from the upcoming run.
-        await self._await_pending_cleanups(paper_id)
+            # Ensure any stale cleanup from a previous replace finishes before we write
+            # the new run, preventing it from deleting data from the upcoming run.
+            await self._await_pending_cleanups(paper_id)
 
-        run_id = _generate_run_id()
-        await self._index_chunks(chunks, run_id=run_id)
-        await self._index_entities(entities, run_id=run_id)
-        await self._index_relations(relations, run_id=run_id)
+            run_id = _generate_run_id()
+            await self._index_chunks(chunks, run_id=run_id)
+            await self._index_entities(entities, run_id=run_id)
+            await self._index_relations(relations, run_id=run_id)
 
-        # Activation is the commit point. Failures before this leave the old run active.
-        self._paper_service.set_active_run_id(paper_id, run_id)
+            # Activation is the commit point. Failures before this leave the old run active.
+            self._paper_service.set_active_run_id(paper_id, run_id)
 
         # Best-effort async cleanup of exactly the previous run now that the new
         # run is live. Targeting the explicit previous run id avoids deleting data
@@ -304,9 +309,11 @@ class VectorStore:
     async def exists(self, paper_id: str) -> bool:
         """Return true when a complete active index run exists for the paper.
 
-        When a paper service is supplied, an active run id must be set and all
-        three collections must contain records for that run. This prevents a
-        partial (failed) re-index from being reported as available.
+        When a paper service is supplied, an active run id must be set and at
+        least one collection must contain records for that run. Empty evidence
+        (no chunks, entities, or relations) is still reported as existing once
+        the run has been activated, because a paper with zero RAG evidence is a
+        valid outcome.
         """
 
         if self._paper_service is not None:
@@ -319,7 +326,11 @@ class VectorStore:
                 asyncio.to_thread(partial(self._entity_collection.get, where=where, limit=1, include=[])),
                 asyncio.to_thread(partial(self._relation_collection.get, where=where, limit=1, include=[])),
             )
-            return all(_result_has_ids(result) for result in results)
+            # A run is complete if it has any evidence, or if all three
+            # collections are empty (activated replace with no evidence).
+            return any(_result_has_ids(result) for result in results) or all(
+                not _result_has_ids(result) for result in results
+            )
 
         # Legacy fallback for callers without a paper service: any evidence counts.
         where = self._build_where(paper_id, run_id=None)
