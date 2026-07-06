@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 from typing import Any
+from unittest.mock import AsyncMock
 
 import pytest
+from backend.config import Settings
 from backend.rag.models import PaperChunk, PaperEntity, PaperRelation, VectorEvidenceType
 from backend.rag.vector_store import ChromaMetadata, ChromaWhere, VectorStore, clean_metadata
 
@@ -418,3 +420,31 @@ async def test_upsert_runs_in_thread_and_does_not_block_event_loop() -> None:
     assert "paper-1:chunk:0" in chunks.records
     assert chunks.upsert_calls == 1
     assert "done" in marker
+
+
+@pytest.mark.asyncio
+async def test_large_text_indexing_splits_into_correct_embedding_batches() -> None:
+    """A 70-document list with batch size 32 must produce exactly 3 embed calls (32+32+6)."""
+
+    large_documents = [f"This is chunk snippet {index}" for index in range(70)]
+    mock_client = AsyncMock()
+    mock_client.embed_texts.side_effect = lambda batch: [[0.1] * 1536 for _ in batch]
+
+    settings = Settings.model_validate(
+        {
+            "embedding_provider": "openai",
+            "embedding_batch_size": 32,
+        }
+    )
+    store = VectorStore(
+        settings=settings,
+        embedding_client=mock_client,
+        chunk_collection=FakeCollection(),
+        entity_collection=FakeCollection(),
+        relation_collection=FakeCollection(),
+    )
+
+    embeddings = await store._embed_in_batches(large_documents)
+
+    assert len(embeddings) == 70
+    assert mock_client.embed_texts.call_count == 3
