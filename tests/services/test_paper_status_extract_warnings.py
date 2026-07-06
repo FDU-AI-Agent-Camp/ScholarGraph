@@ -9,9 +9,8 @@ import pytest
 from backend.agents.extract_constants import EXTRACT_HEURISTIC_FALLBACK_CODE
 from backend.main import app
 from backend.rag.handlers import RAG_INDEX_WARNING_CODE, index_paper_for_rag
-from backend.schemas.graph import GraphNode, NodeType, UnifiedPaperGraph
+from backend.schemas.graph import UnifiedPaperGraph
 from backend.schemas.paper import PaperStatus, PipelineStage
-from backend.schemas.paradigm import Paradigm
 from backend.services.paper_service import get_paper_service
 from httpx import ASGITransport, AsyncClient
 
@@ -21,16 +20,6 @@ async def api_client() -> AsyncClient:
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
         yield client
-
-
-@pytest.fixture
-def sample_graph() -> UnifiedPaperGraph:
-    return UnifiedPaperGraph(
-        paper_id="paper-1",
-        paradigm=Paradigm.STEM,
-        nodes=[GraphNode(id="n_method", label="Hybrid chunker", type=NodeType.METHOD, data={})],
-        edges=[],
-    )
 
 
 class FailingVectorStore:
