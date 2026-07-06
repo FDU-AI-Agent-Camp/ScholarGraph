@@ -15,7 +15,7 @@ from backend.services.paper_pipeline_scheduler import ensure_head_refine_schedul
 from backend.services.paper_service import get_paper_service
 from backend.services.pipeline_completion_service import get_pipeline_completion_service
 from backend.services.pipeline_status_service import get_pipeline_status_service
-from backend.services.rag_index_service import RAG_INDEX_STAGE_MESSAGE, RagIndexService
+from backend.services.rag_index_service import RagIndexService
 
 logger = logging.getLogger(__name__)
 
@@ -220,13 +220,13 @@ async def _index_paper_for_rag_async(
     graph: UnifiedPaperGraph,
     page_break_offsets: list[int] | None = None,
 ) -> None:
-    """Build RAG vector index in the background; surface failures as warnings."""
+    """Build RAG vector index in the background; surface failures as warnings.
 
-    _mark_progress(
-        WorkflowState(paper_id=paper_id),
-        stage=PipelineStage.STORING,
-        message=RAG_INDEX_STAGE_MESSAGE,
-    )
+    This helper is intentionally thin: it delegates to RagIndexService and never
+    touches the pipeline status, so the paper stays READY while RAG enrichment
+    runs asynchronously.
+    """
+
     await RagIndexService().index_paper_for_rag_async(
         paper_id,
         full_text=full_text,
