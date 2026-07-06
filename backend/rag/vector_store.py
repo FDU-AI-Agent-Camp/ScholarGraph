@@ -12,6 +12,9 @@ from backend.rag.models import (
     PaperChunk,
     PaperEntity,
     PaperRelation,
+    RetrievedChunk,
+    RetrievedEntity,
+    RetrievedRelation,
     VectorEvidenceType,
 )
 from backend.rag.vector_store_utils import (
@@ -259,7 +262,7 @@ class VectorStore:
         *,
         paper_id: str,
         top_k: int | None = None,
-    ) -> list:
+    ) -> list[RetrievedChunk]:
         """Search original text chunks scoped to a single paper."""
 
         return await self._query(
@@ -276,7 +279,7 @@ class VectorStore:
         *,
         paper_id: str,
         top_k: int | None = None,
-    ) -> list:
+    ) -> list[RetrievedEntity]:
         """Search graph entities scoped to a single paper."""
 
         return await self._query(
@@ -293,7 +296,7 @@ class VectorStore:
         *,
         paper_id: str,
         top_k: int | None = None,
-    ) -> list:
+    ) -> list[RetrievedRelation]:
         """Search graph relations scoped to a single paper."""
 
         return await self._query(
@@ -497,7 +500,7 @@ async def _query(
     evidence_type: VectorEvidenceType,
     paper_id: str,
     top_k: int,
-) -> list:
+) -> list[RetrievedChunk | RetrievedEntity | RetrievedRelation]:
     if not isinstance(paper_id, str) or not paper_id.strip():
         raise ValueError("单篇 QA 路径下严禁泄露全库检索权限：paper_id 必须是非空字符串")
     if not query_text.strip() or top_k <= 0:

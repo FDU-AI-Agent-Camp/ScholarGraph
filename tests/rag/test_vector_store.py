@@ -170,7 +170,7 @@ async def test_query_chunks_hard_filters_by_paper_id() -> None:
 
     assert [result.paper_id for result in results] == ["paper-1"]
     assert results[0].evidence_type == VectorEvidenceType.CHUNK
-    assert results[0].metadata["chunk_id"] == "paper-1:chunk:0"
+    assert results[0].chunk_id == "paper-1:chunk:0"
 
 
 @pytest.mark.asyncio
@@ -199,7 +199,7 @@ async def test_query_entities_hard_filters_by_paper_id() -> None:
 
     assert [result.paper_id for result in results] == ["paper-1"]
     assert results[0].evidence_type == VectorEvidenceType.ENTITY
-    assert results[0].metadata["entity_id"] == "n1"
+    assert results[0].entity_id == "n1"
 
 
 @pytest.mark.asyncio
@@ -230,7 +230,7 @@ async def test_query_relations_hard_filters_by_paper_id() -> None:
 
     assert [result.paper_id for result in results] == ["paper-1"]
     assert results[0].evidence_type == VectorEvidenceType.RELATION
-    assert results[0].metadata["relation_id"] == "e1"
+    assert results[0].relation_id == "e1"
 
 
 @pytest.mark.asyncio

@@ -148,8 +148,8 @@ async def test_real_chroma_entities_and_relations_round_trip(store: VectorStore)
     entity_results = await store.query_entities("knowledge graph", paper_id="paper-1", top_k=5)
     relation_results = await store.query_relations("retrieval", paper_id="paper-1", top_k=5)
 
-    assert any(result.metadata.get("entity_id") == "n_method" for result in entity_results)
-    assert any(result.metadata.get("relation_id") == "e_supports" for result in relation_results)
+    assert any(result.entity_id == "n_method" for result in entity_results)
+    assert any(result.relation_id == "e_supports" for result in relation_results)
 
 
 @pytest.mark.asyncio

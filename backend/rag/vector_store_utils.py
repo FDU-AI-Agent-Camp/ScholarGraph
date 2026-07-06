@@ -7,7 +7,12 @@ import uuid
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any, Protocol
 
-from backend.rag.models import VectorEvidenceType, VectorSearchResult
+from backend.rag.models import (
+    RetrievedChunk,
+    RetrievedEntity,
+    RetrievedRelation,
+    VectorEvidenceType,
+)
 
 if TYPE_CHECKING:
     from backend.config import Settings
@@ -120,28 +125,78 @@ def _default_embedding_client(settings: Settings | None) -> EmbeddingClientProto
     return get_embedding_client()
 
 
-def _parse_query_results(raw_result: dict[str, Any], *, evidence_type: VectorEvidenceType) -> list[VectorSearchResult]:
+def _optional_int(value: Any) -> int | None:
+    return int(value) if value is not None else None
+
+
+def _optional_str(value: Any) -> str | None:
+    return str(value) if value is not None else None
+
+
+def _parse_query_results(
+    raw_result: dict[str, Any],
+    *,
+    evidence_type: VectorEvidenceType,
+) -> list[RetrievedChunk | RetrievedEntity | RetrievedRelation]:
     ids = _first_query_batch(raw_result.get("ids"))
     documents = _first_query_batch(raw_result.get("documents"))
     metadatas = _first_query_batch(raw_result.get("metadatas"))
     distances = _first_query_batch(raw_result.get("distances"))
 
-    results: list[VectorSearchResult] = []
+    results: list[RetrievedChunk | RetrievedEntity | RetrievedRelation] = []
     for index, result_id in enumerate(ids):
         raw_metadata = _item_at(metadatas, index, default={}) or {}
         metadata = clean_metadata(raw_metadata)
         text = str(_item_at(documents, index, default=""))
         distance = _item_at(distances, index, default=None)
-        results.append(
-            VectorSearchResult(
-                id=str(result_id),
-                paper_id=str(metadata.get("paper_id", "")),
-                evidence_type=evidence_type,
-                text=text,
-                metadata=metadata,
-                distance=float(distance) if isinstance(distance, int | float) else None,
+        parsed_distance = float(distance) if isinstance(distance, int | float) else None
+
+        paper_id = str(metadata.get("paper_id", ""))
+        if evidence_type == VectorEvidenceType.CHUNK:
+            results.append(
+                RetrievedChunk(
+                    id=str(result_id),
+                    paper_id=paper_id,
+                    text=text,
+                    distance=parsed_distance,
+                    chunk_id=str(metadata.get("chunk_id", result_id)),
+                    section=_optional_str(metadata.get("section")),
+                    chunk_index=int(metadata.get("chunk_index", 0)),
+                    source=str(metadata.get("source", "pymupdf")),
+                    char_start=int(metadata.get("char_start", 0)),
+                    char_end=int(metadata.get("char_end", 0)),
+                    page_start=_optional_int(metadata.get("page_start")),
+                    page_end=_optional_int(metadata.get("page_end")),
+                )
             )
-        )
+        elif evidence_type == VectorEvidenceType.ENTITY:
+            results.append(
+                RetrievedEntity(
+                    id=str(result_id),
+                    paper_id=paper_id,
+                    text=text,
+                    distance=parsed_distance,
+                    entity_id=str(metadata.get("entity_id", result_id)),
+                    label=str(metadata.get("label", "")),
+                    node_type=str(metadata.get("node_type", "")),
+                    source_span=_optional_str(metadata.get("source_span")),
+                )
+            )
+        else:
+            results.append(
+                RetrievedRelation(
+                    id=str(result_id),
+                    paper_id=paper_id,
+                    text=text,
+                    distance=parsed_distance,
+                    relation_id=str(metadata.get("relation_id", result_id)),
+                    source_id=str(metadata.get("source_id", "")),
+                    target_id=str(metadata.get("target_id", "")),
+                    relation_type=str(metadata.get("relation_type", "")),
+                    rationale=_optional_str(metadata.get("rationale")),
+                    source_span=_optional_str(metadata.get("source_span")),
+                )
+            )
     return results
 
 

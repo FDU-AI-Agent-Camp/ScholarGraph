@@ -66,7 +66,14 @@ def chunk_text(
     min_soft_boundary_window_chars: int = DEFAULT_MIN_SOFT_BOUNDARY_WINDOW_CHARS,
     include_references: bool = False,
 ) -> list[PaperChunk]:
-    """Split paper text into deterministic, section-aware RAG chunks."""
+    """Split paper text into deterministic, section-aware RAG chunks.
+
+    Page numbers are intentionally omitted here: pymupdf ingest already tracks
+    per-span page metadata in the extraction graph, and attaching accurate page
+    ranges to raw text chunks would require re-parsing the PDF with character-
+    level page spans. For now page_start/page_end remain None; downstream
+    retrieval can enrich results from graph evidence when pages matter.
+    """
 
     normalized_text = _normalize_text(full_text)
     if not normalized_text.strip():
@@ -94,7 +101,7 @@ def chunk_text(
         PaperChunk(
             chunk_id=_chunk_id(paper_id, index),
             paper_id=paper_id,
-            text=normalized_text[text_slice.start : text_slice.end].strip(),
+            text=normalized_text[text_slice.start : text_slice.end],
             page_start=None,
             page_end=None,
             section=text_slice.section,
@@ -104,7 +111,7 @@ def chunk_text(
             char_end=text_slice.end,
         )
         for index, text_slice in enumerate(merged_chunks)
-        if normalized_text[text_slice.start : text_slice.end].strip()
+        if normalized_text[text_slice.start : text_slice.end]
     ]
 
 
