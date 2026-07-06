@@ -9,6 +9,7 @@ import pytest
 from backend.config import Settings
 from backend.rag.models import PaperChunk, PaperEntity, PaperRelation, VectorEvidenceType
 from backend.rag.vector_store import ChromaMetadata, ChromaWhere, VectorStore, clean_metadata
+from backend.rag.vector_store_utils import _embed_in_batches
 
 
 class FakeEmbeddingClient:
@@ -564,15 +565,11 @@ async def test_large_text_indexing_splits_into_correct_embedding_batches() -> No
             "embedding_batch_size": 32,
         }
     )
-    store = VectorStore(
-        settings=settings,
+    embeddings = await _embed_in_batches(
+        large_documents,
         embedding_client=mock_client,
-        chunk_collection=FakeCollection(),
-        entity_collection=FakeCollection(),
-        relation_collection=FakeCollection(),
+        batch_size=settings.embedding_batch_size,
     )
-
-    embeddings = await store._embed_in_batches(large_documents)
 
     assert len(embeddings) == 70
     assert mock_client.embed_texts.call_count == 3

@@ -8,6 +8,9 @@ from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any, Protocol
 
 from backend.rag.models import (
+    PaperChunk,
+    PaperEntity,
+    PaperRelation,
     RetrievedChunk,
     RetrievedEntity,
     RetrievedRelation,
@@ -17,6 +20,25 @@ from backend.rag.models import (
 if TYPE_CHECKING:
     from backend.config import Settings
     from backend.rag.models import EmbeddingClientProtocol
+
+
+async def _embed_in_batches(
+    documents: list[str],
+    *,
+    embedding_client: EmbeddingClientProtocol,
+    batch_size: int,
+) -> list[list[float]]:
+    """Embed documents in configurable batches to avoid API token/throughput limits."""
+
+    if len(documents) <= batch_size:
+        return await embedding_client.embed_texts(documents)
+
+    embeddings: list[list[float]] = []
+    for index in range(0, len(documents), batch_size):
+        batch = documents[index : index + batch_size]
+        batch_embeddings = await embedding_client.embed_texts(batch)
+        embeddings.extend(batch_embeddings)
+    return embeddings
 
 ChromaMetadataValue = str | int | float | bool
 ChromaMetadata = dict[str, ChromaMetadataValue]
@@ -220,3 +242,25 @@ def _result_has_ids(result: dict[str, Any]) -> bool:
             return bool(ids[0])
         return True
     return False
+
+
+def _validate_evidence_paper_ids(
+    paper_id: str,
+    chunks: list[PaperChunk],
+    entities: list[PaperEntity],
+    relations: list[PaperRelation],
+) -> None:
+    """Ensure every evidence item belongs to the target paper.
+
+    Cross-paper indexing is a data-poisoning risk; reject it eagerly.
+    """
+
+    for chunk in chunks:
+        if chunk.paper_id != paper_id:
+            raise ValueError(f"chunk paper_id mismatch: expected {paper_id!r}, got {chunk.paper_id!r}")
+    for entity in entities:
+        if entity.paper_id != paper_id:
+            raise ValueError(f"entity paper_id mismatch: expected {paper_id!r}, got {entity.paper_id!r}")
+    for relation in relations:
+        if relation.paper_id != paper_id:
+            raise ValueError(f"relation paper_id mismatch: expected {paper_id!r}, got {relation.paper_id!r}")

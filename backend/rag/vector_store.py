@@ -25,12 +25,14 @@ from backend.rag.vector_store_utils import (
     RawMetadata,
     _chunk_chroma_id,
     _default_embedding_client,
+    _embed_in_batches,
     _entity_chroma_id,
     _generate_run_id,
     _parse_query_results,
     _persistent_chroma_client,
     _relation_chroma_id,
     _result_has_ids,
+    _validate_evidence_paper_ids,
     clean_metadata,
 )
 
@@ -444,7 +446,12 @@ class VectorStore:
     ) -> None:
         if not ids:
             return
-        embeddings = await self._embed_in_batches(documents)
+        batch_size = getattr(self._settings, "embedding_batch_size", 32)
+        embeddings = await _embed_in_batches(
+            documents,
+            embedding_client=self._embedding_client,
+            batch_size=batch_size,
+        )
         if len(embeddings) != len(documents):
             raise ValueError("Embedding client returned a different number of vectors than input documents.")
         await asyncio.to_thread(
@@ -456,20 +463,6 @@ class VectorStore:
                 metadatas=metadatas,
             )
         )
-
-    async def _embed_in_batches(self, documents: list[str]) -> list[list[float]]:
-        """Embed documents in configurable batches to avoid API token/throughput limits."""
-
-        batch_size = getattr(self._settings, "embedding_batch_size", 32)
-        if len(documents) <= batch_size:
-            return await self._embedding_client.embed_texts(documents)
-
-        embeddings: list[list[float]] = []
-        for index in range(0, len(documents), batch_size):
-            batch = documents[index : index + batch_size]
-            batch_embeddings = await self._embedding_client.embed_texts(batch)
-            embeddings.extend(batch_embeddings)
-        return embeddings
 
     async def _query(
         self,
@@ -500,23 +493,3 @@ class VectorStore:
         return _parse_query_results(raw_result, evidence_type=evidence_type)
 
 
-def _validate_evidence_paper_ids(
-    paper_id: str,
-    chunks: list[PaperChunk],
-    entities: list[PaperEntity],
-    relations: list[PaperRelation],
-) -> None:
-    """Ensure every evidence item belongs to the target paper.
-
-    Cross-paper indexing is a data-poisoning risk; reject it eagerly.
-    """
-
-    for chunk in chunks:
-        if chunk.paper_id != paper_id:
-            raise ValueError(f"chunk paper_id mismatch: expected {paper_id!r}, got {chunk.paper_id!r}")
-    for entity in entities:
-        if entity.paper_id != paper_id:
-            raise ValueError(f"entity paper_id mismatch: expected {paper_id!r}, got {entity.paper_id!r}")
-    for relation in relations:
-        if relation.paper_id != paper_id:
-            raise ValueError(f"relation paper_id mismatch: expected {paper_id!r}, got {relation.paper_id!r}")
