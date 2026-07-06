@@ -99,6 +99,8 @@ class EmbeddingClient:
     async def embed_texts(self, texts: list[str]) -> list[list[float]]:
         """Return one embedding vector per input text.
 
+        In global mock mode this returns deterministic pseudo-vectors so that
+        tests and local development can run without external credentials.
         Empty strings are embedded as zero vectors so callers can keep indices
         stable without additional branching.
         """
@@ -108,13 +110,21 @@ class EmbeddingClient:
         normalized = [text if text else "" for text in texts]
         logger.debug("embedding_request", extra={"provider": self._provider, "texts": len(normalized)})
 
-        if self._provider == "ollama":
+        if self._settings.is_llm_mock:
+            vectors = self._mock_embed(normalized)
+        elif self._provider == "ollama":
             vectors = await self._ollama_client().embed_texts(normalized)
         else:
             vectors = await self._openai_client().aembed_documents(normalized)
 
         logger.debug("embedding_response", extra={"vectors": len(vectors)})
         return vectors
+
+    def _mock_embed(self, texts: list[str]) -> list[list[float]]:
+        """Return deterministic pseudo-embeddings for offline / mock runs."""
+
+        dimension = getattr(self._settings, "embedding_dimension", 1536)
+        return [[0.01 * (index % 10) for index in range(dimension)] for _ in texts]
 
 
 @lru_cache

@@ -2,13 +2,18 @@
 
 from __future__ import annotations
 
-import json
 from typing import Any
 
 from backend.rag.models import PaperEntity, PaperRelation
 from backend.schemas.graph import GraphNode, UnifiedPaperGraph
 
-ENTITY_TEXT_KEYS = ("rationale", "description", "source_span", "summary", "evidence")
+# Whitelist of node.data keys that carry business semantics suitable for embedding.
+# Keys such as "source_span", "coords", "bbox" are intentionally excluded because
+# they are noisy structural metadata, not semantic content.
+ENTITY_SEMANTIC_KEYS = ("description", "summary", "rationale", "evidence")
+
+# Maximum length of any single textual fragment pulled from node.data.
+MAX_DATA_FRAGMENT_CHARS = 500
 
 
 def graph_to_entities(paper_id: str, graph: UnifiedPaperGraph) -> list[PaperEntity]:
@@ -48,13 +53,18 @@ def graph_to_relations(paper_id: str, graph: UnifiedPaperGraph) -> list[PaperRel
 
 
 def _node_to_entity(paper_id: str, node: GraphNode) -> PaperEntity:
-    source_span = _first_text(node.data.get("source_span"), node.data.get("span"), node.data.get("evidence"))
-    support_text = _first_text(*(node.data.get(key) for key in ENTITY_TEXT_KEYS))
+    """Build a concise, semantic entity description from a graph node.
+
+    The description is textualized from a whitelist of business-meaningful
+    fields. Raw JSON serialization is never used, to keep embedding quality high.
+    """
+
+    source_span = _first_text(node.data.get("source_span"), node.data.get("span"))
+    support_text = _extract_semantic_text(node.data)
     description = _join_description_parts(
         [
             f"{node.label} (type: {node.type}).",
             support_text,
-            _compact_json(node.data) if not support_text and node.data else "",
         ]
     )
     return PaperEntity(
@@ -67,6 +77,27 @@ def _node_to_entity(paper_id: str, node: GraphNode) -> PaperEntity:
     )
 
 
+def _extract_semantic_text(data: dict[str, Any]) -> str:
+    """Return a single business-meaningful sentence from whitelisted node data."""
+
+    if not data:
+        return ""
+
+    fragments: list[str] = []
+    for key in ENTITY_SEMANTIC_KEYS:
+        value = data.get(key)
+        text = _first_text(value)
+        if text:
+            # Avoid duplicating the same sentence under different keys.
+            if text not in fragments:
+                fragments.append(text)
+
+    combined = " ".join(fragments)
+    if len(combined) > MAX_DATA_FRAGMENT_CHARS:
+        combined = combined[:MAX_DATA_FRAGMENT_CHARS].rsplit(" ", 1)[0] + "..."
+    return combined
+
+
 def _first_text(*values: Any) -> str | None:
     for value in values:
         if isinstance(value, str) and value.strip():
@@ -76,7 +107,3 @@ def _first_text(*values: Any) -> str | None:
 
 def _join_description_parts(parts: list[str | None]) -> str:
     return " ".join(part.strip() for part in parts if part and part.strip())
-
-
-def _compact_json(value: Any) -> str:
-    return json.dumps(value, ensure_ascii=False, sort_keys=True, default=str)

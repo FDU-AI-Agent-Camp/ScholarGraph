@@ -1,8 +1,10 @@
 """LangGraph node handlers — orchestration only; all domain work in services."""
 
+import logging
 from pathlib import Path
 
 from backend.graph.state import STAGE_PERCENT, WorkflowState
+from backend.schemas.graph import UnifiedPaperGraph
 from backend.schemas.paper import PaperStatus, PaperStatusData, PipelineStage
 from backend.schemas.paradigm import Paradigm, ParadigmClassification
 from backend.services.agent_service import get_agent_service
@@ -13,6 +15,9 @@ from backend.services.paper_pipeline_scheduler import ensure_head_refine_schedul
 from backend.services.paper_service import get_paper_service
 from backend.services.pipeline_completion_service import get_pipeline_completion_service
 from backend.services.pipeline_status_service import get_pipeline_status_service
+from backend.services.rag_index_service import RagIndexService
+
+logger = logging.getLogger(__name__)
 
 
 def _mark_progress(
@@ -73,6 +78,7 @@ async def ingest_node(state: WorkflowState) -> WorkflowState:
         message="PDF 解析完成",
         full_text=result["full_text"],
         classifier_input=result["classifier_input"],
+        page_break_offsets=result.get("page_break_offsets", []),
     )
 
 
@@ -175,7 +181,7 @@ async def extract_node(state: WorkflowState) -> WorkflowState:
 async def store_node(state: WorkflowState) -> WorkflowState:
     _mark_progress(state, stage=PipelineStage.STORING, message="正在写入图谱存储")
     try:
-        get_pipeline_completion_service().finalize(
+        graph = get_pipeline_completion_service().finalize(
             state["paper_id"],
             graph_data=state["graph"],
             classification_data=state["classification"],
@@ -184,12 +190,48 @@ async def store_node(state: WorkflowState) -> WorkflowState:
     except ServiceError as exc:
         return _failure_patch(exc, stage=PipelineStage.STORING)
 
+    # Build the RAG vector index asynchronously without blocking the ready status.
+    # Failures are captured as extract_warnings so the paper can still be usable.
+    try:
+        await _index_paper_for_rag_async(
+            state["paper_id"],
+            full_text=state["full_text"],
+            graph=graph,
+            page_break_offsets=state.get("page_break_offsets"),
+        )
+    except Exception:
+        # RAG indexing is best-effort; failures are already recorded as warnings
+        # by index_paper_for_rag. The paper must still reach ready.
+        logger.exception("rag_index_failed_in_store_node", extra={"paper_id": state["paper_id"]})
+
     return WorkflowState(
         status=PaperStatus.READY,
         stage=PipelineStage.READY,
         percent=STAGE_PERCENT[PipelineStage.READY],
         message="建图完成",
         failed=False,
+    )
+
+
+async def _index_paper_for_rag_async(
+    paper_id: str,
+    *,
+    full_text: str,
+    graph: UnifiedPaperGraph,
+    page_break_offsets: list[int] | None = None,
+) -> None:
+    """Build RAG vector index in the background; surface failures as warnings.
+
+    This helper is intentionally thin: it delegates to RagIndexService and never
+    touches the pipeline status, so the paper stays READY while RAG enrichment
+    runs asynchronously.
+    """
+
+    await RagIndexService().index_paper_for_rag_async(
+        paper_id,
+        full_text=full_text,
+        graph=graph,
+        page_break_offsets=page_break_offsets,
     )
 
 

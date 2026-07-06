@@ -47,7 +47,19 @@ class PaperService:
         self._preview_graphs: dict[str, UnifiedPaperGraph] = {}
         self._preview_available: dict[str, bool] = {}
         self._pdf_paths: dict[str, Path] = {}
+        # Tracks which RAG index run is currently active for each paper.
+        # VectorStore uses this to implement index_run_id snapshot switching.
+        self._active_run_id: dict[str, str] = {}
         seed_from_fixtures(self)
+
+    def set_active_run_id(self, paper_id: str, run_id: str) -> None:
+        """Atomically activate a new RAG index run for the paper."""
+        self.ensure_paper_exists(paper_id)
+        self._active_run_id[paper_id] = run_id
+
+    def get_active_run_id(self, paper_id: str) -> str | None:
+        """Return the currently active RAG index run id, or None if never indexed."""
+        return self._active_run_id.get(paper_id)
 
     async def list_papers(
         self,

@@ -259,30 +259,26 @@ class Settings(BaseSettings):
         default="http://localhost:11434",
         validation_alias="EMBEDDING_OLLAMA_URL",
     )
+    embedding_batch_size: int = Field(
+        default=32,
+        ge=1,
+        le=1024,
+        validation_alias="EMBEDDING_BATCH_SIZE",
+    )
 
+    # RAG / ChromaDB settings
     chromadb_path: str = Field(default="./data/chroma", validation_alias="CHROMADB_PATH")
-    chromadb_chunk_collection: str = Field(
-        default="paper_chunks",
-        validation_alias="CHROMADB_CHUNK_COLLECTION",
-    )
-    chromadb_entity_collection: str = Field(
-        default="paper_entities",
-        validation_alias="CHROMADB_ENTITY_COLLECTION",
-    )
+    chromadb_chunk_collection: str = Field(default="paper_chunks", validation_alias="CHROMADB_CHUNK_COLLECTION")
+    chromadb_entity_collection: str = Field(default="paper_entities", validation_alias="CHROMADB_ENTITY_COLLECTION")
     chromadb_relation_collection: str = Field(
-        default="paper_relations",
-        validation_alias="CHROMADB_RELATION_COLLECTION",
+        default="paper_relations", validation_alias="CHROMADB_RELATION_COLLECTION"
     )
-    rag_chunk_size_chars: int = Field(
-        default=1500,
-        ge=200,
-        validation_alias="RAG_CHUNK_SIZE_CHARS",
-    )
-    rag_chunk_overlap_ratio: float = Field(
-        default=0.20,
-        ge=0.0,
-        lt=1.0,
-        validation_alias="RAG_CHUNK_OVERLAP_RATIO",
+    rag_chunk_size_chars: int = Field(default=1500, ge=200, validation_alias="RAG_CHUNK_SIZE_CHARS")
+    rag_chunk_overlap_ratio: float = Field(default=0.20, ge=0.0, lt=1.0, validation_alias="RAG_CHUNK_OVERLAP_RATIO")
+    rag_chunk_min_chunk_chars: int = Field(default=200, ge=1, validation_alias="RAG_CHUNK_MIN_CHUNK_CHARS")
+    rag_chunk_include_references: bool = Field(default=False, validation_alias="RAG_CHUNK_INCLUDE_REFERENCES")
+    rag_chunk_min_soft_boundary_window_chars: int = Field(
+        default=200, ge=50, validation_alias="RAG_CHUNK_MIN_SOFT_BOUNDARY_WINDOW_CHARS"
     )
     rag_top_k_chunks: int = Field(default=5, ge=1, validation_alias="RAG_TOP_K_CHUNKS")
     rag_top_k_entities: int = Field(default=5, ge=1, validation_alias="RAG_TOP_K_ENTITIES")
@@ -490,5 +486,8 @@ def _should_ignore_dotenv() -> bool:
 @lru_cache
 def get_settings() -> Settings:
     if _should_ignore_dotenv():
-        return Settings.model_validate({})
+        # _env_file=None prevents pydantic-settings from loading repository .env
+        # during tests, so monkeypatched environment variables stay deterministic.
+        # pydantic_settings accepts _env_file at runtime but pyright cannot see it.
+        return Settings(_env_file=None)  # type: ignore[call-arg]
     return Settings()
