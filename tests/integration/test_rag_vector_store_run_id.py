@@ -274,9 +274,60 @@ async def test_run_aware_store_is_isolated_from_unmanaged_store(
         embedding_client=FakeEmbeddingClient(),
         chroma_path=str(temp_chroma_path),
     )
-    # The unmanaged store filters only by paper_id, so it still sees the data;
-    # this test documents the backward-compatible fallback contract.
+    # The unmanaged store filters only by paper_id; it can see the run-managed
+    # data because the legacy fallback ignores index_run_id.
     assert await unmanaged_store.exists(paper_id) is True
+
+
+@pytest.mark.asyncio
+async def test_exists_returns_false_when_no_active_run_id_is_set(
+    temp_chroma_path: Path,
+    paper_service: PaperService,
+) -> None:
+    """A partial run must not be considered available when no run is active."""
+
+    paper_id = "bug-002"
+    _register_paper(paper_service, paper_id)
+    store = VectorStore(
+        embedding_client=FakeEmbeddingClient(),
+        chroma_path=str(temp_chroma_path),
+        paper_service=paper_service,
+    )
+
+    # Simulate an incomplete run: only chunks are indexed, entities/relations are missing.
+    await store._index_chunks(
+        [_chunk(paper_id, 0, "orphan chunk")],
+        run_id="run_broken",
+    )
+
+    # active_run_id is still unset.
+    assert paper_service.get_active_run_id(paper_id) is None
+    assert await store.exists(paper_id) is False
+
+
+@pytest.mark.asyncio
+async def test_exists_returns_false_when_active_run_is_incomplete(
+    temp_chroma_path: Path,
+    paper_service: PaperService,
+) -> None:
+    """An active run id is not available unless all three collections have data."""
+
+    paper_id = "bug-003"
+    _register_paper(paper_service, paper_id)
+    store = VectorStore(
+        embedding_client=FakeEmbeddingClient(),
+        chroma_path=str(temp_chroma_path),
+        paper_service=paper_service,
+    )
+
+    await store._index_chunks(
+        [_chunk(paper_id, 0, "only chunk")],
+        run_id="run_broken",
+    )
+    # Force activate a run that only has chunks.
+    paper_service.set_active_run_id(paper_id, "run_broken")
+
+    assert await store.exists(paper_id) is False
 
 
 @pytest.mark.asyncio

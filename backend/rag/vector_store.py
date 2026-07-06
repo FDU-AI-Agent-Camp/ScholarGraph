@@ -292,8 +292,26 @@ class VectorStore:
             self._paper_service.set_active_run_id(paper_id, "")
 
     async def exists(self, paper_id: str) -> bool:
-        """Return true when any active indexed evidence exists for the paper."""
+        """Return true when a complete active index run exists for the paper.
 
+        When a paper service is supplied, an active run id must be set and all
+        three collections must contain records for that run. This prevents a
+        partial (failed) re-index from being reported as available.
+        """
+
+        if self._paper_service is not None:
+            active_run_id = self._paper_service.get_active_run_id(paper_id)
+            if not active_run_id:
+                return False
+            where = self._build_where(paper_id, run_id=active_run_id)
+            results = await asyncio.gather(
+                asyncio.to_thread(partial(self._chunk_collection.get, where=where, limit=1, include=[])),
+                asyncio.to_thread(partial(self._entity_collection.get, where=where, limit=1, include=[])),
+                asyncio.to_thread(partial(self._relation_collection.get, where=where, limit=1, include=[])),
+            )
+            return all(_result_has_ids(result) for result in results)
+
+        # Legacy fallback for callers without a paper service: any evidence counts.
         where = self._build_where(paper_id, run_id=None)
         results = await asyncio.gather(
             asyncio.to_thread(partial(self._chunk_collection.get, where=where, limit=1, include=[])),
