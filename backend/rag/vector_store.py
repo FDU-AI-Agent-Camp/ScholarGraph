@@ -240,10 +240,10 @@ class VectorStore:
         self,
         query_text: str,
         *,
-        paper_id: str | None = None,
+        paper_id: str,
         top_k: int = 5,
     ) -> list:
-        """Search original text chunks."""
+        """Search original text chunks scoped to a single paper."""
 
         return await self._query(
             self._chunk_collection,
@@ -257,10 +257,10 @@ class VectorStore:
         self,
         query_text: str,
         *,
-        paper_id: str | None = None,
+        paper_id: str,
         top_k: int = 5,
     ) -> list:
-        """Search graph entities."""
+        """Search graph entities scoped to a single paper."""
 
         return await self._query(
             self._entity_collection,
@@ -274,10 +274,10 @@ class VectorStore:
         self,
         query_text: str,
         *,
-        paper_id: str | None = None,
+        paper_id: str,
         top_k: int = 5,
     ) -> list:
-        """Search graph relations."""
+        """Search graph relations scoped to a single paper."""
 
         return await self._query(
             self._relation_collection,
@@ -421,15 +421,17 @@ class VectorStore:
         query_text: str,
         *,
         evidence_type: VectorEvidenceType,
-        paper_id: str | None,
+        paper_id: str,
         top_k: int,
     ) -> list:
+        if not isinstance(paper_id, str) or not paper_id.strip():
+            raise ValueError("paper_id must be a non-empty string")
         if not query_text.strip() or top_k <= 0:
             return []
 
         query_embeddings = await self._embedding_client.embed_texts([query_text])
-        active_run_id = self._paper_service.get_active_run_id(paper_id) if paper_id and self._paper_service else None
-        where: ChromaWhere | None = self._build_where(paper_id, run_id=active_run_id) if paper_id is not None else None
+        active_run_id = self._paper_service.get_active_run_id(paper_id) if self._paper_service else None
+        where: ChromaWhere = self._build_where(paper_id, run_id=active_run_id)
         raw_result = await asyncio.to_thread(
             partial(
                 collection.query,

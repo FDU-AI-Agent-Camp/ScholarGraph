@@ -158,13 +158,25 @@ async def test_delete_by_paper_is_safe_when_no_records_exist() -> None:
 
 
 @pytest.mark.asyncio
-async def test_query_without_paper_id_returns_all_records_across_papers() -> None:
+async def test_query_with_invalid_paper_id_raises_value_error() -> None:
+    store, _chunks, _entities, _relations = _store()
+    await store.index_chunks([_chunk("paper-1", 0, "alpha")])
+
+    invalid_values: list[Any] = [None, "", 123, []]
+    for invalid_value in invalid_values:
+        with pytest.raises(ValueError, match="paper_id must be a non-empty string"):
+            await store.query_chunks("alpha", paper_id=invalid_value, top_k=5)
+
+
+@pytest.mark.asyncio
+async def test_query_scoped_to_single_paper_returns_only_matching_paper() -> None:
     store, _chunks, _entities, _relations = _store()
     await store.index_chunks([_chunk("paper-1", 0, "alpha"), _chunk("paper-2", 0, "beta")])
 
-    results = await store.query_chunks("alpha", paper_id=None, top_k=5)
+    results = await store.query_chunks("alpha", paper_id="paper-1", top_k=5)
 
-    assert len(results) == 2
+    assert len(results) == 1
+    assert results[0].paper_id == "paper-1"
 
 
 @pytest.mark.asyncio
