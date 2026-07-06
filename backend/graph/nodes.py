@@ -15,8 +15,7 @@ from backend.services.paper_pipeline_scheduler import ensure_head_refine_schedul
 from backend.services.paper_service import get_paper_service
 from backend.services.pipeline_completion_service import get_pipeline_completion_service
 from backend.services.pipeline_status_service import get_pipeline_status_service
-
-RAG_INDEX_STAGE_MESSAGE = "正在构建 RAG 向量索引"
+from backend.services.rag_index_service import RAG_INDEX_STAGE_MESSAGE, RagIndexService
 
 logger = logging.getLogger(__name__)
 
@@ -223,27 +222,15 @@ async def _index_paper_for_rag_async(
 ) -> None:
     """Build RAG vector index in the background; surface failures as warnings."""
 
-    from backend.config import get_settings
-    from backend.rag.handlers import index_paper_for_rag
-    from backend.rag.vector_store import VectorStore
-    from backend.services.paper_service import get_paper_service
-
     _mark_progress(
         WorkflowState(paper_id=paper_id),
         stage=PipelineStage.STORING,
         message=RAG_INDEX_STAGE_MESSAGE,
     )
-    settings = get_settings()
-    vector_store = VectorStore(
-        chroma_path=settings.chromadb_path,
-        paper_service=get_paper_service(),
-    )
-    await index_paper_for_rag(
+    await RagIndexService().index_paper_for_rag_async(
         paper_id,
         full_text=full_text,
         graph=graph,
-        vector_store=vector_store,
-        suppress_errors=True,
         page_break_offsets=page_break_offsets,
     )
 
