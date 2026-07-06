@@ -265,12 +265,15 @@ class VectorStore:
     ) -> list[RetrievedChunk]:
         """Search original text chunks scoped to a single paper."""
 
-        return await self._query(
-            self._chunk_collection,
-            query_text,
-            evidence_type=VectorEvidenceType.CHUNK,
-            paper_id=paper_id,
-            top_k=top_k if top_k is not None else self._default_top_k(VectorEvidenceType.CHUNK),
+        return cast(
+            list[RetrievedChunk],
+            await self._query(
+                self._chunk_collection,
+                query_text,
+                evidence_type=VectorEvidenceType.CHUNK,
+                paper_id=paper_id,
+                top_k=top_k if top_k is not None else self._default_top_k(VectorEvidenceType.CHUNK),
+            ),
         )
 
     async def query_entities(
@@ -282,12 +285,15 @@ class VectorStore:
     ) -> list[RetrievedEntity]:
         """Search graph entities scoped to a single paper."""
 
-        return await self._query(
-            self._entity_collection,
-            query_text,
-            evidence_type=VectorEvidenceType.ENTITY,
-            paper_id=paper_id,
-            top_k=top_k if top_k is not None else self._default_top_k(VectorEvidenceType.ENTITY),
+        return cast(
+            list[RetrievedEntity],
+            await self._query(
+                self._entity_collection,
+                query_text,
+                evidence_type=VectorEvidenceType.ENTITY,
+                paper_id=paper_id,
+                top_k=top_k if top_k is not None else self._default_top_k(VectorEvidenceType.ENTITY),
+            ),
         )
 
     async def query_relations(
@@ -299,12 +305,15 @@ class VectorStore:
     ) -> list[RetrievedRelation]:
         """Search graph relations scoped to a single paper."""
 
-        return await self._query(
-            self._relation_collection,
-            query_text,
-            evidence_type=VectorEvidenceType.RELATION,
-            paper_id=paper_id,
-            top_k=top_k if top_k is not None else self._default_top_k(VectorEvidenceType.RELATION),
+        return cast(
+            list[RetrievedRelation],
+            await self._query(
+                self._relation_collection,
+                query_text,
+                evidence_type=VectorEvidenceType.RELATION,
+                paper_id=paper_id,
+                top_k=top_k if top_k is not None else self._default_top_k(VectorEvidenceType.RELATION),
+            ),
         )
 
     async def delete_by_paper(self, paper_id: str) -> None:
@@ -449,7 +458,7 @@ class VectorStore:
         evidence_type: VectorEvidenceType,
         paper_id: str,
         top_k: int,
-    ) -> list:
+    ) -> list[RetrievedChunk | RetrievedEntity | RetrievedRelation]:
         if not isinstance(paper_id, str) or not paper_id.strip():
             raise ValueError("单篇 QA 路径下严禁泄露全库检索权限：paper_id 必须是非空字符串")
         if not query_text.strip() or top_k <= 0:
@@ -490,32 +499,3 @@ def _validate_evidence_paper_ids(
     for relation in relations:
         if relation.paper_id != paper_id:
             raise ValueError(f"relation paper_id mismatch: expected {paper_id!r}, got {relation.paper_id!r}")
-
-
-async def _query(
-    self: VectorStore,
-    collection: CollectionProtocol,
-    query_text: str,
-    *,
-    evidence_type: VectorEvidenceType,
-    paper_id: str,
-    top_k: int,
-) -> list[RetrievedChunk | RetrievedEntity | RetrievedRelation]:
-    if not isinstance(paper_id, str) or not paper_id.strip():
-        raise ValueError("单篇 QA 路径下严禁泄露全库检索权限：paper_id 必须是非空字符串")
-    if not query_text.strip() or top_k <= 0:
-        return []
-
-    query_embeddings = await self._embedding_client.embed_texts([query_text])
-    active_run_id = self._paper_service.get_active_run_id(paper_id) if self._paper_service else None
-    where: ChromaWhere = self._build_where(paper_id, run_id=active_run_id)
-    raw_result = await asyncio.to_thread(
-        partial(
-            collection.query,
-            query_embeddings=query_embeddings,
-            n_results=top_k,
-            where=where,
-            include=["documents", "metadatas", "distances"],
-        )
-    )
-    return _parse_query_results(raw_result, evidence_type=evidence_type)

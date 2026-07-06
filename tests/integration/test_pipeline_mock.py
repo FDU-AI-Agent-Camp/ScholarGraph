@@ -215,6 +215,7 @@ async def test_run_paper_pipeline_builds_queryable_rag_index(
         store = VectorStore(
             embedding_client=FakeEmbeddingClient(),
             chroma_path=str(chroma_path),
+            paper_service=get_paper_service(),
         )
         await index_paper_for_rag(
             paper_id,
@@ -242,6 +243,7 @@ async def test_run_paper_pipeline_builds_queryable_rag_index(
     store = VectorStore(
         embedding_client=FakeEmbeddingClient(),
         chroma_path=str(chroma_path),
+        paper_service=get_paper_service(),
     )
     results = await store.query_chunks("hybrid chunker", paper_id=paper_id, top_k=3)
     assert len(results) >= 1
