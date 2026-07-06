@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 import sys
 from functools import partial
 from typing import TYPE_CHECKING, cast
@@ -32,6 +33,8 @@ from backend.rag.vector_store_utils import (
     _result_has_ids,
     clean_metadata,
 )
+
+logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from backend.config import Settings
@@ -138,12 +141,19 @@ class VectorStore:
             await self._await_pending_cleanups(paper_id)
 
             run_id = _generate_run_id()
-            await self._index_chunks(chunks, run_id=run_id)
-            await self._index_entities(entities, run_id=run_id)
-            await self._index_relations(relations, run_id=run_id)
+            try:
+                await self._index_chunks(chunks, run_id=run_id)
+                await self._index_entities(entities, run_id=run_id)
+                await self._index_relations(relations, run_id=run_id)
 
-            # Activation is the commit point. Failures before this leave the old run active.
-            self._paper_service.set_active_run_id(paper_id, run_id)
+                # Activation is the commit point. Failures before this leave the old run active.
+                self._paper_service.set_active_run_id(paper_id, run_id)
+            except Exception:
+                # Best-effort cleanup of the partially-written run so failed replaces
+                # do not leave orphan data in ChromaDB. The original exception is
+                # re-raised after cleanup attempts.
+                await self._cleanup_run_safely(paper_id, run_id)
+                raise
 
         # Best-effort async cleanup of exactly the previous run now that the new
         # run is live. Targeting the explicit previous run id avoids deleting data
@@ -397,6 +407,17 @@ class VectorStore:
         pending = self._pending_cleanups.pop(paper_id, set())
         if pending:
             await asyncio.gather(*pending, return_exceptions=True)
+
+    async def _cleanup_run_safely(self, paper_id: str, run_id: str) -> None:
+        """Best-effort deletion of a partially-written run; logs but never raises."""
+
+        try:
+            await self._cleanup_run(paper_id, run_id)
+        except Exception:
+            logger.exception(
+                "orphan_run_cleanup_failed",
+                extra={"paper_id": paper_id, "run_id": run_id},
+            )
 
     async def _cleanup_run(self, paper_id: str, run_id: str) -> None:
         """Best-effort deletion of all indexed evidence for a specific run id."""

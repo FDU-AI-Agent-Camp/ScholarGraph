@@ -217,11 +217,13 @@ async def test_run_paper_pipeline_builds_queryable_rag_index(
             chroma_path=str(chroma_path),
             paper_service=get_paper_service(),
         )
+        full_text = kwargs["full_text"]
         await index_paper_for_rag(
             paper_id,
-            full_text=kwargs["full_text"],
+            full_text=full_text,
             graph=kwargs["graph"],
             vector_store=store,
+            page_break_offsets=[len(full_text)],
         )
 
     with mock_pipeline_node_services(paper_id) as mocks:
@@ -230,6 +232,7 @@ async def test_run_paper_pipeline_builds_queryable_rag_index(
                 "paper_id": paper_id,
                 "full_text": "Methods\nWe propose a hybrid chunker.",
                 "classifier_input": "classifier-input",
+                "page_break_offsets": [len("Methods\nWe propose a hybrid chunker.")],
             },
         )
         mocks["rag_index"].side_effect = real_rag_index
@@ -248,3 +251,4 @@ async def test_run_paper_pipeline_builds_queryable_rag_index(
     results = await store.query_chunks("hybrid chunker", paper_id=paper_id, top_k=3)
     assert len(results) >= 1
     assert all(result.paper_id == paper_id for result in results)
+    assert all(result.page_start is not None for result in results)

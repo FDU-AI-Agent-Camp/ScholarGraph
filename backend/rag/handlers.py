@@ -22,6 +22,7 @@ async def index_paper_for_rag(
     graph: UnifiedPaperGraph,
     vector_store: VectorStore | None = None,
     suppress_errors: bool = True,
+    page_break_offsets: list[int] | None = None,
 ) -> bool:
     """Build or replace the RAG vector index for one finalized paper."""
 
@@ -43,6 +44,7 @@ async def index_paper_for_rag(
             min_chunk_chars=settings.rag_chunk_min_chunk_chars,
             min_soft_boundary_window_chars=settings.rag_chunk_min_soft_boundary_window_chars,
             include_references=settings.rag_chunk_include_references,
+            page_break_offsets=page_break_offsets,
         )
         entities = graph_to_entities(paper_id, graph)
         relations = graph_to_relations(paper_id, graph)

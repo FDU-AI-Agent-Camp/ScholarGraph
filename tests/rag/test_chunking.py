@@ -131,3 +131,59 @@ def test_chunk_text_exclude_references_by_default() -> None:
 
     assert not any(chunk.section == "references" for chunk in default_chunks)
     assert any(chunk.section == "references" for chunk in included_chunks)
+
+
+def test_chunk_text_infers_page_numbers_from_break_offsets() -> None:
+    text = "Page1 line1.\n\nPage2 line1.\n\nPage3 line1."
+    # Offsets mark the end of each page in the normalized text.
+    chunks = chunk_text(
+        "paper-pages",
+        text,
+        chunk_size_chars=50,
+        min_chunk_chars=1,
+        page_break_offsets=[len("Page1 line1."), len("Page1 line1.\n\nPage2 line1.")],
+    )
+
+    assert chunks
+    for chunk in chunks:
+        assert chunk.page_start is not None
+        assert chunk.page_end is not None
+        assert chunk.page_start <= chunk.page_end
+
+
+def test_chunk_text_cross_page_chunk_has_start_and_end_pages() -> None:
+    text = "A" * 50 + "\n\n" + "B" * 50
+    chunks = chunk_text(
+        "paper-cross",
+        text,
+        chunk_size_chars=80,
+        min_chunk_chars=1,
+        page_break_offsets=[50],
+    )
+
+    cross_page_chunks = [chunk for chunk in chunks if chunk.page_start != chunk.page_end]
+    assert cross_page_chunks
+    chunk = cross_page_chunks[0]
+    assert chunk.page_start == 1
+    assert chunk.page_end == 2
+
+
+def test_chunk_text_page_fields_none_without_offsets() -> None:
+    chunks = chunk_text("paper-no-pages", "Some content without offsets.", min_chunk_chars=1)
+    assert len(chunks) == 1
+    assert chunks[0].page_start is None
+    assert chunks[0].page_end is None
+
+
+def test_chunk_text_page_resolver_handles_out_of_range_offsets() -> None:
+    text = "Short text."
+    chunks = chunk_text(
+        "paper-overflow",
+        text,
+        min_chunk_chars=1,
+        page_break_offsets=[5],  # boundary is inside the only chunk
+    )
+
+    assert len(chunks) == 1
+    assert chunks[0].page_start == 1
+    assert chunks[0].page_end == 2

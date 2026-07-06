@@ -49,6 +49,7 @@ class WorkflowState(TypedDict, total=False):
 
     full_text: str
     classifier_input: str
+    page_break_offsets: list[int]
 
     classification: dict[str, Any]
     paradigm: str

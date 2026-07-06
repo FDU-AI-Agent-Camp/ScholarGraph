@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+from collections.abc import Callable
 from dataclasses import dataclass
 
 from backend.rag.models import PaperChunk
@@ -65,14 +66,14 @@ def chunk_text(
     min_chunk_chars: int = DEFAULT_MIN_CHUNK_CHARS,
     min_soft_boundary_window_chars: int = DEFAULT_MIN_SOFT_BOUNDARY_WINDOW_CHARS,
     include_references: bool = False,
+    page_break_offsets: list[int] | None = None,
 ) -> list[PaperChunk]:
     """Split paper text into deterministic, section-aware RAG chunks.
 
-    Page numbers are intentionally omitted here: pymupdf ingest already tracks
-    per-span page metadata in the extraction graph, and attaching accurate page
-    ranges to raw text chunks would require re-parsing the PDF with character-
-    level page spans. For now page_start/page_end remain None; downstream
-    retrieval can enrich results from graph evidence when pages matter.
+    When ``page_break_offsets`` is supplied it must list the normalized-text
+    character positions immediately after each page boundary. page_start and
+    page_end are then inferred from each chunk's char_start/char_end. If no
+    offsets are supplied both fields remain None.
     """
 
     normalized_text = _normalize_text(full_text)
@@ -97,13 +98,14 @@ def chunk_text(
         )
 
     merged_chunks = _merge_tiny_slices(normalized_text, raw_chunks, min_chunk_chars)
+    _page_for_offset = _build_page_resolver(page_break_offsets)
     return [
         PaperChunk(
             chunk_id=_chunk_id(paper_id, index),
             paper_id=paper_id,
             text=normalized_text[text_slice.start : text_slice.end],
-            page_start=None,
-            page_end=None,
+            page_start=_page_for_offset(text_slice.start),
+            page_end=_page_for_offset(text_slice.end - 1),
             section=text_slice.section,
             chunk_index=index,
             source=source,
@@ -113,6 +115,23 @@ def chunk_text(
         for index, text_slice in enumerate(merged_chunks)
         if normalized_text[text_slice.start : text_slice.end]
     ]
+
+
+def _build_page_resolver(page_break_offsets: list[int] | None) -> Callable[[int], int | None]:
+    """Return a function that maps a character offset to a 1-based page number."""
+
+    if not page_break_offsets:
+        return lambda _offset: None
+
+    def resolve(offset: int) -> int | None:
+        if offset < 0:
+            return None
+        for page_index, break_offset in enumerate(page_break_offsets):
+            if offset < break_offset:
+                return page_index + 1
+        return len(page_break_offsets) + 1
+
+    return resolve
 
 
 def _normalize_text(text: str) -> str:

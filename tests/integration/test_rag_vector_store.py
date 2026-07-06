@@ -233,3 +233,100 @@ async def test_real_chroma_explicit_top_k_overrides_configured_default(temp_chro
 
     results = await store.query_chunks("chunk", paper_id="paper-1", top_k=7)
     assert len(results) == 7
+
+
+class _DictPaperService:
+    """Minimal paper service that tracks active run ids in memory."""
+
+    def __init__(self) -> None:
+        self._runs: dict[str, str] = {}
+
+    def get_active_run_id(self, paper_id: str) -> str:
+        return self._runs.get(paper_id, "")
+
+    def set_active_run_id(self, paper_id: str, run_id: str) -> None:
+        self._runs[paper_id] = run_id
+
+
+class FailingRelationCollection:
+    """Chroma-like collection that raises on upsert so the new run never activates."""
+
+    def __init__(self, real_collection: Any) -> None:
+        self._real = real_collection
+        self.upsert_calls: list[dict[str, Any]] = []
+
+    def upsert(self, **kwargs: Any) -> None:
+        self.upsert_calls.append(kwargs)
+        if kwargs.get("metadatas") and any(
+            metadata.get("evidence_type") == "relation" for metadata in kwargs["metadatas"]
+        ):
+            raise RuntimeError("relation upsert failed")
+        self._real.upsert(**kwargs)
+
+    def query(self, **kwargs: Any) -> Any:
+        return self._real.query(**kwargs)
+
+    def get(self, **kwargs: Any) -> Any:
+        return self._real.get(**kwargs)
+
+    def delete(self, **kwargs: Any) -> Any:
+        return self._real.delete(**kwargs)
+
+
+@pytest.mark.asyncio
+async def test_failed_replace_with_run_id_leaves_no_orphans_and_keeps_old_run(
+    temp_chroma_path: Path,
+) -> None:
+    """A failed replace must not leave orphan data and must keep the previous run queryable."""
+
+    paper_service = _DictPaperService()
+    store = VectorStore(
+        embedding_client=FakeEmbeddingClient(),
+        chroma_path=str(temp_chroma_path),
+        paper_service=paper_service,  # type: ignore[arg-type]
+    )
+
+    # Seed an old active run.
+    await store.replace_paper_index(
+        "paper-1",
+        chunks=[_chunk("paper-1", 0, "old evidence")],
+        entities=[],
+        relations=[],
+    )
+    old_results = await store.query_chunks("evidence", paper_id="paper-1", top_k=5)
+    assert len(old_results) == 1
+    assert old_results[0].text == "old evidence"
+
+    # Wrap the relation collection so upserting relations fails.
+    failing_relation_collection = FailingRelationCollection(store._relation_collection)
+    store._relation_collection = failing_relation_collection  # type: ignore[assignment]
+
+    with pytest.raises(RuntimeError, match="relation upsert failed"):
+        await store.replace_paper_index(
+            "paper-1",
+            chunks=[_chunk("paper-1", 0, "new evidence")],
+            entities=[],
+            relations=[
+                PaperRelation(
+                    paper_id="paper-1",
+                    relation_id="e_supports",
+                    source_id="n1",
+                    target_id="n2",
+                    relation_type="SUPPORTS",
+                    description="relation evidence",
+                )
+            ],
+        )
+
+    # Old run must still be queryable; no new chunk should leak into results.
+    results = await store.query_chunks("evidence", paper_id="paper-1", top_k=5)
+    assert len(results) == 1
+    assert results[0].text == "old evidence"
+
+    # Verify that orphan chunk records for the failed run are gone by counting
+    # every chunk record for the paper.
+    all_chunks = store._chunk_collection.get(
+        where={"paper_id": "paper-1"},
+        include=[],
+    )
+    assert len(all_chunks["ids"]) == 1

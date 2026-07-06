@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from typing import Any
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from backend.config import Settings
@@ -576,3 +576,66 @@ async def test_large_text_indexing_splits_into_correct_embedding_batches() -> No
 
     assert len(embeddings) == 70
     assert mock_client.embed_texts.call_count == 3
+
+
+# ---------------------------------------------------------------------------
+# Run-id snapshot cleanup tests
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_failed_replace_cleans_up_partial_orphan_run() -> None:
+    """If a replace fails before activation, the partially-written run must be deleted."""
+
+    store, chunks, entities, relations, _embedding_client = _store()
+
+    paper_service = MagicMock()
+    paper_service.get_active_run_id.return_value = "old-run"
+    store._paper_service = paper_service
+
+    cleanup_calls: list[tuple[str, str]] = []
+
+    async def mock_cleanup_run(paper_id: str, run_id: str) -> None:
+        cleanup_calls.append((paper_id, run_id))
+
+    store._cleanup_run = mock_cleanup_run  # type: ignore[method-assign]
+
+    def failing_upsert(**_kwargs: Any) -> None:
+        raise RuntimeError("relation upsert failed")
+
+    relations.upsert = failing_upsert  # type: ignore[method-assign]
+
+    with pytest.raises(RuntimeError, match="relation upsert failed"):
+        await store.replace_paper_index(
+            "paper-1",
+            chunks=[_chunk("paper-1", 0, "chunk text")],
+            entities=[
+                PaperEntity(
+                    paper_id="paper-1",
+                    entity_id="n_method",
+                    label="Method",
+                    node_type="Method",
+                    description="method entity",
+                )
+            ],
+            relations=[
+                PaperRelation(
+                    paper_id="paper-1",
+                    relation_id="e_supports",
+                    source_id="n_evidence",
+                    target_id="n_claim",
+                    relation_type="SUPPORTS",
+                    description="relation evidence",
+                )
+            ],
+        )
+
+    assert len(cleanup_calls) == 1
+    cleaned_paper_id, cleaned_run_id = cleanup_calls[0]
+    assert cleaned_paper_id == "paper-1"
+    assert cleaned_run_id != "old-run"
+    assert chunks.records
+    assert entities.records
+    # Relations failed before writing, so the orphan cleanup only removed
+    # the successfully-written chunk/entity records for the new run.
+    assert not relations.records

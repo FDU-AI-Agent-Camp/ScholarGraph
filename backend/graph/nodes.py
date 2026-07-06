@@ -79,6 +79,7 @@ async def ingest_node(state: WorkflowState) -> WorkflowState:
         message="PDF 解析完成",
         full_text=result["full_text"],
         classifier_input=result["classifier_input"],
+        page_break_offsets=result.get("page_break_offsets", []),
     )
 
 
@@ -193,7 +194,12 @@ async def store_node(state: WorkflowState) -> WorkflowState:
     # Build the RAG vector index asynchronously without blocking the ready status.
     # Failures are captured as extract_warnings so the paper can still be usable.
     try:
-        await _index_paper_for_rag_async(state["paper_id"], full_text=state["full_text"], graph=graph)
+        await _index_paper_for_rag_async(
+            state["paper_id"],
+            full_text=state["full_text"],
+            graph=graph,
+            page_break_offsets=state.get("page_break_offsets"),
+        )
     except Exception:
         # RAG indexing is best-effort; failures are already recorded as warnings
         # by index_paper_for_rag. The paper must still reach ready.
@@ -213,6 +219,7 @@ async def _index_paper_for_rag_async(
     *,
     full_text: str,
     graph: UnifiedPaperGraph,
+    page_break_offsets: list[int] | None = None,
 ) -> None:
     """Build RAG vector index in the background; surface failures as warnings."""
 
@@ -237,6 +244,7 @@ async def _index_paper_for_rag_async(
         graph=graph,
         vector_store=vector_store,
         suppress_errors=True,
+        page_break_offsets=page_break_offsets,
     )
 
 
