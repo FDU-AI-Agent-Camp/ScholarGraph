@@ -25,6 +25,11 @@ async def index_paper_for_rag(
 ) -> bool:
     """Build or replace the RAG vector index for one finalized paper."""
 
+    if not isinstance(paper_id, str) or not paper_id.strip():
+        raise ValueError("paper_id must be a non-empty string")
+    if graph.paper_id != paper_id:
+        raise ValueError(f"graph.paper_id ({graph.paper_id!r}) does not match paper_id ({paper_id!r})")
+
     store = vector_store or VectorStore()
     try:
         from backend.config import get_settings

@@ -110,6 +110,8 @@ class VectorStore:
         asynchronously after activation.
         """
 
+        _validate_evidence_paper_ids(paper_id, chunks, entities, relations)
+
         if self._paper_service is None:
             # Fallback for callers that do not supply a paper service: old behavior.
             await self.delete_by_paper(paper_id)
@@ -442,3 +444,54 @@ class VectorStore:
             )
         )
         return _parse_query_results(raw_result, evidence_type=evidence_type)
+
+
+def _validate_evidence_paper_ids(
+    paper_id: str,
+    chunks: list[PaperChunk],
+    entities: list[PaperEntity],
+    relations: list[PaperRelation],
+) -> None:
+    """Ensure every evidence item belongs to the target paper.
+
+    Cross-paper indexing is a data-poisoning risk; reject it eagerly.
+    """
+
+    for chunk in chunks:
+        if chunk.paper_id != paper_id:
+            raise ValueError(f"chunk paper_id mismatch: expected {paper_id!r}, got {chunk.paper_id!r}")
+    for entity in entities:
+        if entity.paper_id != paper_id:
+            raise ValueError(f"entity paper_id mismatch: expected {paper_id!r}, got {entity.paper_id!r}")
+    for relation in relations:
+        if relation.paper_id != paper_id:
+            raise ValueError(f"relation paper_id mismatch: expected {paper_id!r}, got {relation.paper_id!r}")
+
+
+async def _query(
+    self: VectorStore,
+    collection: CollectionProtocol,
+    query_text: str,
+    *,
+    evidence_type: VectorEvidenceType,
+    paper_id: str,
+    top_k: int,
+) -> list:
+    if not isinstance(paper_id, str) or not paper_id.strip():
+        raise ValueError("单篇 QA 路径下严禁泄露全库检索权限：paper_id 必须是非空字符串")
+    if not query_text.strip() or top_k <= 0:
+        return []
+
+    query_embeddings = await self._embedding_client.embed_texts([query_text])
+    active_run_id = self._paper_service.get_active_run_id(paper_id) if self._paper_service else None
+    where: ChromaWhere = self._build_where(paper_id, run_id=active_run_id)
+    raw_result = await asyncio.to_thread(
+        partial(
+            collection.query,
+            query_embeddings=query_embeddings,
+            n_results=top_k,
+            where=where,
+            include=["documents", "metadatas", "distances"],
+        )
+    )
+    return _parse_query_results(raw_result, evidence_type=evidence_type)

@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 import pytest
-from backend.rag.models import PaperChunk, VectorEvidenceType
+from backend.rag.models import PaperChunk, PaperEntity, PaperRelation, VectorEvidenceType
 from backend.rag.vector_store import VectorStore, clean_metadata
 
 
@@ -203,6 +203,57 @@ async def test_replace_paper_index_with_empty_entities_and_relations_still_index
     assert "paper-1:chunk:0" in chunks.records
     assert entities.upsert_calls == 0
     assert relations.upsert_calls == 0
+
+
+@pytest.mark.asyncio
+async def test_replace_paper_index_rejects_cross_paper_evidence() -> None:
+    """Cross-paper evidence must fail fast to prevent data poisoning."""
+
+    store, chunks, entities, relations = _store()
+
+    with pytest.raises(ValueError, match="chunk paper_id mismatch"):
+        await store.replace_paper_index(
+            "paper-1",
+            chunks=[_chunk("paper-2", 0, "foreign chunk")],
+            entities=[],
+            relations=[],
+        )
+
+    # No partial writes should happen.
+    assert chunks.upsert_calls == 0
+    assert entities.upsert_calls == 0
+    assert relations.upsert_calls == 0
+
+    entity = PaperEntity(
+        entity_id="n_foreign",
+        paper_id="paper-2",
+        label="Foreign",
+        node_type="Method",
+        description="foreign entity",
+    )
+    with pytest.raises(ValueError, match="entity paper_id mismatch"):
+        await store.replace_paper_index(
+            "paper-1",
+            chunks=[_chunk("paper-1", 0, "local chunk")],
+            entities=[entity],
+            relations=[],
+        )
+
+    relation = PaperRelation(
+        relation_id="e_foreign",
+        paper_id="paper-2",
+        source_id="n1",
+        target_id="n2",
+        relation_type="SUPPORTS",
+        description="foreign relation",
+    )
+    with pytest.raises(ValueError, match="relation paper_id mismatch"):
+        await store.replace_paper_index(
+            "paper-1",
+            chunks=[_chunk("paper-1", 0, "local chunk")],
+            entities=[],
+            relations=[relation],
+        )
 
 
 @pytest.mark.asyncio

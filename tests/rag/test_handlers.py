@@ -85,6 +85,45 @@ async def test_index_paper_for_rag_success_returns_true_and_indexes(
 
 
 @pytest.mark.asyncio
+async def test_index_paper_for_rag_rejects_mismatched_graph_paper_id(
+    sample_graph: UnifiedPaperGraph,
+    mock_paper_service: MagicMock,
+) -> None:
+    store = FakeVectorStore()
+
+    with pytest.raises(ValueError, match="graph.paper_id .* does not match paper_id"):
+        await index_paper_for_rag(
+            "paper-2",
+            full_text="Methods\nWe propose a hybrid chunker.",
+            graph=sample_graph,
+            vector_store=store,
+        )
+
+    # Validation happens before any side effect; nothing should be indexed.
+    assert not store.indexed
+    mock_paper_service.record_extract_warnings.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_index_paper_for_rag_rejects_invalid_paper_id(
+    sample_graph: UnifiedPaperGraph,
+    mock_paper_service: MagicMock,
+) -> None:
+    store = FakeVectorStore()
+
+    with pytest.raises(ValueError, match="paper_id must be a non-empty string"):
+        await index_paper_for_rag(
+            "",
+            full_text="Methods\nWe propose a hybrid chunker.",
+            graph=sample_graph,
+            vector_store=store,
+        )
+
+    assert not store.indexed
+    mock_paper_service.record_extract_warnings.assert_not_called()
+
+
+@pytest.mark.asyncio
 async def test_index_paper_for_rag_suppresses_error_and_records_warning(
     sample_graph: UnifiedPaperGraph,
     mock_paper_service: MagicMock,
