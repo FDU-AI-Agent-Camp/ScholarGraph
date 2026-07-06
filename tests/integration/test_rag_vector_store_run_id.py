@@ -6,6 +6,7 @@ import asyncio
 import tempfile
 from pathlib import Path
 from typing import Any
+from unittest import mock
 
 import pytest
 from backend.rag.models import PaperChunk, PaperEntity
@@ -276,3 +277,64 @@ async def test_run_aware_store_is_isolated_from_unmanaged_store(
     # The unmanaged store filters only by paper_id, so it still sees the data;
     # this test documents the backward-compatible fallback contract.
     assert await unmanaged_store.exists(paper_id) is True
+
+
+@pytest.mark.asyncio
+async def test_reindex_failed_midway_keeps_old_index_accessible(
+    temp_chroma_path: Path,
+    paper_service: PaperService,
+) -> None:
+    """Atomicity validation: if entities indexing fails mid-reindex, the old run stays queryable."""
+
+    paper_id = "paper-atomic-midway"
+    _register_paper(paper_service, paper_id)
+    store = VectorStore(
+        embedding_client=FakeEmbeddingClient(),
+        chroma_path=str(temp_chroma_path),
+        paper_service=paper_service,
+    )
+
+    # 1. Establish the first successful index run (Run A).
+    await store.replace_paper_index(
+        paper_id,
+        chunks=[_chunk(paper_id, 0, "Old Text")],
+        entities=[
+            PaperEntity(
+                paper_id=paper_id,
+                entity_id="n_old",
+                label="Old",
+                node_type="Claim",
+                description="Old entity description.",
+            )
+        ],
+        relations=[],
+    )
+    old_chunks = await store.query_chunks("Old Text", paper_id=paper_id, top_k=5)
+    assert len(old_chunks) == 1
+    assert old_chunks[0].text == "Old Text"
+    old_run_id = paper_service.get_active_run_id(paper_id)
+    assert old_run_id
+
+    # 2. Start a second reindex (Run B) but make entities indexing fail.
+    with mock.patch.object(store, "_index_entities", side_effect=RuntimeError("Chroma I/O Error")):
+        with pytest.raises(RuntimeError, match="Chroma I/O Error"):
+            await store.replace_paper_index(
+                paper_id,
+                chunks=[_chunk(paper_id, 0, "New Text")],
+                entities=[
+                    PaperEntity(
+                        paper_id=paper_id,
+                        entity_id="n_new",
+                        label="New",
+                        node_type="Claim",
+                        description="New entity description.",
+                    )
+                ],
+                relations=[],
+            )
+
+    # 3. Core assertion: the active run must still be Run A and old chunks intact.
+    assert paper_service.get_active_run_id(paper_id) == old_run_id
+    current_chunks = await store.query_chunks("Old Text", paper_id=paper_id, top_k=5)
+    assert len(current_chunks) == len(old_chunks)
+    assert current_chunks[0].text == "Old Text"
