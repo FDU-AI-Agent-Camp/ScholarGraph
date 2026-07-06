@@ -40,7 +40,9 @@ async def index_paper_for_rag(
             full_text,
             chunk_size_chars=settings.rag_chunk_size_chars,
             chunk_overlap_ratio=settings.rag_chunk_overlap_ratio,
+            min_chunk_chars=settings.rag_chunk_min_chunk_chars,
             min_soft_boundary_window_chars=settings.rag_chunk_min_soft_boundary_window_chars,
+            include_references=settings.rag_chunk_include_references,
         )
         entities = graph_to_entities(paper_id, graph)
         relations = graph_to_relations(paper_id, graph)

@@ -275,6 +275,8 @@ class Settings(BaseSettings):
     )
     rag_chunk_size_chars: int = Field(default=1500, ge=200, validation_alias="RAG_CHUNK_SIZE_CHARS")
     rag_chunk_overlap_ratio: float = Field(default=0.20, ge=0.0, lt=1.0, validation_alias="RAG_CHUNK_OVERLAP_RATIO")
+    rag_chunk_min_chunk_chars: int = Field(default=200, ge=1, validation_alias="RAG_CHUNK_MIN_CHUNK_CHARS")
+    rag_chunk_include_references: bool = Field(default=False, validation_alias="RAG_CHUNK_INCLUDE_REFERENCES")
     rag_chunk_min_soft_boundary_window_chars: int = Field(
         default=200, ge=50, validation_alias="RAG_CHUNK_MIN_SOFT_BOUNDARY_WINDOW_CHARS"
     )

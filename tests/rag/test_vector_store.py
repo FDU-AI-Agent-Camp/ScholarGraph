@@ -23,6 +23,7 @@ class FakeEmbeddingClient:
 class FakeCollection:
     def __init__(self) -> None:
         self.records: dict[str, dict[str, Any]] = {}
+        self.last_query_n_results: int | None = None
 
     def upsert(
         self,
@@ -47,6 +48,7 @@ class FakeCollection:
         where: ChromaWhere | None = None,
         include: list[str] | None = None,
     ) -> dict[str, Any]:
+        self.last_query_n_results = n_results
         del query_embeddings, include
         rows = [
             (record_id, record)
@@ -84,16 +86,25 @@ def _matches_where(metadata: ChromaMetadata, where: ChromaWhere | None) -> bool:
 
 
 def _store() -> tuple[VectorStore, FakeCollection, FakeCollection, FakeCollection, FakeEmbeddingClient]:
+    return _store_with_settings(None)
+
+
+def _store_with_settings(
+    settings: Any,
+) -> tuple[VectorStore, FakeCollection, FakeCollection, FakeCollection, FakeEmbeddingClient]:
     chunk_collection = FakeCollection()
     entity_collection = FakeCollection()
     relation_collection = FakeCollection()
     embedding_client = FakeEmbeddingClient()
-    store = VectorStore(
-        embedding_client=embedding_client,
-        chunk_collection=chunk_collection,
-        entity_collection=entity_collection,
-        relation_collection=relation_collection,
-    )
+    kwargs: dict[str, Any] = {
+        "embedding_client": embedding_client,
+        "chunk_collection": chunk_collection,
+        "entity_collection": entity_collection,
+        "relation_collection": relation_collection,
+    }
+    if settings is not None:
+        kwargs["settings"] = settings
+    store = VectorStore(**kwargs)
     return store, chunk_collection, entity_collection, relation_collection, embedding_client
 
 
@@ -160,6 +171,102 @@ async def test_query_chunks_hard_filters_by_paper_id() -> None:
     assert [result.paper_id for result in results] == ["paper-1"]
     assert results[0].evidence_type == VectorEvidenceType.CHUNK
     assert results[0].metadata["chunk_id"] == "paper-1:chunk:0"
+
+
+@pytest.mark.asyncio
+async def test_query_entities_hard_filters_by_paper_id() -> None:
+    store, _chunks, entities, _relations, _embedding_client = _store()
+    await store.index_entities(
+        [
+            PaperEntity(
+                paper_id="paper-1",
+                entity_id="n1",
+                label="Method",
+                node_type="Method",
+                description="method entity",
+            ),
+            PaperEntity(
+                paper_id="paper-2",
+                entity_id="n2",
+                label="Claim",
+                node_type="Claim",
+                description="claim entity",
+            ),
+        ]
+    )
+
+    results = await store.query_entities("entity", paper_id="paper-1", top_k=5)
+
+    assert [result.paper_id for result in results] == ["paper-1"]
+    assert results[0].evidence_type == VectorEvidenceType.ENTITY
+    assert results[0].metadata["entity_id"] == "n1"
+
+
+@pytest.mark.asyncio
+async def test_query_relations_hard_filters_by_paper_id() -> None:
+    store, _chunks, _entities, relations, _embedding_client = _store()
+    await store.index_relations(
+        [
+            PaperRelation(
+                paper_id="paper-1",
+                relation_id="e1",
+                source_id="n1",
+                target_id="n2",
+                relation_type="SUPPORTS",
+                description="paper one relation",
+            ),
+            PaperRelation(
+                paper_id="paper-2",
+                relation_id="e2",
+                source_id="n3",
+                target_id="n4",
+                relation_type="REF",
+                description="paper two relation",
+            ),
+        ]
+    )
+
+    results = await store.query_relations("relation", paper_id="paper-1", top_k=5)
+
+    assert [result.paper_id for result in results] == ["paper-1"]
+    assert results[0].evidence_type == VectorEvidenceType.RELATION
+    assert results[0].metadata["relation_id"] == "e1"
+
+
+@pytest.mark.asyncio
+async def test_query_uses_configured_default_top_k() -> None:
+    """When top_k is omitted, query_* uses the configured default per collection."""
+
+    from backend.config import Settings
+
+    store, chunks, _entities, _relations, _embedding_client = _store_with_settings(
+        Settings.model_validate(
+            {
+                "embedding_provider": "openai",
+                "rag_top_k_chunks": 2,
+                "rag_top_k_entities": 3,
+                "rag_top_k_relations": 4,
+            }
+        )
+    )
+    for index in range(10):
+        await store.index_chunks([_chunk("paper-1", index, f"chunk {index}")])
+
+    await store.query_chunks("chunk", paper_id="paper-1")
+    assert chunks.last_query_n_results == 2
+
+
+@pytest.mark.asyncio
+async def test_query_explicit_top_k_overrides_default() -> None:
+    from backend.config import Settings
+
+    store, chunks, _entities, _relations, _embedding_client = _store_with_settings(
+        Settings.model_validate({"embedding_provider": "openai", "rag_top_k_chunks": 2})
+    )
+    await store.index_chunks([_chunk("paper-1", 0, "chunk 0"), _chunk("paper-1", 1, "chunk 1")])
+
+    await store.query_chunks("chunk", paper_id="paper-1", top_k=1)
+    assert chunks.last_query_n_results == 1
 
 
 @pytest.mark.asyncio

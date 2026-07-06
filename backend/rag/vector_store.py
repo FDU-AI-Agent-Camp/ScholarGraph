@@ -243,12 +243,22 @@ class VectorStore:
         ]
         await self._upsert(self._relation_collection, ids=ids, documents=documents, metadatas=metadatas)
 
+    def _default_top_k(self, evidence_type: VectorEvidenceType) -> int:
+        """Resolve the configured default top-k for an evidence type."""
+
+        mapping = {
+            VectorEvidenceType.CHUNK: "rag_top_k_chunks",
+            VectorEvidenceType.ENTITY: "rag_top_k_entities",
+            VectorEvidenceType.RELATION: "rag_top_k_relations",
+        }
+        return getattr(self._settings, mapping[evidence_type], 5)
+
     async def query_chunks(
         self,
         query_text: str,
         *,
         paper_id: str,
-        top_k: int = 5,
+        top_k: int | None = None,
     ) -> list:
         """Search original text chunks scoped to a single paper."""
 
@@ -257,7 +267,7 @@ class VectorStore:
             query_text,
             evidence_type=VectorEvidenceType.CHUNK,
             paper_id=paper_id,
-            top_k=top_k,
+            top_k=top_k if top_k is not None else self._default_top_k(VectorEvidenceType.CHUNK),
         )
 
     async def query_entities(
@@ -265,7 +275,7 @@ class VectorStore:
         query_text: str,
         *,
         paper_id: str,
-        top_k: int = 5,
+        top_k: int | None = None,
     ) -> list:
         """Search graph entities scoped to a single paper."""
 
@@ -274,7 +284,7 @@ class VectorStore:
             query_text,
             evidence_type=VectorEvidenceType.ENTITY,
             paper_id=paper_id,
-            top_k=top_k,
+            top_k=top_k if top_k is not None else self._default_top_k(VectorEvidenceType.ENTITY),
         )
 
     async def query_relations(
@@ -282,7 +292,7 @@ class VectorStore:
         query_text: str,
         *,
         paper_id: str,
-        top_k: int = 5,
+        top_k: int | None = None,
     ) -> list:
         """Search graph relations scoped to a single paper."""
 
@@ -291,7 +301,7 @@ class VectorStore:
             query_text,
             evidence_type=VectorEvidenceType.RELATION,
             paper_id=paper_id,
-            top_k=top_k,
+            top_k=top_k if top_k is not None else self._default_top_k(VectorEvidenceType.RELATION),
         )
 
     async def delete_by_paper(self, paper_id: str) -> None:
