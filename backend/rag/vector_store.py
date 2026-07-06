@@ -425,7 +425,7 @@ class VectorStore:
         top_k: int,
     ) -> list:
         if not isinstance(paper_id, str) or not paper_id.strip():
-            raise ValueError("paper_id must be a non-empty string")
+            raise ValueError("单篇 QA 路径下严禁泄露全库检索权限：paper_id 必须是非空字符串")
         if not query_text.strip() or top_k <= 0:
             return []
 

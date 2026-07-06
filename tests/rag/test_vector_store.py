@@ -163,6 +163,27 @@ async def test_query_chunks_hard_filters_by_paper_id() -> None:
 
 
 @pytest.mark.asyncio
+async def test_vector_store_query_with_none_paper_id_should_raise_value_error() -> None:
+    """Panic test: upstream code must never ask VectorStore to scan the whole collection."""
+
+    store, _chunks, _entities, _relations, _embedding_client = _store()
+
+    with pytest.raises(ValueError, match="单篇 QA 路径下严禁泄露全库检索权限") as exc_info:
+        await store.query_chunks("什么是特征选择？", paper_id=None)  # type: ignore[arg-type]
+
+    assert "paper_id 必须是非空字符串" in str(exc_info.value)
+
+    with pytest.raises(ValueError, match="单篇 QA 路径下严禁泄露全库检索权限"):
+        await store.query_chunks("什么是特征选择？", paper_id="")
+
+    with pytest.raises(ValueError, match="单篇 QA 路径下严禁泄露全库检索权限"):
+        await store.query_entities("什么是特征选择？", paper_id=None)  # type: ignore[arg-type]
+
+    with pytest.raises(ValueError, match="单篇 QA 路径下严禁泄露全库检索权限"):
+        await store.query_relations("什么是特征选择？", paper_id=None)  # type: ignore[arg-type]
+
+
+@pytest.mark.asyncio
 async def test_delete_by_paper_removes_all_evidence_for_one_paper() -> None:
     store, _chunks, _entities, _relations, _embedding_client = _store()
     await store.replace_paper_index(

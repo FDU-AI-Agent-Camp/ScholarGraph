@@ -164,7 +164,10 @@ async def test_query_with_invalid_paper_id_raises_value_error() -> None:
 
     invalid_values: list[Any] = [None, "", 123, []]
     for invalid_value in invalid_values:
-        with pytest.raises(ValueError, match="paper_id must be a non-empty string"):
+        with pytest.raises(
+            ValueError,
+            match="单篇 QA 路径下严禁泄露全库检索权限",
+        ):
             await store.query_chunks("alpha", paper_id=invalid_value, top_k=5)
 
 
