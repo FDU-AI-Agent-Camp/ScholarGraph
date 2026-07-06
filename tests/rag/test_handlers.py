@@ -104,16 +104,13 @@ async def test_index_paper_for_rag_suppresses_error_and_records_warning(
 
     assert result is False
 
-    # Warning is surfaced on the paper status snapshot.
+    # Warning is surfaced on the paper status snapshot as a pure machine code.
     mock_paper_service.record_extract_warnings.assert_called_once()
     call_args = mock_paper_service.record_extract_warnings.call_args
     assert call_args.args[0] == "paper-1"
-    warning = call_args.args[1][0]
-    assert warning.startswith(RAG_INDEX_WARNING_CODE)
-    assert "RuntimeError" in warning
-    assert "ChromaDB disk full" in warning
+    assert call_args.args[1] == [RAG_INDEX_WARNING_CODE]
 
-    # Structured log extra keys are present.
+    # Structured log retains detailed error context for operators.
     assert any("rag_index_failed" in record.message for record in caplog.records)
     error_record = next(record for record in caplog.records if "rag_index_failed" in record.message)
     assert error_record.exc_info is not None

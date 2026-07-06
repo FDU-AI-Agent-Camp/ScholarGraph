@@ -82,13 +82,11 @@ async def test_embedding_failure_is_suppressed_and_recorded(
 
     assert result is False
     mock_paper_service.record_extract_warnings.assert_called_once()
-    warning = mock_paper_service.record_extract_warnings.call_args.args[1][0]
-    assert RAG_INDEX_WARNING_CODE in warning
-    assert "RuntimeError" in warning
-    assert "embedding service unreachable" in warning
+    assert mock_paper_service.record_extract_warnings.call_args.args[1] == [RAG_INDEX_WARNING_CODE]
 
     error_record = next(record for record in caplog.records if RAG_INDEX_WARNING_CODE in record.message)
     assert error_record.exc_type == "RuntimeError"
+    assert "embedding service unreachable" in error_record.exc_msg
 
 
 @pytest.mark.asyncio
@@ -110,9 +108,11 @@ async def test_vector_store_failure_is_suppressed_and_recorded(
         )
 
     assert result is False
-    warning = mock_paper_service.record_extract_warnings.call_args.args[1][0]
-    assert "ConnectionError" in warning
-    assert "ChromaDB connection refused" in warning
+    assert mock_paper_service.record_extract_warnings.call_args.args[1] == [RAG_INDEX_WARNING_CODE]
+
+    error_record = next(record for record in caplog.records if RAG_INDEX_WARNING_CODE in record.message)
+    assert error_record.exc_type == "ConnectionError"
+    assert "ChromaDB connection refused" in error_record.exc_msg
 
 
 @pytest.mark.asyncio
@@ -185,10 +185,11 @@ async def test_warning_write_failure_does_not_hide_original_error(
 
 
 @pytest.mark.asyncio
-async def test_exception_message_is_truncated_in_warning(
+async def test_exception_message_is_truncated_in_log_not_warning(
     sample_graph: UnifiedPaperGraph,
     mock_paper_service: MagicMock,
     tmp_chroma_path: str,
+    caplog: Any,
 ) -> None:
     class LongMessageError(Exception):
         pass
@@ -199,14 +200,19 @@ async def test_exception_message_is_truncated_in_warning(
 
     store = VectorStore(embedding_client=BoomEmbeddingClient(), chroma_path=tmp_chroma_path)
 
-    await index_paper_for_rag(
-        "paper-1",
-        full_text="Methods\nWe do something.",
-        graph=sample_graph,
-        vector_store=store,
-        suppress_errors=True,
-    )
+    with caplog.at_level(logging.ERROR, logger="backend.rag.handlers"):
+        await index_paper_for_rag(
+            "paper-1",
+            full_text="Methods\nWe do something.",
+            graph=sample_graph,
+            vector_store=store,
+            suppress_errors=True,
+        )
 
-    warning = mock_paper_service.record_extract_warnings.call_args.args[1][0]
-    assert len(warning) <= 200
-    assert warning.endswith("...")
+    # The warning exposed to clients remains a fixed-size machine code.
+    assert mock_paper_service.record_extract_warnings.call_args.args[1] == [RAG_INDEX_WARNING_CODE]
+
+    # Long messages are retained in the structured log for operators.
+    error_record = next(record for record in caplog.records if RAG_INDEX_WARNING_CODE in record.message)
+    assert len(error_record.exc_msg) > 200
+    assert "x" * 100 in error_record.exc_msg

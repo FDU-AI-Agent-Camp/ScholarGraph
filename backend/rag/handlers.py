@@ -69,13 +69,15 @@ async def index_paper_for_rag(
 
 
 def _record_index_warning(paper_id: str, exc_type_name: str, exc_msg: str) -> None:
-    """Persist a concise RAG index warning on the paper status snapshot."""
+    """Persist a machine-readable RAG index warning on the paper status snapshot.
 
-    summary = f"{RAG_INDEX_WARNING_CODE}: [{exc_type_name}] {exc_msg}".strip()
-    if len(summary) > 200:
-        summary = summary[:197] + "..."
+    The warning code itself is a fixed machine code so frontends can map it
+    reliably. Detailed error context (exception type and message) is already
+    captured by the structured logger.exception() call in index_paper_for_rag.
+    """
+
     try:
-        get_paper_service().record_extract_warnings(paper_id, [summary])
+        get_paper_service().record_extract_warnings(paper_id, [RAG_INDEX_WARNING_CODE])
     except Exception:
         # If the status service is unavailable, do not let the warning write
         # hide the original RAG indexing failure.
