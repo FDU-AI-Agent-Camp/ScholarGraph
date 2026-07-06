@@ -30,10 +30,10 @@ async def index_paper_for_rag(
     if graph.paper_id != paper_id:
         raise ValueError(f"graph.paper_id ({graph.paper_id!r}) does not match paper_id ({paper_id!r})")
 
+    from backend.config import get_settings
+
     store = vector_store or VectorStore()
     try:
-        from backend.config import get_settings
-
         settings = get_settings()
         chunks = chunk_text(
             paper_id,

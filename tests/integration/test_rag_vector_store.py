@@ -187,3 +187,49 @@ async def test_real_chroma_query_does_not_block_event_loop(store: VectorStore) -
     await task
 
     assert "done" in marker
+
+
+@pytest.mark.asyncio
+async def test_real_chroma_query_uses_configured_default_top_k(temp_chroma_path: Path) -> None:
+    """When top_k is omitted, VectorStore reads defaults from settings."""
+
+    from backend.config import Settings
+
+    settings = Settings.model_validate(
+        {
+            "embedding_provider": "openai",
+            "rag_top_k_chunks": 2,
+            "rag_top_k_entities": 2,
+            "rag_top_k_relations": 2,
+        }
+    )
+    store = VectorStore(
+        embedding_client=FakeEmbeddingClient(),
+        chroma_path=str(temp_chroma_path),
+        settings=settings,
+    )
+    await store.index_chunks([_chunk("paper-1", index, f"chunk {index}") for index in range(10)])
+
+    results = await store.query_chunks("chunk", paper_id="paper-1")
+    assert len(results) == 2
+
+
+@pytest.mark.asyncio
+async def test_real_chroma_explicit_top_k_overrides_configured_default(temp_chroma_path: Path) -> None:
+    from backend.config import Settings
+
+    settings = Settings.model_validate(
+        {
+            "embedding_provider": "openai",
+            "rag_top_k_chunks": 2,
+        }
+    )
+    store = VectorStore(
+        embedding_client=FakeEmbeddingClient(),
+        chroma_path=str(temp_chroma_path),
+        settings=settings,
+    )
+    await store.index_chunks([_chunk("paper-1", index, f"chunk {index}") for index in range(10)])
+
+    results = await store.query_chunks("chunk", paper_id="paper-1", top_k=7)
+    assert len(results) == 7

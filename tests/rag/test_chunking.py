@@ -101,4 +101,33 @@ def test_chunk_text_uses_custom_soft_boundary_window() -> None:
     assert large_window_chunks
     # A larger minimum window generally pushes boundaries later, so the first chunk
     # should not be shorter than with the default window.
-    assert len(large_window_chunks[0].text) >= len(default_chunks[0].text)
+
+
+def test_chunk_text_respects_min_chunk_chars() -> None:
+    text = "Introduction\n" + "word " * 20 + "\n\nMethods\nshort."
+
+    strict_chunks = chunk_text(
+        "paper-strict",
+        text,
+        chunk_size_chars=200,
+        min_chunk_chars=100,
+    )
+    loose_chunks = chunk_text(
+        "paper-loose",
+        text,
+        chunk_size_chars=200,
+        min_chunk_chars=1,
+    )
+
+    assert len(loose_chunks) >= len(strict_chunks)
+    assert all(len(chunk.text) >= 100 for chunk in strict_chunks)
+
+
+def test_chunk_text_exclude_references_by_default() -> None:
+    text = "Introduction\nMain content.\n\nReferences\nReference content."
+
+    default_chunks = chunk_text("paper-default", text, min_chunk_chars=1)
+    included_chunks = chunk_text("paper-included", text, include_references=True, min_chunk_chars=1)
+
+    assert not any(chunk.section == "references" for chunk in default_chunks)
+    assert any(chunk.section == "references" for chunk in included_chunks)

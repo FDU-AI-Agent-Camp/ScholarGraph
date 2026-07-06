@@ -85,6 +85,64 @@ async def test_index_paper_for_rag_success_returns_true_and_indexes(
 
 
 @pytest.mark.asyncio
+async def test_index_paper_for_rag_passes_chunk_options_to_chunk_text(
+    sample_graph: UnifiedPaperGraph,
+    mock_paper_service: MagicMock,
+    monkeypatch: Any,
+) -> None:
+    """All chunking configuration values must flow from settings into chunk_text."""
+
+    from backend.config import Settings
+
+    calls: list[dict[str, Any]] = []
+
+    def fake_chunk_text(paper_id: str, full_text: str, **kwargs: Any) -> list[PaperChunk]:
+        calls.append({"paper_id": paper_id, "full_text": full_text, **kwargs})
+        return [
+            PaperChunk(
+                chunk_id=f"{paper_id}:chunk:0",
+                paper_id=paper_id,
+                text=full_text,
+                section="methods",
+                chunk_index=0,
+                source="pymupdf",
+                char_start=0,
+                char_end=len(full_text),
+            )
+        ]
+
+    monkeypatch.setattr("backend.rag.handlers.chunk_text", fake_chunk_text)
+
+    settings = Settings.model_validate(
+        {
+            "embedding_provider": "openai",
+            "rag_chunk_size_chars": 1000,
+            "rag_chunk_overlap_ratio": 0.15,
+            "rag_chunk_min_chunk_chars": 300,
+            "rag_chunk_min_soft_boundary_window_chars": 250,
+            "rag_chunk_include_references": True,
+        }
+    )
+    monkeypatch.setattr("backend.config.get_settings", lambda: settings)
+
+    await index_paper_for_rag(
+        "paper-1",
+        full_text="Methods\nWe propose a hybrid chunker.",
+        graph=sample_graph,
+        vector_store=FakeVectorStore(),
+    )
+
+    assert len(calls) == 1
+    call = calls[0]
+    assert call["paper_id"] == "paper-1"
+    assert call["chunk_size_chars"] == 1000
+    assert call["chunk_overlap_ratio"] == 0.15
+    assert call["min_chunk_chars"] == 300
+    assert call["min_soft_boundary_window_chars"] == 250
+    assert call["include_references"] is True
+
+
+@pytest.mark.asyncio
 async def test_index_paper_for_rag_rejects_mismatched_graph_paper_id(
     sample_graph: UnifiedPaperGraph,
     mock_paper_service: MagicMock,
