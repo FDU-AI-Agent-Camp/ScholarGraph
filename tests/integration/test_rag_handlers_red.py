@@ -2,11 +2,14 @@
 
 These tests intentionally break dependencies to verify that
 ``index_paper_for_rag`` fails gracefully and produces useful feedback.
+Every test uses an isolated temporary Chroma directory to avoid polluting
+``./data/chroma`` or any other default persistence path.
 """
 
 from __future__ import annotations
 
 import logging
+from pathlib import Path
 from typing import Any
 from unittest.mock import MagicMock
 
@@ -36,6 +39,12 @@ class FailingVectorStore(VectorStore):
 
 
 @pytest.fixture
+def tmp_chroma_path(tmp_path: Path) -> str:
+    """Provide an isolated Chroma persistence directory per test."""
+    return str(tmp_path / "chroma_test_dir")
+
+
+@pytest.fixture
 def sample_graph() -> UnifiedPaperGraph:
     return UnifiedPaperGraph(
         paper_id="paper-1",
@@ -57,9 +66,10 @@ def mock_paper_service(monkeypatch: Any) -> MagicMock:
 async def test_embedding_failure_is_suppressed_and_recorded(
     sample_graph: UnifiedPaperGraph,
     mock_paper_service: MagicMock,
+    tmp_chroma_path: str,
     caplog: Any,
 ) -> None:
-    store = VectorStore(embedding_client=FailingEmbeddingClient())
+    store = VectorStore(embedding_client=FailingEmbeddingClient(), chroma_path=tmp_chroma_path)
 
     with caplog.at_level(logging.ERROR, logger="backend.rag.handlers"):
         result = await index_paper_for_rag(
@@ -85,9 +95,10 @@ async def test_embedding_failure_is_suppressed_and_recorded(
 async def test_vector_store_failure_is_suppressed_and_recorded(
     sample_graph: UnifiedPaperGraph,
     mock_paper_service: MagicMock,
+    tmp_chroma_path: str,
     caplog: Any,
 ) -> None:
-    store = FailingVectorStore(embedding_client=MagicMock())
+    store = FailingVectorStore(embedding_client=MagicMock(), chroma_path=tmp_chroma_path)
 
     with caplog.at_level(logging.ERROR, logger="backend.rag.handlers"):
         result = await index_paper_for_rag(
@@ -108,8 +119,9 @@ async def test_vector_store_failure_is_suppressed_and_recorded(
 async def test_suppress_false_re_raises_with_full_stack(
     sample_graph: UnifiedPaperGraph,
     mock_paper_service: MagicMock,
+    tmp_chroma_path: str,
 ) -> None:
-    store = VectorStore(embedding_client=FailingEmbeddingClient())
+    store = VectorStore(embedding_client=FailingEmbeddingClient(), chroma_path=tmp_chroma_path)
 
     with pytest.raises(RuntimeError, match="embedding service unreachable"):
         await index_paper_for_rag(
@@ -128,14 +140,14 @@ async def test_suppress_false_re_raises_with_full_stack(
 async def test_empty_full_text_is_allowed_and_indexes_empty_chunks(
     sample_graph: UnifiedPaperGraph,
     mock_paper_service: MagicMock,
+    tmp_chroma_path: str,
     caplog: Any,
 ) -> None:
-    store = VectorStore(embedding_client=MagicMock())
     # MagicMock embedding returns empty list by default, causing count mismatch.
     # Use a real fake to keep the happy path working.
     from tests.integration.test_rag_vector_store import FakeEmbeddingClient
 
-    store = VectorStore(embedding_client=FakeEmbeddingClient())
+    store = VectorStore(embedding_client=FakeEmbeddingClient(), chroma_path=tmp_chroma_path)
 
     result = await index_paper_for_rag(
         "paper-1",
@@ -153,10 +165,11 @@ async def test_empty_full_text_is_allowed_and_indexes_empty_chunks(
 async def test_warning_write_failure_does_not_hide_original_error(
     sample_graph: UnifiedPaperGraph,
     mock_paper_service: MagicMock,
+    tmp_chroma_path: str,
     caplog: Any,
 ) -> None:
     mock_paper_service.record_extract_warnings.side_effect = OSError("DB down")
-    store = VectorStore(embedding_client=FailingEmbeddingClient())
+    store = VectorStore(embedding_client=FailingEmbeddingClient(), chroma_path=tmp_chroma_path)
 
     with caplog.at_level(logging.ERROR, logger="backend.rag.handlers"):
         result = await index_paper_for_rag(
@@ -175,6 +188,7 @@ async def test_warning_write_failure_does_not_hide_original_error(
 async def test_exception_message_is_truncated_in_warning(
     sample_graph: UnifiedPaperGraph,
     mock_paper_service: MagicMock,
+    tmp_chroma_path: str,
 ) -> None:
     class LongMessageError(Exception):
         pass
@@ -183,7 +197,7 @@ async def test_exception_message_is_truncated_in_warning(
         async def embed_texts(self, _texts: list[str]) -> list[list[float]]:
             raise LongMessageError("x" * 500)
 
-    store = VectorStore(embedding_client=BoomEmbeddingClient())
+    store = VectorStore(embedding_client=BoomEmbeddingClient(), chroma_path=tmp_chroma_path)
 
     await index_paper_for_rag(
         "paper-1",

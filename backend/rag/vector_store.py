@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import sys
 from functools import partial
 from typing import TYPE_CHECKING, cast
 
@@ -72,7 +73,14 @@ class VectorStore:
         from backend.config import get_settings
 
         self._settings = settings or get_settings()
-        client = _persistent_chroma_client(chroma_path or self._settings.chromadb_path)
+        resolved_chroma_path = chroma_path or self._settings.chromadb_path
+        if chroma_path is None and "pytest" in sys.modules:
+            raise RuntimeError(
+                "CRITICAL: VectorStore must be initialized with an explicit isolated "
+                "chroma_path in tests. Passing the default persistence directory would "
+                "pollute the development environment."
+            )
+        client = _persistent_chroma_client(resolved_chroma_path)
         self._chunk_collection = cast(
             CollectionProtocol,
             client.get_or_create_collection(name=self._settings.chromadb_chunk_collection, embedding_function=None),
