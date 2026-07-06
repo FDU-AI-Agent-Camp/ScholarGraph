@@ -1,5 +1,6 @@
 """LangGraph node handlers — orchestration only; all domain work in services."""
 
+import logging
 from pathlib import Path
 
 from backend.graph.state import STAGE_PERCENT, WorkflowState
@@ -16,6 +17,8 @@ from backend.services.pipeline_completion_service import get_pipeline_completion
 from backend.services.pipeline_status_service import get_pipeline_status_service
 
 RAG_INDEX_STAGE_MESSAGE = "正在构建 RAG 向量索引"
+
+logger = logging.getLogger(__name__)
 
 
 def _mark_progress(
@@ -189,7 +192,12 @@ async def store_node(state: WorkflowState) -> WorkflowState:
 
     # Build the RAG vector index asynchronously without blocking the ready status.
     # Failures are captured as extract_warnings so the paper can still be usable.
-    await _index_paper_for_rag_async(state["paper_id"], full_text=state["full_text"], graph=graph)
+    try:
+        await _index_paper_for_rag_async(state["paper_id"], full_text=state["full_text"], graph=graph)
+    except Exception:
+        # RAG indexing is best-effort; failures are already recorded as warnings
+        # by index_paper_for_rag. The paper must still reach ready.
+        logger.exception("rag_index_failed_in_store_node", extra={"paper_id": state["paper_id"]})
 
     return WorkflowState(
         status=PaperStatus.READY,

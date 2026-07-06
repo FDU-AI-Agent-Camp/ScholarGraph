@@ -159,6 +159,7 @@ def mock_pipeline_node_services(
                 "ingest": ingest_svc,
                 "agent": agent_svc,
                 "completion": completion_svc,
+                "rag_index": mock_rag_index,
                 "store_save": store_cls.return_value.save,
             }
 

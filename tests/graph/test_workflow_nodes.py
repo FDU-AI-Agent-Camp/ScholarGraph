@@ -1,6 +1,7 @@
 """Unit tests: per-node inputs, outputs, and progress side effects."""
 
 from pathlib import Path
+from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
 from backend.agents.classifier_constants import CLASSIFIER_HEURISTIC_FALLBACK_CODE
@@ -371,6 +372,63 @@ async def test_store_node_finalize_error_fails(
 
     assert out["failed"] is True
     assert "建图收尾失败" in out["error_message"]
+
+
+async def test_store_node_rag_index_failure_does_not_block_ready(
+    post_extract_state: WorkflowState,
+) -> None:
+    """RAG indexing failures must be swallowed so the paper still reaches ready."""
+
+    paper_id = post_extract_state["paper_id"]
+    with (
+        patch("backend.services.graph_persistence_service.GraphStore") as store_cls,
+        patch("backend.graph.nodes._index_paper_for_rag_async", side_effect=RuntimeError("RAG crashed")),
+    ):
+        store_cls.return_value.save = MagicMock()
+        persistence = GraphPersistenceService(store=store_cls.return_value)
+        completion_svc = PipelineCompletionService(graph_persistence=persistence)
+        with patch(
+            "backend.graph.nodes.get_pipeline_completion_service",
+            return_value=completion_svc,
+        ):
+            out = await nodes.store_node(post_extract_state)
+
+    assert out["status"] == PaperStatus.READY
+    status = await get_paper_service().get_status(paper_id)
+    assert status.status == PaperStatus.READY
+
+
+async def test_store_node_rag_index_failure_records_extract_warning(
+    post_extract_state: WorkflowState,
+) -> None:
+    """RAG indexing failures must surface as extract_warnings for operators."""
+
+    from backend.rag.handlers import RAG_INDEX_WARNING_CODE
+
+    paper_id = post_extract_state["paper_id"]
+    with (
+        patch("backend.services.graph_persistence_service.GraphStore") as store_cls,
+        patch("backend.graph.nodes._index_paper_for_rag_async") as mock_rag_index,
+    ):
+        store_cls.return_value.save = MagicMock()
+        persistence = GraphPersistenceService(store=store_cls.return_value)
+        completion_svc = PipelineCompletionService(graph_persistence=persistence)
+
+        async def failing_rag_index(*_args: Any, **_kwargs: Any) -> None:
+            from backend.services.paper_service import get_paper_service
+
+            get_paper_service().record_extract_warnings(paper_id, [RAG_INDEX_WARNING_CODE])
+            raise RuntimeError("RAG crashed")
+
+        mock_rag_index.side_effect = failing_rag_index
+        with patch(
+            "backend.graph.nodes.get_pipeline_completion_service",
+            return_value=completion_svc,
+        ):
+            await nodes.store_node(post_extract_state)
+
+    paper = await get_paper_service().get_paper(paper_id)
+    assert RAG_INDEX_WARNING_CODE in paper.extract_warnings
 
 
 # ── fail_node ───────────────────────────────────────────────────────────────

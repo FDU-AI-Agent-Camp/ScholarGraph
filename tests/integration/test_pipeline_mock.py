@@ -14,6 +14,7 @@ from backend.agents.classifier_types import ClassifyResult
 from backend.agents.workflow import run_paper_pipeline
 from backend.graph.state import NODE_CLASSIFY, NODE_EXTRACT, NODE_INGEST, NODE_STORE, STAGE_PERCENT
 from backend.graph.workflow import run_paper_pipeline as run_paper_pipeline_from_graph
+from backend.rag.vector_store import VectorStore
 from backend.schemas.graph import GraphNode, UnifiedPaperGraph
 from backend.schemas.paper import PaperStatus, PipelineStage
 from backend.schemas.paradigm import Paradigm, ParadigmClassification
@@ -154,3 +155,94 @@ async def test_run_paper_pipeline_extract_failure_short_circuits_store(
     status = await get_paper_service().get_status(paper_id)
     assert status.status == PaperStatus.FAILED
     assert status.failed_during == PipelineStage.EXTRACTING
+
+
+async def test_run_paper_pipeline_rag_failure_still_reaches_ready(
+    integration_paper: tuple[str, Path],
+) -> None:
+    """RAG indexing failure must not block the pipeline from reaching ready."""
+
+    paper_id, pdf_path = integration_paper
+
+    with mock_pipeline_node_services(paper_id) as mocks:
+        mocks["rag_index"].side_effect = RuntimeError("embedding service unavailable")
+        final = await run_paper_pipeline(paper_id, pdf_path)
+
+    assert final.get("failed") is not True
+    status = await get_paper_service().get_status(paper_id)
+    assert status.status == PaperStatus.READY
+
+
+async def test_run_paper_pipeline_rag_index_records_warning_on_failure(
+    integration_paper: tuple[str, Path],
+) -> None:
+    """RAG indexing failure must be visible as extract_warnings."""
+
+    from backend.rag.handlers import RAG_INDEX_WARNING_CODE
+
+    paper_id, pdf_path = integration_paper
+
+    with mock_pipeline_node_services(paper_id) as mocks:
+
+        async def failing_rag_index(*_args: object, **_kwargs: object) -> None:
+            get_paper_service().record_extract_warnings(paper_id, [RAG_INDEX_WARNING_CODE])
+            raise RuntimeError("embedding service unavailable")
+
+        mocks["rag_index"].side_effect = failing_rag_index
+        await run_paper_pipeline(paper_id, pdf_path)
+
+    paper = await get_paper_service().get_paper(paper_id)
+    assert RAG_INDEX_WARNING_CODE in paper.extract_warnings
+
+
+class FakeEmbeddingClient:
+    async def embed_texts(self, texts: list[str]) -> list[list[float]]:
+        return [[float(len(text)), 0.0] for text in texts]
+
+
+async def test_run_paper_pipeline_builds_queryable_rag_index(
+    integration_paper: tuple[str, Path],
+    tmp_path: Path,
+) -> None:
+    """End-to-end: after pipeline success, the RAG vector index is queryable."""
+
+    paper_id, pdf_path = integration_paper
+    chroma_path = tmp_path / "chroma"
+
+    async def real_rag_index(*_args: object, **kwargs: object) -> None:
+        from backend.rag.handlers import index_paper_for_rag
+
+        store = VectorStore(
+            embedding_client=FakeEmbeddingClient(),
+            chroma_path=str(chroma_path),
+        )
+        await index_paper_for_rag(
+            paper_id,
+            full_text=kwargs["full_text"],
+            graph=kwargs["graph"],
+            vector_store=store,
+        )
+
+    with mock_pipeline_node_services(paper_id) as mocks:
+        mocks["ingest"].ingest = AsyncMock(
+            return_value={
+                "paper_id": paper_id,
+                "full_text": "Methods\nWe propose a hybrid chunker.",
+                "classifier_input": "classifier-input",
+            },
+        )
+        mocks["rag_index"].side_effect = real_rag_index
+        final = await run_paper_pipeline(paper_id, pdf_path)
+
+    assert final.get("failed") is not True
+    status = await get_paper_service().get_status(paper_id)
+    assert status.status == PaperStatus.READY
+
+    # Directly query the produced vector store to prove indexing happened.
+    store = VectorStore(
+        embedding_client=FakeEmbeddingClient(),
+        chroma_path=str(chroma_path),
+    )
+    results = await store.query_chunks("hybrid chunker", paper_id=paper_id, top_k=3)
+    assert len(results) >= 1
+    assert all(result.paper_id == paper_id for result in results)
