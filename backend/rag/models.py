@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from enum import StrEnum
-from typing import Protocol
+from typing import Any, Protocol
 
 from pydantic import BaseModel, Field
 
@@ -14,6 +14,14 @@ class VectorEvidenceType(StrEnum):
     CHUNK = "chunk"
     ENTITY = "entity"
     RELATION = "relation"
+
+
+class QuestionScale(StrEnum):
+    """V2 retrieval scale used by the hard-rule QA router."""
+
+    SKELETON = "skeleton"
+    DETAIL = "detail"
+    CROSS_PAPER = "cross"
 
 
 class PaperChunk(BaseModel):
@@ -98,6 +106,17 @@ class RetrievedRelation(RetrievedEvidence):
     relation_type: str = Field(min_length=1)
     rationale: str | None = None
     source_span: str | None = None
+
+
+class RetrievalContext(BaseModel):
+    """Unified context returned by the V2 hybrid retriever."""
+
+    nodes: list[dict[str, Any]] = Field(default_factory=list)
+    edges: list[dict[str, Any]] = Field(default_factory=list)
+    entities: list[RetrievedEntity] = Field(default_factory=list)
+    relations: list[RetrievedRelation] = Field(default_factory=list)
+    chunks: list[RetrievedChunk] = Field(default_factory=list)
+    scale: QuestionScale
 
 
 class EmbeddingClientProtocol(Protocol):

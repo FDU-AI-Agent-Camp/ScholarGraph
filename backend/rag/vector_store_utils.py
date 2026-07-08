@@ -175,6 +175,8 @@ def _parse_query_results(
         parsed_distance = float(distance) if isinstance(distance, int | float) else None
 
         paper_id = str(metadata.get("paper_id", ""))
+        if not paper_id:
+            continue
         if evidence_type == VectorEvidenceType.CHUNK:
             results.append(
                 RetrievedChunk(

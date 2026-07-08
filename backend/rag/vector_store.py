@@ -274,9 +274,9 @@ class VectorStore:
         *,
         paper_id: str,
         top_k: int | None = None,
+        query_embedding: list[float] | None = None,
     ) -> list[RetrievedChunk]:
         """Search original text chunks scoped to a single paper."""
-
         return cast(
             list[RetrievedChunk],
             await self._query(
@@ -285,6 +285,7 @@ class VectorStore:
                 evidence_type=VectorEvidenceType.CHUNK,
                 paper_id=paper_id,
                 top_k=top_k if top_k is not None else self._default_top_k(VectorEvidenceType.CHUNK),
+                query_embedding=query_embedding,
             ),
         )
 
@@ -294,9 +295,9 @@ class VectorStore:
         *,
         paper_id: str,
         top_k: int | None = None,
+        query_embedding: list[float] | None = None,
     ) -> list[RetrievedEntity]:
         """Search graph entities scoped to a single paper."""
-
         return cast(
             list[RetrievedEntity],
             await self._query(
@@ -305,6 +306,7 @@ class VectorStore:
                 evidence_type=VectorEvidenceType.ENTITY,
                 paper_id=paper_id,
                 top_k=top_k if top_k is not None else self._default_top_k(VectorEvidenceType.ENTITY),
+                query_embedding=query_embedding,
             ),
         )
 
@@ -314,9 +316,9 @@ class VectorStore:
         *,
         paper_id: str,
         top_k: int | None = None,
+        query_embedding: list[float] | None = None,
     ) -> list[RetrievedRelation]:
         """Search graph relations scoped to a single paper."""
-
         return cast(
             list[RetrievedRelation],
             await self._query(
@@ -325,12 +327,12 @@ class VectorStore:
                 evidence_type=VectorEvidenceType.RELATION,
                 paper_id=paper_id,
                 top_k=top_k if top_k is not None else self._default_top_k(VectorEvidenceType.RELATION),
+                query_embedding=query_embedding,
             ),
         )
 
     async def delete_by_paper(self, paper_id: str) -> None:
         """Delete all indexed evidence for one paper from all collections."""
-
         where = self._build_where(paper_id, run_id=None)
         await asyncio.gather(
             asyncio.to_thread(partial(self._chunk_collection.delete, where=where)),
@@ -472,13 +474,16 @@ class VectorStore:
         evidence_type: VectorEvidenceType,
         paper_id: str,
         top_k: int,
+        query_embedding: list[float] | None = None,
     ) -> list[RetrievedChunk | RetrievedEntity | RetrievedRelation]:
         if not isinstance(paper_id, str) or not paper_id.strip():
             raise ValueError("单篇 QA 路径下严禁泄露全库检索权限：paper_id 必须是非空字符串")
         if not query_text.strip() or top_k <= 0:
             return []
 
-        query_embeddings = await self._embedding_client.embed_texts([query_text])
+        query_embeddings = (
+            [query_embedding] if query_embedding is not None else await self._embedding_client.embed_texts([query_text])
+        )
         active_run_id = self._paper_service.get_active_run_id(paper_id) if self._paper_service else None
         where: ChromaWhere = self._build_where(paper_id, run_id=active_run_id)
         raw_result = await asyncio.to_thread(
