@@ -1,4 +1,4 @@
-"""Pydantic models and protocols for V2 RAG vector indexing."""
+"""Pydantic models and protocols for V2 RAG vector indexing (Phase 1+2+4)."""
 
 from __future__ import annotations
 
@@ -6,6 +6,18 @@ from enum import StrEnum
 from typing import Protocol
 
 from pydantic import BaseModel, Field
+
+# ---------------------------------------------------------------------------
+# Question-scale routing (Phase 2 — rag-qa-evaluation / rag-hybrid-retriever)
+# ---------------------------------------------------------------------------
+
+
+class QuestionScale(StrEnum):
+    """Three-scale routing for hybrid RAG."""
+
+    SKELETON = "skeleton"  # 摘要 / 整体结构 — A 尺度
+    DETAIL = "detail"  # 方法 / 数据 / 实验数值 — B 尺度
+    CROSS_PAPER = "cross"  # 多篇对比（未来）
 
 
 class VectorEvidenceType(StrEnum):
@@ -106,3 +118,25 @@ class EmbeddingClientProtocol(Protocol):
     async def embed_texts(self, texts: list[str]) -> list[list[float]]:
         """Return one embedding vector per input text."""
         ...
+
+
+# ---------------------------------------------------------------------------
+# Retrieval context (Phase 2 — consumed by QA + Patrol)
+# ---------------------------------------------------------------------------
+
+
+class RetrievalContext(BaseModel):
+    """Complete retrieval result passed to QA / Patrol prompt builders.
+
+    Members:
+        nodes / edges: graph topology subgraph (A 尺度).
+        entities / relations / chunks: vector recall results (B 尺度).
+        scale: the resolved question scale.
+    """
+
+    nodes: list[dict] = Field(default_factory=list)
+    edges: list[dict] = Field(default_factory=list)
+    entities: list[RetrievedEntity] = Field(default_factory=list)
+    relations: list[RetrievedRelation] = Field(default_factory=list)
+    chunks: list[RetrievedChunk] = Field(default_factory=list)
+    scale: QuestionScale
