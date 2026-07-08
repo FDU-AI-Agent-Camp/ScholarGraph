@@ -2,9 +2,9 @@
 
 Covers:
 - ``_CITE_RE`` regex matching all four citation types.
-- ``_dispatch_citation`` correct event shapes.
+- ``dispatch_citation`` correct event shapes.
 - ``_build_edge_label_cache`` auto-joined labels.
-- ``_format_retrieval_context`` prompt-section generation.
+- ``format_retrieval_context`` prompt-section generation.
 - Mixed citation types in a single LLM stream.
 """
 
@@ -13,11 +13,13 @@ from __future__ import annotations
 import pytest
 from backend.graph.qa import (
     _CITE_RE,
-    _build_chunk_text_cache,
     _build_edge_label_cache,
-    _dispatch_citation,
-    _format_retrieval_context,
     _split_incomplete_cite,
+)
+from backend.graph.qa_v2 import (
+    build_chunk_text_cache,
+    dispatch_citation,
+    format_retrieval_context,
 )
 from backend.rag.models import (
     QuestionScale,
@@ -161,7 +163,7 @@ class TestDispatchCitation:
     def test_node_citation_has_type_and_node_id(
         self, node_cache: dict[str, str], edge_cache: dict[str, str], chunk_cache: dict[str, str]
     ) -> None:
-        evt = _dispatch_citation("", "n1", "hss-001", node_cache, edge_cache, chunk_cache)
+        evt = dispatch_citation("", "n1", "hss-001", node_cache, edge_cache, chunk_cache)
         assert evt.event == "citation"
         assert evt.data["type"] == "node"
         assert evt.data["paper_id"] == "hss-001"
@@ -171,7 +173,7 @@ class TestDispatchCitation:
     def test_edge_citation_has_type_and_edge_id(
         self, node_cache: dict[str, str], edge_cache: dict[str, str], chunk_cache: dict[str, str]
     ) -> None:
-        evt = _dispatch_citation("edge:", "e1", "hss-001", node_cache, edge_cache, chunk_cache)
+        evt = dispatch_citation("edge:", "e1", "hss-001", node_cache, edge_cache, chunk_cache)
         assert evt.event == "citation"
         assert evt.data["type"] == "edge"
         assert evt.data["paper_id"] == "hss-001"
@@ -181,7 +183,7 @@ class TestDispatchCitation:
     def test_chunk_citation_has_type_and_text_preview(
         self, node_cache: dict[str, str], edge_cache: dict[str, str], chunk_cache: dict[str, str]
     ) -> None:
-        evt = _dispatch_citation("chunk:", "c1", "hss-001", node_cache, edge_cache, chunk_cache)
+        evt = dispatch_citation("chunk:", "c1", "hss-001", node_cache, edge_cache, chunk_cache)
         assert evt.event == "citation"
         assert evt.data["type"] == "chunk"
         assert evt.data["paper_id"] == "hss-001"
@@ -192,7 +194,7 @@ class TestDispatchCitation:
     def test_page_citation_has_type_and_page(
         self, node_cache: dict[str, str], edge_cache: dict[str, str], chunk_cache: dict[str, str]
     ) -> None:
-        evt = _dispatch_citation("page:", "12", "hss-001", node_cache, edge_cache, chunk_cache)
+        evt = dispatch_citation("page:", "12", "hss-001", node_cache, edge_cache, chunk_cache)
         assert evt.event == "citation"
         assert evt.data["type"] == "page"
         assert evt.data["paper_id"] == "hss-001"
@@ -202,14 +204,14 @@ class TestDispatchCitation:
     def test_page_non_integer_treated_as_string(
         self, node_cache: dict[str, str], edge_cache: dict[str, str], chunk_cache: dict[str, str]
     ) -> None:
-        evt = _dispatch_citation("page:", "appendix", "hss-001", node_cache, edge_cache, chunk_cache)
+        evt = dispatch_citation("page:", "appendix", "hss-001", node_cache, edge_cache, chunk_cache)
         assert evt.data["type"] == "page"
         assert evt.data["page"] == "appendix"
 
     def test_unknown_node_id_falls_back_to_raw_id(
         self, node_cache: dict[str, str], edge_cache: dict[str, str], chunk_cache: dict[str, str]
     ) -> None:
-        evt = _dispatch_citation("", "n_missing", "hss-001", node_cache, edge_cache, chunk_cache)
+        evt = dispatch_citation("", "n_missing", "hss-001", node_cache, edge_cache, chunk_cache)
         assert evt.data["type"] == "node"
         assert evt.data["node_id"] == "n_missing"
         assert evt.data["label"] == "n_missing"
@@ -317,10 +319,10 @@ class TestBuildEdgeLabelCache:
 
 class TestBuildChunkTextCache:
     def test_returns_empty_for_none(self) -> None:
-        assert _build_chunk_text_cache(None) == {}
+        assert build_chunk_text_cache(None) == {}
 
     def test_returns_empty_for_empty_list(self) -> None:
-        assert _build_chunk_text_cache([]) == {}
+        assert build_chunk_text_cache([]) == {}
 
     def test_maps_chunk_ids_to_text(self) -> None:
         chunks = [
@@ -345,7 +347,7 @@ class TestBuildChunkTextCache:
                 distance=0.34,
             ),
         ]
-        cache = _build_chunk_text_cache(chunks)
+        cache = build_chunk_text_cache(chunks)
         assert cache == {"c1": "Text chunk one.", "c2": "Text chunk two."}
 
 
@@ -420,14 +422,14 @@ class TestFormatRetrievalContext:
     """V2 prompt-section generation from RetrievalContext."""
 
     def test_none_returns_three_empty_strings(self) -> None:
-        entities, relations, chunks = _format_retrieval_context(None)
+        entities, relations, chunks = format_retrieval_context(None)
         assert entities == ""
         assert relations == ""
         assert chunks == ""
 
     def test_empty_context_returns_empty_strings(self) -> None:
         rc = RetrievalContext(scale=QuestionScale.DETAIL)
-        entities, relations, chunks = _format_retrieval_context(rc)
+        entities, relations, chunks = format_retrieval_context(rc)
         assert entities == ""
         assert relations == ""
         assert chunks == ""
@@ -437,7 +439,7 @@ class TestFormatRetrievalContext:
             scale=QuestionScale.DETAIL,
             entities=[_make_entity("n1", label="核心论点", node_type="Thesis")],
         )
-        entities, _, _ = _format_retrieval_context(rc)
+        entities, _, _ = format_retrieval_context(rc)
         assert "核心论点" in entities
         assert "Thesis" in entities
         assert "n1" in entities
@@ -449,7 +451,7 @@ class TestFormatRetrievalContext:
                 _make_relation("e1", description="分论点支撑核心论点。"),
             ],
         )
-        _, relations, _ = _format_retrieval_context(rc)
+        _, relations, _ = format_retrieval_context(rc)
         assert "分论点支撑核心论点" in relations
         assert "e1" in relations
 
@@ -461,7 +463,7 @@ class TestFormatRetrievalContext:
                 _make_chunk("c2", "Another chunk.", section="methods"),
             ],
         )
-        _, _, chunks = _format_retrieval_context(rc)
+        _, _, chunks = format_retrieval_context(rc)
         assert "[page 3]" in chunks
         assert "Institution text" in chunks
         assert "Another chunk" in chunks
@@ -473,7 +475,7 @@ class TestFormatRetrievalContext:
             relations=[_make_relation("e1", description="rel desc")],
             chunks=[_make_chunk("c1", "chunk text")],
         )
-        entities, relations, chunks = _format_retrieval_context(rc)
+        entities, relations, chunks = format_retrieval_context(rc)
         assert entities != ""
         assert relations != ""
         assert chunks != ""

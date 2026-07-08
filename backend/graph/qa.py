@@ -26,6 +26,12 @@ from backend.services.paper_service import PaperService, get_paper_service
 if TYPE_CHECKING:
     from backend.rag.models import RetrievalContext
 
+from backend.graph.qa_v2 import (
+    build_chunk_text_cache,
+    dispatch_citation,
+    format_retrieval_context,
+)
+
 logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
@@ -284,7 +290,7 @@ class _GraphQaEngine:
         buffer = ""
         node_label_cache: dict[str, str] = {n.id: n.label for n in graph.nodes}
         edge_label_cache: dict[str, str] = _build_edge_label_cache(graph)
-        chunk_text_cache: dict[str, str] = _build_chunk_text_cache(chunks)
+        chunk_text_cache: dict[str, str] = build_chunk_text_cache(chunks)
 
         async for chunk in self._llm.chat.astream(prompt):
             delta: str = ""
@@ -310,7 +316,7 @@ class _GraphQaEngine:
 
                     prefix = match.group(1) or ""
                     cite_value = match.group(2)
-                    yield _dispatch_citation(
+                    yield dispatch_citation(
                         prefix,
                         cite_value,
                         paper_id,
@@ -348,7 +354,7 @@ class _GraphQaEngine:
 
             prefix = match.group(1) or ""
             cite_value = match.group(2)
-            yield _dispatch_citation(
+            yield dispatch_citation(
                 prefix,
                 cite_value,
                 paper_id,
@@ -384,7 +390,7 @@ class _GraphQaEngine:
             edges_desc = "（无匹配关系）"
 
         # Build extra sections from RetrievalContext (V2 Phase 2).
-        entities_desc, relations_desc, chunks_desc = _format_retrieval_context(retrieval_context)
+        entities_desc, relations_desc, chunks_desc = format_retrieval_context(retrieval_context)
 
         prompt = template.format(
             paradigm=graph.paradigm.value,
@@ -405,116 +411,3 @@ class _GraphQaEngine:
         if _QA_PROMPT_PATH.is_file():
             return _QA_PROMPT_PATH.read_text(encoding="utf-8")
         return _FALLBACK_QA_PROMPT
-
-
-# ---------------------------------------------------------------------------
-# Module-level helpers
-# ---------------------------------------------------------------------------
-
-
-def _build_chunk_text_cache(chunks: list | None) -> dict[str, str]:
-    """Build a mapping from chunk_id → text for citation text_preview."""
-    if not chunks:
-        return {}
-    cache: dict[str, str] = {}
-    for c in chunks:
-        cid = getattr(c, "chunk_id", None)
-        text = getattr(c, "text", None)
-        if cid and text:
-            cache[cid] = text
-    return cache
-
-
-def _dispatch_citation(
-    prefix: str,
-    cite_value: str,
-    paper_id: str,
-    node_label_cache: dict[str, str],
-    edge_label_cache: dict[str, str],
-    chunk_text_cache: dict[str, str],
-) -> QaEvent:
-    """Build one ``citation`` SSE event from a matched [CITE:...] marker."""
-    if prefix == "edge:":
-        label = edge_label_cache.get(cite_value, cite_value)
-        return QaEvent(
-            "citation",
-            {
-                "type": "edge",
-                "paper_id": paper_id,
-                "edge_id": cite_value,
-                "label": label,
-            },
-        )
-    if prefix == "chunk:":
-        text_preview = chunk_text_cache.get(cite_value, "")[:120]
-        return QaEvent(
-            "citation",
-            {
-                "type": "chunk",
-                "paper_id": paper_id,
-                "chunk_id": cite_value,
-                "label": f"片段 {cite_value}",
-                "text_preview": text_preview,
-            },
-        )
-    if prefix == "page:":
-        try:
-            page_num = int(cite_value)
-        except (ValueError, TypeError):
-            page_num = cite_value
-        return QaEvent(
-            "citation",
-            {
-                "type": "page",
-                "paper_id": paper_id,
-                "page": page_num,
-                "label": f"第{cite_value}页",
-            },
-        )
-
-    # Default: bare [CITE:node_id] (V1 backward-compatible).
-    label = node_label_cache.get(cite_value, cite_value)
-    return QaEvent(
-        "citation",
-        {
-            "type": "node",
-            "paper_id": paper_id,
-            "node_id": cite_value,
-            "label": label,
-        },
-    )
-
-
-def _format_retrieval_context(
-    rc: "RetrievalContext | None",
-) -> tuple[str, str, str]:
-    """Format retrieval context into three prompt-section strings.
-
-    Returns ``(entities_desc, relations_desc, chunks_desc)``.  Each is an
-    empty string when the context is ``None`` or the corresponding collection
-    is empty.
-    """
-    if rc is None:
-        return ("", "", "")
-
-    entities_desc = ""
-    if rc.entities:
-        lines = [f"- [{e.entity_id}] {e.label} ({e.node_type})" for e in rc.entities]
-        entities_desc = "\n".join(lines)
-
-    relations_desc = ""
-    if rc.relations:
-        lines = [f"- [{r.relation_id}] {r.text[:200]}" for r in rc.relations]
-        relations_desc = "\n".join(lines)
-
-    chunks_desc = ""
-    if rc.chunks:
-        lines = []
-        for c in rc.chunks:
-            page_info = ""
-            if c.page_start is not None:
-                page_info = f" [page {c.page_start}]"
-            lines.append(f"- [{c.chunk_id}]{page_info} {c.text[:300]}")
-        chunks_desc = "\n".join(lines)
-
-    return (entities_desc, relations_desc, chunks_desc)
