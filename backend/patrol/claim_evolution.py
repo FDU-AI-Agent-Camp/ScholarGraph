@@ -171,13 +171,17 @@ async def build_claim_evolution_insight(
         left_question.label,
         right_question.label,
     )
+    evidence_summary = llm_summary or _fallback_evidence_summary(
+        left_claim.label if left_claim else None,
+        right_claim.label if right_claim else None,
+    )
 
     point = ClaimEvolutionPoint(
         mode="claim_evolution",
         research_question=left_question.label,
         paper_a_claim=left_claim.label if left_claim else "未检出明确结论",
         paper_b_claim=right_claim.label if right_claim else "未检出明确结论",
-        evidence_summary=summary,
+        evidence_summary=evidence_summary,
     )
 
     return PatrolInsight(
@@ -236,3 +240,17 @@ def _fallback_claim_evolution_summary(left_question: str, right_question: str) -
         f"两篇论文分别关注「{left_question}」与「{right_question}」，"
         "研究问题存在相似性，建议对照结论与证据链进一步研判。"
     )
+
+
+def _fallback_evidence_summary(left_claim: str | None, right_claim: str | None) -> str:
+    """Return a claim-focused fallback when the LLM does not provide a structured evidence summary."""
+    if left_claim and right_claim:
+        return (
+            f"论文 A 的结论为「{left_claim}」，论文 B 的结论为「{right_claim}」，"
+            "两者围绕相似问题给出了不同判断，建议结合证据链分析差异来源。"
+        )
+    if left_claim:
+        return f"论文 A 的结论为「{left_claim}」，论文 B 未检出明确结论。"
+    if right_claim:
+        return f"论文 B 的结论为「{right_claim}」，论文 A 未检出明确结论。"
+    return "两篇论文均未检出明确结论，建议结合原文进一步提取核心主张。"
