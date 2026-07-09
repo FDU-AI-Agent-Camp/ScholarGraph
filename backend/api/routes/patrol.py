@@ -6,7 +6,7 @@ from pydantic import BaseModel, Field
 from backend.api.deps import get_request_id
 from backend.api.responses import success
 from backend.schemas.patrol import PatrolMode
-from backend.services.patrol_service import PatrolService, get_patrol_service
+from backend.services.patrol_service import PatrolService
 
 router = APIRouter(prefix="/patrol")
 
@@ -17,6 +17,8 @@ class PatrolRequest(BaseModel):
 
 
 def get_patrol_service_dep() -> PatrolService:
+    from backend.services.patrol_service import get_patrol_service
+
     return get_patrol_service()
 
 

@@ -217,3 +217,138 @@ async def test_patrol_api_contradiction_both_papers_lack_subarguments_returns_in
     assert insight["status"] == "insufficient_data"
     assert "hss-001" in insight["summary"]
     assert "hss-002" in insight["summary"]
+
+
+@pytest.mark.asyncio
+async def test_api_patrol_rejects_unsupported_mode_before_graph_load(
+    api_client: AsyncClient,
+) -> None:
+    response = await api_client.post(
+        "/api/v1/patrol",
+        json={"paper_ids": ["hss-001", "hss-002"], "mode": "unsupported_mode"},
+    )
+    assert response.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_api_method_overlap_returns_structured_points(
+    api_client: AsyncClient,
+    patrol_graph_dir,
+) -> None:
+    from backend.graph.store import GraphStore
+    from tests.helpers.patrol_graphs import build_stem_graph_with_method_dataset
+
+    store = GraphStore(base_dir=patrol_graph_dir)
+    store.save(
+        build_stem_graph_with_method_dataset(
+            "stem-001",
+            method_label="PCA",
+            dataset_label="Dataset A",
+        ),
+    )
+    store.save(
+        build_stem_graph_with_method_dataset(
+            "stem-002",
+            method_label="PCA",
+            dataset_label="Dataset B",
+        ),
+    )
+    response = await api_client.post(
+        "/api/v1/patrol",
+        json={"paper_ids": ["stem-001", "stem-002"], "mode": "method_overlap"},
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert_api_envelope(body)
+    data = body["data"]
+    assert data["mode"] == "method_overlap"
+    insight = data["insights"][0]
+    assert insight["insight_id"] == "ins-method-overlap-001"
+    assert len(insight["structured_points"]) == 1
+    assert insight["structured_points"][0]["mode"] == "method_overlap"
+
+
+@pytest.mark.asyncio
+async def test_api_method_overlap_insufficient_data_returns_200(
+    api_client: AsyncClient,
+    patrol_graph_dir,
+) -> None:
+    from backend.graph.store import GraphStore
+    from tests.helpers.patrol_graphs import build_stem_graph_with_question_claim
+
+    store = GraphStore(base_dir=patrol_graph_dir)
+    store.save(build_stem_graph_with_question_claim("stem-001", question_label="Q1", claim_label="C1"))
+    store.save(build_stem_graph_with_question_claim("stem-002", question_label="Q2", claim_label="C2"))
+    response = await api_client.post(
+        "/api/v1/patrol",
+        json={"paper_ids": ["stem-001", "stem-002"], "mode": "method_overlap"},
+    )
+    assert response.status_code == 200
+    data = response.json()["data"]
+    assert data["mode"] == "method_overlap"
+    insight = data["insights"][0]
+    assert insight["insight_id"] == "ins-method-overlap-001"
+    assert insight["status"] == "insufficient_data"
+    assert insight["structured_points"] == []
+
+
+@pytest.mark.asyncio
+async def test_api_claim_evolution_returns_structured_points(
+    api_client: AsyncClient,
+    patrol_graph_dir,
+) -> None:
+    from backend.graph.store import GraphStore
+    from tests.helpers.patrol_graphs import build_stem_graph_with_question_claim
+
+    store = GraphStore(base_dir=patrol_graph_dir)
+    store.save(
+        build_stem_graph_with_question_claim(
+            "stem-001",
+            question_label="PCA 是否提升分类准确率？",
+            claim_label="准确率提升 5%",
+        ),
+    )
+    store.save(
+        build_stem_graph_with_question_claim(
+            "stem-002",
+            question_label="PCA 是否提升分类准确率？",
+            claim_label="准确率无显著变化",
+        ),
+    )
+    response = await api_client.post(
+        "/api/v1/patrol",
+        json={"paper_ids": ["stem-001", "stem-002"], "mode": "claim_evolution"},
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert_api_envelope(body)
+    data = body["data"]
+    assert data["mode"] == "claim_evolution"
+    insight = data["insights"][0]
+    assert insight["insight_id"] == "ins-claim-evolution-001"
+    assert len(insight["structured_points"]) == 1
+    assert insight["structured_points"][0]["mode"] == "claim_evolution"
+
+
+@pytest.mark.asyncio
+async def test_api_claim_evolution_insufficient_data_returns_200(
+    api_client: AsyncClient,
+    patrol_graph_dir,
+) -> None:
+    from backend.graph.store import GraphStore
+    from tests.helpers.patrol_graphs import build_stem_graph_with_method_dataset
+
+    store = GraphStore(base_dir=patrol_graph_dir)
+    store.save(build_stem_graph_with_method_dataset("stem-001", method_label="PCA", dataset_label="D1"))
+    store.save(build_stem_graph_with_method_dataset("stem-002", method_label="Random Forest", dataset_label="D2"))
+    response = await api_client.post(
+        "/api/v1/patrol",
+        json={"paper_ids": ["stem-001", "stem-002"], "mode": "claim_evolution"},
+    )
+    assert response.status_code == 200
+    data = response.json()["data"]
+    assert data["mode"] == "claim_evolution"
+    insight = data["insights"][0]
+    assert insight["insight_id"] == "ins-claim-evolution-001"
+    assert insight["status"] == "insufficient_data"
+    assert insight["structured_points"] == []

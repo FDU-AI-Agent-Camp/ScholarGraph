@@ -24,6 +24,25 @@ CONTRADICTION_SYSTEM = (
     "只输出 JSON，字段 summary。"
 )
 
+METHOD_OVERLAP_SYSTEM = (
+    "你是学术共同体巡检助手。根据两篇 STEM 论文的方法（Method）与数据集（Dataset）节点，"
+    "用中文写一段 80–200 字的 Method Overlap 洞察摘要，说明两篇论文在方法或数据上是否存在重叠或差异。"
+    "只输出 JSON，字段 summary。"
+)
+
+CLAIM_EVOLUTION_SYSTEM = (
+    "你是学术共同体巡检助手。根据两篇论文的研究问题（ResearchQuestion）与结论（Claim/Finding），"
+    "用中文写一段 80–200 字的 Claim Evolution 洞察摘要，说明针对相似问题两篇论文的结论是否演进或分歧。"
+    "只输出 JSON，字段 summary。"
+)
+
+_SYSTEM_PROMPTS: dict[PatrolMode, str] = {
+    PatrolMode.LENS_CLASH: LENS_CLASH_SYSTEM,
+    PatrolMode.CONTRADICTION: CONTRADICTION_SYSTEM,
+    PatrolMode.METHOD_OVERLAP: METHOD_OVERLAP_SYSTEM,
+    PatrolMode.CLAIM_EVOLUTION: CLAIM_EVOLUTION_SYSTEM,
+}
+
 
 async def generate_patrol_summary(
     mode: PatrolMode,
@@ -38,7 +57,9 @@ async def generate_patrol_summary(
     """
     if not context.strip():
         return None
-    system = LENS_CLASH_SYSTEM if mode == PatrolMode.LENS_CLASH else CONTRADICTION_SYSTEM
+    system = _SYSTEM_PROMPTS.get(mode)
+    if system is None:
+        return None
     try:
         client = llm_client or get_llm_client()
         structured = client.chat.with_structured_output(PatrolSummaryOutput)

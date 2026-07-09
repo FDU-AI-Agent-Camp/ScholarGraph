@@ -241,3 +241,23 @@ def mock_agent_services_only(
                 "completion": completion_svc,
                 "store_save": store_cls.return_value.save,
             }
+
+
+@pytest.fixture(autouse=True)
+def _patrol_service_global_mock_vector_store(monkeypatch) -> None:
+    """Avoid real ChromaDB in any test that calls get_patrol_service()."""
+    from unittest.mock import AsyncMock
+
+    from backend.services import patrol_service as ps_module
+
+    def _mock_vector_store(*_args, **_kwargs):
+        mock = AsyncMock()
+        mock.query_chunks.return_value = []
+        return mock
+
+    def _mock_get_patrol_service():
+        return ps_module.PatrolService(vector_store=_mock_vector_store())
+
+    monkeypatch.setattr(ps_module, "get_patrol_service", _mock_get_patrol_service)
+    if hasattr(ps_module.get_patrol_service, "cache_clear"):
+        ps_module.get_patrol_service.cache_clear()

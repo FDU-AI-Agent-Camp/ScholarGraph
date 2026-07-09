@@ -54,3 +54,61 @@ async def test_corpus_hss_pair_produces_contradiction_insight(patrol_graph_dir) 
     assert len(report.insights) >= 1
     assert report.insights[0].insight_id == "ins-contradiction-001"
     assert len(report.insights[0].node_refs) == 2
+
+
+async def test_corpus_stem_pair_produces_method_overlap_insight(patrol_graph_dir) -> None:
+    from backend.graph.store import GraphStore
+    from tests.helpers.patrol_graphs import build_stem_graph_with_method_dataset
+
+    store = GraphStore(base_dir=patrol_graph_dir)
+    store.save(
+        build_stem_graph_with_method_dataset(
+            "stem-001",
+            method_label="PCA",
+            dataset_label="Dataset A",
+        ),
+    )
+    store.save(
+        build_stem_graph_with_method_dataset(
+            "stem-002",
+            method_label="PCA",
+            dataset_label="Dataset B",
+        ),
+    )
+    report = await run_patrol(
+        ["stem-001", "stem-002"],
+        PatrolMode.METHOD_OVERLAP,
+        store=store,
+    )
+    assert report.mode == PatrolMode.METHOD_OVERLAP
+    assert len(report.insights) >= 1
+    assert report.insights[0].insight_id == "ins-method-overlap-001"
+
+
+async def test_corpus_stem_pair_produces_claim_evolution_insight(patrol_graph_dir) -> None:
+    from backend.graph.store import GraphStore
+    from tests.helpers.patrol_graphs import build_stem_graph_with_question_claim
+
+    store = GraphStore(base_dir=patrol_graph_dir)
+    store.save(
+        build_stem_graph_with_question_claim(
+            "stem-001",
+            question_label="PCA 是否提升分类准确率？",
+            claim_label="准确率提升 5%",
+        ),
+    )
+    store.save(
+        build_stem_graph_with_question_claim(
+            "stem-002",
+            question_label="PCA 是否提升分类准确率？",
+            claim_label="准确率无显著变化",
+        ),
+    )
+    report = await run_patrol(
+        ["stem-001", "stem-002"],
+        PatrolMode.CLAIM_EVOLUTION,
+        store=store,
+    )
+    assert report.mode == PatrolMode.CLAIM_EVOLUTION
+    assert len(report.insights) >= 1
+    assert report.insights[0].insight_id == "ins-claim-evolution-001"

@@ -95,6 +95,157 @@ async def test_run_patrol_insight_matches_openapi_fields(tmp_path: Path) -> None
     assert set(payload["insights"][0]["node_refs"][0]) == {"paper_id", "node_id", "label"}
 
 
+# ------------------------------------------------------------------
+# Red-bar tests: verify the new schema/modes exist before implementation.
+# ------------------------------------------------------------------
+
+
+def test_method_overlap_mode_exists_in_patrol_mode_enum() -> None:
+    assert hasattr(PatrolMode, "METHOD_OVERLAP")
+    assert PatrolMode.METHOD_OVERLAP.value == "method_overlap"
+
+
+def test_claim_evolution_mode_exists_in_patrol_mode_enum() -> None:
+    assert hasattr(PatrolMode, "CLAIM_EVOLUTION")
+    assert PatrolMode.CLAIM_EVOLUTION.value == "claim_evolution"
+
+
+def test_structured_points_field_exists_on_patrol_insight() -> None:
+    from backend.schemas.patrol import PatrolInsight
+
+    fields = PatrolInsight.model_fields
+    assert "structured_points" in fields
+
+
+# ------------------------------------------------------------------
+# Integration tests for new patrol modes.
+# ------------------------------------------------------------------
+
+
+async def test_run_patrol_method_overlap_success(tmp_path: Path) -> None:
+    from backend.graph.store import GraphStore
+    from tests.helpers.patrol_graphs import build_stem_graph_with_method_dataset
+
+    store_dir = tmp_path / "graphs"
+    store = GraphStore(base_dir=store_dir)
+    store.save(
+        build_stem_graph_with_method_dataset(
+            "stem-001",
+            method_label="PCA",
+            dataset_label="Dataset A",
+        ),
+    )
+    store.save(
+        build_stem_graph_with_method_dataset(
+            "stem-002",
+            method_label="PCA",
+            dataset_label="Dataset B",
+        ),
+    )
+    report = await run_patrol(
+        ["stem-001", "stem-002"],
+        PatrolMode.METHOD_OVERLAP,
+        store=store,
+    )
+    assert report.mode == PatrolMode.METHOD_OVERLAP
+    assert len(report.insights) == 1
+    assert report.insights[0].insight_id == "ins-method-overlap-001"
+    assert len(report.insights[0].structured_points) == 1
+
+
+async def test_run_patrol_claim_evolution_success(tmp_path: Path) -> None:
+    from backend.graph.store import GraphStore
+    from tests.helpers.patrol_graphs import build_stem_graph_with_question_claim
+
+    store_dir = tmp_path / "graphs"
+    store = GraphStore(base_dir=store_dir)
+    store.save(
+        build_stem_graph_with_question_claim(
+            "stem-001",
+            question_label="PCA 是否提升分类准确率？",
+            claim_label="准确率提升 5%",
+        ),
+    )
+    store.save(
+        build_stem_graph_with_question_claim(
+            "stem-002",
+            question_label="PCA 是否提升分类准确率？",
+            claim_label="准确率无显著变化",
+        ),
+    )
+    report = await run_patrol(
+        ["stem-001", "stem-002"],
+        PatrolMode.CLAIM_EVOLUTION,
+        store=store,
+    )
+    assert report.mode == PatrolMode.CLAIM_EVOLUTION
+    assert len(report.insights) == 1
+    assert report.insights[0].insight_id == "ins-claim-evolution-001"
+    assert len(report.insights[0].structured_points) == 1
+
+
+async def test_run_patrol_mixed_context_calls_vector_store(tmp_path: Path) -> None:
+    from unittest.mock import AsyncMock
+
+    from backend.graph.store import GraphStore
+    from tests.helpers.patrol_graphs import build_stem_graph_with_method_dataset
+
+    store_dir = tmp_path / "graphs"
+    store = GraphStore(base_dir=store_dir)
+    store.save(
+        build_stem_graph_with_method_dataset(
+            "stem-001",
+            method_label="PCA",
+            dataset_label="Dataset A",
+        ),
+    )
+    store.save(
+        build_stem_graph_with_method_dataset(
+            "stem-002",
+            method_label="PCA",
+            dataset_label="Dataset B",
+        ),
+    )
+    vector_store = AsyncMock()
+    vector_store.query_chunks.return_value = []
+    await run_patrol(
+        ["stem-001", "stem-002"],
+        PatrolMode.METHOD_OVERLAP,
+        store=store,
+        vector_store=vector_store,
+    )
+    assert vector_store.query_chunks.await_count == 2
+
+
+async def test_run_patrol_gracefully_degrades_without_vector_store(tmp_path: Path) -> None:
+    from backend.graph.store import GraphStore
+    from tests.helpers.patrol_graphs import build_stem_graph_with_method_dataset
+
+    store_dir = tmp_path / "graphs"
+    store = GraphStore(base_dir=store_dir)
+    store.save(
+        build_stem_graph_with_method_dataset(
+            "stem-001",
+            method_label="PCA",
+            dataset_label="Dataset A",
+        ),
+    )
+    store.save(
+        build_stem_graph_with_method_dataset(
+            "stem-002",
+            method_label="PCA",
+            dataset_label="Dataset B",
+        ),
+    )
+    report = await run_patrol(
+        ["stem-001", "stem-002"],
+        PatrolMode.METHOD_OVERLAP,
+        store=store,
+    )
+    assert report.mode == PatrolMode.METHOD_OVERLAP
+    assert len(report.insights) == 1
+
+
 async def test_run_patrol_contradiction_success() -> None:
     from tests.helpers.patrol_graphs import build_hss_graph_with_thesis
 

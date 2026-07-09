@@ -2,6 +2,7 @@
 
 from datetime import datetime
 from enum import StrEnum
+from typing import Annotated, Literal
 
 from pydantic import BaseModel, Field
 
@@ -9,6 +10,8 @@ from pydantic import BaseModel, Field
 class PatrolMode(StrEnum):
     LENS_CLASH = "lens_clash"
     CONTRADICTION = "contradiction"
+    METHOD_OVERLAP = "method_overlap"
+    CLAIM_EVOLUTION = "claim_evolution"
 
 
 class PatrolInsightStatus(StrEnum):
@@ -20,6 +23,43 @@ class NodeRef(BaseModel):
     paper_id: str
     node_id: str
     label: str | None = None
+
+
+class PatrolPoint(BaseModel):
+    """Base for all structured patrol points; discriminator is ``mode``."""
+
+    mode: Literal["contradiction", "lens_clash", "method_overlap", "claim_evolution"]
+
+
+class ContradictionPoint(PatrolPoint):
+    mode: Literal["contradiction"]
+    point_a: str
+    point_b: str
+    conflict_type: str
+
+
+class LensClashPoint(PatrolPoint):
+    mode: Literal["lens_clash"]
+    lens_a: str
+    lens_b: str
+    clash_aspect: str
+
+
+class MethodOverlapPoint(PatrolPoint):
+    mode: Literal["method_overlap"]
+    method: str
+    paper_a_usage: str
+    paper_b_usage: str
+    dataset_a: str | None = None
+    dataset_b: str | None = None
+
+
+class ClaimEvolutionPoint(PatrolPoint):
+    mode: Literal["claim_evolution"]
+    research_question: str
+    paper_a_claim: str
+    paper_b_claim: str
+    evidence_summary: str
 
 
 class PatrolInsight(BaseModel):
@@ -39,6 +79,12 @@ class PatrolInsight(BaseModel):
     )
     paper_ids: list[str] = Field(default_factory=list)
     node_refs: list[NodeRef] = Field(default_factory=list)
+    structured_points: list[
+        Annotated[
+            ContradictionPoint | LensClashPoint | MethodOverlapPoint | ClaimEvolutionPoint,
+            Field(discriminator="mode"),
+        ]
+    ] = Field(default_factory=list)
 
 
 class PatrolReport(BaseModel):

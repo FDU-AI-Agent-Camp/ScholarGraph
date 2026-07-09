@@ -1,15 +1,23 @@
 """Patrol orchestration entry (BE-4)."""
 
+from __future__ import annotations
+
 from collections.abc import Callable
 from datetime import UTC, datetime
+from typing import TYPE_CHECKING
 
 from backend.graph.store import GraphStore
 from backend.llm.client import LlmClient
+from backend.patrol.claim_evolution import build_claim_evolution_insight
 from backend.patrol.contradiction import build_contradiction_insight
 from backend.patrol.errors import PatrolError
 from backend.patrol.lens_clash import build_lens_clash_insight
+from backend.patrol.method_overlap import build_method_overlap_insight
 from backend.schemas.graph import UnifiedPaperGraph
 from backend.schemas.patrol import PatrolMode, PatrolReport
+
+if TYPE_CHECKING:
+    from backend.rag.vector_store import VectorStore
 
 PATROL_PAPER_COUNT = 2
 GraphLoader = Callable[[str], UnifiedPaperGraph | None]
@@ -21,6 +29,7 @@ async def run_patrol(
     *,
     store: GraphStore | None = None,
     graph_loader: GraphLoader | None = None,
+    vector_store: VectorStore | None = None,
     llm_client: LlmClient | None = None,
 ) -> PatrolReport:
     """Run community patrol for exactly two papers."""
@@ -46,12 +55,37 @@ async def run_patrol(
     elif mode == PatrolMode.CONTRADICTION:
         insight = await build_contradiction_insight(graphs, paper_ids, llm_client=llm_client)
         if insight is None:
-            # Data-quality checks are now handled inside build_contradiction_insight,
-            # which returns an insight with status='insufficient_data' instead of None.
-            # Reaching here means an unexpected internal state.
             raise PatrolError(
                 "PATROL_INTERNAL_ERROR",
                 "无法构建矛盾巡检洞察",
+                status_code=500,
+            )
+        insights = [insight]
+    elif mode == PatrolMode.METHOD_OVERLAP:
+        insight = await build_method_overlap_insight(
+            graphs,
+            paper_ids,
+            vector_store=vector_store,
+            llm_client=llm_client,
+        )
+        if insight is None:
+            raise PatrolError(
+                "PATROL_INTERNAL_ERROR",
+                "无法构建方法重叠巡检洞察",
+                status_code=500,
+            )
+        insights = [insight]
+    elif mode == PatrolMode.CLAIM_EVOLUTION:
+        insight = await build_claim_evolution_insight(
+            graphs,
+            paper_ids,
+            vector_store=vector_store,
+            llm_client=llm_client,
+        )
+        if insight is None:
+            raise PatrolError(
+                "PATROL_INTERNAL_ERROR",
+                "无法构建观点演进巡检洞察",
                 status_code=500,
             )
         insights = [insight]
