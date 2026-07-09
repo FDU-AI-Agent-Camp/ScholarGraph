@@ -587,7 +587,82 @@ components:
 
     PatrolMode:
       type: string
-      enum: [lens_clash, contradiction]
+      enum: [lens_clash, contradiction, method_overlap, claim_evolution]
+
+    PatrolPoint:
+      type: object
+      required: [mode]
+      discriminator:
+        propertyName: mode
+      oneOf:
+        - $ref: "#/components/schemas/ContradictionPoint"
+        - $ref: "#/components/schemas/LensClashPoint"
+        - $ref: "#/components/schemas/MethodOverlapPoint"
+        - $ref: "#/components/schemas/ClaimEvolutionPoint"
+
+    ContradictionPoint:
+      type: object
+      required: [mode, point_a, point_b, conflict_type]
+      properties:
+        mode:
+          type: string
+          enum: [contradiction]
+        point_a:
+          type: string
+        point_b:
+          type: string
+        conflict_type:
+          type: string
+
+    LensClashPoint:
+      type: object
+      required: [mode, lens_a, lens_b, clash_aspect]
+      properties:
+        mode:
+          type: string
+          enum: [lens_clash]
+        lens_a:
+          type: string
+        lens_b:
+          type: string
+        clash_aspect:
+          type: string
+
+    MethodOverlapPoint:
+      type: object
+      required: [mode, method, paper_a_usage, paper_b_usage]
+      properties:
+        mode:
+          type: string
+          enum: [method_overlap]
+        method:
+          type: string
+        paper_a_usage:
+          type: string
+        paper_b_usage:
+          type: string
+        dataset_a:
+          type: string
+          nullable: true
+        dataset_b:
+          type: string
+          nullable: true
+
+    ClaimEvolutionPoint:
+      type: object
+      required: [mode, research_question, paper_a_claim, paper_b_claim, evidence_summary]
+      properties:
+        mode:
+          type: string
+          enum: [claim_evolution]
+        research_question:
+          type: string
+        paper_a_claim:
+          type: string
+        paper_b_claim:
+          type: string
+        evidence_summary:
+          type: string
 
     PatrolRequest:
       type: object
@@ -646,6 +721,10 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/NodeRef"
+        structured_points:
+          type: array
+          items:
+            $ref: "#/components/schemas/PatrolPoint"
 
     PatrolResponse:
       type: object
