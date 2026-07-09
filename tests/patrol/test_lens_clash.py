@@ -8,6 +8,7 @@ from backend.patrol.lens_clash import (
     analytical_lens_nodes,
     build_lens_clash_insight,
 )
+from backend.schemas.patrol import LensClashPoint
 from tests.helpers.patrol_graphs import build_hss_graph_with_lens
 
 
@@ -30,6 +31,13 @@ async def test_build_lens_clash_insight_with_different_lenses() -> None:
     assert "消费社会" in insight.summary
     assert "公共领域" in insight.summary
     assert [ref.node_id for ref in insight.node_refs] == ["n_lens_a", "n_lens_b"]
+    assert len(insight.structured_points) == 1
+    point = insight.structured_points[0]
+    assert isinstance(point, LensClashPoint)
+    assert point.mode == "lens_clash"
+    assert point.lens_a == "消费社会"
+    assert point.lens_b == "公共领域"
+    assert point.clash_aspect == "analytical_framework"
 
 
 async def test_build_lens_clash_insight_returns_none_without_lenses() -> None:
