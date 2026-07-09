@@ -56,9 +56,9 @@ async def run_patrol(
         insight = await build_contradiction_insight(graphs, paper_ids, llm_client=llm_client)
         if insight is None:
             raise PatrolError(
-                "PATROL_INTERNAL_ERROR",
+                "PATROL_INSUFFICIENT_DATA",
                 "无法构建矛盾巡检洞察",
-                status_code=500,
+                status_code=422,
             )
         insights = [insight]
     elif mode == PatrolMode.METHOD_OVERLAP:
@@ -70,9 +70,9 @@ async def run_patrol(
         )
         if insight is None:
             raise PatrolError(
-                "PATROL_INTERNAL_ERROR",
+                "PATROL_INSUFFICIENT_DATA",
                 "无法构建方法重叠巡检洞察",
-                status_code=500,
+                status_code=422,
             )
         insights = [insight]
     elif mode == PatrolMode.CLAIM_EVOLUTION:
@@ -84,9 +84,9 @@ async def run_patrol(
         )
         if insight is None:
             raise PatrolError(
-                "PATROL_INTERNAL_ERROR",
+                "PATROL_INSUFFICIENT_DATA",
                 "无法构建观点演进巡检洞察",
-                status_code=500,
+                status_code=422,
             )
         insights = [insight]
     else:

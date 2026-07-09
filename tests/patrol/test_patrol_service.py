@@ -96,20 +96,20 @@ async def test_patrol_service_delegates_method_overlap_with_vector_store() -> No
     )
 
 
-async def test_patrol_service_maps_claim_evolution_internal_error_to_api_error() -> None:
+async def test_patrol_service_maps_claim_evolution_insufficient_data_to_api_error() -> None:
     service = PatrolService()
     with patch("backend.services.patrol_service.patrol_run", new_callable=AsyncMock) as run:
         from backend.patrol.errors import PatrolError
 
         run.side_effect = PatrolError(
-            "PATROL_INTERNAL_ERROR",
+            "PATROL_INSUFFICIENT_DATA",
             "无法构建观点演进巡检洞察",
-            status_code=500,
+            status_code=422,
         )
         with pytest.raises(ApiError) as exc_info:
             await service.run_patrol(["stem-001", "stem-002"], PatrolMode.CLAIM_EVOLUTION)
-    assert exc_info.value.code == "PATROL_INTERNAL_ERROR"
-    assert exc_info.value.status_code == 500
+    assert exc_info.value.code == "PATROL_INSUFFICIENT_DATA"
+    assert exc_info.value.status_code == 422
 
 
 async def test_patrol_service_delegates_claim_evolution_with_vector_store() -> None:

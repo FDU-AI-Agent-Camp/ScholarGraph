@@ -228,8 +228,13 @@ async def test_method_overlap_rejects_wrong_paper_count() -> None:
 
 
 async def test_method_overlap_uses_vector_store_context() -> None:
+    from unittest.mock import AsyncMock, patch
+
     vector_store = AsyncMock()
-    vector_store.query_chunks.return_value = []
+    vector_store.query_chunks.return_value = [
+        AsyncMock(text="chunk text for stem-001"),
+        AsyncMock(text="another chunk for stem-001"),
+    ]
     graphs = {
         "stem-001": build_stem_graph_with_method_dataset(
             "stem-001",
@@ -242,11 +247,20 @@ async def test_method_overlap_uses_vector_store_context() -> None:
             dataset_label="Dataset B",
         ),
     }
-    insight = await build_method_overlap_insight(
-        graphs,
-        ["stem-001", "stem-002"],
-        vector_store=vector_store,
-    )
+    with patch(
+        "backend.patrol.method_overlap.generate_patrol_summary",
+        new_callable=AsyncMock,
+        return_value=None,
+    ) as mock_summary:
+        insight = await build_method_overlap_insight(
+            graphs,
+            ["stem-001", "stem-002"],
+            vector_store=vector_store,
+        )
     assert insight is not None
     vector_store.query_chunks.assert_any_await("method dataset experimental setup", paper_id="stem-001", top_k=3)
     vector_store.query_chunks.assert_any_await("method dataset experimental setup", paper_id="stem-002", top_k=3)
+    assert mock_summary.called
+    context = mock_summary.call_args.args[1]
+    assert "chunk text for stem-001" in context
+    assert "another chunk for stem-001" in context
