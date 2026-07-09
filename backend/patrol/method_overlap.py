@@ -41,6 +41,24 @@ def _primary_node(nodes: list[GraphNode]) -> GraphNode | None:
     return nodes[0] if nodes else None
 
 
+def _normalize(label: str) -> str:
+    """Normalize a node label for overlap comparison."""
+    return label.strip().lower()
+
+
+def _find_overlap(left_nodes: list[GraphNode], right_nodes: list[GraphNode]) -> list[str]:
+    """Return overlapping labels (preserving left-side casing) between two node lists."""
+    right_labels = {_normalize(node.label) for node in right_nodes}
+    seen: set[str] = set()
+    overlaps: list[str] = []
+    for node in left_nodes:
+        normalized = _normalize(node.label)
+        if normalized in right_labels and normalized not in seen:
+            overlaps.append(node.label)
+            seen.add(normalized)
+    return overlaps
+
+
 async def build_method_overlap_insight(
     graphs: Mapping[str, UnifiedPaperGraph],
     paper_ids: list[str],
@@ -77,12 +95,30 @@ async def build_method_overlap_insight(
             node_refs=[],
         )
 
+    left_datasets = dataset_nodes(left_graph)
+    right_datasets = dataset_nodes(right_graph)
+
+    method_overlap = _find_overlap(left_methods, right_methods)
+    dataset_overlap = _find_overlap(left_datasets, right_datasets)
+
+    if not method_overlap and not dataset_overlap:
+        summary = (
+            f"两篇论文 {left_id} 与 {right_id} 的方法与数据集均无显著重合，"
+            "无法生成方法重叠巡检报告。"
+        )
+        return PatrolInsight(
+            insight_id=METHOD_OVERLAP_INSIGHT_ID,
+            title=METHOD_OVERLAP_TITLE,
+            summary=summary,
+            status=PatrolInsightStatus.INSUFFICIENT_DATA,
+            paper_ids=[left_id, right_id],
+            node_refs=[],
+        )
+
     left_primary = _primary_node(left_methods)
     right_primary = _primary_node(right_methods)
     assert left_primary is not None and right_primary is not None
 
-    left_datasets = dataset_nodes(left_graph)
-    right_datasets = dataset_nodes(right_graph)
     left_dataset = _primary_node(left_datasets)
     right_dataset = _primary_node(right_datasets)
 
@@ -96,19 +132,40 @@ async def build_method_overlap_insight(
         context,
         llm_client=llm_client,
     )
+
+    overlap_label = method_overlap[0] if method_overlap else dataset_overlap[0]
     summary = llm_summary or _fallback_method_overlap_summary(
         left_primary.label,
         right_primary.label,
+        overlap_label=overlap_label,
+        has_method_overlap=bool(method_overlap),
     )
 
     point = MethodOverlapPoint(
         mode="method_overlap",
-        method=left_primary.label,
+        method=overlap_label,
         paper_a_usage=left_primary.label,
         paper_b_usage=right_primary.label,
         dataset_a=left_dataset.label if left_dataset else None,
         dataset_b=right_dataset.label if right_dataset else None,
     )
+
+    node_refs: list[NodeRef] = []
+    if method_overlap:
+        normalized_overlap = _normalize(method_overlap[0])
+        node_refs.extend(
+            NodeRef(paper_id=paper_id, node_id=node.id, label=node.label)
+            for paper_id, nodes in ((left_id, left_methods), (right_id, right_methods))
+            for node in nodes
+            if _normalize(node.label) == normalized_overlap
+        )
+    else:
+        node_refs.extend(
+            [
+                NodeRef(paper_id=left_id, node_id=left_primary.id, label=left_primary.label),
+                NodeRef(paper_id=right_id, node_id=right_primary.id, label=right_primary.label),
+            ]
+        )
 
     return PatrolInsight(
         insight_id=METHOD_OVERLAP_INSIGHT_ID,
@@ -116,10 +173,7 @@ async def build_method_overlap_insight(
         summary=summary,
         status=PatrolInsightStatus.READY,
         paper_ids=[left_id, right_id],
-        node_refs=[
-            NodeRef(paper_id=left_id, node_id=left_primary.id, label=left_primary.label),
-            NodeRef(paper_id=right_id, node_id=right_primary.id, label=right_primary.label),
-        ],
+        node_refs=node_refs,
         structured_points=[point],
     )
 
@@ -157,10 +211,19 @@ async def _build_method_overlap_context(
     return "\n\n".join(sections)
 
 
-def _fallback_method_overlap_summary(left_method: str, right_method: str) -> str:
-    if left_method == right_method:
-        return f"两篇论文均使用了「{left_method}」方法，建议进一步比对具体使用场景、超参数配置与数据集差异。"
+def _fallback_method_overlap_summary(
+    left_method: str,
+    right_method: str,
+    *,
+    overlap_label: str,
+    has_method_overlap: bool,
+) -> str:
+    if has_method_overlap:
+        return (
+            f"两篇论文均使用了「{overlap_label}」方法，建议进一步比对具体使用场景、"
+            "超参数配置与数据集差异。"
+        )
     return (
         f"两篇论文分别采用「{left_method}」与「{right_method}」方法，"
-        "当前图谱中未检出显著方法重叠，建议结合实验段落进一步核验。"
+        f"但在数据集「{overlap_label}」上存在重叠，建议结合实验段落进一步核验。"
     )

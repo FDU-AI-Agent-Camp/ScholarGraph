@@ -103,6 +103,72 @@ async def test_method_overlap_fallback_summary_when_llm_fails(monkeypatch) -> No
     assert "PCA" in insight.summary
 
 
+async def test_method_overlap_insufficient_when_no_overlap() -> None:
+    """Boundary: two papers with different methods and datasets should not trigger overlap."""
+    graphs = {
+        "stem-001": build_stem_graph_with_method_dataset(
+            "stem-001",
+            method_label="PCA",
+            dataset_label="MNIST",
+        ),
+        "stem-002": build_stem_graph_with_method_dataset(
+            "stem-002",
+            method_label="Random Forest",
+            dataset_label="CIFAR-10",
+        ),
+    }
+    insight = await build_method_overlap_insight(graphs, ["stem-001", "stem-002"])
+    assert insight is not None
+    assert insight.status == PatrolInsightStatus.INSUFFICIENT_DATA
+    assert insight.structured_points == []
+
+
+async def test_method_overlap_ready_when_dataset_overlaps() -> None:
+    """Two papers using different methods but the same dataset still trigger overlap."""
+    graphs = {
+        "stem-001": build_stem_graph_with_method_dataset(
+            "stem-001",
+            method_label="PCA",
+            dataset_label="MNIST",
+        ),
+        "stem-002": build_stem_graph_with_method_dataset(
+            "stem-002",
+            method_label="Random Forest",
+            dataset_label="MNIST",
+        ),
+    }
+    insight = await build_method_overlap_insight(graphs, ["stem-001", "stem-002"])
+    assert insight is not None
+    assert insight.status == PatrolInsightStatus.READY
+    point = insight.structured_points[0]
+    assert isinstance(point, MethodOverlapPoint)
+    assert point.method == "MNIST"
+    assert point.dataset_a == "MNIST"
+    assert point.dataset_b == "MNIST"
+
+
+async def test_method_overlap_case_insensitive_match() -> None:
+    """Normalized labels should match regardless of case; returned casing follows the left paper."""
+    graphs = {
+        "stem-001": build_stem_graph_with_method_dataset(
+            "stem-001",
+            method_label="PCA",
+            dataset_label="Dataset A",
+        ),
+        "stem-002": build_stem_graph_with_method_dataset(
+            "stem-002",
+            method_label="pca",
+            dataset_label="Dataset B",
+        ),
+    }
+    insight = await build_method_overlap_insight(graphs, ["stem-001", "stem-002"])
+    assert insight is not None
+    assert insight.status == PatrolInsightStatus.READY
+    point = insight.structured_points[0]
+    assert isinstance(point, MethodOverlapPoint)
+    assert point.method == "PCA"
+
+
 async def test_method_overlap_rejects_wrong_paper_count() -> None:
     graphs = {
         "stem-001": build_stem_graph_with_method_dataset(
