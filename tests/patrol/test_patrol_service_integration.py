@@ -92,3 +92,69 @@ async def test_patrol_service_returns_insufficient_data_for_contradiction(patrol
     assert report.mode == PatrolMode.CONTRADICTION
     assert report.insights[0].status == PatrolInsightStatus.INSUFFICIENT_DATA
     assert report.insights[0].has_contradiction is False
+
+
+async def test_patrol_service_runs_method_overlap_mode(patrol_graph_dir) -> None:
+    from tests.helpers.patrol_graphs import build_stem_graph_with_method_dataset
+
+    store = GraphStore(base_dir=patrol_graph_dir)
+    store.save(build_stem_graph_with_method_dataset("stem-001", method_label="PCA", dataset_label="MNIST"))
+    store.save(build_stem_graph_with_method_dataset("stem-002", method_label="PCA", dataset_label="CIFAR-10"))
+    service = PatrolService(store=store)
+    report = await service.run_patrol(["stem-001", "stem-002"], PatrolMode.METHOD_OVERLAP)
+    assert report.mode == PatrolMode.METHOD_OVERLAP
+    assert report.insights[0].insight_id == "ins-method-overlap-001"
+    assert report.insights[0].status == PatrolInsightStatus.READY
+    assert report.insights[0].structured_points[0].mode == "method_overlap"
+
+
+async def test_patrol_service_returns_insufficient_data_for_method_overlap(patrol_graph_dir) -> None:
+    from tests.helpers.patrol_graphs import build_stem_graph_with_question_claim
+
+    store = GraphStore(base_dir=patrol_graph_dir)
+    store.save(build_stem_graph_with_question_claim("stem-001", question_label="Q1", claim_label="C1"))
+    store.save(build_stem_graph_with_question_claim("stem-002", question_label="Q2", claim_label="C2"))
+    service = PatrolService(store=store)
+    report = await service.run_patrol(["stem-001", "stem-002"], PatrolMode.METHOD_OVERLAP)
+    assert report.mode == PatrolMode.METHOD_OVERLAP
+    assert report.insights[0].status == PatrolInsightStatus.INSUFFICIENT_DATA
+    assert report.insights[0].structured_points == []
+
+
+async def test_patrol_service_runs_claim_evolution_mode(patrol_graph_dir) -> None:
+    from tests.helpers.patrol_graphs import build_stem_graph_with_question_claim
+
+    store = GraphStore(base_dir=patrol_graph_dir)
+    store.save(
+        build_stem_graph_with_question_claim(
+            "stem-001",
+            question_label="PCA 是否提升分类准确率？",
+            claim_label="准确率提升 5%",
+        ),
+    )
+    store.save(
+        build_stem_graph_with_question_claim(
+            "stem-002",
+            question_label="PCA 是否提升分类准确率？",
+            claim_label="准确率无显著变化",
+        ),
+    )
+    service = PatrolService(store=store)
+    report = await service.run_patrol(["stem-001", "stem-002"], PatrolMode.CLAIM_EVOLUTION)
+    assert report.mode == PatrolMode.CLAIM_EVOLUTION
+    assert report.insights[0].insight_id == "ins-claim-evolution-001"
+    assert report.insights[0].status == PatrolInsightStatus.READY
+    assert report.insights[0].structured_points[0].mode == "claim_evolution"
+
+
+async def test_patrol_service_returns_insufficient_data_for_claim_evolution(patrol_graph_dir) -> None:
+    from tests.helpers.patrol_graphs import build_stem_graph_with_method_dataset
+
+    store = GraphStore(base_dir=patrol_graph_dir)
+    store.save(build_stem_graph_with_method_dataset("stem-001", method_label="PCA", dataset_label="D1"))
+    store.save(build_stem_graph_with_method_dataset("stem-002", method_label="Random Forest", dataset_label="D2"))
+    service = PatrolService(store=store)
+    report = await service.run_patrol(["stem-001", "stem-002"], PatrolMode.CLAIM_EVOLUTION)
+    assert report.mode == PatrolMode.CLAIM_EVOLUTION
+    assert report.insights[0].status == PatrolInsightStatus.INSUFFICIENT_DATA
+    assert report.insights[0].structured_points == []

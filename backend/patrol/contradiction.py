@@ -5,7 +5,13 @@ from collections.abc import Mapping
 from backend.llm.client import LlmClient
 from backend.patrol.llm_summary import generate_patrol_summary
 from backend.schemas.graph import GraphNode, UnifiedPaperGraph
-from backend.schemas.patrol import NodeRef, PatrolInsight, PatrolInsightStatus, PatrolMode
+from backend.schemas.patrol import (
+    ContradictionPoint,
+    NodeRef,
+    PatrolInsight,
+    PatrolInsightStatus,
+    PatrolMode,
+)
 
 THESIS_NODE_TYPE = "Thesis"
 SUB_ARGUMENT_NODE_TYPE = "SubArgument"
@@ -105,6 +111,13 @@ async def build_contradiction_insight(
     )
     summary = llm_summary or _fallback_contradiction_summary(left_thesis.label, right_thesis.label)
 
+    point = ContradictionPoint(
+        mode="contradiction",
+        point_a=left_thesis.label,
+        point_b=right_thesis.label,
+        conflict_type="potential",
+    )
+
     return PatrolInsight(
         insight_id=CONTRADICTION_INSIGHT_ID,
         title=CONTRADICTION_TITLE,
@@ -115,6 +128,7 @@ async def build_contradiction_insight(
             NodeRef(paper_id=left_id, node_id=left_thesis.id, label=left_thesis.label),
             NodeRef(paper_id=right_id, node_id=right_thesis.id, label=right_thesis.label),
         ],
+        structured_points=[point],
     )
 
 

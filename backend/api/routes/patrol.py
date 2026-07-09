@@ -6,7 +6,7 @@ from pydantic import BaseModel, Field
 from backend.api.deps import get_request_id
 from backend.api.responses import success
 from backend.schemas.patrol import PatrolMode
-from backend.services.patrol_service import PatrolService, get_patrol_service
+from backend.services.patrol_service import PatrolService
 
 router = APIRouter(prefix="/patrol")
 
@@ -17,6 +17,8 @@ class PatrolRequest(BaseModel):
 
 
 def get_patrol_service_dep() -> PatrolService:
+    from backend.services.patrol_service import get_patrol_service
+
     return get_patrol_service()
 
 
@@ -26,6 +28,6 @@ async def run_patrol_route(
     request_id: str = Depends(get_request_id),
     service: PatrolService = Depends(get_patrol_service_dep),
 ) -> dict:
-    """Run lens_clash or contradiction patrol across two ready papers."""
+    """Run patrol across two ready papers."""
     report = await service.run_patrol(body.paper_ids, body.mode)
     return success(report, request_id)
