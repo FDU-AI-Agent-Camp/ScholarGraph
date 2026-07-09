@@ -23,6 +23,9 @@ CLAIM_EVOLUTION_INSIGHT_ID = "ins-claim-evolution-001"
 CLAIM_EVOLUTION_TITLE = "观点演进（Claim Evolution）"
 CLAIM_EVOLUTION_QUERY_TEXT = "research question thesis conclusion claim finding"
 CLAIM_TOP_K = 3
+# MVP threshold for question similarity using character-set Jaccard.
+# Works across Chinese (character-level) and English (letter-level).
+QUESTION_SIMILARITY_THRESHOLD = 0.3
 
 
 def research_question_nodes(graph: UnifiedPaperGraph | None) -> list[GraphNode]:
@@ -45,6 +48,36 @@ def claim_nodes(graph: UnifiedPaperGraph | None) -> list[GraphNode]:
 
 def _primary_node(nodes: list[GraphNode]) -> GraphNode | None:
     return nodes[0] if nodes else None
+
+
+def _normalize(label: str) -> str:
+    """Normalize a node label for similarity comparison."""
+    return label.strip().lower()
+
+
+def _char_jaccard(left: str, right: str) -> float:
+    """Return character-set Jaccard similarity between two labels."""
+    left_chars = set(_normalize(left))
+    right_chars = set(_normalize(right))
+    if not left_chars or not right_chars:
+        return 0.0
+    intersection = left_chars & right_chars
+    union = left_chars | right_chars
+    return len(intersection) / len(union)
+
+
+def _questions_are_similar(left: str, right: str, threshold: float = QUESTION_SIMILARITY_THRESHOLD) -> bool:
+    """Check whether two research questions/theses are similar enough to compare."""
+    if _normalize(left) == _normalize(right):
+        return True
+    return _char_jaccard(left, right) >= threshold
+
+
+def _claims_are_different(left: GraphNode | None, right: GraphNode | None) -> bool:
+    """Return True when both claims exist and are not normalized-equal."""
+    if left is None or right is None:
+        return False
+    return _normalize(left.label) != _normalize(right.label)
 
 
 async def build_claim_evolution_insight(
@@ -94,6 +127,35 @@ async def build_claim_evolution_insight(
     right_claims = claim_nodes(right_graph)
     left_claim = _primary_node(left_claims)
     right_claim = _primary_node(right_claims)
+
+    if not _questions_are_similar(left_question.label, right_question.label):
+        summary = (
+            f"两篇论文 {left_id} 与 {right_id} 的研究问题/论点相似度不足，"
+            "无法生成观点演进巡检报告。"
+        )
+        return PatrolInsight(
+            insight_id=CLAIM_EVOLUTION_INSIGHT_ID,
+            title=CLAIM_EVOLUTION_TITLE,
+            summary=summary,
+            status=PatrolInsightStatus.INSUFFICIENT_DATA,
+            paper_ids=[left_id, right_id],
+            node_refs=[],
+        )
+
+    if left_claim is not None and right_claim is not None:
+        if not _claims_are_different(left_claim, right_claim):
+            summary = (
+                f"两篇论文 {left_id} 与 {right_id} 的研究问题相似，但结论相同，"
+                "不存在观点演进差异。"
+            )
+            return PatrolInsight(
+                insight_id=CLAIM_EVOLUTION_INSIGHT_ID,
+                title=CLAIM_EVOLUTION_TITLE,
+                summary=summary,
+                status=PatrolInsightStatus.INSUFFICIENT_DATA,
+                paper_ids=[left_id, right_id],
+                node_refs=[],
+            )
 
     context = await _build_claim_evolution_context(
         graphs,

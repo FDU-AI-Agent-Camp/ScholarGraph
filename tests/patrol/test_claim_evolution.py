@@ -10,7 +10,6 @@ from backend.schemas.patrol import (
 )
 from tests.helpers.patrol_graphs import (
     build_hss_graph_with_question_claim,
-    build_hss_graph_with_thesis,
     build_stem_graph_with_method_dataset,
     build_stem_graph_with_question_claim,
 )
@@ -66,8 +65,8 @@ async def test_claim_evolution_ready_with_hss_related_questions() -> None:
     assert "政治参与" in point.paper_a_claim or "政治参与" in point.paper_b_claim
 
 
-async def test_claim_evolution_ready_with_hss_unrelated_questions() -> None:
-    """Boundary: two HSS papers with completely unrelated topics still pass the gate."""
+async def test_claim_evolution_insufficient_with_hss_unrelated_questions() -> None:
+    """Boundary: two HSS papers with completely unrelated topics return insufficient_data."""
     graphs = {
         "hss-001": build_hss_graph_with_question_claim(
             "hss-001",
@@ -82,26 +81,22 @@ async def test_claim_evolution_ready_with_hss_unrelated_questions() -> None:
     }
     insight = await build_claim_evolution_insight(graphs, ["hss-001", "hss-002"])
     assert insight is not None
-    # Current gatekeeper only checks existence of ResearchQuestion/Thesis, not semantic relatedness.
-    assert insight.status == PatrolInsightStatus.READY
-    assert insight.structured_points
-    point = insight.structured_points[0]
-    assert isinstance(point, ClaimEvolutionPoint)
-    assert point.paper_a_claim
-    assert point.paper_b_claim
+    assert insight.status == PatrolInsightStatus.INSUFFICIENT_DATA
+    assert insight.structured_points == []
 
 
 async def test_claim_evolution_ready_with_thesis_fallback() -> None:
+    """Thesis nodes can act as research questions when similar and conclusions differ."""
     graphs = {
-        "hss-001": build_hss_graph_with_thesis(
+        "hss-001": build_hss_graph_with_question_claim(
             "hss-001",
-            thesis_id="n_t_a",
-            thesis_label="论点 A",
+            thesis_label="社交媒体使用是否促进青年政治参与？",
+            claim_label="社交媒体显著提升政治参与意愿",
         ),
-        "hss-002": build_hss_graph_with_thesis(
+        "hss-002": build_hss_graph_with_question_claim(
             "hss-002",
-            thesis_id="n_t_b",
-            thesis_label="论点 B",
+            thesis_label="社交媒体对青年政治参与有何影响？",
+            claim_label="社交媒体的影响被算法过滤气泡削弱",
         ),
     }
     insight = await build_claim_evolution_insight(graphs, ["hss-001", "hss-002"])
@@ -109,7 +104,49 @@ async def test_claim_evolution_ready_with_thesis_fallback() -> None:
     assert insight.status == PatrolInsightStatus.READY
     point = insight.structured_points[0]
     assert isinstance(point, ClaimEvolutionPoint)
-    assert point.research_question == "论点 A"
+    assert "社交媒体" in point.research_question
+
+
+async def test_claim_evolution_insufficient_when_same_conclusion() -> None:
+    """Similar questions with identical claims do not represent claim evolution."""
+    graphs = {
+        "stem-001": build_stem_graph_with_question_claim(
+            "stem-001",
+            question_label="PCA 是否提升分类准确率？",
+            claim_label="准确率提升 5%",
+        ),
+        "stem-002": build_stem_graph_with_question_claim(
+            "stem-002",
+            question_label="PCA 是否提升分类准确率？",
+            claim_label="准确率提升 5%",
+        ),
+    }
+    insight = await build_claim_evolution_insight(graphs, ["stem-001", "stem-002"])
+    assert insight is not None
+    assert insight.status == PatrolInsightStatus.INSUFFICIENT_DATA
+    assert insight.structured_points == []
+
+
+async def test_claim_evolution_ready_when_token_overlap_above_threshold() -> None:
+    """Questions do not need to be identical; sufficient token overlap is enough."""
+    graphs = {
+        "stem-001": build_stem_graph_with_question_claim(
+            "stem-001",
+            question_label="PCA 是否提升分类准确率？",
+            claim_label="准确率提升 5%",
+        ),
+        "stem-002": build_stem_graph_with_question_claim(
+            "stem-002",
+            question_label="分类准确率是否可以通过 PCA 提升？",
+            claim_label="准确率无显著变化",
+        ),
+    }
+    insight = await build_claim_evolution_insight(graphs, ["stem-001", "stem-002"])
+    assert insight is not None
+    assert insight.status == PatrolInsightStatus.READY
+    point = insight.structured_points[0]
+    assert isinstance(point, ClaimEvolutionPoint)
+    assert point.mode == "claim_evolution"
 
 
 async def test_claim_evolution_insufficient_when_no_question_or_thesis() -> None:
@@ -131,7 +168,12 @@ async def test_claim_evolution_insufficient_when_no_question_or_thesis() -> None
     assert insight.structured_points == []
 
 
-async def test_claim_evolution_insufficient_when_no_claim() -> None:
+async def test_claim_evolution_ready_when_no_claim() -> None:
+    """If both papers have the same question and no claims, we cannot judge conclusion difference.
+
+    Current MVP rule: only reject when both claims exist and are identical. Missing claims are
+    treated as insufficient information to reject, so the insight is produced with placeholders.
+    """
     from backend.schemas.graph import GraphNode, NodeType, UnifiedPaperGraph
     from backend.schemas.paradigm import Paradigm
 
