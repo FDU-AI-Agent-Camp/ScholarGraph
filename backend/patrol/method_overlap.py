@@ -121,10 +121,7 @@ async def build_method_overlap_insight(
     dataset_overlap = _find_overlap(left_datasets, right_datasets)
 
     if not method_overlap and not dataset_overlap:
-        summary = (
-            f"两篇论文 {left_id} 与 {right_id} 的方法与数据集均无显著重合，"
-            "无法生成方法重叠巡检报告。"
-        )
+        summary = f"两篇论文 {left_id} 与 {right_id} 的方法与数据集均无显著重合，无法生成方法重叠巡检报告。"
         return PatrolInsight(
             insight_id=METHOD_OVERLAP_INSIGHT_ID,
             title=METHOD_OVERLAP_TITLE,
@@ -238,10 +235,7 @@ def _fallback_method_overlap_summary(
     has_method_overlap: bool,
 ) -> str:
     if has_method_overlap:
-        return (
-            f"两篇论文均使用了「{overlap_label}」方法，建议进一步比对具体使用场景、"
-            "超参数配置与数据集差异。"
-        )
+        return f"两篇论文均使用了「{overlap_label}」方法，建议进一步比对具体使用场景、超参数配置与数据集差异。"
     return (
         f"两篇论文分别采用「{left_method}」与「{right_method}」方法，"
         f"但在数据集「{overlap_label}」上存在重叠，建议结合实验段落进一步核验。"

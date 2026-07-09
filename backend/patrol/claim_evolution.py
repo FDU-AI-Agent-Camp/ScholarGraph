@@ -129,10 +129,7 @@ async def build_claim_evolution_insight(
     right_claim = _primary_node(right_claims)
 
     if not _questions_are_similar(left_question.label, right_question.label):
-        summary = (
-            f"两篇论文 {left_id} 与 {right_id} 的研究问题/论点相似度不足，"
-            "无法生成观点演进巡检报告。"
-        )
+        summary = f"两篇论文 {left_id} 与 {right_id} 的研究问题/论点相似度不足，无法生成观点演进巡检报告。"
         return PatrolInsight(
             insight_id=CLAIM_EVOLUTION_INSIGHT_ID,
             title=CLAIM_EVOLUTION_TITLE,
@@ -144,10 +141,7 @@ async def build_claim_evolution_insight(
 
     if left_claim is not None and right_claim is not None:
         if not _claims_are_different(left_claim, right_claim):
-            summary = (
-                f"两篇论文 {left_id} 与 {right_id} 的研究问题相似，但结论相同，"
-                "不存在观点演进差异。"
-            )
+            summary = f"两篇论文 {left_id} 与 {right_id} 的研究问题相似，但结论相同，不存在观点演进差异。"
             return PatrolInsight(
                 insight_id=CLAIM_EVOLUTION_INSIGHT_ID,
                 title=CLAIM_EVOLUTION_TITLE,
