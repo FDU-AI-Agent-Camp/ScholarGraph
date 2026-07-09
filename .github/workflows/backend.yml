@@ -46,6 +46,16 @@ jobs:
       - name: Backend CI gate
         run: make ci
 
+      # 以下独立步骤用于满足 V1 DoD D-01/D-02 acceptance test 对工作流命令的显式断言。
+      - name: Ruff check
+        run: uv run ruff check backend tests scripts
+
+      - name: Ruff format check
+        run: uv run ruff format --check backend tests scripts
+
+      - name: Pytest not red
+        run: uv run pytest -q -m "not red and not live_mineru and not live_grobid"
+
       - name: Upload coverage report
         if: always()
         uses: actions/upload-artifact@v4
