@@ -1,6 +1,6 @@
 """Unit tests for claim_evolution patrol mode (TDD red phase)."""
 
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, patch
 
 from backend.patrol.claim_evolution import build_claim_evolution_insight
 from backend.schemas.patrol import (
@@ -213,7 +213,10 @@ async def test_claim_evolution_rejects_wrong_paper_count() -> None:
 
 async def test_claim_evolution_uses_vector_store_context() -> None:
     vector_store = AsyncMock()
-    vector_store.query_chunks.return_value = []
+    vector_store.query_chunks.return_value = [
+        AsyncMock(text="claim chunk for stem-001"),
+        AsyncMock(text="another claim chunk for stem-001"),
+    ]
     graphs = {
         "stem-001": build_stem_graph_with_question_claim(
             "stem-001",
@@ -226,11 +229,16 @@ async def test_claim_evolution_uses_vector_store_context() -> None:
             claim_label="准确率无显著变化",
         ),
     }
-    insight = await build_claim_evolution_insight(
-        graphs,
-        ["stem-001", "stem-002"],
-        vector_store=vector_store,
-    )
+    with patch(
+        "backend.patrol.claim_evolution.generate_patrol_summary",
+        new_callable=AsyncMock,
+        return_value=None,
+    ) as mock_summary:
+        insight = await build_claim_evolution_insight(
+            graphs,
+            ["stem-001", "stem-002"],
+            vector_store=vector_store,
+        )
     assert insight is not None
     vector_store.query_chunks.assert_any_await(
         "research question thesis conclusion claim finding",
@@ -242,3 +250,7 @@ async def test_claim_evolution_uses_vector_store_context() -> None:
         paper_id="stem-002",
         top_k=3,
     )
+    assert mock_summary.called
+    context = mock_summary.call_args.args[1]
+    assert "claim chunk for stem-001" in context
+    assert "another claim chunk for stem-001" in context

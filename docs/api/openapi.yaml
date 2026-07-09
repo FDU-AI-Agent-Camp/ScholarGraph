@@ -697,8 +697,12 @@ components:
       description: |
         Insight readiness status.
         `ready` means the insight was produced from a full LLM analysis.
-        `insufficient_data` means the graphs lacked required node types (Thesis/SubArgument)
-        and a deterministic template response was returned instead.
+        `insufficient_data` means the graphs lacked required node types or did not meet
+        the mode-specific comparison criteria. Examples:
+        - lens_clash: missing AnalyticalLens nodes.
+        - contradiction: missing Thesis or SubArgument nodes.
+        - method_overlap: no overlapping Method or Dataset labels.
+        - claim_evolution: ResearchQuestion/Thesis too dissimilar, or claims are identical.
 
     PatrolInsight:
       type: object
