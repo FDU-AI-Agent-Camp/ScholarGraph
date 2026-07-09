@@ -77,16 +77,18 @@ def build_stem_graph_with_method_dataset(
     *,
     method_id: str = "n_method",
     method_label: str,
+    method_data: dict | None = None,
     dataset_id: str = "n_dataset",
     dataset_label: str,
+    dataset_data: dict | None = None,
 ) -> UnifiedPaperGraph:
     """STEM graph with Method and Dataset nodes for method_overlap tests."""
     return UnifiedPaperGraph(
         paper_id=paper_id,
         paradigm=Paradigm.STEM,
         nodes=[
-            GraphNode(id=method_id, label=method_label, type=NodeType.METHOD, data={}),
-            GraphNode(id=dataset_id, label=dataset_label, type=NodeType.DATASET, data={}),
+            GraphNode(id=method_id, label=method_label, type=NodeType.METHOD, data=method_data or {}),
+            GraphNode(id=dataset_id, label=dataset_label, type=NodeType.DATASET, data=dataset_data or {}),
         ],
         edges=[
             GraphEdge(

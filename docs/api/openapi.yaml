@@ -637,10 +637,13 @@ components:
           enum: [method_overlap]
         method:
           type: string
+          description: The overlapping method or dataset label.
         paper_a_usage:
           type: string
+          description: How paper A uses the overlapping method. MVP fallback is '用于 {method}' until LLM extraction is wired.
         paper_b_usage:
           type: string
+          description: How paper B uses the overlapping method. MVP fallback is '用于 {method}' until LLM extraction is wired.
         dataset_a:
           type: string
           nullable: true

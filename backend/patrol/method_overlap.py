@@ -46,6 +46,25 @@ def _normalize(label: str) -> str:
     return label.strip().lower()
 
 
+def _extract_usage(node: GraphNode) -> str:
+    """Extract a usage description for a method node.
+
+    Priority:
+    1. ``node.data["usage"]`` if present and non-empty.
+    2. ``node.data["description"]`` if present and non-empty.
+    3. MVP fallback template ``"用于 {label}"``.
+
+    TODO: enrich with LLM-structured usage extraction once the summary
+    generator returns per-paper usage fields.
+    """
+    data = node.data or {}
+    for key in ("usage", "description"):
+        value = data.get(key)
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+    return f"用于 {node.label}"
+
+
 def _find_overlap(left_nodes: list[GraphNode], right_nodes: list[GraphNode]) -> list[str]:
     """Return overlapping labels (preserving left-side casing) between two node lists."""
     right_labels = {_normalize(node.label) for node in right_nodes}
@@ -144,8 +163,8 @@ async def build_method_overlap_insight(
     point = MethodOverlapPoint(
         mode="method_overlap",
         method=overlap_label,
-        paper_a_usage=left_primary.label,
-        paper_b_usage=right_primary.label,
+        paper_a_usage=_extract_usage(left_primary),
+        paper_b_usage=_extract_usage(right_primary),
         dataset_a=left_dataset.label if left_dataset else None,
         dataset_b=right_dataset.label if right_dataset else None,
     )

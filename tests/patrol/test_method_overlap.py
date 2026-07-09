@@ -169,6 +169,52 @@ async def test_method_overlap_case_insensitive_match() -> None:
     assert point.method == "PCA"
 
 
+async def test_method_overlap_uses_node_usage_when_available() -> None:
+    """paper_a_usage / paper_b_usage should come from node.data['usage'] when present."""
+    graphs = {
+        "stem-001": build_stem_graph_with_method_dataset(
+            "stem-001",
+            method_label="PCA",
+            method_data={"usage": "用于降维"},
+            dataset_label="Dataset A",
+        ),
+        "stem-002": build_stem_graph_with_method_dataset(
+            "stem-002",
+            method_label="PCA",
+            method_data={"usage": "用于特征选择"},
+            dataset_label="Dataset B",
+        ),
+    }
+    insight = await build_method_overlap_insight(graphs, ["stem-001", "stem-002"])
+    assert insight is not None
+    point = insight.structured_points[0]
+    assert isinstance(point, MethodOverlapPoint)
+    assert point.paper_a_usage == "用于降维"
+    assert point.paper_b_usage == "用于特征选择"
+
+
+async def test_method_overlap_uses_fallback_template_without_usage() -> None:
+    """MVP fallback: usage is '用于 {method_label}' when node.data has no usage."""
+    graphs = {
+        "stem-001": build_stem_graph_with_method_dataset(
+            "stem-001",
+            method_label="PCA",
+            dataset_label="Dataset A",
+        ),
+        "stem-002": build_stem_graph_with_method_dataset(
+            "stem-002",
+            method_label="PCA",
+            dataset_label="Dataset B",
+        ),
+    }
+    insight = await build_method_overlap_insight(graphs, ["stem-001", "stem-002"])
+    assert insight is not None
+    point = insight.structured_points[0]
+    assert isinstance(point, MethodOverlapPoint)
+    assert point.paper_a_usage == "用于 PCA"
+    assert point.paper_b_usage == "用于 PCA"
+
+
 async def test_method_overlap_rejects_wrong_paper_count() -> None:
     graphs = {
         "stem-001": build_stem_graph_with_method_dataset(

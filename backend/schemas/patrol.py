@@ -48,8 +48,12 @@ class LensClashPoint(PatrolPoint):
 class MethodOverlapPoint(PatrolPoint):
     mode: Literal["method_overlap"]
     method: str
-    paper_a_usage: str
-    paper_b_usage: str
+    paper_a_usage: str = Field(
+        description="How paper A uses the method. MVP fallback '用于 {method}' until LLM extraction."
+    )
+    paper_b_usage: str = Field(
+        description="How paper B uses the method. MVP fallback '用于 {method}' until LLM extraction."
+    )
     dataset_a: str | None = None
     dataset_b: str | None = None
 
