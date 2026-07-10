@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 from collections.abc import Mapping
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Literal
+from typing import TYPE_CHECKING, Any, Literal
 
 import numpy as np
 
@@ -351,6 +351,8 @@ async def build_method_overlap_insight(
         llm_output,
     )
 
+    meta = await _check_rag_index_ready(vector_store, [left_id, right_id])
+
     return PatrolInsight(
         insight_id=METHOD_OVERLAP_INSIGHT_ID,
         title=METHOD_OVERLAP_TITLE,
@@ -359,7 +361,43 @@ async def build_method_overlap_insight(
         paper_ids=[left_id, right_id],
         node_refs=node_refs,
         structured_points=points,
+        meta=meta,
     )
+
+
+RAG_DEGRADED_META_KEY = "patrol_rag_context_degraded"
+
+
+async def _check_rag_index_ready(
+    vector_store: VectorStore | None,
+    paper_ids: list[str],
+) -> dict[str, Any]:
+    """Return degradation metadata when VectorStore index is missing for any paper."""
+    if vector_store is None:
+        return {
+            RAG_DEGRADED_META_KEY: {
+                "paper_ids": paper_ids,
+                "reason": "vector_store_unavailable",
+            },
+        }
+
+    degraded: list[str] = []
+    for paper_id in paper_ids:
+        try:
+            if not await vector_store.exists(paper_id):
+                degraded.append(paper_id)
+        except Exception:  # noqa: BLE001
+            degraded.append(paper_id)
+
+    if degraded:
+        logger.warning("patrol_rag_context_degraded", extra={"paper_ids": degraded, "reason": "index_not_ready"})
+        return {
+            RAG_DEGRADED_META_KEY: {
+                "paper_ids": degraded,
+                "reason": "index_not_ready",
+            },
+        }
+    return {}
 
 
 def _render_method_overlap_query(

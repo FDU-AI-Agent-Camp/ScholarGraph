@@ -342,10 +342,46 @@ async def test_claim_evolution_uses_vector_store_context() -> None:
     expected_query = "PCA 是否提升分类准确率？ 结论 证据 实验设计 差异"
     vector_store.query_chunks.assert_any_await(expected_query, paper_id="stem-001", top_k=3)
     vector_store.query_chunks.assert_any_await(expected_query, paper_id="stem-002", top_k=3)
+    # When vector_store is supplied and exists() returns True, no degradation flag is set.
+    assert "patrol_rag_context_degraded" not in insight.meta
     assert mock_summary.called
     context = mock_summary.call_args.args[0]
     assert "claim chunk for stem-001" in context
     assert "another claim chunk for stem-001" in context
+
+
+async def test_claim_evolution_records_rag_degradation_when_index_missing() -> None:
+    """If VectorStore index is missing, READY insight carries patrol_rag_context_degraded meta."""
+    vector_store = AsyncMock()
+    vector_store.exists.return_value = False
+    vector_store.query_chunks.return_value = []
+    graphs = {
+        "stem-001": build_stem_graph_with_question_claim(
+            "stem-001",
+            question_label="PCA 是否提升分类准确率？",
+            claim_label="准确率提升 5%",
+        ),
+        "stem-002": build_stem_graph_with_question_claim(
+            "stem-002",
+            question_label="PCA 是否提升分类准确率？",
+            claim_label="准确率无显著变化",
+        ),
+    }
+    with patch(
+        "backend.patrol.claim_evolution.generate_claim_evolution_summary",
+        new_callable=AsyncMock,
+        return_value=None,
+    ):
+        insight = await build_claim_evolution_insight(
+            graphs,
+            ["stem-001", "stem-002"],
+            vector_store=vector_store,
+            embedding_client=_FakeEmbeddingClient(),
+        )
+    assert insight is not None
+    assert insight.status == PatrolInsightStatus.READY
+    assert insight.meta.get("patrol_rag_context_degraded", {}).get("reason") == "index_not_ready"
+    assert set(insight.meta["patrol_rag_context_degraded"]["paper_ids"]) == {"stem-001", "stem-002"}
 
 
 async def test_claim_evolution_llm_structured_output_populates_fields() -> None:

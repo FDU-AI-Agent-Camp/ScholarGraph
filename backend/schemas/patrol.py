@@ -3,7 +3,7 @@
 from collections.abc import Sequence
 from datetime import datetime
 from enum import StrEnum
-from typing import Annotated, Literal
+from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, Field, model_serializer
 
@@ -156,6 +156,10 @@ class PatrolInsight(BaseModel):
             Field(discriminator="mode"),
         ]
     ] = Field(default_factory=list)
+    meta: dict[str, Any] = Field(
+        default_factory=dict,
+        description="Machine-readable metadata about insight generation (e.g. degradation flags).",
+    )
 
 
 class PatrolReport(BaseModel):

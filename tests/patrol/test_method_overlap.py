@@ -745,10 +745,45 @@ async def test_method_overlap_uses_vector_store_context() -> None:
     # Query is now graph-topology-guided: the aligned anchor label PCA is injected.
     vector_store.query_chunks.assert_any_await("PCA 具体应用场景 数据集配置 实验数值特征", paper_id="stem-001", top_k=3)
     vector_store.query_chunks.assert_any_await("PCA 具体应用场景 数据集配置 实验数值特征", paper_id="stem-002", top_k=3)
+    # When vector_store is supplied and exists() returns True, no degradation flag is set.
+    assert "patrol_rag_context_degraded" not in insight.meta
     assert mock_summary.called
     context = mock_summary.call_args.args[0]
     assert "chunk text for stem-001" in context
     assert "another chunk for stem-001" in context
+
+
+async def test_method_overlap_records_rag_degradation_when_index_missing() -> None:
+    """If VectorStore index is missing, READY insight carries patrol_rag_context_degraded meta."""
+    vector_store = AsyncMock()
+    vector_store.exists.return_value = False
+    vector_store.query_chunks.return_value = []
+    graphs = {
+        "stem-001": build_stem_graph_with_method_dataset(
+            "stem-001",
+            method_label="PCA",
+            dataset_label="Dataset A",
+        ),
+        "stem-002": build_stem_graph_with_method_dataset(
+            "stem-002",
+            method_label="PCA",
+            dataset_label="Dataset B",
+        ),
+    }
+    with patch(
+        "backend.patrol.method_overlap.generate_method_overlap_summary",
+        new_callable=AsyncMock,
+        return_value=None,
+    ):
+        insight = await build_method_overlap_insight(
+            graphs,
+            ["stem-001", "stem-002"],
+            vector_store=vector_store,
+        )
+    assert insight is not None
+    assert insight.status == PatrolInsightStatus.READY
+    assert insight.meta.get("patrol_rag_context_degraded", {}).get("reason") == "index_not_ready"
+    assert set(insight.meta["patrol_rag_context_degraded"]["paper_ids"]) == {"stem-001", "stem-002"}
 
 
 class _FakeEmbeddingClient:
