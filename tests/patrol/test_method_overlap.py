@@ -319,6 +319,97 @@ async def test_method_overlap_aligns_multiple_literal_pairs() -> None:
         assert "usage in paper B" in point.paper_b_usage
 
 
+async def test_method_overlap_perfect_llm_alignment_overrides_node_usage() -> None:
+    """Perfect LLM output should override raw node usage and evidence_summary."""
+    llm_output = MethodOverlapOutput(
+        summary="两篇论文均在图像分类任务中使用了 PCA 进行降维。",
+        comparison_details=[
+            MethodComparativeDetail(
+                method_pair_name="PCA <-> PCA",
+                paper_a_usage="论文 A 将 PCA 用于 MNIST 手写数字特征压缩，保留 95% 方差。",
+                paper_b_usage="论文 B 将 PCA 用于 CIFAR-10 图像降维，保留 90% 方差。",
+                evidence_summary="两者都通过 PCA 降低输入维度，但论文 B 在更复杂的彩色图像上验证了效果。",
+            ),
+        ],
+    )
+    with patch(
+        "backend.patrol.method_overlap.generate_method_overlap_summary",
+        new_callable=AsyncMock,
+        return_value=llm_output,
+    ):
+        graphs = {
+            "stem-001": build_stem_graph_with_method_dataset(
+                "stem-001",
+                method_label="PCA",
+                method_data={"usage": "原始节点 usage A", "description": "原始节点 description A"},
+                dataset_label="MNIST",
+            ),
+            "stem-002": build_stem_graph_with_method_dataset(
+                "stem-002",
+                method_label="PCA",
+                method_data={"usage": "原始节点 usage B", "description": "原始节点 description B"},
+                dataset_label="CIFAR-10",
+            ),
+        }
+        insight = await build_method_overlap_insight(graphs, ["stem-001", "stem-002"])
+
+    assert insight is not None
+    assert insight.status == PatrolInsightStatus.READY
+    assert insight.summary == llm_output.summary
+    point = insight.structured_points[0]
+    assert isinstance(point, MethodOverlapPoint)
+    assert point.paper_a_usage == llm_output.comparison_details[0].paper_a_usage
+    assert point.paper_b_usage == llm_output.comparison_details[0].paper_b_usage
+    assert point.evidence_summary == llm_output.comparison_details[0].evidence_summary
+    assert "原始节点" not in point.paper_a_usage
+    assert "原始节点" not in point.paper_b_usage
+
+
+async def test_method_overlap_hallucinated_pair_name_falls_back_to_node_description() -> None:
+    """LLM returns a mismatched pair name; system should fallback to node description without crashing."""
+    llm_output = MethodOverlapOutput(
+        summary="两篇论文的核心方法都涉及支持向量机分类器的设计与验证。",
+        comparison_details=[
+            MethodComparativeDetail(
+                method_pair_name="SVM <-> Support Vector Machine",
+                paper_a_usage="论文 A 使用 SVM 做分类",
+                paper_b_usage="论文 B 也使用 SVM 做分类",
+                evidence_summary="SVM 是核心分类器",
+            ),
+        ],
+    )
+    with patch(
+        "backend.patrol.method_overlap.generate_method_overlap_summary",
+        new_callable=AsyncMock,
+        return_value=llm_output,
+    ):
+        graphs = {
+            "stem-001": build_stem_graph_with_method_dataset(
+                "stem-001",
+                method_label="PCA",
+                method_data={"description": "论文 A 用 PCA 做无监督降维"},
+                dataset_label="MNIST",
+            ),
+            "stem-002": build_stem_graph_with_method_dataset(
+                "stem-002",
+                method_label="PCA",
+                method_data={"description": "论文 B 用 PCA 压缩特征"},
+                dataset_label="CIFAR-10",
+            ),
+        }
+        insight = await build_method_overlap_insight(graphs, ["stem-001", "stem-002"])
+
+    assert insight is not None
+    assert insight.status == PatrolInsightStatus.READY
+    assert insight.structured_points
+    point = insight.structured_points[0]
+    assert isinstance(point, MethodOverlapPoint)
+    assert point.method == "PCA"
+    assert point.paper_a_usage == "论文 A 用 PCA 做无监督降维"
+    assert point.paper_b_usage == "论文 B 用 PCA 压缩特征"
+    assert point.evidence_summary is None
+
+
 async def test_method_overlap_rejects_wrong_paper_count() -> None:
     graphs = {
         "stem-001": build_stem_graph_with_method_dataset(
