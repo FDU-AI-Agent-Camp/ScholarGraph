@@ -4,15 +4,14 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Mapping
-from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any, Literal
-
-import numpy as np
+from typing import TYPE_CHECKING, Any
 
 from backend.config import get_settings
 from backend.llm.client import LlmClient
 from backend.llm.embeddings import EmbeddingClient, get_embedding_client
 from backend.patrol.llm_summary import generate_method_overlap_summary
+from backend.patrol.method_overlap_semantic import find_semantic_method_overlap
+from backend.patrol.overlap_anchor import _OverlapAnchor
 from backend.patrol.rag_service import PatrolRAGService
 from backend.schemas.graph import GraphNode, NodeType, UnifiedPaperGraph
 from backend.schemas.paradigm import Paradigm
@@ -72,46 +71,6 @@ def _extract_usage(node: GraphNode) -> str:
     return f"用于 {node.label}"
 
 
-@dataclass(frozen=True)
-class _OverlapAnchor:
-    """Physical anchor for an overlap relationship between two papers.
-
-    This is the source of truth for structured_points and node_refs: every
-    anchor returned by the local state machine must be reflected in the final
-    output.  The LLM injects semantic flesh (usage / evidence) on top of this
-    skeleton.
-    """
-
-    left_node: GraphNode
-    right_node: GraphNode
-    overlap_kind: OverlapType
-    match_type: Literal["literal", "semantic"]
-    overlap_score: float
-
-    @property
-    def pair_label(self) -> str:
-        return f"{self.left_node.label} <-> {self.right_node.label}"
-
-    @property
-    def overlap_label(self) -> str:
-        """Short representative label for the overlapping item."""
-        if _normalize(self.left_node.label) == _normalize(self.right_node.label):
-            return self.left_node.label
-        # Prefer the shorter label as the canonical representative for semantic pairs.
-        left = self.left_node.label
-        right = self.right_node.label
-        return left if len(left) <= len(right) else right
-
-
-def _embed_text_for_node(node: GraphNode) -> str:
-    """Build a single embedding text from a node's label and description."""
-    parts = [node.label]
-    description = (node.data or {}).get("description")
-    if isinstance(description, str) and description.strip():
-        parts.append(description.strip())
-    return " ".join(parts)
-
-
 def _find_overlap_pairs(
     left_nodes: list[GraphNode],
     right_nodes: list[GraphNode],
@@ -147,73 +106,6 @@ def _find_overlap_pairs(
             )
         )
     return anchors
-
-
-def _cosine_similarity_matrix(
-    left_vectors: list[list[float]],
-    right_vectors: list[list[float]],
-) -> np.ndarray:
-    """Compute the cross cosine-similarity matrix between two vector sets."""
-    left = np.asarray(left_vectors, dtype=np.float64)
-    right = np.asarray(right_vectors, dtype=np.float64)
-    left_norms = np.linalg.norm(left, axis=1, keepdims=True)
-    right_norms = np.linalg.norm(right, axis=1, keepdims=True)
-    # Avoid division by zero; zero vectors will produce all-zero similarities.
-    left_norms[left_norms == 0] = 1.0
-    right_norms[right_norms == 0] = 1.0
-    left_normalized = left / left_norms
-    right_normalized = right / right_norms
-    return left_normalized @ right_normalized.T
-
-
-async def _find_semantic_method_overlap(
-    left_methods: list[GraphNode],
-    right_methods: list[GraphNode],
-    embedding_client: EmbeddingClient,
-    threshold: float,
-    max_matrix_size: int,
-) -> _OverlapAnchor | None:
-    """Find the strongest semantic method overlap across two papers.
-
-    Returns the best matching anchor plus the cosine score, or ``None`` when no
-    pair exceeds the threshold or the matrix is too large.
-    """
-    if not left_methods or not right_methods:
-        return None
-
-    # Mock embeddings are deterministic but not semantically meaningful, so skip
-    # the soft path to avoid false positives in test/local mock runs.
-    if getattr(embedding_client, "is_mock", False):
-        return None
-
-    matrix_size = len(left_methods) * len(right_methods)
-    if matrix_size > max_matrix_size:
-        return None
-
-    texts = [_embed_text_for_node(node) for node in left_methods + right_methods]
-    vectors = await embedding_client.embed_texts(texts)
-    if len(vectors) != len(texts):
-        return None
-
-    split_at = len(left_methods)
-    similarity = _cosine_similarity_matrix(vectors[:split_at], vectors[split_at:])
-    if similarity.size == 0:
-        return None
-
-    best_index = int(np.argmax(similarity))
-    best_flat = np.unravel_index(best_index, similarity.shape)
-    best_score = float(similarity[best_flat])
-    if best_score < threshold:
-        return None
-
-    left_idx, right_idx = best_flat
-    return _OverlapAnchor(
-        left_node=left_methods[left_idx],
-        right_node=right_methods[right_idx],
-        overlap_kind=OverlapType.METHOD,
-        match_type="semantic",
-        overlap_score=best_score,
-    )
 
 
 async def build_method_overlap_insight(
@@ -282,7 +174,7 @@ async def build_method_overlap_insight(
     if not method_anchors:
         settings = get_settings()
         client = embedding_client or get_embedding_client()
-        semantic_anchor = await _find_semantic_method_overlap(
+        semantic_anchor = await find_semantic_method_overlap(
             left_methods,
             right_methods,
             client,
