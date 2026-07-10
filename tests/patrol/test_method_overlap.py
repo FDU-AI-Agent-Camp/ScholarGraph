@@ -3,6 +3,8 @@
 from unittest.mock import AsyncMock, patch
 
 from backend.patrol.method_overlap import build_method_overlap_insight
+from backend.schemas.graph import GraphNode, NodeType, UnifiedPaperGraph
+from backend.schemas.paradigm import Paradigm
 from backend.schemas.patrol import (
     MethodOverlapPoint,
     PatrolInsightStatus,
@@ -216,6 +218,105 @@ async def test_method_overlap_uses_fallback_template_without_usage() -> None:
     assert isinstance(point, MethodOverlapPoint)
     assert point.paper_a_usage == "用于 PCA"
     assert point.paper_b_usage == "用于 PCA"
+
+
+async def test_method_overlap_fallback_when_llm_misses_pair() -> None:
+    """Alignment merger should fall back to node usage when LLM omits a pair."""
+    llm_output = MethodOverlapOutput(
+        summary="两篇论文在方法层面存在重叠，需要进一步对比实验设计差异。",
+        comparison_details=[
+            MethodComparativeDetail(
+                method_pair_name="SVM <-> SVM",
+                paper_a_usage="论文 A 的 SVM 使用说明很长",
+                paper_b_usage="论文 B 的 SVM 使用说明也很长",
+                evidence_summary="SVM 相关证据摘要",
+            ),
+        ],
+    )
+    with patch(
+        "backend.patrol.method_overlap.generate_method_overlap_summary",
+        new_callable=AsyncMock,
+        return_value=llm_output,
+    ):
+        graphs = {
+            "stem-001": build_stem_graph_with_method_dataset(
+                "stem-001",
+                method_label="PCA",
+                method_data={"usage": "论文 A 用 PCA 降维"},
+                dataset_label="MNIST",
+            ),
+            "stem-002": build_stem_graph_with_method_dataset(
+                "stem-002",
+                method_label="PCA",
+                method_data={"usage": "论文 B 用 PCA 提取主成分"},
+                dataset_label="CIFAR-10",
+            ),
+        }
+        insight = await build_method_overlap_insight(graphs, ["stem-001", "stem-002"])
+
+    assert insight is not None
+    point = insight.structured_points[0]
+    assert isinstance(point, MethodOverlapPoint)
+    assert point.method == "PCA"
+    assert point.paper_a_usage == "论文 A 用 PCA 降维"
+    assert point.paper_b_usage == "论文 B 用 PCA 提取主成分"
+    assert point.evidence_summary is None
+
+
+async def test_method_overlap_aligns_multiple_literal_pairs() -> None:
+    """Two shared method labels should produce two anchored structured points."""
+    llm_output = MethodOverlapOutput(
+        summary="两篇论文均使用了 PCA 与 SVM 两种方法，并在不同数据集上进行了验证。",
+        comparison_details=[
+            MethodComparativeDetail(
+                method_pair_name="PCA <-> PCA",
+                paper_a_usage="PCA usage in paper A",
+                paper_b_usage="PCA usage in paper B",
+                evidence_summary="PCA evidence summary",
+            ),
+            MethodComparativeDetail(
+                method_pair_name="SVM <-> SVM",
+                paper_a_usage="SVM usage in paper A",
+                paper_b_usage="SVM usage in paper B",
+                evidence_summary="SVM evidence summary",
+            ),
+        ],
+    )
+    with patch(
+        "backend.patrol.method_overlap.generate_method_overlap_summary",
+        new_callable=AsyncMock,
+        return_value=llm_output,
+    ):
+        graphs = {
+            "stem-001": UnifiedPaperGraph(
+                paper_id="stem-001",
+                paradigm=Paradigm.STEM,
+                nodes=[
+                    GraphNode(id="m1", label="PCA", type=NodeType.METHOD, data={}),
+                    GraphNode(id="m2", label="SVM", type=NodeType.METHOD, data={}),
+                ],
+                edges=[],
+            ),
+            "stem-002": UnifiedPaperGraph(
+                paper_id="stem-002",
+                paradigm=Paradigm.STEM,
+                nodes=[
+                    GraphNode(id="m3", label="PCA", type=NodeType.METHOD, data={}),
+                    GraphNode(id="m4", label="SVM", type=NodeType.METHOD, data={}),
+                ],
+                edges=[],
+            ),
+        }
+        insight = await build_method_overlap_insight(graphs, ["stem-001", "stem-002"])
+
+    assert insight is not None
+    assert len(insight.structured_points) == 2
+    methods = {point.method for point in insight.structured_points}
+    assert methods == {"PCA", "SVM"}
+    for point in insight.structured_points:
+        assert isinstance(point, MethodOverlapPoint)
+        assert "usage in paper A" in point.paper_a_usage
+        assert "usage in paper B" in point.paper_b_usage
 
 
 async def test_method_overlap_rejects_wrong_paper_count() -> None:

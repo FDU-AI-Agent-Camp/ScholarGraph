@@ -1,5 +1,6 @@
 """Community patrol report schemas (BE-4) — aligned with docs/api/openapi.yaml."""
 
+from collections.abc import Sequence
 from datetime import datetime
 from enum import StrEnum
 from typing import Annotated, Literal
@@ -123,7 +124,7 @@ class PatrolInsight(BaseModel):
     )
     paper_ids: list[str] = Field(default_factory=list)
     node_refs: list[NodeRef] = Field(default_factory=list)
-    structured_points: list[
+    structured_points: Sequence[
         Annotated[
             ContradictionPoint | LensClashPoint | MethodOverlapPoint | ClaimEvolutionPoint,
             Field(discriminator="mode"),
