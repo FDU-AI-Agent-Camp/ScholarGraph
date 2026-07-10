@@ -2,6 +2,7 @@
 
 from unittest.mock import AsyncMock, patch
 
+from backend.config import get_settings
 from backend.patrol.claim_evolution import build_claim_evolution_insight
 from backend.schemas.patrol import (
     ClaimEvolutionPoint,
@@ -294,6 +295,52 @@ async def test_claim_evolution_backfills_missing_claims_from_vector_store() -> N
     assert "实验结果显示准确率提升 5%" in (point.paper_a_claim or "")
     assert "实验结果显示准确率提升 5%" in (point.paper_b_claim or "")
     vector_store.query_chunks.assert_awaited()
+
+
+async def test_claim_evolution_chunk_top_k_is_configurable(monkeypatch) -> None:
+    """PATROL_CLAIM_CHUNK_TOP_K must control how many chunks are backfilled into the prompt."""
+    from backend.schemas.graph import GraphNode, NodeType, UnifiedPaperGraph
+    from backend.schemas.paradigm import Paradigm
+
+    settings = get_settings()
+    monkeypatch.setattr(settings, "patrol_claim_chunk_top_k", 5)
+
+    vector_store = AsyncMock()
+    vector_store.query_chunks.return_value = [AsyncMock(text=f"chunk {i} for missing claim") for i in range(5)]
+
+    graphs = {
+        "stem-001": UnifiedPaperGraph(
+            paper_id="stem-001",
+            paradigm=Paradigm.STEM,
+            nodes=[GraphNode(id="n_q", label="Q1", type=NodeType.RESEARCH_QUESTION, data={})],
+            edges=[],
+        ),
+        "stem-002": UnifiedPaperGraph(
+            paper_id="stem-002",
+            paradigm=Paradigm.STEM,
+            nodes=[GraphNode(id="n_q", label="Q1", type=NodeType.RESEARCH_QUESTION, data={})],
+            edges=[],
+        ),
+    }
+    with patch(
+        "backend.patrol.claim_evolution.generate_claim_evolution_summary",
+        new_callable=AsyncMock,
+        return_value=None,
+    ) as mock_summary:
+        insight = await build_claim_evolution_insight(
+            graphs,
+            ["stem-001", "stem-002"],
+            vector_store=vector_store,
+            embedding_client=_FakeEmbeddingClient(),
+        )
+
+    assert insight is not None
+    assert insight.status == PatrolInsightStatus.READY
+    vector_store.query_chunks.assert_any_await("Q1", paper_id="stem-001", top_k=5)
+    vector_store.query_chunks.assert_any_await("Q1", paper_id="stem-002", top_k=5)
+    context = mock_summary.call_args.args[0]
+    for i in range(5):
+        assert f"chunk {i} for missing claim" in context
 
 
 async def test_claim_evolution_rejects_wrong_paper_count() -> None:

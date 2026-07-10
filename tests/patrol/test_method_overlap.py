@@ -786,6 +786,52 @@ async def test_method_overlap_records_rag_degradation_when_index_missing() -> No
     assert set(insight.meta["patrol_rag_context_degraded"]["paper_ids"]) == {"stem-001", "stem-002"}
 
 
+async def test_method_overlap_chinese_description_recall() -> None:
+    """Dynamic Chinese query must recall a Chinese method-description chunk."""
+    vector_store = AsyncMock()
+    vector_store.query_chunks.return_value = [
+        AsyncMock(text="使用卷积神经网络对图像进行特征提取，并在 ImageNet 上验证了效果。"),
+    ]
+    graphs = {
+        "stem-001": build_stem_graph_with_method_dataset(
+            "stem-001",
+            method_label="卷积神经网络",
+            method_data={"description": "使用卷积神经网络对图像进行特征提取"},
+            dataset_label="ImageNet",
+        ),
+        "stem-002": build_stem_graph_with_method_dataset(
+            "stem-002",
+            method_label="卷积神经网络",
+            method_data={"description": "使用卷积神经网络对图像进行特征提取"},
+            dataset_label="CIFAR-10",
+        ),
+    }
+    with patch(
+        "backend.patrol.method_overlap.generate_method_overlap_summary",
+        new_callable=AsyncMock,
+        return_value=None,
+    ) as mock_summary:
+        insight = await build_method_overlap_insight(
+            graphs,
+            ["stem-001", "stem-002"],
+            vector_store=vector_store,
+        )
+
+    assert insight is not None
+    assert insight.status == PatrolInsightStatus.READY
+    # The dynamic query should be anchored by the overlapping Chinese label.
+    queries = {}
+    for call in vector_store.query_chunks.call_args_list:
+        query = call.args[0] if call.args else call.kwargs.get("query")
+        paper_id = call.kwargs.get("paper_id") or call.args[1]
+        queries[paper_id] = query
+    for paper_id in ("stem-001", "stem-002"):
+        assert "卷积神经网络" in queries[paper_id]
+        assert "具体应用场景" in queries[paper_id]
+    context = mock_summary.call_args.args[0]
+    assert "使用卷积神经网络对图像进行特征提取" in context
+
+
 class _FakeEmbeddingClient:
     """Deterministic embedding client for semantic overlap tests.
 
