@@ -19,6 +19,14 @@ class PatrolInsightStatus(StrEnum):
     INSUFFICIENT_DATA = "insufficient_data"
 
 
+class EvolutionType(StrEnum):
+    """Relationship between two claims addressing the same research question."""
+
+    INHERIT = "inherit"
+    CONTRADICT = "contradict"
+    REFINED = "refined"
+
+
 class NodeRef(BaseModel):
     paper_id: str
     node_id: str
@@ -70,9 +78,28 @@ class MethodOverlapPoint(PatrolPoint):
 class ClaimEvolutionPoint(PatrolPoint):
     mode: Literal["claim_evolution"]
     research_question: str
-    paper_a_claim: str
-    paper_b_claim: str
-    evidence_summary: str
+    paper_a_claim: str | None = Field(
+        default=None,
+        description="论文 A 的核心结论；当图谱未抽取到 Claim 节点时，可从 VectorStore 召回文本填充。",
+    )
+    paper_b_claim: str | None = Field(
+        default=None,
+        description="论文 B 的核心结论；当图谱未抽取到 Claim 节点时，可从 VectorStore 召回文本填充。",
+    )
+    evolution_type: EvolutionType | None = Field(
+        default=None,
+        description="两篇论文结论的演进关系：inherit（继承深化）、contradict（矛盾冲突）、refined（修正细化）。",
+    )
+    problem_fit_score: int | None = Field(
+        default=None,
+        ge=0,
+        le=100,
+        description="研究问题契合度评分，0-100；数值越高说明两篇论文关注的问题越一致。",
+    )
+    evidence_summary: str | None = Field(
+        default=None,
+        description="基于双方证据链的综合摘要；LLM 未生成时可用召回 Chunk 文本作为兜底。",
+    )
 
 
 class PatrolInsight(BaseModel):

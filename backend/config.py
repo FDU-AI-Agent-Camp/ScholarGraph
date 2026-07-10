@@ -281,6 +281,20 @@ class Settings(BaseSettings):
         validation_alias="PATROL_MAX_MATRIX_SIZE",
         description="Max M*N method-node pairs allowed for in-memory semantic similarity matrix.",
     )
+    patrol_claim_rq_threshold: float = Field(
+        default=0.75,
+        ge=0.0,
+        le=1.0,
+        validation_alias="PATROL_CLAIM_RQ_THRESHOLD",
+        description="Cosine-similarity threshold for claim-evolution research-question recall.",
+    )
+    patrol_claim_chunk_top_k: int = Field(
+        default=3,
+        ge=1,
+        le=20,
+        validation_alias="PATROL_CLAIM_CHUNK_TOP_K",
+        description="Top-k chunks retrieved from VectorStore to backfill missing Claim nodes in claim_evolution.",
+    )
 
     # RAG / ChromaDB settings
     chromadb_path: str = Field(default="./data/chroma", validation_alias="CHROMADB_PATH")

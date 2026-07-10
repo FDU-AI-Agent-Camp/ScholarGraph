@@ -5,15 +5,19 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import TYPE_CHECKING
 
+import numpy as np
+
+from backend.config import get_settings
 from backend.llm.client import LlmClient
-from backend.patrol.llm_summary import generate_patrol_summary
+from backend.llm.embeddings import EmbeddingClient, get_embedding_client
+from backend.patrol.llm_summary import generate_claim_evolution_summary
 from backend.schemas.graph import GraphNode, NodeType, UnifiedPaperGraph
 from backend.schemas.patrol import (
     ClaimEvolutionPoint,
+    EvolutionType,
     NodeRef,
     PatrolInsight,
     PatrolInsightStatus,
-    PatrolMode,
 )
 
 if TYPE_CHECKING:
@@ -23,9 +27,6 @@ CLAIM_EVOLUTION_INSIGHT_ID = "ins-claim-evolution-001"
 CLAIM_EVOLUTION_TITLE = "观点演进（Claim Evolution）"
 CLAIM_EVOLUTION_QUERY_TEXT = "research question thesis conclusion claim finding"
 CLAIM_TOP_K = 3
-# MVP threshold for question similarity using character-set Jaccard.
-# Works across Chinese (character-level) and English (letter-level).
-QUESTION_SIMILARITY_THRESHOLD = 0.3
 
 
 def research_question_nodes(graph: UnifiedPaperGraph | None) -> list[GraphNode]:
@@ -50,34 +51,52 @@ def _primary_node(nodes: list[GraphNode]) -> GraphNode | None:
     return nodes[0] if nodes else None
 
 
-def _normalize(label: str) -> str:
-    """Normalize a node label for similarity comparison."""
-    return label.strip().lower()
-
-
-def _char_jaccard(left: str, right: str) -> float:
-    """Return character-set Jaccard similarity between two labels."""
-    left_chars = set(_normalize(left))
-    right_chars = set(_normalize(right))
-    if not left_chars or not right_chars:
+def _cosine_similarity(left: list[float], right: list[float]) -> float:
+    """Return cosine similarity between two vectors."""
+    left_arr = np.asarray(left, dtype=np.float64)
+    right_arr = np.asarray(right, dtype=np.float64)
+    left_norm = np.linalg.norm(left_arr)
+    right_norm = np.linalg.norm(right_arr)
+    if left_norm == 0 or right_norm == 0:
         return 0.0
-    intersection = left_chars & right_chars
-    union = left_chars | right_chars
-    return len(intersection) / len(union)
+    return float(left_arr @ right_arr / (left_norm * right_norm))
 
 
-def _questions_are_similar(left: str, right: str, threshold: float = QUESTION_SIMILARITY_THRESHOLD) -> bool:
-    """Check whether two research questions/theses are similar enough to compare."""
-    if _normalize(left) == _normalize(right):
-        return True
-    return _char_jaccard(left, right) >= threshold
+async def _question_similarity(
+    left: GraphNode,
+    right: GraphNode,
+    embedding_client: EmbeddingClient,
+) -> float:
+    """Compute embedding cosine similarity between two question/thesis nodes."""
+    vectors = await embedding_client.embed_texts([left.label, right.label])
+    if len(vectors) != 2:
+        return 0.0
+    return _cosine_similarity(vectors[0], vectors[1])
 
 
-def _claims_are_different(left: GraphNode | None, right: GraphNode | None) -> bool:
-    """Return True when both claims exist and are not normalized-equal."""
-    if left is None or right is None:
-        return False
-    return _normalize(left.label) != _normalize(right.label)
+async def _retrieve_claim_backfill_chunks(
+    paper_id: str,
+    question: GraphNode,
+    vector_store: VectorStore,
+    top_k: int,
+) -> list[str]:
+    """Retrieve conclusion-related chunks from VectorStore when Claim nodes are missing."""
+    query = question.label
+    chunks = await vector_store.query_chunks(
+        query,
+        paper_id=paper_id,
+        top_k=top_k,
+    )
+    return [chunk.text for chunk in chunks if chunk.text.strip()]
+
+
+def _format_claim(label: str | None, chunks: list[str]) -> str | None:
+    """Prefer graph node label; fall back to retrieved chunk texts."""
+    if label:
+        return label
+    if chunks:
+        return "\n".join(chunks)
+    return None
 
 
 async def build_claim_evolution_insight(
@@ -86,8 +105,16 @@ async def build_claim_evolution_insight(
     *,
     vector_store: VectorStore | None = None,
     llm_client: LlmClient | None = None,
+    embedding_client: EmbeddingClient | None = None,
 ) -> PatrolInsight | None:
-    """Compare research questions and claims across two papers."""
+    """Compare research questions and claims across two papers.
+
+    Pipeline:
+    1. Require ResearchQuestion or Thesis on both sides.
+    2. Compute embedding cosine similarity between primary questions; gate below threshold.
+    3. Backfill missing Claim nodes from VectorStore using the research question as query.
+    4. Ask LLM for structured NLI-style output (evolution_type, problem_fit_score, summary).
+    """
     if len(paper_ids) != 2:
         return None
 
@@ -123,12 +150,17 @@ async def build_claim_evolution_insight(
     right_question = _primary_node(right_questions) or _primary_node(right_theses)
     assert left_question is not None and right_question is not None
 
-    left_claims = claim_nodes(left_graph)
-    right_claims = claim_nodes(right_graph)
-    left_claim = _primary_node(left_claims)
-    right_claim = _primary_node(right_claims)
+    settings = get_settings()
+    embed_client = embedding_client or get_embedding_client()
 
-    if not _questions_are_similar(left_question.label, right_question.label):
+    # Mock embeddings are non-informative; fall back to a fast literal equality gate.
+    if getattr(embed_client, "is_mock", False):
+        questions_match = left_question.label.strip().lower() == right_question.label.strip().lower()
+    else:
+        similarity = await _question_similarity(left_question, right_question, embed_client)
+        questions_match = similarity >= settings.patrol_claim_rq_threshold
+
+    if not questions_match:
         summary = f"两篇论文 {left_id} 与 {right_id} 的研究问题/论点相似度不足，无法生成观点演进巡检报告。"
         return PatrolInsight(
             insight_id=CLAIM_EVOLUTION_INSIGHT_ID,
@@ -139,42 +171,63 @@ async def build_claim_evolution_insight(
             node_refs=[],
         )
 
-    if left_claim is not None and right_claim is not None:
-        if not _claims_are_different(left_claim, right_claim):
-            summary = f"两篇论文 {left_id} 与 {right_id} 的研究问题相似，但结论相同，不存在观点演进差异。"
-            return PatrolInsight(
-                insight_id=CLAIM_EVOLUTION_INSIGHT_ID,
-                title=CLAIM_EVOLUTION_TITLE,
-                summary=summary,
-                status=PatrolInsightStatus.INSUFFICIENT_DATA,
-                paper_ids=[left_id, right_id],
-                node_refs=[],
-            )
+    # Backfill missing claims from VectorStore when available.
+    left_claim = _primary_node(claim_nodes(left_graph))
+    right_claim = _primary_node(claim_nodes(right_graph))
+
+    left_claim_chunks: list[str] = []
+    right_claim_chunks: list[str] = []
+    if left_claim is None and vector_store is not None:
+        left_claim_chunks = await _retrieve_claim_backfill_chunks(
+            left_id,
+            left_question,
+            vector_store,
+            settings.patrol_claim_chunk_top_k,
+        )
+    if right_claim is None and vector_store is not None:
+        right_claim_chunks = await _retrieve_claim_backfill_chunks(
+            right_id,
+            right_question,
+            vector_store,
+            settings.patrol_claim_chunk_top_k,
+        )
+
+    left_claim_text = _format_claim(left_claim.label if left_claim else None, left_claim_chunks)
+    right_claim_text = _format_claim(right_claim.label if right_claim else None, right_claim_chunks)
 
     context = await _build_claim_evolution_context(
         graphs,
         paper_ids,
         vector_store=vector_store,
+        extra_claim_chunks={
+            left_id: left_claim_chunks,
+            right_id: right_claim_chunks,
+        },
     )
-    llm_summary = await generate_patrol_summary(
-        PatrolMode.CLAIM_EVOLUTION,
+
+    llm_output = await generate_claim_evolution_summary(
         context,
         llm_client=llm_client,
     )
-    summary = llm_summary or _fallback_claim_evolution_summary(
-        left_question.label,
-        right_question.label,
-    )
-    evidence_summary = llm_summary or _fallback_evidence_summary(
-        left_claim.label if left_claim else None,
-        right_claim.label if right_claim else None,
-    )
+
+    if llm_output is not None:
+        summary = llm_output.comparison_summary
+        evidence_summary = llm_output.evidence_summary
+        evolution_type = EvolutionType(llm_output.evolution_type)
+        problem_fit_score = llm_output.problem_fit_score
+    else:
+        summary = _fallback_claim_evolution_summary(left_question.label, right_question.label)
+        evidence_summary = _fallback_evidence_summary(left_claim_text, right_claim_text)
+        evolution_type = None
+        problem_fit_score = None
 
     point = ClaimEvolutionPoint(
         mode="claim_evolution",
         research_question=left_question.label,
-        paper_a_claim=left_claim.label if left_claim else "未检出明确结论",
-        paper_b_claim=right_claim.label if right_claim else "未检出明确结论",
+        paper_a_claim=left_claim_text,
+        paper_b_claim=right_claim_text,
+        evolution_type=evolution_type,
+        problem_fit_score=problem_fit_score,
         evidence_summary=evidence_summary,
     )
 
@@ -197,8 +250,10 @@ async def _build_claim_evolution_context(
     paper_ids: list[str],
     *,
     vector_store: VectorStore | None = None,
+    extra_claim_chunks: dict[str, list[str]] | None = None,
 ) -> str:
     sections: list[str] = []
+    extra_claim_chunks = extra_claim_chunks or {}
     for paper_id in paper_ids:
         graph = graphs.get(paper_id)
         if graph is None:
@@ -212,6 +267,9 @@ async def _build_claim_evolution_context(
             f"Thesis: {', '.join(thesis_labels) or '（无）'}\n"
             f"Claim/Finding: {', '.join(claim_labels) or '（无）'}"
         )
+        backfill = extra_claim_chunks.get(paper_id, [])
+        if backfill:
+            section += "\n召回结论候选段落：\n" + "\n".join(f"- {text}" for text in backfill)
         sections.append(section)
 
     if vector_store is not None:
@@ -241,7 +299,7 @@ def _fallback_evidence_summary(left_claim: str | None, right_claim: str | None) 
     if left_claim and right_claim:
         return (
             f"论文 A 的结论为「{left_claim}」，论文 B 的结论为「{right_claim}」，"
-            "两者围绕相似问题给出了不同判断，建议结合证据链分析差异来源。"
+            "两者围绕相似问题给出了判断，建议结合证据链分析差异来源。"
         )
     if left_claim:
         return f"论文 A 的结论为「{left_claim}」，论文 B 未检出明确结论。"

@@ -8,7 +8,7 @@ from langchain_core.messages import HumanMessage, SystemMessage
 
 from backend.llm.client import LlmClient, get_llm_client
 from backend.schemas.patrol import PatrolMode
-from backend.schemas.patrol_llm import PatrolSummaryOutput
+from backend.schemas.patrol_llm import ClaimEvolutionOutput, PatrolSummaryOutput
 
 logger = logging.getLogger(__name__)
 
@@ -32,8 +32,12 @@ METHOD_OVERLAP_SYSTEM = (
 
 CLAIM_EVOLUTION_SYSTEM = (
     "你是学术共同体巡检助手。根据两篇论文的研究问题（ResearchQuestion）与结论（Claim/Finding），"
-    "用中文写一段 80–200 字的 Claim Evolution 洞察摘要，说明针对相似问题两篇论文的结论是否演进或分歧。"
-    "只输出 JSON，字段 summary。"
+    "判定它们是否关注同一核心命题，以及结论之间是继承深化、矛盾冲突还是在特定条件下修正细化。"
+    "只输出 JSON，字段："
+    "evolution_type（枚举：inherit / contradict / refined）、"
+    "problem_fit_score（0-100 整数，研究问题契合度）、"
+    "comparison_summary（80-200 字中文观点对比摘要）、"
+    "evidence_summary（可选，基于证据链的额外说明）。"
 )
 
 _SYSTEM_PROMPTS: dict[PatrolMode, str] = {
@@ -76,4 +80,31 @@ async def generate_patrol_summary(
         return None
     except Exception as exc:
         logger.warning("patrol LLM summary failed, using template fallback: %s", exc)
+        return None
+
+
+async def generate_claim_evolution_summary(
+    context: str,
+    *,
+    llm_client: LlmClient | None = None,
+) -> ClaimEvolutionOutput | None:
+    """Invoke LLM with NLI-style structured schema for claim_evolution mode."""
+    if not context.strip():
+        return None
+    try:
+        client = llm_client or get_llm_client()
+        structured = client.chat.with_structured_output(ClaimEvolutionOutput)
+        result = await structured.ainvoke(
+            [
+                SystemMessage(content=CLAIM_EVOLUTION_SYSTEM),
+                HumanMessage(content=context),
+            ],
+        )
+        if isinstance(result, ClaimEvolutionOutput):
+            return result
+        return ClaimEvolutionOutput.model_validate(result)
+    except ValueError:
+        return None
+    except Exception as exc:
+        logger.warning("claim evolution LLM summary failed, using template fallback: %s", exc)
         return None

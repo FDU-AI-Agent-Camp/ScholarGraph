@@ -83,6 +83,7 @@ async def run_patrol(
             graphs,
             paper_ids,
             vector_store=vector_store,
+            embedding_client=embedding_client,
             llm_client=llm_client,
         )
         if insight is None:
