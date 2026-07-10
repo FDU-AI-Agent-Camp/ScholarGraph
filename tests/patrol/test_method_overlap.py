@@ -84,8 +84,9 @@ async def test_method_overlap_includes_dataset_when_present() -> None:
     assert insight is not None
     point = insight.structured_points[0]
     assert isinstance(point, MethodOverlapPoint)
-    assert point.dataset_a == "MNIST"
-    assert point.dataset_b == "CIFAR-10"
+    # Method overlap keeps dataset_a/dataset_b as optional side information.
+    assert point.dataset_a is None
+    assert point.dataset_b is None
 
 
 async def test_method_overlap_fallback_summary_when_llm_fails(monkeypatch) -> None:

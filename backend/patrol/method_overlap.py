@@ -69,17 +69,19 @@ def _extract_usage(node: GraphNode) -> str:
 
 
 @dataclass(frozen=True)
-class _MethodPair:
-    """Algorithm-discovered method overlap anchor.
+class _OverlapAnchor:
+    """Physical anchor for an overlap relationship between two papers.
 
-    This is the source of truth for structured_points: every pair returned by
-    the local state machine must be reflected in the final output.  The LLM
-    injects semantic flesh (usage / evidence) on top of this skeleton.
+    This is the source of truth for structured_points and node_refs: every
+    anchor returned by the local state machine must be reflected in the final
+    output.  The LLM injects semantic flesh (usage / evidence) on top of this
+    skeleton.
     """
 
     left_node: GraphNode
     right_node: GraphNode
-    overlap_type: Literal["literal", "semantic"]
+    overlap_kind: OverlapType
+    match_type: Literal["literal", "semantic"]
     overlap_score: float
 
     @property
@@ -87,11 +89,14 @@ class _MethodPair:
         return f"{self.left_node.label} <-> {self.right_node.label}"
 
     @property
-    def method_label(self) -> str:
-        """Short representative label for the overlap item."""
+    def overlap_label(self) -> str:
+        """Short representative label for the overlapping item."""
         if _normalize(self.left_node.label) == _normalize(self.right_node.label):
             return self.left_node.label
-        return f"{self.left_node.label}/{self.right_node.label}"
+        # Prefer the shorter label as the canonical representative for semantic pairs.
+        left = self.left_node.label
+        right = self.right_node.label
+        return left if len(left) <= len(right) else right
 
 
 def _embed_text_for_node(node: GraphNode) -> str:
@@ -106,10 +111,11 @@ def _embed_text_for_node(node: GraphNode) -> str:
 def _find_overlap_pairs(
     left_nodes: list[GraphNode],
     right_nodes: list[GraphNode],
-) -> list[_MethodPair]:
-    """Return all literal-label overlap pairs between two node lists.
+    overlap_kind: OverlapType,
+) -> list[_OverlapAnchor]:
+    """Return all literal-label overlap anchors between two node lists.
 
-    For each shared normalized label we create one pair using the first
+    For each shared normalized label we create one anchor using the first
     occurrence on each side.  Additional occurrences are tracked via node_refs
     by the caller.
     """
@@ -118,7 +124,7 @@ def _find_overlap_pairs(
         right_by_label.setdefault(_normalize(node.label), []).append(node)
 
     seen: set[str] = set()
-    pairs: list[_MethodPair] = []
+    anchors: list[_OverlapAnchor] = []
     for left_node in left_nodes:
         normalized = _normalize(left_node.label)
         if normalized in seen:
@@ -127,15 +133,16 @@ def _find_overlap_pairs(
         if not right_matches:
             continue
         seen.add(normalized)
-        pairs.append(
-            _MethodPair(
+        anchors.append(
+            _OverlapAnchor(
                 left_node=left_node,
                 right_node=right_matches[0],
-                overlap_type="literal",
+                overlap_kind=overlap_kind,
+                match_type="literal",
                 overlap_score=1.0,
             )
         )
-    return pairs
+    return anchors
 
 
 def _cosine_similarity_matrix(
@@ -161,10 +168,10 @@ async def _find_semantic_method_overlap(
     embedding_client: EmbeddingClient,
     threshold: float,
     max_matrix_size: int,
-) -> _MethodPair | None:
+) -> _OverlapAnchor | None:
     """Find the strongest semantic method overlap across two papers.
 
-    Returns the best matching pair plus the cosine score, or ``None`` when no
+    Returns the best matching anchor plus the cosine score, or ``None`` when no
     pair exceeds the threshold or the matrix is too large.
     """
     if not left_methods or not right_methods:
@@ -196,10 +203,11 @@ async def _find_semantic_method_overlap(
         return None
 
     left_idx, right_idx = best_flat
-    return _MethodPair(
+    return _OverlapAnchor(
         left_node=left_methods[left_idx],
         right_node=right_methods[right_idx],
-        overlap_type="semantic",
+        overlap_kind=OverlapType.METHOD,
+        match_type="semantic",
         overlap_score=best_score,
     )
 
@@ -244,48 +252,48 @@ async def build_method_overlap_insight(
     left_datasets = dataset_nodes(left_graph)
     right_datasets = dataset_nodes(right_graph)
 
-    method_pairs = _find_overlap_pairs(left_methods, right_methods)
-    dataset_overlap = _find_overlap_pairs(left_datasets, right_datasets)
+    method_anchors = _find_overlap_pairs(left_methods, right_methods, OverlapType.METHOD)
+    dataset_anchors = _find_overlap_pairs(left_datasets, right_datasets, OverlapType.DATASET)
 
-    if not method_pairs:
+    if not method_anchors:
         settings = get_settings()
         client = embedding_client or get_embedding_client()
-        semantic_pair = await _find_semantic_method_overlap(
+        semantic_anchor = await _find_semantic_method_overlap(
             left_methods,
             right_methods,
             client,
             settings.patrol_semantic_threshold,
             settings.patrol_max_matrix_size,
         )
-        if semantic_pair is not None:
-            method_pairs = [semantic_pair]
+        if semantic_anchor is not None:
+            method_anchors = [semantic_anchor]
 
     node_refs: list[NodeRef] = []
-    for pair in method_pairs:
-        node_refs.append(NodeRef(paper_id=left_id, node_id=pair.left_node.id, label=pair.left_node.label))
-        node_refs.append(NodeRef(paper_id=right_id, node_id=pair.right_node.id, label=pair.right_node.label))
+    for anchor in method_anchors:
+        node_refs.append(NodeRef(paper_id=left_id, node_id=anchor.left_node.id, label=anchor.left_node.label))
+        node_refs.append(NodeRef(paper_id=right_id, node_id=anchor.right_node.id, label=anchor.right_node.label))
 
-    dataset_only_pair: _MethodPair | None = None
-    if not method_pairs and dataset_overlap:
+    dataset_only_anchor: _OverlapAnchor | None = None
+    if not method_anchors and dataset_anchors:
         # Fall back to dataset literal overlap when no method overlap is found.
-        # We still anchor the insight to the primary method nodes on each side.
-        left_primary_method = _primary_node(left_methods)
-        right_primary_method = _primary_node(right_methods)
-        assert left_primary_method is not None and right_primary_method is not None
-        dataset_only_pair = _MethodPair(
-            left_node=left_primary_method,
-            right_node=right_primary_method,
-            overlap_type="literal",
-            overlap_score=1.0,
-        )
+        # The anchor nodes are the actual dataset nodes so node_refs point to them.
+        dataset_only_anchor = dataset_anchors[0]
         node_refs.extend(
             [
-                NodeRef(paper_id=left_id, node_id=left_primary_method.id, label=left_primary_method.label),
-                NodeRef(paper_id=right_id, node_id=right_primary_method.id, label=right_primary_method.label),
+                NodeRef(
+                    paper_id=left_id,
+                    node_id=dataset_only_anchor.left_node.id,
+                    label=dataset_only_anchor.left_node.label,
+                ),
+                NodeRef(
+                    paper_id=right_id,
+                    node_id=dataset_only_anchor.right_node.id,
+                    label=dataset_only_anchor.right_node.label,
+                ),
             ]
         )
 
-    if not method_pairs and dataset_only_pair is None:
+    if not method_anchors and dataset_only_anchor is None:
         summary = f"两篇论文 {left_id} 与 {right_id} 的方法与数据集均无显著重合，无法生成方法重叠巡检报告。"
         return PatrolInsight(
             insight_id=METHOD_OVERLAP_INSIGHT_ID,
@@ -296,13 +304,10 @@ async def build_method_overlap_insight(
             node_refs=[],
         )
 
-    left_dataset = _primary_node(left_datasets)
-    right_dataset = _primary_node(right_datasets)
-
     context = await _build_method_overlap_context(
         graphs,
         paper_ids,
-        algorithm_pairs=method_pairs or ([dataset_only_pair] if dataset_only_pair else []),
+        algorithm_anchors=method_anchors or ([dataset_only_anchor] if dataset_only_anchor else []),
         vector_store=vector_store,
     )
     llm_output = await generate_method_overlap_summary(
@@ -311,19 +316,17 @@ async def build_method_overlap_insight(
     )
 
     summary = _derive_summary(
-        method_pairs or ([dataset_only_pair] if dataset_only_pair else []),
-        dataset_only_pair is not None,
+        method_anchors or ([dataset_only_anchor] if dataset_only_anchor else []),
+        dataset_only_anchor is not None,
         llm_output,
         left_id,
         right_id,
     )
 
     points = _build_method_overlap_points(
-        method_pairs or ([dataset_only_pair] if dataset_only_pair else []),
-        dataset_only_pair is not None,
+        method_anchors or ([dataset_only_anchor] if dataset_only_anchor else []),
+        dataset_only_anchor is not None,
         llm_output,
-        left_dataset=left_dataset,
-        right_dataset=right_dataset,
     )
 
     return PatrolInsight(
@@ -341,7 +344,7 @@ async def _build_method_overlap_context(
     graphs: Mapping[str, UnifiedPaperGraph],
     paper_ids: list[str],
     *,
-    algorithm_pairs: list[_MethodPair],
+    algorithm_anchors: list[_OverlapAnchor],
     vector_store: VectorStore | None = None,
 ) -> str:
     sections: list[str] = []
@@ -358,8 +361,8 @@ async def _build_method_overlap_context(
         )
         sections.append(section)
 
-    if algorithm_pairs:
-        pair_lines = [f"- {pair.pair_label}" for pair in algorithm_pairs]
+    if algorithm_anchors:
+        pair_lines = [f"- {anchor.pair_label}" for anchor in algorithm_anchors]
         sections.append(
             "以下方法对已由算法确认存在显著重叠，请在 comparison_details 中为每一对生成结构化对比：\n"
             + "\n".join(pair_lines)
@@ -379,19 +382,19 @@ async def _build_method_overlap_context(
 
 
 def _match_llm_detail(
-    pair: _MethodPair,
+    anchor: _OverlapAnchor,
     details: list[MethodComparativeDetail],
 ) -> MethodComparativeDetail | None:
-    """Align an algorithm-discovered pair with an LLM-generated detail.
+    """Align an algorithm-discovered anchor with an LLM-generated detail.
 
     Matching order:
     1. Exact match on the expected pair_label produced by the state machine.
     2. Fuzzy match: both labels appear somewhere in the LLM method_pair_name.
     3. Partial match: either label appears in the LLM method_pair_name.
     """
-    left_label = pair.left_node.label
-    right_label = pair.right_node.label
-    expected = pair.pair_label
+    left_label = anchor.left_node.label
+    right_label = anchor.right_node.label
+    expected = anchor.pair_label
 
     for detail in details:
         if detail.method_pair_name == expected:
@@ -411,7 +414,7 @@ def _match_llm_detail(
 
 
 def _derive_summary(
-    pairs: list[_MethodPair],
+    anchors: list[_OverlapAnchor],
     dataset_only: bool,
     llm_output: MethodOverlapOutput | None,
     left_id: str,
@@ -422,15 +425,15 @@ def _derive_summary(
         return llm_output.summary.strip()
 
     if dataset_only:
-        # Dataset-only branch is anchored to the primary method nodes.
-        left_method = pairs[0].left_node.label
-        right_method = pairs[0].right_node.label
+        # Dataset-only branch is anchored to the actual dataset nodes.
+        left_dataset = anchors[0].left_node.label
+        right_dataset = anchors[0].right_node.label
         return (
-            f"两篇论文分别采用「{left_method}」与「{right_method}」方法，"
-            "但在数据集上存在重叠，建议结合实验段落进一步核验。"
+            f"两篇论文均使用「{left_dataset}」与「{right_dataset}」数据集，"
+            "建议结合实验段落进一步核验数据重叠的具体含义。"
         )
 
-    pair_labels = [pair.pair_label for pair in pairs]
+    pair_labels = [anchor.pair_label for anchor in anchors]
     return (
         f"两篇论文 {left_id} 与 {right_id} 在方法层面存在显著重叠："
         f"{'; '.join(pair_labels)}。建议进一步比对具体使用场景与实验差异。"
@@ -438,68 +441,59 @@ def _derive_summary(
 
 
 def _build_method_overlap_points(
-    pairs: list[_MethodPair],
+    anchors: list[_OverlapAnchor],
     dataset_only: bool,
     llm_output: MethodOverlapOutput | None,
-    *,
-    left_dataset: GraphNode | None,
-    right_dataset: GraphNode | None,
 ) -> list[MethodOverlapPoint]:
-    """Merge algorithm pairs with LLM details to produce anchored structured points."""
+    """Merge algorithm anchors with LLM details to produce anchored structured points."""
     details = llm_output.comparison_details if llm_output is not None else []
     points: list[MethodOverlapPoint] = []
-    for pair in pairs:
-        detail = _match_llm_detail(pair, details)
+    for anchor in anchors:
+        detail = _match_llm_detail(anchor, details)
         point = _build_single_method_overlap_point(
-            pair,
+            anchor,
             dataset_only=dataset_only,
             detail=detail,
-            left_dataset=left_dataset,
-            right_dataset=right_dataset,
         )
         points.append(point)
     return points
 
 
 def _build_single_method_overlap_point(
-    pair: _MethodPair,
+    anchor: _OverlapAnchor,
     *,
     dataset_only: bool,
     detail: MethodComparativeDetail | None,
-    left_dataset: GraphNode | None,
-    right_dataset: GraphNode | None,
 ) -> MethodOverlapPoint:
-    """Create one MethodOverlapPoint anchored to the algorithm pair.
+    """Create one MethodOverlapPoint anchored to the algorithm anchor.
 
     LLM detail is preferred for semantic flesh (usage/evidence); if the LLM
-    missed the pair, fall back to node-level descriptions and a template.
+    missed the anchor, fall back to node-level descriptions and a template.
     """
     if detail is not None:
         paper_a_usage = detail.paper_a_usage.strip()
         paper_b_usage = detail.paper_b_usage.strip()
         evidence_summary = detail.evidence_summary.strip() or None
     else:
-        paper_a_usage = _extract_usage(pair.left_node)
-        paper_b_usage = _extract_usage(pair.right_node)
+        paper_a_usage = _extract_usage(anchor.left_node)
+        paper_b_usage = _extract_usage(anchor.right_node)
         evidence_summary = None
 
-    method_label = pair.left_node.label
-    if pair.overlap_type == "literal" and _normalize(pair.left_node.label) == _normalize(pair.right_node.label):
-        method_label = pair.left_node.label
+    overlap_label = anchor.overlap_label
+    overlap_kind = anchor.overlap_kind
     if dataset_only:
-        method_label = left_dataset.label if left_dataset else pair.left_node.label
-
-    overlap_type = OverlapType.MIXED if dataset_only else OverlapType.METHOD
+        overlap_label = anchor.left_node.label
+        overlap_kind = OverlapType.DATASET
 
     return MethodOverlapPoint(
         mode="method_overlap",
-        overlap_type=overlap_type,
-        overlap_label=method_label,
-        overlap_score=pair.overlap_score,
-        match_type=pair.overlap_type,
+        overlap_type=overlap_kind,
+        overlap_label=overlap_label,
+        overlap_score=anchor.overlap_score,
+        match_type=anchor.match_type,
         paper_a_usage=paper_a_usage,
         paper_b_usage=paper_b_usage,
-        dataset_a=left_dataset.label if left_dataset else None,
-        dataset_b=right_dataset.label if right_dataset else None,
+        dataset_a=anchor.left_node.label if overlap_kind == OverlapType.DATASET else None,
+        dataset_b=anchor.right_node.label if overlap_kind == OverlapType.DATASET else None,
         evidence_summary=evidence_summary,
     )
