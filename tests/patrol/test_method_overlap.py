@@ -410,6 +410,141 @@ async def test_method_overlap_hallucinated_pair_name_falls_back_to_node_descript
     assert point.evidence_summary is None
 
 
+async def test_alignment_merger_perfect_match_with_semantic_pair() -> None:
+    """路径 A：算法发现 PCA <-> Principal Component Analysis，LLM 完美匹配，语义被完整吸收。"""
+    llm_output = MethodOverlapOutput(
+        summary="两篇论文均采用主成分分析对高维图像特征进行线性降维与去噪处理。",
+        comparison_details=[
+            MethodComparativeDetail(
+                method_pair_name="PCA <-> Principal Component Analysis",
+                paper_a_usage="论文 A 使用 PCA 对 MNIST 图像进行降维，保留 95% 累计方差。",
+                paper_b_usage="论文 B 将 Principal Component Analysis 应用于 CIFAR-10 颜色通道压缩。",
+                evidence_summary="两者均利用主成分分析降低输入维度，但论文 B 在更复杂的彩色图像上验证效果。",
+            ),
+        ],
+    )
+    with patch(
+        "backend.patrol.method_overlap.generate_method_overlap_summary",
+        new_callable=AsyncMock,
+        return_value=llm_output,
+    ):
+        graphs = {
+            "stem-001": build_stem_graph_with_method_dataset(
+                "stem-001",
+                method_label="PCA",
+                method_data={"description": "原始描述 A：主成分分析"},
+                dataset_label="MNIST",
+            ),
+            "stem-002": build_stem_graph_with_method_dataset(
+                "stem-002",
+                method_label="Principal Component Analysis",
+                method_data={"description": "原始描述 B：PCA 变体"},
+                dataset_label="CIFAR-10",
+            ),
+        }
+        insight = await build_method_overlap_insight(
+            graphs,
+            ["stem-001", "stem-002"],
+            embedding_client=_FakeEmbeddingClient(),
+        )
+
+    assert insight is not None
+    assert insight.status == PatrolInsightStatus.READY
+    assert insight.summary == llm_output.summary
+    assert len(insight.structured_points) == 1
+    point = insight.structured_points[0]
+    assert isinstance(point, MethodOverlapPoint)
+    assert point.method == "PCA"
+    assert point.paper_a_usage == llm_output.comparison_details[0].paper_a_usage
+    assert point.paper_b_usage == llm_output.comparison_details[0].paper_b_usage
+    assert point.evidence_summary == llm_output.comparison_details[0].evidence_summary
+    assert "原始描述" not in (point.paper_a_usage + (point.paper_b_usage or ""))
+
+
+async def test_alignment_merger_hallucinated_pair_name_falls_back_to_description() -> None:
+    """路径 B：算法发现 PCA <-> Principal Component Analysis，LLM 配对名错误，系统不崩溃并降级。"""
+    llm_output = MethodOverlapOutput(
+        summary="两篇论文都讨论了支持向量机在文本分类任务中的应用差异。",
+        comparison_details=[
+            MethodComparativeDetail(
+                method_pair_name="SVM <-> Support Vector Machine",
+                paper_a_usage="论文 A 使用 SVM 进行文本分类",
+                paper_b_usage="论文 B 使用 SVM 进行情感分析",
+                evidence_summary="SVM 核函数选择不同导致性能差异",
+            ),
+        ],
+    )
+    with patch(
+        "backend.patrol.method_overlap.generate_method_overlap_summary",
+        new_callable=AsyncMock,
+        return_value=llm_output,
+    ):
+        graphs = {
+            "stem-001": build_stem_graph_with_method_dataset(
+                "stem-001",
+                method_label="PCA",
+                method_data={"description": "论文 A 用 PCA 提取 MNIST 主成分"},
+                dataset_label="MNIST",
+            ),
+            "stem-002": build_stem_graph_with_method_dataset(
+                "stem-002",
+                method_label="Principal Component Analysis",
+                method_data={"description": "论文 B 用 PCA 压缩 CIFAR-10 特征"},
+                dataset_label="CIFAR-10",
+            ),
+        }
+        insight = await build_method_overlap_insight(
+            graphs,
+            ["stem-001", "stem-002"],
+            embedding_client=_FakeEmbeddingClient(),
+        )
+
+    assert insight is not None
+    assert insight.status == PatrolInsightStatus.READY
+    assert insight.structured_points
+    point = insight.structured_points[0]
+    assert isinstance(point, MethodOverlapPoint)
+    assert point.method == "PCA"
+    assert point.paper_a_usage == "论文 A 用 PCA 提取 MNIST 主成分"
+    assert point.paper_b_usage == "论文 B 用 PCA 压缩 CIFAR-10 特征"
+    assert point.evidence_summary is None
+
+
+async def test_alignment_merger_malformed_llm_output_returns_ready_with_fallback() -> None:
+    """路径 B 扩展：LLM 返回 None 或残缺输出时仍应 READY 并 fallback。"""
+    with patch(
+        "backend.patrol.method_overlap.generate_method_overlap_summary",
+        new_callable=AsyncMock,
+        return_value=None,
+    ):
+        graphs = {
+            "stem-001": build_stem_graph_with_method_dataset(
+                "stem-001",
+                method_label="PCA",
+                method_data={"description": "论文 A 用 PCA 做无监督降维"},
+                dataset_label="MNIST",
+            ),
+            "stem-002": build_stem_graph_with_method_dataset(
+                "stem-002",
+                method_label="Principal Component Analysis",
+                method_data={"description": "论文 B 用 PCA 压缩特征"},
+                dataset_label="CIFAR-10",
+            ),
+        }
+        insight = await build_method_overlap_insight(
+            graphs,
+            ["stem-001", "stem-002"],
+            embedding_client=_FakeEmbeddingClient(),
+        )
+
+    assert insight is not None
+    assert insight.status == PatrolInsightStatus.READY
+    point = insight.structured_points[0]
+    assert isinstance(point, MethodOverlapPoint)
+    assert point.paper_a_usage == "论文 A 用 PCA 做无监督降维"
+    assert point.paper_b_usage == "论文 B 用 PCA 压缩特征"
+
+
 async def test_method_overlap_rejects_wrong_paper_count() -> None:
     graphs = {
         "stem-001": build_stem_graph_with_method_dataset(
@@ -512,17 +647,23 @@ class _FakeEmbeddingClient:
     method labels/descriptions are considered semantically similar.
     """
 
-    def __init__(self) -> None:
-        self.vectors: dict[str, list[float]] = {
-            "PCA 线性降维": [1.0, 0.0],
-            "Principal Component Analysis 线性降维": [0.95, 0.31],
-            "Random Forest 集成学习": [0.0, 1.0],
-            "SVM 支持向量机": [0.0, 0.0],
-        }
+    def __init__(self, threshold: float = 0.75) -> None:
         self.is_mock = False
+        self._threshold = threshold
 
     async def embed_texts(self, texts: list[str]) -> list[list[float]]:
-        return [self.vectors.get(text, [0.0, 0.0]).copy() for text in texts]
+        vectors: dict[str, list[float]] = {}
+        for text in texts:
+            if "PCA" in text or "Principal Component Analysis" in text:
+                # Deterministic but different vectors for PCA-related texts.
+                vectors[text] = [1.0, 0.0] if text.startswith("PCA") else [0.99, 0.01]
+            else:
+                vectors[text] = [0.0, 0.0]
+        return [vectors.get(text, [0.0, 0.0]).copy() for text in texts]
+
+    @property
+    def threshold(self) -> float:
+        return self._threshold
 
 
 async def test_method_overlap_ready_with_semantic_method_match() -> None:
