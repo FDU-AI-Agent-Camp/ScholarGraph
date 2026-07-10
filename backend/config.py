@@ -298,11 +298,12 @@ class Settings(BaseSettings):
 
     # Patrol RAG hybrid-context settings
     patrol_method_overlap_query_template: str = Field(
-        default="{method_labels} {dataset_labels} experimental setup evaluation dataset",
+        default="{anchor_labels} 具体应用场景 数据集配置 实验数值特征",
         min_length=1,
         validation_alias="PATROL_METHOD_OVERLAP_QUERY_TEMPLATE",
         description=(
-            "Query template for VectorStore recall in method_overlap. Placeholders: {method_labels}, {dataset_labels}."
+            "Query template for VectorStore recall in method_overlap. "
+            "Placeholders: {anchor_labels}, {method_labels}, {dataset_labels}."
         ),
     )
     patrol_method_overlap_top_k: int = Field(
@@ -313,12 +314,12 @@ class Settings(BaseSettings):
         description="Top-k chunks retrieved from VectorStore for method_overlap context enhancement.",
     )
     patrol_claim_evolution_query_template: str = Field(
-        default="{question_labels} {thesis_labels} conclusion claim finding result",
+        default="{anchor_labels} 结论 证据 实验设计 差异",
         min_length=1,
         validation_alias="PATROL_CLAIM_EVOLUTION_QUERY_TEMPLATE",
         description=(
             "Query template for VectorStore recall in claim_evolution. "
-            "Placeholders: {question_labels}, {thesis_labels}."
+            "Placeholders: {anchor_labels}, {question_labels}, {thesis_labels}."
         ),
     )
     patrol_claim_evolution_top_k: int = Field(

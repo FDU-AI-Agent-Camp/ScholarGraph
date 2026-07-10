@@ -338,8 +338,8 @@ async def test_claim_evolution_uses_vector_store_context() -> None:
             embedding_client=_FakeEmbeddingClient(),
         )
     assert insight is not None
-    # Query is now dynamically rendered from graph question labels using the configured template.
-    expected_query = "PCA 是否提升分类准确率？  conclusion claim finding result"
+    # Query is now graph-topology-guided: the aligned question label is the anchor.
+    expected_query = "PCA 是否提升分类准确率？ 结论 证据 实验设计 差异"
     vector_store.query_chunks.assert_any_await(expected_query, paper_id="stem-001", top_k=3)
     vector_store.query_chunks.assert_any_await(expected_query, paper_id="stem-002", top_k=3)
     assert mock_summary.called

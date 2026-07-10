@@ -204,6 +204,10 @@ async def build_claim_evolution_insight(
             left_id: left_claim_chunks,
             right_id: right_claim_chunks,
         },
+        anchor_nodes={
+            left_id: left_question,
+            right_id: right_question,
+        },
     )
 
     llm_output = await generate_claim_evolution_summary(
@@ -246,11 +250,24 @@ async def build_claim_evolution_insight(
     )
 
 
-def _render_claim_evolution_query(graph: UnifiedPaperGraph, template: str) -> str:
-    """Render the VectorStore query from the graph's question and thesis labels."""
+def _render_claim_evolution_query(
+    graph: UnifiedPaperGraph,
+    template: str,
+    anchor_node: GraphNode | None,
+) -> str:
+    """Render the VectorStore query from the aligned anchor node and graph labels.
+
+    The aligned question/thesis label is injected as {anchor_labels} so recall
+    focuses on the intersection problem rather than every question in the paper.
+    """
     question_labels = " ".join(node.label for node in research_question_nodes(graph))
     thesis_labels = " ".join(node.label for node in thesis_nodes(graph))
-    return template.format(question_labels=question_labels, thesis_labels=thesis_labels)
+    anchor_labels = anchor_node.label if anchor_node is not None else ""
+    return template.format(
+        anchor_labels=anchor_labels,
+        question_labels=question_labels,
+        thesis_labels=thesis_labels,
+    )
 
 
 async def _build_claim_evolution_context(
@@ -259,10 +276,12 @@ async def _build_claim_evolution_context(
     *,
     vector_store: VectorStore | None = None,
     extra_claim_chunks: dict[str, list[str]] | None = None,
+    anchor_nodes: dict[str, GraphNode] | None = None,
 ) -> str:
     settings = get_settings()
     sections: list[str] = []
     extra_claim_chunks = extra_claim_chunks or {}
+    anchor_nodes = anchor_nodes or {}
     for paper_id in paper_ids:
         graph = graphs.get(paper_id)
         if graph is None:
@@ -289,7 +308,11 @@ async def _build_claim_evolution_context(
             graph = graphs.get(paper_id)
             if graph is None:
                 continue
-            query = _render_claim_evolution_query(graph, settings.patrol_claim_evolution_query_template)
+            query = _render_claim_evolution_query(
+                graph,
+                settings.patrol_claim_evolution_query_template,
+                anchor_nodes.get(paper_id),
+            )
             chunks = await vector_store.query_chunks(
                 query,
                 paper_id=paper_id,

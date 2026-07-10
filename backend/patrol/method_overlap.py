@@ -362,11 +362,28 @@ async def build_method_overlap_insight(
     )
 
 
-def _render_method_overlap_query(graph: UnifiedPaperGraph, template: str) -> str:
-    """Render the VectorStore query from the graph's method and dataset labels."""
+def _render_method_overlap_query(
+    graph: UnifiedPaperGraph,
+    template: str,
+    anchors: list[_OverlapAnchor],
+) -> str:
+    """Render the VectorStore query from aligned anchors and graph labels.
+
+    The aligned anchor labels (e.g. the overlapping method/dataset) are injected
+    as {anchor_labels} so the recall focuses on the intersection entity rather
+    than all methods/datasets in the paper.
+    """
     method_labels = " ".join(node.label for node in method_nodes(graph))
     dataset_labels = " ".join(node.label for node in dataset_nodes(graph))
-    return template.format(method_labels=method_labels, dataset_labels=dataset_labels)
+
+    anchor_labels = " ".join(
+        dict.fromkeys(node.label for anchor in anchors for node in (anchor.left_node, anchor.right_node) if node.label)
+    )
+    return template.format(
+        anchor_labels=anchor_labels,
+        method_labels=method_labels,
+        dataset_labels=dataset_labels,
+    )
 
 
 async def _build_method_overlap_context(
@@ -406,7 +423,11 @@ async def _build_method_overlap_context(
             graph = graphs.get(paper_id)
             if graph is None:
                 continue
-            query = _render_method_overlap_query(graph, settings.patrol_method_overlap_query_template)
+            query = _render_method_overlap_query(
+                graph,
+                settings.patrol_method_overlap_query_template,
+                algorithm_anchors,
+            )
             chunks = await vector_store.query_chunks(
                 query,
                 paper_id=paper_id,
