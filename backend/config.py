@@ -296,6 +296,39 @@ class Settings(BaseSettings):
         description="Top-k chunks retrieved from VectorStore to backfill missing Claim nodes in claim_evolution.",
     )
 
+    # Patrol RAG hybrid-context settings
+    patrol_method_overlap_query_template: str = Field(
+        default="{method_labels} {dataset_labels} experimental setup evaluation dataset",
+        min_length=1,
+        validation_alias="PATROL_METHOD_OVERLAP_QUERY_TEMPLATE",
+        description=(
+            "Query template for VectorStore recall in method_overlap. Placeholders: {method_labels}, {dataset_labels}."
+        ),
+    )
+    patrol_method_overlap_top_k: int = Field(
+        default=3,
+        ge=0,
+        le=20,
+        validation_alias="PATROL_METHOD_OVERLAP_TOP_K",
+        description="Top-k chunks retrieved from VectorStore for method_overlap context enhancement.",
+    )
+    patrol_claim_evolution_query_template: str = Field(
+        default="{question_labels} {thesis_labels} conclusion claim finding result",
+        min_length=1,
+        validation_alias="PATROL_CLAIM_EVOLUTION_QUERY_TEMPLATE",
+        description=(
+            "Query template for VectorStore recall in claim_evolution. "
+            "Placeholders: {question_labels}, {thesis_labels}."
+        ),
+    )
+    patrol_claim_evolution_top_k: int = Field(
+        default=3,
+        ge=0,
+        le=20,
+        validation_alias="PATROL_CLAIM_EVOLUTION_TOP_K",
+        description="Top-k chunks retrieved from VectorStore for claim_evolution context enhancement.",
+    )
+
     # RAG / ChromaDB settings
     chromadb_path: str = Field(default="./data/chroma", validation_alias="CHROMADB_PATH")
     chromadb_chunk_collection: str = Field(default="paper_chunks", validation_alias="CHROMADB_CHUNK_COLLECTION")

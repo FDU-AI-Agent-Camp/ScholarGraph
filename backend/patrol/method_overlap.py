@@ -31,8 +31,6 @@ logger = logging.getLogger(__name__)
 
 METHOD_OVERLAP_INSIGHT_ID = "ins-method-overlap-001"
 METHOD_OVERLAP_TITLE = "方法重叠（Method Overlap）"
-METHOD_OVERLAP_QUERY_TEXT = "method dataset experimental setup"
-METHOD_TOP_K = 3
 
 
 def method_nodes(graph: UnifiedPaperGraph | None) -> list[GraphNode]:
@@ -364,6 +362,13 @@ async def build_method_overlap_insight(
     )
 
 
+def _render_method_overlap_query(graph: UnifiedPaperGraph, template: str) -> str:
+    """Render the VectorStore query from the graph's method and dataset labels."""
+    method_labels = " ".join(node.label for node in method_nodes(graph))
+    dataset_labels = " ".join(node.label for node in dataset_nodes(graph))
+    return template.format(method_labels=method_labels, dataset_labels=dataset_labels)
+
+
 async def _build_method_overlap_context(
     graphs: Mapping[str, UnifiedPaperGraph],
     paper_ids: list[str],
@@ -371,6 +376,7 @@ async def _build_method_overlap_context(
     algorithm_anchors: list[_OverlapAnchor],
     vector_store: VectorStore | None = None,
 ) -> str:
+    settings = get_settings()
     sections: list[str] = []
     for paper_id in paper_ids:
         graph = graphs.get(paper_id)
@@ -392,12 +398,19 @@ async def _build_method_overlap_context(
             + "\n".join(pair_lines)
         )
 
-    if vector_store is not None:
+    if vector_store is None:
+        if settings.patrol_method_overlap_top_k > 0:
+            logger.warning("method_overlap_vector_store_unavailable", extra={"paper_ids": paper_ids})
+    elif settings.patrol_method_overlap_top_k > 0:
         for paper_id in paper_ids:
+            graph = graphs.get(paper_id)
+            if graph is None:
+                continue
+            query = _render_method_overlap_query(graph, settings.patrol_method_overlap_query_template)
             chunks = await vector_store.query_chunks(
-                METHOD_OVERLAP_QUERY_TEXT,
+                query,
                 paper_id=paper_id,
-                top_k=METHOD_TOP_K,
+                top_k=settings.patrol_method_overlap_top_k,
             )
             if chunks:
                 sections.append(f"paper_id={paper_id} 相关段落：\n" + "\n".join(f"- {chunk.text}" for chunk in chunks))

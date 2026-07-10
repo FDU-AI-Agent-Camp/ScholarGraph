@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Mapping
 from typing import TYPE_CHECKING
 
@@ -23,10 +24,10 @@ from backend.schemas.patrol import (
 if TYPE_CHECKING:
     from backend.rag.vector_store import VectorStore
 
+logger = logging.getLogger(__name__)
+
 CLAIM_EVOLUTION_INSIGHT_ID = "ins-claim-evolution-001"
 CLAIM_EVOLUTION_TITLE = "观点演进（Claim Evolution）"
-CLAIM_EVOLUTION_QUERY_TEXT = "research question thesis conclusion claim finding"
-CLAIM_TOP_K = 3
 
 
 def research_question_nodes(graph: UnifiedPaperGraph | None) -> list[GraphNode]:
@@ -245,6 +246,13 @@ async def build_claim_evolution_insight(
     )
 
 
+def _render_claim_evolution_query(graph: UnifiedPaperGraph, template: str) -> str:
+    """Render the VectorStore query from the graph's question and thesis labels."""
+    question_labels = " ".join(node.label for node in research_question_nodes(graph))
+    thesis_labels = " ".join(node.label for node in thesis_nodes(graph))
+    return template.format(question_labels=question_labels, thesis_labels=thesis_labels)
+
+
 async def _build_claim_evolution_context(
     graphs: Mapping[str, UnifiedPaperGraph],
     paper_ids: list[str],
@@ -252,6 +260,7 @@ async def _build_claim_evolution_context(
     vector_store: VectorStore | None = None,
     extra_claim_chunks: dict[str, list[str]] | None = None,
 ) -> str:
+    settings = get_settings()
     sections: list[str] = []
     extra_claim_chunks = extra_claim_chunks or {}
     for paper_id in paper_ids:
@@ -272,12 +281,19 @@ async def _build_claim_evolution_context(
             section += "\n召回结论候选段落：\n" + "\n".join(f"- {text}" for text in backfill)
         sections.append(section)
 
-    if vector_store is not None:
+    if vector_store is None:
+        if settings.patrol_claim_evolution_top_k > 0:
+            logger.warning("claim_evolution_vector_store_unavailable", extra={"paper_ids": paper_ids})
+    elif settings.patrol_claim_evolution_top_k > 0:
         for paper_id in paper_ids:
+            graph = graphs.get(paper_id)
+            if graph is None:
+                continue
+            query = _render_claim_evolution_query(graph, settings.patrol_claim_evolution_query_template)
             chunks = await vector_store.query_chunks(
-                CLAIM_EVOLUTION_QUERY_TEXT,
+                query,
                 paper_id=paper_id,
-                top_k=CLAIM_TOP_K,
+                top_k=settings.patrol_claim_evolution_top_k,
             )
             if chunks:
                 sections.append(f"paper_id={paper_id} 相关段落：\n" + "\n".join(f"- {chunk.text}" for chunk in chunks))

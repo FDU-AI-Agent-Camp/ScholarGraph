@@ -742,8 +742,13 @@ async def test_method_overlap_uses_vector_store_context() -> None:
             vector_store=vector_store,
         )
     assert insight is not None
-    vector_store.query_chunks.assert_any_await("method dataset experimental setup", paper_id="stem-001", top_k=3)
-    vector_store.query_chunks.assert_any_await("method dataset experimental setup", paper_id="stem-002", top_k=3)
+    # Query is now dynamically rendered from graph labels using the configured template.
+    vector_store.query_chunks.assert_any_await(
+        "PCA Dataset A experimental setup evaluation dataset", paper_id="stem-001", top_k=3
+    )
+    vector_store.query_chunks.assert_any_await(
+        "PCA Dataset B experimental setup evaluation dataset", paper_id="stem-002", top_k=3
+    )
     assert mock_summary.called
     context = mock_summary.call_args.args[0]
     assert "chunk text for stem-001" in context

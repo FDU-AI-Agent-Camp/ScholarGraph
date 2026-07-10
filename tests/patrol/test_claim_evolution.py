@@ -338,16 +338,10 @@ async def test_claim_evolution_uses_vector_store_context() -> None:
             embedding_client=_FakeEmbeddingClient(),
         )
     assert insight is not None
-    vector_store.query_chunks.assert_any_await(
-        "research question thesis conclusion claim finding",
-        paper_id="stem-001",
-        top_k=3,
-    )
-    vector_store.query_chunks.assert_any_await(
-        "research question thesis conclusion claim finding",
-        paper_id="stem-002",
-        top_k=3,
-    )
+    # Query is now dynamically rendered from graph question labels using the configured template.
+    expected_query = "PCA 是否提升分类准确率？  conclusion claim finding result"
+    vector_store.query_chunks.assert_any_await(expected_query, paper_id="stem-001", top_k=3)
+    vector_store.query_chunks.assert_any_await(expected_query, paper_id="stem-002", top_k=3)
     assert mock_summary.called
     context = mock_summary.call_args.args[0]
     assert "claim chunk for stem-001" in context
