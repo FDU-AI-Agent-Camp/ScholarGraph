@@ -48,6 +48,15 @@ class LensClashPoint(PatrolPoint):
 class MethodOverlapPoint(PatrolPoint):
     mode: Literal["method_overlap"]
     method: str
+    overlap_score: float | None = Field(
+        default=None,
+        description="Significance score of the overlap. 1.0 for literal label match; "
+        "0.0-1.0 for semantic soft match; omitted when unavailable.",
+    )
+    overlap_type: Literal["literal", "semantic"] | None = Field(
+        default=None,
+        description="How the overlap was determined: literal label equality or semantic embedding similarity.",
+    )
     paper_a_usage: str = Field(
         description="How paper A uses the method. MVP fallback '用于 {method}' until LLM extraction."
     )

@@ -3,9 +3,13 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Literal
 
+import numpy as np
+
+from backend.config import get_settings
 from backend.llm.client import LlmClient
+from backend.llm.embeddings import EmbeddingClient, get_embedding_client
 from backend.patrol.llm_summary import generate_patrol_summary
 from backend.schemas.graph import GraphNode, NodeType, UnifiedPaperGraph
 from backend.schemas.patrol import (
@@ -65,6 +69,15 @@ def _extract_usage(node: GraphNode) -> str:
     return f"用于 {node.label}"
 
 
+def _embed_text_for_node(node: GraphNode) -> str:
+    """Build a single embedding text from a node's label and description."""
+    parts = [node.label]
+    description = (node.data or {}).get("description")
+    if isinstance(description, str) and description.strip():
+        parts.append(description.strip())
+    return " ".join(parts)
+
+
 def _find_overlap(left_nodes: list[GraphNode], right_nodes: list[GraphNode]) -> list[str]:
     """Return overlapping labels (preserving left-side casing) between two node lists."""
     right_labels = {_normalize(node.label) for node in right_nodes}
@@ -78,12 +91,74 @@ def _find_overlap(left_nodes: list[GraphNode], right_nodes: list[GraphNode]) -> 
     return overlaps
 
 
+def _cosine_similarity_matrix(
+    left_vectors: list[list[float]],
+    right_vectors: list[list[float]],
+) -> np.ndarray:
+    """Compute the cross cosine-similarity matrix between two vector sets."""
+    left = np.asarray(left_vectors, dtype=np.float64)
+    right = np.asarray(right_vectors, dtype=np.float64)
+    left_norms = np.linalg.norm(left, axis=1, keepdims=True)
+    right_norms = np.linalg.norm(right, axis=1, keepdims=True)
+    # Avoid division by zero; zero vectors will produce all-zero similarities.
+    left_norms[left_norms == 0] = 1.0
+    right_norms[right_norms == 0] = 1.0
+    left_normalized = left / left_norms
+    right_normalized = right / right_norms
+    return left_normalized @ right_normalized.T
+
+
+async def _find_semantic_method_overlap(
+    left_methods: list[GraphNode],
+    right_methods: list[GraphNode],
+    embedding_client: EmbeddingClient,
+    threshold: float,
+    max_matrix_size: int,
+) -> tuple[GraphNode, GraphNode, float] | None:
+    """Find the strongest semantic method overlap across two papers.
+
+    Returns the best matching left/right node pair plus the cosine score,
+    or ``None`` when no pair exceeds the threshold or the matrix is too large.
+    """
+    if not left_methods or not right_methods:
+        return None
+
+    # Mock embeddings are deterministic but not semantically meaningful, so skip
+    # the soft path to avoid false positives in test/local mock runs.
+    if getattr(embedding_client, "is_mock", False):
+        return None
+
+    matrix_size = len(left_methods) * len(right_methods)
+    if matrix_size > max_matrix_size:
+        return None
+
+    texts = [_embed_text_for_node(node) for node in left_methods + right_methods]
+    vectors = await embedding_client.embed_texts(texts)
+    if len(vectors) != len(texts):
+        return None
+
+    split_at = len(left_methods)
+    similarity = _cosine_similarity_matrix(vectors[:split_at], vectors[split_at:])
+    if similarity.size == 0:
+        return None
+
+    best_index = int(np.argmax(similarity))
+    best_flat = np.unravel_index(best_index, similarity.shape)
+    best_score = float(similarity[best_flat])
+    if best_score < threshold:
+        return None
+
+    left_idx, right_idx = best_flat
+    return left_methods[left_idx], right_methods[right_idx], best_score
+
+
 async def build_method_overlap_insight(
     graphs: Mapping[str, UnifiedPaperGraph],
     paper_ids: list[str],
     *,
     vector_store: VectorStore | None = None,
     llm_client: LlmClient | None = None,
+    embedding_client: EmbeddingClient | None = None,
 ) -> PatrolInsight | None:
     """Compare methods and datasets across two STEM papers."""
     if len(paper_ids) != 2:
@@ -120,7 +195,65 @@ async def build_method_overlap_insight(
     method_overlap = _find_overlap(left_methods, right_methods)
     dataset_overlap = _find_overlap(left_datasets, right_datasets)
 
-    if not method_overlap and not dataset_overlap:
+    overlap_label: str | None = None
+    overlap_score: float | None = None
+    overlap_type: Literal["literal", "semantic"] | None = None
+    left_primary: GraphNode | None = None
+    right_primary: GraphNode | None = None
+    node_refs: list[NodeRef] = []
+
+    if method_overlap:
+        # Hard path: literal label equality is considered fully significant.
+        overlap_label = method_overlap[0]
+        overlap_score = 1.0
+        overlap_type = "literal"
+        normalized_overlap = _normalize(overlap_label)
+        matched_left = [node for node in left_methods if _normalize(node.label) == normalized_overlap]
+        matched_right = [node for node in right_methods if _normalize(node.label) == normalized_overlap]
+        left_primary = matched_left[0]
+        right_primary = matched_right[0]
+        node_refs.extend(
+            NodeRef(paper_id=paper_id, node_id=node.id, label=node.label)
+            for paper_id, nodes in ((left_id, matched_left), (right_id, matched_right))
+            for node in nodes
+        )
+    else:
+        # Soft path: use semantic embeddings for method nodes that do not match literally.
+        settings = get_settings()
+        client = embedding_client or get_embedding_client()
+        semantic_match = await _find_semantic_method_overlap(
+            left_methods,
+            right_methods,
+            client,
+            settings.patrol_semantic_threshold,
+            settings.patrol_max_matrix_size,
+        )
+        if semantic_match:
+            left_primary, right_primary, overlap_score = semantic_match
+            overlap_label = left_primary.label
+            overlap_type = "semantic"
+            node_refs.extend(
+                [
+                    NodeRef(paper_id=left_id, node_id=left_primary.id, label=left_primary.label),
+                    NodeRef(paper_id=right_id, node_id=right_primary.id, label=right_primary.label),
+                ]
+            )
+        elif dataset_overlap:
+            # Fall back to dataset literal overlap when no method overlap is found.
+            overlap_label = dataset_overlap[0]
+            overlap_score = 1.0
+            overlap_type = "literal"
+            left_primary = _primary_node(left_methods)
+            right_primary = _primary_node(right_methods)
+            assert left_primary is not None and right_primary is not None
+            node_refs.extend(
+                [
+                    NodeRef(paper_id=left_id, node_id=left_primary.id, label=left_primary.label),
+                    NodeRef(paper_id=right_id, node_id=right_primary.id, label=right_primary.label),
+                ]
+            )
+
+    if overlap_label is None or left_primary is None or right_primary is None:
         summary = f"两篇论文 {left_id} 与 {right_id} 的方法与数据集均无显著重合，无法生成方法重叠巡检报告。"
         return PatrolInsight(
             insight_id=METHOD_OVERLAP_INSIGHT_ID,
@@ -130,10 +263,6 @@ async def build_method_overlap_insight(
             paper_ids=[left_id, right_id],
             node_refs=[],
         )
-
-    left_primary = _primary_node(left_methods)
-    right_primary = _primary_node(right_methods)
-    assert left_primary is not None and right_primary is not None
 
     left_dataset = _primary_node(left_datasets)
     right_dataset = _primary_node(right_datasets)
@@ -149,39 +278,23 @@ async def build_method_overlap_insight(
         llm_client=llm_client,
     )
 
-    overlap_label = method_overlap[0] if method_overlap else dataset_overlap[0]
     summary = llm_summary or _fallback_method_overlap_summary(
         left_primary.label,
         right_primary.label,
         overlap_label=overlap_label,
-        has_method_overlap=bool(method_overlap),
+        has_method_overlap=overlap_type in ("literal", "semantic"),
     )
 
     point = MethodOverlapPoint(
         mode="method_overlap",
         method=overlap_label,
+        overlap_score=overlap_score,
+        overlap_type=overlap_type,
         paper_a_usage=_extract_usage(left_primary),
         paper_b_usage=_extract_usage(right_primary),
         dataset_a=left_dataset.label if left_dataset else None,
         dataset_b=right_dataset.label if right_dataset else None,
     )
-
-    node_refs: list[NodeRef] = []
-    if method_overlap:
-        normalized_overlap = _normalize(method_overlap[0])
-        node_refs.extend(
-            NodeRef(paper_id=paper_id, node_id=node.id, label=node.label)
-            for paper_id, nodes in ((left_id, left_methods), (right_id, right_methods))
-            for node in nodes
-            if _normalize(node.label) == normalized_overlap
-        )
-    else:
-        node_refs.extend(
-            [
-                NodeRef(paper_id=left_id, node_id=left_primary.id, label=left_primary.label),
-                NodeRef(paper_id=right_id, node_id=right_primary.id, label=right_primary.label),
-            ]
-        )
 
     return PatrolInsight(
         insight_id=METHOD_OVERLAP_INSIGHT_ID,

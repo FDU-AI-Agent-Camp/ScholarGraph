@@ -36,6 +36,8 @@ async def test_method_overlap_ready_two_methods() -> None:
     assert isinstance(point, MethodOverlapPoint)
     assert point.mode == "method_overlap"
     assert point.method == "PCA"
+    assert point.overlap_type == "literal"
+    assert point.overlap_score == 1.0
     assert point.paper_a_usage
     assert point.paper_b_usage
 
@@ -264,3 +266,111 @@ async def test_method_overlap_uses_vector_store_context() -> None:
     context = mock_summary.call_args.args[1]
     assert "chunk text for stem-001" in context
     assert "another chunk for stem-001" in context
+
+
+class _FakeEmbeddingClient:
+    """Deterministic embedding client for semantic overlap tests.
+
+    Vectors are keyed by the embedded text so callers can control which
+    method labels/descriptions are considered semantically similar.
+    """
+
+    def __init__(self) -> None:
+        self.vectors: dict[str, list[float]] = {
+            "PCA 线性降维": [1.0, 0.0],
+            "Principal Component Analysis 线性降维": [0.95, 0.31],
+            "Random Forest 集成学习": [0.0, 1.0],
+            "SVM 支持向量机": [0.0, 0.0],
+        }
+        self.is_mock = False
+
+    async def embed_texts(self, texts: list[str]) -> list[list[float]]:
+        return [self.vectors.get(text, [0.0, 0.0]).copy() for text in texts]
+
+
+async def test_method_overlap_ready_with_semantic_method_match() -> None:
+    """Soft path: labels differ but descriptions identify the same method."""
+    graphs = {
+        "stem-001": build_stem_graph_with_method_dataset(
+            "stem-001",
+            method_label="PCA",
+            method_data={"description": "线性降维"},
+            dataset_label="Dataset A",
+        ),
+        "stem-002": build_stem_graph_with_method_dataset(
+            "stem-002",
+            method_label="Principal Component Analysis",
+            method_data={"description": "线性降维"},
+            dataset_label="Dataset B",
+        ),
+    }
+    insight = await build_method_overlap_insight(
+        graphs,
+        ["stem-001", "stem-002"],
+        embedding_client=_FakeEmbeddingClient(),
+    )
+    assert insight is not None
+    assert insight.status == PatrolInsightStatus.READY
+    point = insight.structured_points[0]
+    assert isinstance(point, MethodOverlapPoint)
+    assert point.overlap_type == "semantic"
+    assert point.overlap_score is not None
+    assert 0.0 < point.overlap_score < 1.0
+    assert point.overlap_score >= 0.75
+    assert point.method == "PCA"
+
+
+async def test_method_overlap_insufficient_when_semantic_match_below_threshold() -> None:
+    """Soft path should not trigger when embeddings are orthogonal."""
+    graphs = {
+        "stem-001": build_stem_graph_with_method_dataset(
+            "stem-001",
+            method_label="PCA",
+            method_data={"description": "线性降维"},
+            dataset_label="Dataset A",
+        ),
+        "stem-002": build_stem_graph_with_method_dataset(
+            "stem-002",
+            method_label="Random Forest",
+            method_data={"description": "集成学习"},
+            dataset_label="Dataset B",
+        ),
+    }
+    insight = await build_method_overlap_insight(
+        graphs,
+        ["stem-001", "stem-002"],
+        embedding_client=_FakeEmbeddingClient(),
+    )
+    assert insight is not None
+    assert insight.status == PatrolInsightStatus.INSUFFICIENT_DATA
+    assert insight.structured_points == []
+
+
+async def test_method_overlap_degrades_when_matrix_too_large(monkeypatch) -> None:
+    """When M*N exceeds PATROL_MAX_MATRIX_SIZE, fall back to literal matching only."""
+    from backend.config import get_settings
+
+    graphs = {
+        "stem-001": build_stem_graph_with_method_dataset(
+            "stem-001",
+            method_label="PCA",
+            method_data={"description": "线性降维"},
+            dataset_label="Dataset A",
+        ),
+        "stem-002": build_stem_graph_with_method_dataset(
+            "stem-002",
+            method_label="Principal Component Analysis",
+            method_data={"description": "线性降维"},
+            dataset_label="Dataset B",
+        ),
+    }
+    settings = get_settings()
+    monkeypatch.setattr(settings, "patrol_max_matrix_size", 0)
+    insight = await build_method_overlap_insight(
+        graphs,
+        ["stem-001", "stem-002"],
+        embedding_client=_FakeEmbeddingClient(),
+    )
+    assert insight is not None
+    assert insight.status == PatrolInsightStatus.INSUFFICIENT_DATA
+    assert insight.structured_points == []

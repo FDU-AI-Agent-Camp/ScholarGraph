@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING
 
 from backend.api.exceptions import ApiError
 from backend.graph.store import GraphStore
+from backend.llm.embeddings import EmbeddingClient, get_embedding_client
 from backend.patrol.errors import PatrolError
 from backend.patrol.service import run_patrol as patrol_run
 from backend.schemas.patrol import PatrolMode, PatrolReport
@@ -23,9 +24,11 @@ class PatrolService:
         store: GraphStore | None = None,
         *,
         vector_store: VectorStore | None = None,
+        embedding_client: EmbeddingClient | None = None,
     ) -> None:
         self._store = store
         self._vector_store = vector_store
+        self._embedding_client = embedding_client
 
     async def run_patrol(
         self,
@@ -38,6 +41,7 @@ class PatrolService:
                 mode,
                 store=self._store,
                 vector_store=self._vector_store,
+                embedding_client=self._embedding_client,
             )
         except PatrolError as exc:
             raise ApiError(
@@ -52,4 +56,7 @@ def get_patrol_service() -> PatrolService:
     from backend.rag.vector_store import VectorStore
     from backend.services.paper_service import get_paper_service
 
-    return PatrolService(vector_store=VectorStore(paper_service=get_paper_service()))
+    return PatrolService(
+        vector_store=VectorStore(paper_service=get_paper_service()),
+        embedding_client=get_embedding_client(),
+    )

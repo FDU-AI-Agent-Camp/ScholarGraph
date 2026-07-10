@@ -96,6 +96,15 @@ class EmbeddingClient:
             )
         return self._ollama
 
+    @property
+    def is_mock(self) -> bool:
+        """Whether the client returns deterministic pseudo-embeddings.
+
+        Semantic consumers should treat mock vectors as non-informative and
+        fall back to literal/rule-based paths.
+        """
+        return self._settings.is_llm_mock
+
     async def embed_texts(self, texts: list[str]) -> list[list[float]]:
         """Return one embedding vector per input text.
 

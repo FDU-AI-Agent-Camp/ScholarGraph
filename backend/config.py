@@ -266,6 +266,22 @@ class Settings(BaseSettings):
         validation_alias="EMBEDDING_BATCH_SIZE",
     )
 
+    # Patrol semantic overlap settings
+    patrol_semantic_threshold: float = Field(
+        default=0.75,
+        ge=0.0,
+        le=1.0,
+        validation_alias="PATROL_SEMANTIC_THRESHOLD",
+        description="Cosine-similarity threshold for soft method-overlap detection.",
+    )
+    patrol_max_matrix_size: int = Field(
+        default=500,
+        ge=1,
+        le=2000,
+        validation_alias="PATROL_MAX_MATRIX_SIZE",
+        description="Max M*N method-node pairs allowed for in-memory semantic similarity matrix.",
+    )
+
     # RAG / ChromaDB settings
     chromadb_path: str = Field(default="./data/chroma", validation_alias="CHROMADB_PATH")
     chromadb_chunk_collection: str = Field(default="paper_chunks", validation_alias="CHROMADB_CHUNK_COLLECTION")

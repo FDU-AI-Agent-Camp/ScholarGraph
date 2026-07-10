@@ -46,6 +46,7 @@ async def test_patrol_service_returns_delegated_report() -> None:
         PatrolMode.LENS_CLASH,
         store=None,
         vector_store=service._vector_store,
+        embedding_client=service._embedding_client,
     )
 
 
@@ -93,6 +94,7 @@ async def test_patrol_service_delegates_method_overlap_with_vector_store() -> No
         PatrolMode.METHOD_OVERLAP,
         store=None,
         vector_store=service._vector_store,
+        embedding_client=service._embedding_client,
     )
 
 
@@ -129,4 +131,5 @@ async def test_patrol_service_delegates_claim_evolution_with_vector_store() -> N
         PatrolMode.CLAIM_EVOLUTION,
         store=None,
         vector_store=service._vector_store,
+        embedding_client=service._embedding_client,
     )
