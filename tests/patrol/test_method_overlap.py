@@ -13,6 +13,7 @@ from backend.schemas.patrol import (
 )
 from backend.schemas.patrol_llm import MethodComparativeDetail, MethodOverlapOutput
 from tests.helpers.patrol_graphs import (
+    build_hss_graph_with_question_claim,
     build_stem_graph_with_method_dataset,
     build_stem_graph_with_question_claim,
 )
@@ -547,6 +548,47 @@ async def test_alignment_merger_malformed_llm_output_returns_ready_with_fallback
     assert isinstance(point, MethodOverlapPoint)
     assert point.paper_a_usage == "论文 A 用 PCA 做无监督降维"
     assert point.paper_b_usage == "论文 B 用 PCA 压缩特征"
+
+
+async def test_method_overlap_skips_hss_paradigm() -> None:
+    """HSS papers should short-circuit and return INSUFFICIENT_DATA."""
+    graphs = {
+        "hss-001": build_hss_graph_with_question_claim(
+            "hss-001",
+            thesis_label="数字民主",
+            claim_label="社交媒体提升政治参与",
+        ),
+        "stem-001": build_stem_graph_with_method_dataset(
+            "stem-001",
+            method_label="PCA",
+            dataset_label="Dataset A",
+        ),
+    }
+    insight = await build_method_overlap_insight(graphs, ["hss-001", "stem-001"])
+    assert insight is not None
+    assert insight.status == PatrolInsightStatus.INSUFFICIENT_DATA
+    assert insight.structured_points == []
+    assert "HSS" in insight.summary
+
+
+async def test_method_overlap_skips_both_hss_papers() -> None:
+    """Two HSS papers should also short-circuit without crashing."""
+    graphs = {
+        "hss-001": build_hss_graph_with_question_claim(
+            "hss-001",
+            thesis_label="数字民主",
+            claim_label="社交媒体提升政治参与",
+        ),
+        "hss-002": build_hss_graph_with_question_claim(
+            "hss-002",
+            thesis_label="公共领域",
+            claim_label="微博使用提升投票率",
+        ),
+    }
+    insight = await build_method_overlap_insight(graphs, ["hss-001", "hss-002"])
+    assert insight is not None
+    assert insight.status == PatrolInsightStatus.INSUFFICIENT_DATA
+    assert insight.structured_points == []
 
 
 async def test_method_overlap_rejects_wrong_paper_count() -> None:

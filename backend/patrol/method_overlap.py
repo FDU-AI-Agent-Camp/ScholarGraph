@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Literal
@@ -13,6 +14,7 @@ from backend.llm.client import LlmClient
 from backend.llm.embeddings import EmbeddingClient, get_embedding_client
 from backend.patrol.llm_summary import generate_method_overlap_summary
 from backend.schemas.graph import GraphNode, NodeType, UnifiedPaperGraph
+from backend.schemas.paradigm import Paradigm
 from backend.schemas.patrol import (
     MethodOverlapPoint,
     NodeRef,
@@ -24,6 +26,8 @@ from backend.schemas.patrol_llm import MethodComparativeDetail, MethodOverlapOut
 
 if TYPE_CHECKING:
     from backend.rag.vector_store import VectorStore
+
+logger = logging.getLogger(__name__)
 
 METHOD_OVERLAP_INSIGHT_ID = "ins-method-overlap-001"
 METHOD_OVERLAP_TITLE = "方法重叠（Method Overlap）"
@@ -227,6 +231,26 @@ async def build_method_overlap_insight(
     left_id, right_id = paper_ids
     left_graph = graphs.get(left_id)
     right_graph = graphs.get(right_id)
+
+    # Paradigm gate: method overlap is only semantically meaningful for STEM.
+    # HSS papers are centred around AnalyticalLens / Thesis, so short-circuit.
+    if (left_graph is not None and left_graph.paradigm == Paradigm.HSS) or (
+        right_graph is not None and right_graph.paradigm == Paradigm.HSS
+    ):
+        logger.info("skipped_due_to_paradigm_mismatch", extra={"paper_ids": [left_id, right_id]})
+        summary = (
+            f"方法重叠（Method Overlap）模式仅适用于 STEM 范式论文；"
+            f"当前文献 {left_id} 或 {right_id} 属于 HSS 范式，不进行方法重叠分析。"
+        )
+        return PatrolInsight(
+            insight_id=METHOD_OVERLAP_INSIGHT_ID,
+            title=METHOD_OVERLAP_TITLE,
+            summary=summary,
+            status=PatrolInsightStatus.INSUFFICIENT_DATA,
+            paper_ids=[left_id, right_id],
+            node_refs=[],
+        )
+
     left_methods = method_nodes(left_graph)
     right_methods = method_nodes(right_graph)
 
