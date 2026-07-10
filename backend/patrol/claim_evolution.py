@@ -12,6 +12,7 @@ from backend.config import get_settings
 from backend.llm.client import LlmClient
 from backend.llm.embeddings import EmbeddingClient, get_embedding_client
 from backend.patrol.llm_summary import generate_claim_evolution_summary
+from backend.patrol.rag_service import RAG_DEGRADED_META_KEY, PatrolRAGService
 from backend.schemas.graph import GraphNode, NodeType, UnifiedPaperGraph
 from backend.schemas.patrol import (
     ClaimEvolutionPoint,
@@ -19,6 +20,7 @@ from backend.schemas.patrol import (
     NodeRef,
     PatrolInsight,
     PatrolInsightStatus,
+    PatrolMode,
 )
 
 if TYPE_CHECKING:
@@ -196,7 +198,7 @@ async def build_claim_evolution_insight(
     left_claim_text = _format_claim(left_claim.label if left_claim else None, left_claim_chunks)
     right_claim_text = _format_claim(right_claim.label if right_claim else None, right_claim_chunks)
 
-    context = await _build_claim_evolution_context(
+    context, meta = await _build_claim_evolution_context(
         graphs,
         paper_ids,
         vector_store=vector_store,
@@ -238,6 +240,8 @@ async def build_claim_evolution_insight(
 
     meta = await _check_rag_index_ready(vector_store, [left_id, right_id])
 
+    meta = await _check_rag_index_ready(vector_store, [left_id, right_id])
+
     return PatrolInsight(
         insight_id=CLAIM_EVOLUTION_INSIGHT_ID,
         title=CLAIM_EVOLUTION_TITLE,
@@ -251,9 +255,6 @@ async def build_claim_evolution_insight(
         structured_points=[point],
         meta=meta,
     )
-
-
-RAG_DEGRADED_META_KEY = "patrol_rag_context_degraded"
 
 
 async def _check_rag_index_ready(
@@ -315,11 +316,12 @@ async def _build_claim_evolution_context(
     vector_store: VectorStore | None = None,
     extra_claim_chunks: dict[str, list[str]] | None = None,
     anchor_nodes: dict[str, GraphNode] | None = None,
-) -> str:
+) -> tuple[str, dict[str, Any]]:
     settings = get_settings()
     sections: list[str] = []
     extra_claim_chunks = extra_claim_chunks or {}
     anchor_nodes = anchor_nodes or {}
+    paper_queries: dict[str, str] = {}
     for paper_id in paper_ids:
         graph = graphs.get(paper_id)
         if graph is None:
@@ -337,29 +339,20 @@ async def _build_claim_evolution_context(
         if backfill:
             section += "\n召回结论候选段落：\n" + "\n".join(f"- {text}" for text in backfill)
         sections.append(section)
+        paper_queries[paper_id] = _render_claim_evolution_query(
+            graph,
+            settings.patrol_claim_evolution_query_template,
+            anchor_nodes.get(paper_id),
+        )
 
-    if vector_store is None:
-        if settings.patrol_claim_evolution_top_k > 0:
-            logger.warning("claim_evolution_vector_store_unavailable", extra={"paper_ids": paper_ids})
-    elif settings.patrol_claim_evolution_top_k > 0:
-        for paper_id in paper_ids:
-            graph = graphs.get(paper_id)
-            if graph is None:
-                continue
-            query = _render_claim_evolution_query(
-                graph,
-                settings.patrol_claim_evolution_query_template,
-                anchor_nodes.get(paper_id),
-            )
-            chunks = await vector_store.query_chunks(
-                query,
-                paper_id=paper_id,
-                top_k=settings.patrol_claim_evolution_top_k,
-            )
-            if chunks:
-                sections.append(f"paper_id={paper_id} 相关段落：\n" + "\n".join(f"- {chunk.text}" for chunk in chunks))
+    rag_service = PatrolRAGService(vector_store)
+    rag_sections, meta = await rag_service.enrich_context(
+        PatrolMode.CLAIM_EVOLUTION,
+        paper_queries,
+    )
+    sections.extend(rag_sections)
 
-    return "\n\n".join(sections)
+    return "\n\n".join(sections), meta
 
 
 def _fallback_claim_evolution_summary(left_question: str, right_question: str) -> str:

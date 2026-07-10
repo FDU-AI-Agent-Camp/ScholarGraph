@@ -13,6 +13,7 @@ from backend.config import get_settings
 from backend.llm.client import LlmClient
 from backend.llm.embeddings import EmbeddingClient, get_embedding_client
 from backend.patrol.llm_summary import generate_method_overlap_summary
+from backend.patrol.rag_service import RAG_DEGRADED_META_KEY, PatrolRAGService
 from backend.schemas.graph import GraphNode, NodeType, UnifiedPaperGraph
 from backend.schemas.paradigm import Paradigm
 from backend.schemas.patrol import (
@@ -21,6 +22,7 @@ from backend.schemas.patrol import (
     OverlapType,
     PatrolInsight,
     PatrolInsightStatus,
+    PatrolMode,
 )
 from backend.schemas.patrol_llm import MethodComparativeDetail, MethodOverlapOutput
 
@@ -326,7 +328,7 @@ async def build_method_overlap_insight(
             node_refs=[],
         )
 
-    context = await _build_method_overlap_context(
+    context, meta = await _build_method_overlap_context(
         graphs,
         paper_ids,
         algorithm_anchors=method_anchors or ([dataset_only_anchor] if dataset_only_anchor else []),
@@ -351,8 +353,6 @@ async def build_method_overlap_insight(
         llm_output,
     )
 
-    meta = await _check_rag_index_ready(vector_store, [left_id, right_id])
-
     return PatrolInsight(
         insight_id=METHOD_OVERLAP_INSIGHT_ID,
         title=METHOD_OVERLAP_TITLE,
@@ -363,9 +363,6 @@ async def build_method_overlap_insight(
         structured_points=points,
         meta=meta,
     )
-
-
-RAG_DEGRADED_META_KEY = "patrol_rag_context_degraded"
 
 
 async def _check_rag_index_ready(
@@ -430,9 +427,10 @@ async def _build_method_overlap_context(
     *,
     algorithm_anchors: list[_OverlapAnchor],
     vector_store: VectorStore | None = None,
-) -> str:
+) -> tuple[str, dict[str, Any]]:
     settings = get_settings()
     sections: list[str] = []
+    paper_queries: dict[str, str] = {}
     for paper_id in paper_ids:
         graph = graphs.get(paper_id)
         if graph is None:
@@ -445,6 +443,11 @@ async def _build_method_overlap_context(
             f"Dataset: {', '.join(dataset_labels) or '（无）'}"
         )
         sections.append(section)
+        paper_queries[paper_id] = _render_method_overlap_query(
+            graph,
+            settings.patrol_method_overlap_query_template,
+            algorithm_anchors,
+        )
 
     if algorithm_anchors:
         pair_lines = [f"- {anchor.pair_label}" for anchor in algorithm_anchors]
@@ -453,28 +456,14 @@ async def _build_method_overlap_context(
             + "\n".join(pair_lines)
         )
 
-    if vector_store is None:
-        if settings.patrol_method_overlap_top_k > 0:
-            logger.warning("method_overlap_vector_store_unavailable", extra={"paper_ids": paper_ids})
-    elif settings.patrol_method_overlap_top_k > 0:
-        for paper_id in paper_ids:
-            graph = graphs.get(paper_id)
-            if graph is None:
-                continue
-            query = _render_method_overlap_query(
-                graph,
-                settings.patrol_method_overlap_query_template,
-                algorithm_anchors,
-            )
-            chunks = await vector_store.query_chunks(
-                query,
-                paper_id=paper_id,
-                top_k=settings.patrol_method_overlap_top_k,
-            )
-            if chunks:
-                sections.append(f"paper_id={paper_id} 相关段落：\n" + "\n".join(f"- {chunk.text}" for chunk in chunks))
+    rag_service = PatrolRAGService(vector_store)
+    rag_sections, meta = await rag_service.enrich_context(
+        PatrolMode.METHOD_OVERLAP,
+        paper_queries,
+    )
+    sections.extend(rag_sections)
 
-    return "\n\n".join(sections)
+    return "\n\n".join(sections), meta
 
 
 def _match_llm_detail(
