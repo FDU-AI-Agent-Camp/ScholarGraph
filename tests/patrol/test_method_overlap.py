@@ -1,6 +1,6 @@
 """Unit tests for method_overlap patrol mode (TDD red phase)."""
 
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, patch
 
 from backend.patrol.method_overlap import build_method_overlap_insight
 from backend.schemas.patrol import (
@@ -8,6 +8,7 @@ from backend.schemas.patrol import (
     PatrolInsightStatus,
     PatrolPoint,  # noqa: F401  used by type assertions
 )
+from backend.schemas.patrol_llm import MethodComparativeDetail, MethodOverlapOutput
 from tests.helpers.patrol_graphs import (
     build_stem_graph_with_method_dataset,
     build_stem_graph_with_question_claim,
@@ -84,7 +85,7 @@ async def test_method_overlap_includes_dataset_when_present() -> None:
 
 async def test_method_overlap_fallback_summary_when_llm_fails(monkeypatch) -> None:
     monkeypatch.setattr(
-        "backend.patrol.method_overlap.generate_patrol_summary",
+        "backend.patrol.method_overlap.generate_method_overlap_summary",
         AsyncMock(return_value=None),
     )
     graphs = {
@@ -229,6 +230,50 @@ async def test_method_overlap_rejects_wrong_paper_count() -> None:
     assert insight is None
 
 
+async def test_method_overlap_uses_structured_llm_output_when_available() -> None:
+    """When LLM returns MethodOverlapOutput, structured_points should use LLM fields."""
+    llm_output = MethodOverlapOutput(
+        summary="两篇论文均在图像分类任务中使用了 PCA 进行降维。",
+        comparison_details=[
+            MethodComparativeDetail(
+                method_pair_name="PCA <-> PCA",
+                paper_a_usage="论文 A 将 PCA 用于 MNIST 手写数字特征压缩，保留 95% 方差。",
+                paper_b_usage="论文 B 将 PCA 用于 CIFAR-10 图像降维，保留 90% 方差。",
+                evidence_summary="两者都通过 PCA 降低输入维度，但论文 B 在更复杂的彩色图像上验证了效果。",
+            ),
+        ],
+    )
+    with patch(
+        "backend.patrol.method_overlap.generate_method_overlap_summary",
+        new_callable=AsyncMock,
+        return_value=llm_output,
+    ):
+        graphs = {
+            "stem-001": build_stem_graph_with_method_dataset(
+                "stem-001",
+                method_label="PCA",
+                method_data={"usage": "用于降维"},
+                dataset_label="MNIST",
+            ),
+            "stem-002": build_stem_graph_with_method_dataset(
+                "stem-002",
+                method_label="PCA",
+                method_data={"usage": "用于特征选择"},
+                dataset_label="CIFAR-10",
+            ),
+        }
+        insight = await build_method_overlap_insight(graphs, ["stem-001", "stem-002"])
+
+    assert insight is not None
+    assert insight.status == PatrolInsightStatus.READY
+    assert insight.summary == llm_output.summary
+    point = insight.structured_points[0]
+    assert isinstance(point, MethodOverlapPoint)
+    assert point.paper_a_usage == llm_output.comparison_details[0].paper_a_usage
+    assert point.paper_b_usage == llm_output.comparison_details[0].paper_b_usage
+    assert point.evidence_summary == llm_output.comparison_details[0].evidence_summary
+
+
 async def test_method_overlap_uses_vector_store_context() -> None:
     from unittest.mock import AsyncMock, patch
 
@@ -250,7 +295,7 @@ async def test_method_overlap_uses_vector_store_context() -> None:
         ),
     }
     with patch(
-        "backend.patrol.method_overlap.generate_patrol_summary",
+        "backend.patrol.method_overlap.generate_method_overlap_summary",
         new_callable=AsyncMock,
         return_value=None,
     ) as mock_summary:
@@ -263,7 +308,7 @@ async def test_method_overlap_uses_vector_store_context() -> None:
     vector_store.query_chunks.assert_any_await("method dataset experimental setup", paper_id="stem-001", top_k=3)
     vector_store.query_chunks.assert_any_await("method dataset experimental setup", paper_id="stem-002", top_k=3)
     assert mock_summary.called
-    context = mock_summary.call_args.args[1]
+    context = mock_summary.call_args.args[0]
     assert "chunk text for stem-001" in context
     assert "another chunk for stem-001" in context
 

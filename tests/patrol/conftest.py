@@ -20,10 +20,11 @@ def _disable_patrol_llm_unless_llm_tests(monkeypatch, request) -> None:
         return None
 
     monkeypatch.setattr("backend.patrol.llm_summary.generate_patrol_summary", _no_llm)
+    monkeypatch.setattr("backend.patrol.llm_summary.generate_method_overlap_summary", _no_llm)
     monkeypatch.setattr("backend.patrol.llm_summary.generate_claim_evolution_summary", _no_llm)
     monkeypatch.setattr("backend.patrol.lens_clash.generate_patrol_summary", _no_llm)
     monkeypatch.setattr("backend.patrol.contradiction.generate_patrol_summary", _no_llm)
-    monkeypatch.setattr("backend.patrol.method_overlap.generate_patrol_summary", _no_llm)
+    monkeypatch.setattr("backend.patrol.method_overlap.generate_method_overlap_summary", _no_llm)
     monkeypatch.setattr("backend.patrol.claim_evolution.generate_claim_evolution_summary", _no_llm)
 
 

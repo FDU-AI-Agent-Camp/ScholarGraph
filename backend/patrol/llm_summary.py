@@ -3,14 +3,22 @@
 from __future__ import annotations
 
 import logging
+from typing import TypeVar
 
 from langchain_core.messages import HumanMessage, SystemMessage
+from pydantic import BaseModel
 
 from backend.llm.client import LlmClient, get_llm_client
 from backend.schemas.patrol import PatrolMode
-from backend.schemas.patrol_llm import ClaimEvolutionOutput, PatrolSummaryOutput
+from backend.schemas.patrol_llm import (
+    ClaimEvolutionOutput,
+    MethodOverlapOutput,
+    PatrolSummaryOutput,
+)
 
 logger = logging.getLogger(__name__)
+
+_T = TypeVar("_T", bound=BaseModel)
 
 LENS_CLASH_SYSTEM = (
     "你是学术共同体巡检助手。根据两篇论文的分析视角（Analytical Lens）标签，"
@@ -26,8 +34,10 @@ CONTRADICTION_SYSTEM = (
 
 METHOD_OVERLAP_SYSTEM = (
     "你是学术共同体巡检助手。根据两篇 STEM 论文的方法（Method）与数据集（Dataset）节点，"
-    "用中文写一段 80–200 字的 Method Overlap 洞察摘要，说明两篇论文在方法或数据上是否存在重叠或差异。"
-    "只输出 JSON，字段 summary。"
+    "用中文写一段 80–200 字的方法论宏观对比综述，并针对每一对显著重叠的方法给出结构化对比细节。"
+    "只输出 JSON，字段："
+    "summary（宏观对比综述）、"
+    "comparison_details（数组，每个元素包含 method_pair_name、paper_a_usage、paper_b_usage、evidence_summary）。"
 )
 
 CLAIM_EVOLUTION_SYSTEM = (
@@ -81,6 +91,49 @@ async def generate_patrol_summary(
     except Exception as exc:
         logger.warning("patrol LLM summary failed, using template fallback: %s", exc)
         return None
+
+
+async def _generate_structured_output(
+    schema: type[_T],
+    system: str,
+    context: str,
+    *,
+    llm_client: LlmClient | None = None,
+) -> _T | None:
+    """Invoke LLM with an arbitrary Pydantic schema and validate the result."""
+    if not context.strip():
+        return None
+    try:
+        client = llm_client or get_llm_client()
+        structured = client.chat.with_structured_output(schema)
+        result = await structured.ainvoke(
+            [
+                SystemMessage(content=system),
+                HumanMessage(content=context),
+            ],
+        )
+        if isinstance(result, schema):
+            return result
+        return schema.model_validate(result)
+    except ValueError:
+        return None
+    except Exception as exc:
+        logger.warning("patrol LLM structured output failed for %s: %s", schema.__name__, exc)
+        return None
+
+
+async def generate_method_overlap_summary(
+    context: str,
+    *,
+    llm_client: LlmClient | None = None,
+) -> MethodOverlapOutput | None:
+    """Invoke LLM with the mode-specific structured schema for method_overlap."""
+    return await _generate_structured_output(
+        MethodOverlapOutput,
+        METHOD_OVERLAP_SYSTEM,
+        context,
+        llm_client=llm_client,
+    )
 
 
 async def generate_claim_evolution_summary(

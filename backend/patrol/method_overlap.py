@@ -10,14 +10,13 @@ import numpy as np
 from backend.config import get_settings
 from backend.llm.client import LlmClient
 from backend.llm.embeddings import EmbeddingClient, get_embedding_client
-from backend.patrol.llm_summary import generate_patrol_summary
+from backend.patrol.llm_summary import generate_method_overlap_summary
 from backend.schemas.graph import GraphNode, NodeType, UnifiedPaperGraph
 from backend.schemas.patrol import (
     MethodOverlapPoint,
     NodeRef,
     PatrolInsight,
     PatrolInsightStatus,
-    PatrolMode,
 )
 
 if TYPE_CHECKING:
@@ -272,28 +271,42 @@ async def build_method_overlap_insight(
         paper_ids,
         vector_store=vector_store,
     )
-    llm_summary = await generate_patrol_summary(
-        PatrolMode.METHOD_OVERLAP,
+    llm_output = await generate_method_overlap_summary(
         context,
         llm_client=llm_client,
     )
 
-    summary = llm_summary or _fallback_method_overlap_summary(
-        left_primary.label,
-        right_primary.label,
-        overlap_label=overlap_label,
-        has_method_overlap=overlap_type in ("literal", "semantic"),
-    )
+    summary: str
+    paper_a_usage: str
+    paper_b_usage: str
+    evidence_summary: str | None = None
+
+    if llm_output is not None and llm_output.comparison_details:
+        summary = llm_output.summary.strip()
+        detail = llm_output.comparison_details[0]
+        paper_a_usage = detail.paper_a_usage.strip()
+        paper_b_usage = detail.paper_b_usage.strip()
+        evidence_summary = detail.evidence_summary.strip() or None
+    else:
+        summary = _fallback_method_overlap_summary(
+            left_primary.label,
+            right_primary.label,
+            overlap_label=overlap_label,
+            has_method_overlap=overlap_type in ("literal", "semantic"),
+        )
+        paper_a_usage = _extract_usage(left_primary)
+        paper_b_usage = _extract_usage(right_primary)
 
     point = MethodOverlapPoint(
         mode="method_overlap",
         method=overlap_label,
         overlap_score=overlap_score,
         overlap_type=overlap_type,
-        paper_a_usage=_extract_usage(left_primary),
-        paper_b_usage=_extract_usage(right_primary),
+        paper_a_usage=paper_a_usage,
+        paper_b_usage=paper_b_usage,
         dataset_a=left_dataset.label if left_dataset else None,
         dataset_b=right_dataset.label if right_dataset else None,
+        evidence_summary=evidence_summary,
     )
 
     return PatrolInsight(

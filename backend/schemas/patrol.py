@@ -73,6 +73,10 @@ class MethodOverlapPoint(PatrolPoint):
     )
     dataset_a: str | None = None
     dataset_b: str | None = None
+    evidence_summary: str | None = Field(
+        default=None,
+        description="基于双方方法/数据证据链的综合摘要；LLM 未生成时可为空。",
+    )
 
 
 class ClaimEvolutionPoint(PatrolPoint):
