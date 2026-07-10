@@ -16,6 +16,7 @@ from backend.schemas.graph import GraphNode, NodeType, UnifiedPaperGraph
 from backend.schemas.patrol import (
     MethodOverlapPoint,
     NodeRef,
+    OverlapType,
     PatrolInsight,
     PatrolInsightStatus,
 )
@@ -488,11 +489,14 @@ def _build_single_method_overlap_point(
     if dataset_only:
         method_label = left_dataset.label if left_dataset else pair.left_node.label
 
+    overlap_type = OverlapType.MIXED if dataset_only else OverlapType.METHOD
+
     return MethodOverlapPoint(
         mode="method_overlap",
-        method=method_label,
+        overlap_type=overlap_type,
+        overlap_label=method_label,
         overlap_score=pair.overlap_score,
-        overlap_type=pair.overlap_type,
+        match_type=pair.overlap_type,
         paper_a_usage=paper_a_usage,
         paper_b_usage=paper_b_usage,
         dataset_a=left_dataset.label if left_dataset else None,

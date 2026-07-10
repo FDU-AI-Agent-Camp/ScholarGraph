@@ -7,6 +7,7 @@ from backend.schemas.graph import GraphNode, NodeType, UnifiedPaperGraph
 from backend.schemas.paradigm import Paradigm
 from backend.schemas.patrol import (
     MethodOverlapPoint,
+    OverlapType,
     PatrolInsightStatus,
     PatrolPoint,  # noqa: F401  used by type assertions
 )
@@ -39,7 +40,9 @@ async def test_method_overlap_ready_two_methods() -> None:
     assert isinstance(point, MethodOverlapPoint)
     assert point.mode == "method_overlap"
     assert point.method == "PCA"
-    assert point.overlap_type == "literal"
+    assert point.overlap_label == "PCA"
+    assert point.overlap_type == OverlapType.METHOD
+    assert point.match_type == "literal"
     assert point.overlap_score == 1.0
     assert point.paper_a_usage
     assert point.paper_b_usage
@@ -691,11 +694,13 @@ async def test_method_overlap_ready_with_semantic_method_match() -> None:
     assert insight.status == PatrolInsightStatus.READY
     point = insight.structured_points[0]
     assert isinstance(point, MethodOverlapPoint)
-    assert point.overlap_type == "semantic"
+    assert point.overlap_type == OverlapType.METHOD
+    assert point.match_type == "semantic"
     assert point.overlap_score is not None
     assert 0.0 < point.overlap_score < 1.0
     assert point.overlap_score >= 0.75
     assert point.method == "PCA"
+    assert point.overlap_label == "PCA"
 
 
 async def test_method_overlap_insufficient_when_semantic_match_below_threshold() -> None:

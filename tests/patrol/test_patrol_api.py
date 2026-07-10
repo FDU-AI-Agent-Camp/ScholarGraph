@@ -296,9 +296,11 @@ async def test_api_method_overlap_e2e_contract(
     assert len(points) == 1
     point = points[0]
     assert point["mode"] == "method_overlap"
-    assert point["method"] == "PCA"
+    assert point["overlap_type"] == "method"
+    assert point["overlap_label"] == "PCA"
+    assert point["method"] == "PCA"  # backwards-compatible alias
     assert point["overlap_score"] == 1.0
-    assert point["overlap_type"] == "literal"
+    assert point["match_type"] == "literal"
     assert point["paper_a_usage"] == llm_output["comparison_details"][0]["paper_a_usage"]
     assert point["paper_b_usage"] == llm_output["comparison_details"][0]["paper_b_usage"]
     assert point["evidence_summary"] == llm_output["comparison_details"][0]["evidence_summary"]

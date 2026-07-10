@@ -5,7 +5,7 @@ from datetime import datetime
 from enum import StrEnum
 from typing import Annotated, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_serializer
 
 
 class PatrolMode(StrEnum):
@@ -54,30 +54,56 @@ class LensClashPoint(PatrolPoint):
     clash_aspect: str
 
 
+class OverlapType(StrEnum):
+    """What kind of item is being compared in a method_overlap point."""
+
+    METHOD = "method"
+    DATASET = "dataset"
+    MIXED = "mixed"
+
+
 class MethodOverlapPoint(PatrolPoint):
     mode: Literal["method_overlap"]
-    method: str
+    overlap_type: OverlapType = Field(
+        ...,
+        description="Whether the point compares methods, datasets, or both.",
+    )
+    overlap_label: str = Field(
+        ...,
+        description="The representative label of the overlapping item (method or dataset name).",
+    )
     overlap_score: float | None = Field(
         default=None,
         description="Significance score of the overlap. 1.0 for literal label match; "
         "0.0-1.0 for semantic soft match; omitted when unavailable.",
     )
-    overlap_type: Literal["literal", "semantic"] | None = Field(
+    match_type: Literal["literal", "semantic"] | None = Field(
         default=None,
         description="How the overlap was determined: literal label equality or semantic embedding similarity.",
     )
-    paper_a_usage: str = Field(
-        description="How paper A uses the method. MVP fallback '用于 {method}' until LLM extraction."
-    )
-    paper_b_usage: str = Field(
-        description="How paper B uses the method. MVP fallback '用于 {method}' until LLM extraction."
-    )
+    paper_a_usage: str = Field(description="How paper A uses the overlapping item.")
+    paper_b_usage: str = Field(description="How paper B uses the overlapping item.")
     dataset_a: str | None = None
     dataset_b: str | None = None
     evidence_summary: str | None = Field(
         default=None,
         description="基于双方方法/数据证据链的综合摘要；LLM 未生成时可为空。",
     )
+
+    # Backwards-compatible alias kept for consumers that expect the old ``method`` field.
+    # TODO: remove once frontend and fixtures have migrated to ``overlap_label``.
+    @property
+    def method(self) -> str:
+        """Return the overlap label for legacy callers expecting a ``method`` field."""
+        return self.overlap_label
+
+    model_config = {"populate_by_name": True}
+
+    @model_serializer(mode="wrap")
+    def _serialize_with_method(self, handler):
+        data = handler(self)
+        data["method"] = self.method
+        return data
 
 
 class ClaimEvolutionPoint(PatrolPoint):

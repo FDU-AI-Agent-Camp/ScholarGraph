@@ -22,7 +22,8 @@ def test_all_four_point_types_serialize() -> None:
         LensClashPoint(mode="lens_clash", lens_a="LA", lens_b="LB", clash_aspect="ontology"),
         MethodOverlapPoint(
             mode="method_overlap",
-            method="PCA",
+            overlap_type="method",
+            overlap_label="PCA",
             paper_a_usage="降维",
             paper_b_usage="特征选择",
             dataset_a="MNIST",
@@ -92,7 +93,8 @@ def test_patrol_report_with_structured_points_round_trip() -> None:
                 structured_points=[
                     MethodOverlapPoint(
                         mode="method_overlap",
-                        method="PCA",
+                        overlap_type="method",
+                        overlap_label="PCA",
                         paper_a_usage="降维",
                         paper_b_usage="特征选择",
                     )
