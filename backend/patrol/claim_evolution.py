@@ -12,7 +12,7 @@ from backend.config import get_settings
 from backend.llm.client import LlmClient
 from backend.llm.embeddings import EmbeddingClient, get_embedding_client
 from backend.patrol.llm_summary import generate_claim_evolution_summary
-from backend.patrol.rag_service import RAG_DEGRADED_META_KEY, PatrolRAGService
+from backend.patrol.rag_service import PatrolRAGService
 from backend.schemas.graph import GraphNode, NodeType, UnifiedPaperGraph
 from backend.schemas.patrol import (
     ClaimEvolutionPoint,
@@ -238,10 +238,6 @@ async def build_claim_evolution_insight(
         evidence_summary=evidence_summary,
     )
 
-    meta = await _check_rag_index_ready(vector_store, [left_id, right_id])
-
-    meta = await _check_rag_index_ready(vector_store, [left_id, right_id])
-
     return PatrolInsight(
         insight_id=CLAIM_EVOLUTION_INSIGHT_ID,
         title=CLAIM_EVOLUTION_TITLE,
@@ -255,38 +251,6 @@ async def build_claim_evolution_insight(
         structured_points=[point],
         meta=meta,
     )
-
-
-async def _check_rag_index_ready(
-    vector_store: VectorStore | None,
-    paper_ids: list[str],
-) -> dict[str, Any]:
-    """Return degradation metadata when VectorStore index is missing for any paper."""
-    if vector_store is None:
-        return {
-            RAG_DEGRADED_META_KEY: {
-                "paper_ids": paper_ids,
-                "reason": "vector_store_unavailable",
-            },
-        }
-
-    degraded: list[str] = []
-    for paper_id in paper_ids:
-        try:
-            if not await vector_store.exists(paper_id):
-                degraded.append(paper_id)
-        except Exception:  # noqa: BLE001
-            degraded.append(paper_id)
-
-    if degraded:
-        logger.warning("patrol_rag_context_degraded", extra={"paper_ids": degraded, "reason": "index_not_ready"})
-        return {
-            RAG_DEGRADED_META_KEY: {
-                "paper_ids": degraded,
-                "reason": "index_not_ready",
-            },
-        }
-    return {}
 
 
 def _render_claim_evolution_query(
