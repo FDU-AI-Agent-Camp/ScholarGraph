@@ -55,7 +55,12 @@ async def run_patrol(
             )
         insights = [insight]
     elif mode == PatrolMode.CONTRADICTION:
-        insight = await build_contradiction_insight(graphs, paper_ids, llm_client=llm_client)
+        insight = await build_contradiction_insight(
+            graphs,
+            paper_ids,
+            vector_store=vector_store,
+            llm_client=llm_client,
+        )
         if insight is None:
             raise PatrolError(
                 "PATROL_INSUFFICIENT_DATA",
