@@ -12,10 +12,12 @@ from backend.schemas.paradigm import Paradigm
 
 __all__ = [
     "build_hss_graph_with_lens",
+    "build_hss_graph_with_method",
     "build_hss_graph_with_question_claim",
     "build_hss_graph_with_thesis",
     "build_hss_graph_without_lens",
     "build_hss_graph_without_thesis",
+    "build_stem_graph_dataset_only",
     "build_stem_graph_with_method_dataset",
     "build_stem_graph_with_question_claim",
     "seed_corpus_patrol_graphs",
@@ -127,6 +129,49 @@ def build_stem_graph_with_question_claim(
                 type="ADDRESSES",
             ),
         ],
+    )
+
+
+def build_hss_graph_with_method(
+    paper_id: str,
+    *,
+    method_id: str = "n_method",
+    method_label: str,
+    method_data: dict | None = None,
+) -> UnifiedPaperGraph:
+    """HSS graph that still contains a Method node to test paradigm gate."""
+    return UnifiedPaperGraph(
+        paper_id=paper_id,
+        paradigm=Paradigm.HSS,
+        nodes=[
+            GraphNode(id=method_id, label=method_label, type=NodeType.METHOD, data=method_data or {}),
+        ],
+        edges=[],
+    )
+
+
+def build_stem_graph_dataset_only(
+    paper_id: str,
+    *,
+    method_id: str = "n_method",
+    method_label: str,
+    dataset_id: str = "n_dataset",
+    dataset_label: str,
+    dataset_data: dict | None = None,
+) -> UnifiedPaperGraph:
+    """STEM graph with a method node and a dataset node.
+
+    The default helper wires the dataset to the method.  To test dataset-only
+    overlap, callers should construct two graphs whose method labels differ but
+    whose dataset labels match.
+    """
+    return build_stem_graph_with_method_dataset(
+        paper_id,
+        method_id=method_id,
+        method_label=method_label,
+        dataset_id=dataset_id,
+        dataset_label=dataset_label,
+        dataset_data=dataset_data,
     )
 
 

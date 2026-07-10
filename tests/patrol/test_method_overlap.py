@@ -14,6 +14,7 @@ from backend.schemas.patrol import (
 from backend.schemas.patrol_llm import MethodComparativeDetail, MethodOverlapOutput
 from tests.helpers.patrol_graphs import (
     build_hss_graph_with_question_claim,
+    build_stem_graph_dataset_only,
     build_stem_graph_with_method_dataset,
     build_stem_graph_with_question_claim,
 )
@@ -589,6 +590,69 @@ async def test_method_overlap_skips_both_hss_papers() -> None:
     assert insight is not None
     assert insight.status == PatrolInsightStatus.INSUFFICIENT_DATA
     assert insight.structured_points == []
+
+
+async def test_method_overlap_dataset_only_anchors_to_dataset_nodes() -> None:
+    """Dataset-only overlap must produce DATASET point with dataset node refs and usage."""
+    graphs = {
+        "stem-001": build_stem_graph_dataset_only(
+            "stem-001",
+            method_label="PCA",
+            dataset_id="ds_mnist_001",
+            dataset_label="MNIST",
+            dataset_data={"description": "Handwritten digit benchmark with 70,000 grayscale images."},
+        ),
+        "stem-002": build_stem_graph_dataset_only(
+            "stem-002",
+            method_label="Random Forest",
+            dataset_id="ds_mnist_002",
+            dataset_label="MNIST",
+            dataset_data={"description": "Same handwritten digit dataset used to evaluate tree ensembles."},
+        ),
+    }
+    insight = await build_method_overlap_insight(graphs, ["stem-001", "stem-002"])
+    assert insight is not None
+    assert insight.status == PatrolInsightStatus.READY
+    assert len(insight.structured_points) == 1
+    point = insight.structured_points[0]
+    assert isinstance(point, MethodOverlapPoint)
+    assert point.overlap_type == OverlapType.DATASET
+    assert point.overlap_label == "MNIST"
+    # node_refs must point to the dataset nodes, not the method nodes.
+    ref_ids = {ref.node_id for ref in insight.node_refs}
+    assert ref_ids == {"ds_mnist_001", "ds_mnist_002"}
+    # Usage must come from the dataset description, not from the method label.
+    assert "Handwritten" in point.paper_a_usage
+    assert "tree ensembles" in point.paper_b_usage
+    assert "PCA" not in point.paper_a_usage
+    assert "Random Forest" not in point.paper_b_usage
+
+
+async def test_method_overlap_hss_gate_ignores_shared_method_labels() -> None:
+    """Two HSS papers with identical method labels must still be rejected by paradigm gate."""
+    graphs = {
+        "hss-001": UnifiedPaperGraph(
+            paper_id="hss-001",
+            paradigm=Paradigm.HSS,
+            nodes=[
+                GraphNode(id="m_text_analysis_1", label="Textual Analysis", type=NodeType.ANALYTICAL_LENS, data={}),
+            ],
+            edges=[],
+        ),
+        "hss-002": UnifiedPaperGraph(
+            paper_id="hss-002",
+            paradigm=Paradigm.HSS,
+            nodes=[
+                GraphNode(id="m_text_analysis_2", label="Textual Analysis", type=NodeType.ANALYTICAL_LENS, data={}),
+            ],
+            edges=[],
+        ),
+    }
+    insight = await build_method_overlap_insight(graphs, ["hss-001", "hss-002"])
+    assert insight is not None
+    assert insight.status == PatrolInsightStatus.INSUFFICIENT_DATA
+    assert insight.structured_points == []
+    assert insight.node_refs == []
 
 
 async def test_method_overlap_rejects_wrong_paper_count() -> None:
