@@ -1,8 +1,14 @@
 """Unit tests for method_overlap patrol mode (TDD red phase)."""
 
+from __future__ import annotations
+
+import math
 from unittest.mock import AsyncMock, patch
 
+import pytest
+from backend.config import get_settings
 from backend.patrol.method_overlap import build_method_overlap_insight
+from backend.patrol.similarity import cosine_similarity
 from backend.schemas.graph import GraphNode, NodeType, UnifiedPaperGraph
 from backend.schemas.paradigm import Paradigm
 from backend.schemas.patrol import (
@@ -16,6 +22,7 @@ from tests.helpers.patrol_graphs import (
     build_hss_graph_with_question_claim,
     build_stem_graph_dataset_only,
     build_stem_graph_with_method_dataset,
+    build_stem_graph_with_method_dataset_rq,
     build_stem_graph_with_question_claim,
 )
 
@@ -435,17 +442,19 @@ async def test_alignment_merger_perfect_match_with_semantic_pair() -> None:
         return_value=llm_output,
     ):
         graphs = {
-            "stem-001": build_stem_graph_with_method_dataset(
+            "stem-001": build_stem_graph_with_method_dataset_rq(
                 "stem-001",
                 method_label="PCA",
                 method_data={"description": "原始描述 A：主成分分析"},
                 dataset_label="MNIST",
+                question_label="Does PCA improve image classification accuracy?",
             ),
-            "stem-002": build_stem_graph_with_method_dataset(
+            "stem-002": build_stem_graph_with_method_dataset_rq(
                 "stem-002",
                 method_label="Principal Component Analysis",
                 method_data={"description": "原始描述 B：PCA 变体"},
                 dataset_label="CIFAR-10",
+                question_label="Does PCA improve image classification accuracy?",
             ),
         }
         insight = await build_method_overlap_insight(
@@ -486,17 +495,19 @@ async def test_alignment_merger_hallucinated_pair_name_falls_back_to_description
         return_value=llm_output,
     ):
         graphs = {
-            "stem-001": build_stem_graph_with_method_dataset(
+            "stem-001": build_stem_graph_with_method_dataset_rq(
                 "stem-001",
                 method_label="PCA",
                 method_data={"description": "论文 A 用 PCA 提取 MNIST 主成分"},
                 dataset_label="MNIST",
+                question_label="Does PCA improve image classification accuracy?",
             ),
-            "stem-002": build_stem_graph_with_method_dataset(
+            "stem-002": build_stem_graph_with_method_dataset_rq(
                 "stem-002",
                 method_label="Principal Component Analysis",
                 method_data={"description": "论文 B 用 PCA 压缩 CIFAR-10 特征"},
                 dataset_label="CIFAR-10",
+                question_label="Does PCA improve image classification accuracy?",
             ),
         }
         insight = await build_method_overlap_insight(
@@ -524,17 +535,19 @@ async def test_alignment_merger_malformed_llm_output_returns_ready_with_fallback
         return_value=None,
     ):
         graphs = {
-            "stem-001": build_stem_graph_with_method_dataset(
+            "stem-001": build_stem_graph_with_method_dataset_rq(
                 "stem-001",
                 method_label="PCA",
                 method_data={"description": "论文 A 用 PCA 做无监督降维"},
                 dataset_label="MNIST",
+                question_label="Does PCA improve image classification accuracy?",
             ),
-            "stem-002": build_stem_graph_with_method_dataset(
+            "stem-002": build_stem_graph_with_method_dataset_rq(
                 "stem-002",
                 method_label="Principal Component Analysis",
                 method_data={"description": "论文 B 用 PCA 压缩特征"},
                 dataset_label="CIFAR-10",
+                question_label="Does PCA improve image classification accuracy?",
             ),
         }
         insight = await build_method_overlap_insight(
@@ -839,7 +852,7 @@ class _FakeEmbeddingClient:
     method labels/descriptions are considered semantically similar.
     """
 
-    def __init__(self, threshold: float = 0.75) -> None:
+    def __init__(self, threshold: float = 0.88) -> None:
         self.is_mock = False
         self._threshold = threshold
 
@@ -847,8 +860,11 @@ class _FakeEmbeddingClient:
         vectors: dict[str, list[float]] = {}
         for text in texts:
             if "PCA" in text or "Principal Component Analysis" in text:
-                # Deterministic but different vectors for PCA-related texts.
                 vectors[text] = [1.0, 0.0] if text.startswith("PCA") else [0.99, 0.01]
+            elif "Naive Bayes" in text:
+                vectors[text] = [0.9, 0.43]
+            elif "Logistic Regression" in text:
+                vectors[text] = [0.88, 0.47]
             else:
                 vectors[text] = [0.0, 0.0]
         return [vectors.get(text, [0.0, 0.0]).copy() for text in texts]
@@ -858,20 +874,153 @@ class _FakeEmbeddingClient:
         return self._threshold
 
 
-async def test_method_overlap_ready_with_semantic_method_match() -> None:
-    """Soft path: labels differ but descriptions identify the same method."""
+# Live defect regression vectors (bge-m3 stem-soft-a/b corpus).
+_LIVE_NB_LR_COSINE = 0.82
+_NB_LIVE_DEFECT_VECTOR = [1.0, 0.0]
+_LR_LIVE_DEFECT_VECTOR = [_LIVE_NB_LR_COSINE, math.sqrt(1.0 - _LIVE_NB_LR_COSINE**2)]
+
+
+class _NbLrLiveDefectEmbeddingClient:
+    """Reproduce live false-positive: NB ↔ LR cosine ≈ 0.82 with disjoint datasets."""
+
+    is_mock = False
+
+    async def embed_texts(self, texts: list[str]) -> list[list[float]]:
+        vectors: list[list[float]] = []
+        for text in texts:
+            if "Naive Bayes" in text:
+                vectors.append(_NB_LIVE_DEFECT_VECTOR.copy())
+            elif "Logistic Regression" in text:
+                vectors.append(_LR_LIVE_DEFECT_VECTOR.copy())
+            else:
+                vectors.append([0.0, 0.0])
+        return vectors
+
+
+class _PcaSynonymLiveDefectEmbeddingClient:
+    """Reproduce live true-positive: PCA ↔ Principal Component Analysis high cosine."""
+
+    is_mock = False
+
+    async def embed_texts(self, texts: list[str]) -> list[list[float]]:
+        vectors: dict[str, list[float]] = {}
+        for text in texts:
+            if text.startswith("PCA") or text.startswith("PCA "):
+                vectors[text] = [1.0, 0.0]
+            elif "Principal Component Analysis" in text:
+                vectors[text] = [0.99, 0.01]
+            else:
+                vectors[text] = [0.0, 0.0]
+        return [vectors.get(text, [0.0, 0.0]).copy() for text in texts]
+
+
+@pytest.mark.asyncio
+async def test_live_defect_naive_bayes_vs_logistic_regression_blocked_by_topology(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """经典误配防御：NB↔LR embedding≈0.82 但无公共 Dataset/RQ 拓扑 → INSUFFICIENT_DATA."""
+    settings = get_settings()
+    # Reproduce the pre-topology live gate where 0.81–0.82 cosine would pass embedding.
+    monkeypatch.setattr(settings, "patrol_semantic_threshold", 0.75)
+
+    nb_text = "Naive Bayes probabilistic generative classifier"
+    lr_text = "Logistic Regression discriminative linear classifier"
+    assert cosine_similarity(_NB_LIVE_DEFECT_VECTOR, _LR_LIVE_DEFECT_VECTOR) == pytest.approx(
+        _LIVE_NB_LR_COSINE,
+        abs=1e-6,
+    )
+
     graphs = {
-        "stem-001": build_stem_graph_with_method_dataset(
+        "stem-soft-a": build_stem_graph_with_method_dataset_rq(
+            "stem-soft-a",
+            method_label="Naive Bayes",
+            method_data={"description": "probabilistic generative classifier"},
+            dataset_label="Dataset X",
+            question_label="Can Naive Bayes classify images in dataset X?",
+        ),
+        "stem-soft-b": build_stem_graph_with_method_dataset_rq(
+            "stem-soft-b",
+            method_label="Logistic Regression",
+            method_data={"description": "discriminative linear classifier"},
+            dataset_label="Dataset Y",
+            question_label="Does logistic regression improve accuracy on dataset Y?",
+        ),
+    }
+    insight = await build_method_overlap_insight(
+        graphs,
+        ["stem-soft-a", "stem-soft-b"],
+        embedding_client=_NbLrLiveDefectEmbeddingClient(),
+    )
+
+    assert insight is not None
+    assert insight.status == PatrolInsightStatus.INSUFFICIENT_DATA
+    assert insight.structured_points == []
+    assert (
+        cosine_similarity(
+            (await _NbLrLiveDefectEmbeddingClient().embed_texts([nb_text]))[0],
+            (await _NbLrLiveDefectEmbeddingClient().embed_texts([lr_text]))[0],
+        )
+        >= settings.patrol_semantic_threshold
+    )
+
+
+@pytest.mark.asyncio
+async def test_live_defect_pca_vs_principal_component_analysis_passes_with_mnist_resonance() -> None:
+    """同义词对提取：PCA↔全名 + 共享 MNIST 数据集拓扑共振 → READY 且高分 semantic。"""
+    shared_dataset = "MNIST"
+    graphs = {
+        "stem-soft-a": build_stem_graph_with_method_dataset(
+            "stem-soft-a",
+            method_label="PCA",
+            method_data={"description": "linear dimensionality reduction for image features"},
+            dataset_label=shared_dataset,
+        ),
+        "stem-soft-b": build_stem_graph_with_method_dataset(
+            "stem-soft-b",
+            method_label="Principal Component Analysis",
+            method_data={"description": "principal components for image feature compression"},
+            dataset_label=shared_dataset,
+        ),
+    }
+    insight = await build_method_overlap_insight(
+        graphs,
+        ["stem-soft-a", "stem-soft-b"],
+        embedding_client=_PcaSynonymLiveDefectEmbeddingClient(),
+    )
+
+    assert insight is not None
+    assert insight.status == PatrolInsightStatus.READY
+    assert len(insight.structured_points) == 1
+    point = insight.structured_points[0]
+    assert isinstance(point, MethodOverlapPoint)
+    assert point.mode == "method_overlap"
+    assert point.overlap_type == OverlapType.METHOD
+    assert point.match_type == "semantic"
+    assert point.overlap_score is not None
+    assert point.overlap_score >= get_settings().patrol_semantic_threshold
+    assert point.method == "PCA"
+    assert point.overlap_label == "PCA"
+    assert {ref.label for ref in insight.node_refs} == {"PCA", "Principal Component Analysis"}
+
+
+async def test_method_overlap_ready_with_semantic_method_match() -> None:
+    """Soft path: labels differ but descriptions and topology identify the same method."""
+    shared_dataset = "MNIST"
+    shared_question = "Does dimensionality reduction improve image classification accuracy?"
+    graphs = {
+        "stem-001": build_stem_graph_with_method_dataset_rq(
             "stem-001",
             method_label="PCA",
             method_data={"description": "线性降维"},
-            dataset_label="Dataset A",
+            dataset_label=shared_dataset,
+            question_label=shared_question,
         ),
-        "stem-002": build_stem_graph_with_method_dataset(
+        "stem-002": build_stem_graph_with_method_dataset_rq(
             "stem-002",
             method_label="Principal Component Analysis",
             method_data={"description": "线性降维"},
-            dataset_label="Dataset B",
+            dataset_label=shared_dataset,
+            question_label=shared_question,
         ),
     }
     insight = await build_method_overlap_insight(
@@ -887,7 +1036,7 @@ async def test_method_overlap_ready_with_semantic_method_match() -> None:
     assert point.match_type == "semantic"
     assert point.overlap_score is not None
     assert 0.0 < point.overlap_score < 1.0
-    assert point.overlap_score >= 0.75
+    assert point.overlap_score >= 0.88
     assert point.method == "PCA"
     assert point.overlap_label == "PCA"
 
@@ -906,6 +1055,67 @@ async def test_method_overlap_insufficient_when_semantic_match_below_threshold()
             method_label="Random Forest",
             method_data={"description": "集成学习"},
             dataset_label="Dataset B",
+        ),
+    }
+    insight = await build_method_overlap_insight(
+        graphs,
+        ["stem-001", "stem-002"],
+        embedding_client=_FakeEmbeddingClient(),
+    )
+    assert insight is not None
+    assert insight.status == PatrolInsightStatus.INSUFFICIENT_DATA
+    assert insight.structured_points == []
+
+
+async def test_method_overlap_rejects_semantic_noise_without_topology_resonance() -> None:
+    """High embedding similarity alone is insufficient when datasets and RQs differ."""
+    graphs = {
+        "stem-001": build_stem_graph_with_method_dataset_rq(
+            "stem-001",
+            method_label="Naive Bayes",
+            method_data={"description": "Generative classifier"},
+            dataset_label="MNIST",
+            question_label="Can generative models classify handwritten digits?",
+        ),
+        "stem-002": build_stem_graph_with_method_dataset_rq(
+            "stem-002",
+            method_label="Logistic Regression",
+            method_data={"description": "Discriminative classifier"},
+            dataset_label="CIFAR-10",
+            question_label="Does logistic regression improve object recognition?",
+        ),
+    }
+    insight = await build_method_overlap_insight(
+        graphs,
+        ["stem-001", "stem-002"],
+        embedding_client=_FakeEmbeddingClient(),
+    )
+    assert insight is not None
+    assert insight.status == PatrolInsightStatus.INSUFFICIENT_DATA
+    assert insight.structured_points == []
+
+
+async def test_method_overlap_semantic_path_disabled_skips_embedding(monkeypatch) -> None:
+    """ENABLE_PATROL_SEMANTIC_PATH=false forces literal-only matching."""
+    from backend.config import get_settings
+
+    settings = get_settings()
+    monkeypatch.setattr(settings, "enable_patrol_semantic_path", False)
+
+    graphs = {
+        "stem-001": build_stem_graph_with_method_dataset_rq(
+            "stem-001",
+            method_label="PCA",
+            method_data={"description": "线性降维"},
+            dataset_label="Dataset A",
+            question_label="Question A",
+        ),
+        "stem-002": build_stem_graph_with_method_dataset_rq(
+            "stem-002",
+            method_label="Principal Component Analysis",
+            method_data={"description": "线性降维"},
+            dataset_label="Dataset B",
+            question_label="Question B",
         ),
     }
     insight = await build_method_overlap_insight(

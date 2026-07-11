@@ -19,6 +19,7 @@ __all__ = [
     "build_hss_graph_without_thesis",
     "build_stem_graph_dataset_only",
     "build_stem_graph_with_method_dataset",
+    "build_stem_graph_with_method_dataset_rq",
     "build_stem_graph_with_question_claim",
     "seed_corpus_patrol_graphs",
     "seed_patrol_graphs",
@@ -99,6 +100,52 @@ def build_stem_graph_with_method_dataset(
                 target=method_id,
                 label="EVALUATED_ON",
                 type="EVALUATED_ON",
+            ),
+        ],
+    )
+
+
+def build_stem_graph_with_method_dataset_rq(
+    paper_id: str,
+    *,
+    method_id: str = "n_method",
+    method_label: str,
+    method_data: dict | None = None,
+    dataset_id: str = "n_dataset",
+    dataset_label: str,
+    dataset_data: dict | None = None,
+    question_id: str = "n_question",
+    question_label: str,
+    question_data: dict | None = None,
+) -> UnifiedPaperGraph:
+    """STEM graph with Method, Dataset, and ResearchQuestion wired for topology resonance tests."""
+    return UnifiedPaperGraph(
+        paper_id=paper_id,
+        paradigm=Paradigm.STEM,
+        nodes=[
+            GraphNode(id=method_id, label=method_label, type=NodeType.METHOD, data=method_data or {}),
+            GraphNode(id=dataset_id, label=dataset_label, type=NodeType.DATASET, data=dataset_data or {}),
+            GraphNode(
+                id=question_id,
+                label=question_label,
+                type=NodeType.RESEARCH_QUESTION,
+                data=question_data or {},
+            ),
+        ],
+        edges=[
+            GraphEdge(
+                id="e_evaluated_on",
+                source=dataset_id,
+                target=method_id,
+                label="EVALUATED_ON",
+                type="EVALUATED_ON",
+            ),
+            GraphEdge(
+                id="e_addresses",
+                source=method_id,
+                target=question_id,
+                label="ADDRESSES",
+                type="ADDRESSES",
             ),
         ],
     )
