@@ -5,7 +5,7 @@ from datetime import datetime
 from enum import StrEnum
 from typing import Annotated, Any, Literal
 
-from pydantic import BaseModel, Field, model_serializer
+from pydantic import BaseModel, Field, computed_field
 
 
 class PatrolMode(StrEnum):
@@ -66,7 +66,7 @@ class MethodOverlapPoint(PatrolPoint):
     mode: Literal["method_overlap"]
     overlap_type: OverlapType = Field(
         ...,
-        description="Whether the point compares methods, datasets, or both.",
+        description="Whether the point compares methods or datasets (dual overlap emits two points).",
     )
     overlap_label: str = Field(
         ...,
@@ -81,6 +81,10 @@ class MethodOverlapPoint(PatrolPoint):
         default=None,
         description="How the overlap was determined: literal label equality or semantic embedding similarity.",
     )
+    node_refs: list[NodeRef] = Field(
+        default_factory=list,
+        description="Graph nodes anchored by this point; supports many-to-many literal overlaps.",
+    )
     paper_a_usage: str = Field(description="How paper A uses the overlapping item.")
     paper_b_usage: str = Field(description="How paper B uses the overlapping item.")
     dataset_a: str | None = None
@@ -90,20 +94,13 @@ class MethodOverlapPoint(PatrolPoint):
         description="基于双方方法/数据证据链的综合摘要；LLM 未生成时可为空。",
     )
 
-    # Backwards-compatible alias kept for consumers that expect the old ``method`` field.
-    # TODO: remove once frontend and fixtures have migrated to ``overlap_label``.
+    @computed_field  # type: ignore[prop-decorator]
     @property
     def method(self) -> str:
-        """Return the overlap label for legacy callers expecting a ``method`` field."""
+        """Deprecated alias for ``overlap_label``; kept for legacy frontend consumers."""
         return self.overlap_label
 
     model_config = {"populate_by_name": True}
-
-    @model_serializer(mode="wrap")
-    def _serialize_with_method(self, handler):
-        data = handler(self)
-        data["method"] = self.method
-        return data
 
 
 class ClaimEvolutionPoint(PatrolPoint):
