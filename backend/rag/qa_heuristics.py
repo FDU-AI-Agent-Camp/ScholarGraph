@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import math
 import re
 from dataclasses import dataclass, field
 from typing import Any
@@ -9,22 +10,26 @@ from typing import Any
 # Numeric literals in required_patterns, e.g. "0.89", "92%", "-1.5"
 _PATTERN_NUMBER_RE = re.compile(r"^-?\d+(?:\.\d+)?%?$")
 
-# Extract numbers from free text (integers and decimals; avoids splitting version-like tokens conservatively)
-_EXTRACT_NUMBER_RE = re.compile(r"(?<![\w.])-?\d+\.\d+(?![\w.])|(?<![\w.])-?\d+(?![\w.])")
+# Percent tokens in free text, e.g. "15%", "0.89 %"
+_EXTRACT_PERCENT_RE = re.compile(r"(?<![\w.])(-?\d+(?:\.\d+)?)\s*%")
+
+# Plain numeric tokens (decimals/integers without trailing %)
+_EXTRACT_PLAIN_NUMBER_RE = re.compile(r"(?<![\w.])(-?\d+\.\d+)(?![\w.])|(?<![\w.])(-?\d+)(?![\w.%])")
 
 # Dataset / benchmark identifiers (STEM): ImageNet, CIFAR-10, MNIST, GLUE, etc.
 _DATASET_TOKEN_RE = re.compile(r"\b[A-Z][A-Za-z0-9]*(?:[-_][A-Za-z0-9]+)*\b")
 
-_DEFAULT_NUMERIC_TOLERANCE = 1e-6
+_DEFAULT_NUMERIC_TOLERANCE = 1e-9
 _DEFAULT_RELATIVE_TOLERANCE = 0.01
 
 
 @dataclass(frozen=True, slots=True)
 class NumericExpectation:
-    """One expected numeric value with optional absolute tolerance."""
+    """One expected numeric value with optional absolute/relative tolerance."""
 
     value: float
     tolerance: float = _DEFAULT_NUMERIC_TOLERANCE
+    rel_tol: float = _DEFAULT_RELATIVE_TOLERANCE
 
 
 @dataclass
@@ -69,22 +74,44 @@ def _parse_numeric_expectations(gold: dict[str, Any]) -> list[NumericExpectation
     if isinstance(raw, list) and raw:
         expectations: list[NumericExpectation] = []
         default_tol = float(gold.get("numeric_tolerance", _DEFAULT_NUMERIC_TOLERANCE))
+        default_rel_tol = float(gold.get("numeric_rel_tol", _DEFAULT_RELATIVE_TOLERANCE))
         for item in raw:
             if isinstance(item, dict):
-                value = float(item["value"])
+                value = _normalize_gold_numeric(str(item["value"]))
                 tol = float(item.get("tolerance", default_tol))
-                expectations.append(NumericExpectation(value=value, tolerance=tol))
+                rel_tol = float(item.get("rel_tol", default_rel_tol))
+                expectations.append(NumericExpectation(value=value, tolerance=tol, rel_tol=rel_tol))
             else:
-                expectations.append(NumericExpectation(value=float(item), tolerance=default_tol))
+                expectations.append(
+                    NumericExpectation(
+                        value=_normalize_gold_numeric(str(item)),
+                        tolerance=default_tol,
+                        rel_tol=default_rel_tol,
+                    ),
+                )
         return expectations
 
     expectations = []
+    default_rel_tol = float(gold.get("numeric_rel_tol", _DEFAULT_RELATIVE_TOLERANCE))
     for pattern in gold.get("required_patterns", []):
         text = str(pattern).strip()
         if _PATTERN_NUMBER_RE.match(text):
-            value = float(text.rstrip("%"))
-            expectations.append(NumericExpectation(value=value, tolerance=_DEFAULT_NUMERIC_TOLERANCE))
+            expectations.append(
+                NumericExpectation(
+                    value=_normalize_gold_numeric(text),
+                    tolerance=_DEFAULT_NUMERIC_TOLERANCE,
+                    rel_tol=default_rel_tol,
+                ),
+            )
     return expectations
+
+
+def _normalize_gold_numeric(token: str) -> float:
+    """Normalize gold numeric tokens; ``15%`` → ``0.15``."""
+    text = token.strip()
+    if text.endswith("%"):
+        return float(text[:-1].strip()) / 100.0
+    return float(text)
 
 
 def _resolve_expected_datasets(gold: dict[str, Any]) -> list[str]:
@@ -103,15 +130,37 @@ def _resolve_expected_datasets(gold: dict[str, Any]) -> list[str]:
 
 
 def extract_numbers_from_text(text: str) -> list[float]:
-    """Pull numeric literals from answer text."""
+    """Pull numeric literals from answer text, normalizing percentages to decimals."""
     numbers: list[float] = []
-    for match in _EXTRACT_NUMBER_RE.finditer(text):
-        token = match.group(0).rstrip("%")
+    percent_spans: list[tuple[int, int]] = []
+
+    for match in _EXTRACT_PERCENT_RE.finditer(text):
+        numbers.append(float(match.group(1)) / 100.0)
+        percent_spans.append(match.span())
+
+    def _inside_percent_span(start: int, end: int) -> bool:
+        return any(p_start <= start and end <= p_end for p_start, p_end in percent_spans)
+
+    for match in _EXTRACT_PLAIN_NUMBER_RE.finditer(text):
+        if _inside_percent_span(match.start(), match.end()):
+            continue
+        token = match.group(0)
         try:
             numbers.append(float(token))
         except ValueError:
             continue
     return numbers
+
+
+def numeric_values_match(
+    expected: float,
+    candidate: float,
+    *,
+    abs_tol: float = _DEFAULT_NUMERIC_TOLERANCE,
+    rel_tol: float = _DEFAULT_RELATIVE_TOLERANCE,
+) -> bool:
+    """STEM-friendly numeric equivalence (``0.15`` ≈ ``0.150`` ≈ ``15%``)."""
+    return math.isclose(candidate, expected, rel_tol=rel_tol, abs_tol=abs_tol)
 
 
 def extract_datasets_from_text(text: str) -> list[str]:
@@ -133,10 +182,11 @@ def _numbers_satisfied(
             (
                 value
                 for value in found
-                if abs(value - spec.value) <= spec.tolerance
-                or (
-                    spec.value != 0
-                    and abs((value - spec.value) / spec.value) <= _DEFAULT_RELATIVE_TOLERANCE
+                if numeric_values_match(
+                    spec.value,
+                    value,
+                    abs_tol=spec.tolerance,
+                    rel_tol=spec.rel_tol,
                 )
             ),
             None,

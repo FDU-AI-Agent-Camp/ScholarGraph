@@ -5,6 +5,7 @@ from __future__ import annotations
 from backend.rag.qa_heuristics import (
     extract_datasets_from_text,
     extract_numbers_from_text,
+    numeric_values_match,
     run_heuristic_guardrails,
 )
 
@@ -70,4 +71,25 @@ def test_missing_numeric_fails_guardrail() -> None:
 
 def test_extract_numbers_and_datasets_helpers() -> None:
     assert 0.89 in extract_numbers_from_text("F1=0.89 on CIFAR-10")
+    assert 0.15 in extract_numbers_from_text("accuracy 15% on test set")
     assert "CIFAR-10" in extract_datasets_from_text("Evaluated on CIFAR-10 and MNIST")
+
+
+def test_percent_gold_matches_decimal_and_percent_answer() -> None:
+    result = run_heuristic_guardrails(
+        "模型准确率达到 15%，在 ImageNet 上验证。",
+        [],
+        {
+            "required_patterns": ["15%"],
+            "forbidden_patterns": [],
+            "nodes": [],
+            "edges": [],
+        },
+    )
+    assert result.numeric_match is True
+    assert result.missing_numbers == []
+
+
+def test_math_isclose_handles_trailing_zeros() -> None:
+    assert numeric_values_match(0.15, 0.150, rel_tol=0.01)
+    assert numeric_values_match(0.89, 0.891, rel_tol=0.01)
