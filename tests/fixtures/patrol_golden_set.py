@@ -61,8 +61,7 @@ class PatrolGoldenSet(BaseModel):
         hss_count = sum(1 for pair in self.pairs if pair.paradigm == "HSS")
         if stem_count != _EXPECTED_STEM_COUNT or hss_count != _EXPECTED_HSS_COUNT:
             msg = (
-                f"expected STEM={_EXPECTED_STEM_COUNT} HSS={_EXPECTED_HSS_COUNT}, "
-                f"got STEM={stem_count} HSS={hss_count}"
+                f"expected STEM={_EXPECTED_STEM_COUNT} HSS={_EXPECTED_HSS_COUNT}, got STEM={stem_count} HSS={hss_count}"
             )
             raise ValueError(msg)
 

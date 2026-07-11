@@ -14,6 +14,7 @@ from tests.fixtures.patrol_golden_set import (
     golden_set_path,
     load_patrol_golden_set,
 )
+from tests.patrol.conftest import patch_patrol_settings
 
 
 def test_patrol_golden_set_file_exists_and_validates() -> None:
@@ -56,10 +57,13 @@ async def test_patrol_golden_pair_rq_gate_expectation(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Each golden pair must pass or fail the two-stage RQ gate per its label."""
+    patch_patrol_settings(
+        monkeypatch,
+        reranker_enabled=True,
+        patrol_claim_rq_coarse_threshold=0.42,
+        patrol_claim_rq_rerank_threshold=0.60,
+    )
     settings = get_settings()
-    monkeypatch.setattr(settings, "reranker_enabled", True)
-    monkeypatch.setattr(settings, "patrol_claim_rq_coarse_threshold", 0.42)
-    monkeypatch.setattr(settings, "patrol_claim_rq_rerank_threshold", 0.60)
 
     left = GraphNode(id=f"{pair.id}-a", label=pair.label_a, type=NodeType.RESEARCH_QUESTION, data={})
     right = GraphNode(id=f"{pair.id}-b", label=pair.label_b, type=NodeType.RESEARCH_QUESTION, data={})

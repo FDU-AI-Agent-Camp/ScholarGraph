@@ -4,7 +4,6 @@ import math
 from unittest.mock import AsyncMock, patch
 
 import pytest
-from backend.config import get_settings
 from backend.patrol.claim_evolution import build_claim_evolution_insight
 from backend.schemas.patrol import (
     ClaimEvolutionPoint,
@@ -17,6 +16,7 @@ from tests.helpers.patrol_graphs import (
     build_stem_graph_with_method_dataset,
     build_stem_graph_with_question_claim,
 )
+from tests.patrol.conftest import patch_patrol_settings
 
 
 class _FakeEmbeddingClient:
@@ -304,8 +304,7 @@ async def test_claim_evolution_chunk_top_k_is_configurable(monkeypatch) -> None:
     from backend.schemas.graph import GraphNode, NodeType, UnifiedPaperGraph
     from backend.schemas.paradigm import Paradigm
 
-    settings = get_settings()
-    monkeypatch.setattr(settings, "patrol_claim_chunk_top_k", 5)
+    patch_patrol_settings(monkeypatch, patrol_claim_chunk_top_k=5)
 
     vector_store = AsyncMock()
     vector_store.query_chunks.return_value = [AsyncMock(text=f"chunk {i} for missing claim") for i in range(5)]
@@ -509,9 +508,12 @@ async def test_claim_evolution_english_questions_use_lower_threshold(monkeypatch
     from backend.schemas.graph import GraphNode, NodeType, UnifiedPaperGraph
     from backend.schemas.paradigm import Paradigm
 
-    settings = get_settings()
-    monkeypatch.setattr(settings, "patrol_claim_rq_threshold", 0.75)
-    monkeypatch.setattr(settings, "patrol_claim_rq_threshold_english", 0.55)
+    patch_patrol_settings(
+        monkeypatch,
+        reranker_enabled=False,
+        patrol_claim_rq_threshold=0.75,
+        patrol_claim_rq_threshold_english=0.55,
+    )
 
     class _EnglishEmbeddingClient:
         is_mock = False
@@ -595,10 +597,12 @@ async def test_claim_evolution_rerank_blocks_macro_micro_granularity_mismatch(
     from backend.schemas.graph import GraphNode, NodeType, UnifiedPaperGraph
     from backend.schemas.paradigm import Paradigm
 
-    settings = get_settings()
-    monkeypatch.setattr(settings, "reranker_enabled", True)
-    monkeypatch.setattr(settings, "patrol_claim_rq_coarse_threshold", 0.42)
-    monkeypatch.setattr(settings, "patrol_claim_rq_rerank_threshold", 0.60)
+    patch_patrol_settings(
+        monkeypatch,
+        reranker_enabled=True,
+        patrol_claim_rq_coarse_threshold=0.42,
+        patrol_claim_rq_rerank_threshold=0.60,
+    )
 
     graphs = {
         "hss-macro": UnifiedPaperGraph(
@@ -642,10 +646,12 @@ async def test_claim_evolution_two_stage_pipeline_passes_with_rerank(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """卡点：粗筛 + Cross-Encoder 精排均通过后进入 READY 下游。"""
-    settings = get_settings()
-    monkeypatch.setattr(settings, "reranker_enabled", True)
-    monkeypatch.setattr(settings, "patrol_claim_rq_coarse_threshold", 0.42)
-    monkeypatch.setattr(settings, "patrol_claim_rq_rerank_threshold", 0.60)
+    patch_patrol_settings(
+        monkeypatch,
+        reranker_enabled=True,
+        patrol_claim_rq_coarse_threshold=0.42,
+        patrol_claim_rq_rerank_threshold=0.60,
+    )
 
     graphs = {
         "hss-001": build_hss_graph_with_question_claim(

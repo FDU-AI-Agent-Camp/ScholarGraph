@@ -57,3 +57,18 @@ class TestSemanticThresholdDefaults:
         )
         assert settings.patrol_claim_rq_threshold_effective("PCA 是否提升分类准确率？") == 0.75
         assert settings.patrol_claim_rq_threshold_effective("Does PCA improve classification accuracy?") == 0.55
+
+    def test_patrol_topology_rq_semantic_threshold_english_default(self) -> None:
+        settings = Settings(
+            _env_file=None,
+            patrol_topology_rq_semantic_threshold=0.75,
+            patrol_topology_rq_semantic_threshold_english=0.55,
+        )
+        assert settings.patrol_topology_rq_semantic_threshold_for("微博与投票率") == 0.75
+        assert (
+            settings.patrol_topology_rq_semantic_threshold_for(
+                "Does Weibo usage increase turnout?",
+                "微博与投票率",
+            )
+            == 0.55
+        )

@@ -25,6 +25,7 @@ from tests.helpers.patrol_graphs import (
     build_stem_graph_with_method_dataset_rq,
     build_stem_graph_with_question_claim,
 )
+from tests.patrol.conftest import patch_patrol_settings
 
 
 async def test_method_overlap_ready_two_methods() -> None:
@@ -1054,9 +1055,8 @@ async def test_live_defect_naive_bayes_vs_logistic_regression_blocked_by_topolog
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """经典误配防御：NB↔LR embedding≈0.82 但无公共 Dataset/RQ 拓扑 → INSUFFICIENT_DATA."""
+    patch_patrol_settings(monkeypatch, patrol_semantic_threshold=0.75)
     settings = get_settings()
-    # Reproduce the pre-topology live gate where 0.81–0.82 cosine would pass embedding.
-    monkeypatch.setattr(settings, "patrol_semantic_threshold", 0.75)
 
     nb_text = "Naive Bayes probabilistic generative classifier"
     lr_text = "Logistic Regression discriminative linear classifier"
@@ -1237,10 +1237,7 @@ async def test_method_overlap_rejects_semantic_noise_without_topology_resonance(
 
 async def test_method_overlap_semantic_path_disabled_skips_embedding(monkeypatch) -> None:
     """ENABLE_PATROL_SEMANTIC_PATH=false forces literal-only matching."""
-    from backend.config import get_settings
-
-    settings = get_settings()
-    monkeypatch.setattr(settings, "enable_patrol_semantic_path", False)
+    patch_patrol_settings(monkeypatch, enable_patrol_semantic_path=False)
 
     graphs = {
         "stem-001": build_stem_graph_with_method_dataset_rq(
@@ -1270,8 +1267,6 @@ async def test_method_overlap_semantic_path_disabled_skips_embedding(monkeypatch
 
 async def test_method_overlap_degrades_when_matrix_too_large(monkeypatch) -> None:
     """When M*N exceeds PATROL_MAX_MATRIX_SIZE, fall back to literal matching only."""
-    from backend.config import get_settings
-
     graphs = {
         "stem-001": build_stem_graph_with_method_dataset(
             "stem-001",
@@ -1286,6 +1281,8 @@ async def test_method_overlap_degrades_when_matrix_too_large(monkeypatch) -> Non
             dataset_label="Dataset B",
         ),
     }
+    # ``0`` is intentionally below the Settings schema floor (ge=1); setattr the
+    # cached singleton for this edge case — autouse teardown clears it afterward.
     settings = get_settings()
     monkeypatch.setattr(settings, "patrol_max_matrix_size", 0)
     insight = await build_method_overlap_insight(

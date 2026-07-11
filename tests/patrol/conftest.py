@@ -2,12 +2,57 @@
 
 from __future__ import annotations
 
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Iterator
 
 import pytest
 from backend.config import get_settings
+from backend.llm.embeddings import get_embedding_client
 from backend.main import app
 from httpx import ASGITransport, AsyncClient
+
+_PATROL_SETTING_ENV_KEYS: dict[str, str] = {
+    "reranker_enabled": "RERANKER_ENABLED",
+    "enable_patrol_semantic_path": "ENABLE_PATROL_SEMANTIC_PATH",
+    "patrol_semantic_threshold": "PATROL_SEMANTIC_THRESHOLD",
+    "patrol_max_matrix_size": "PATROL_MAX_MATRIX_SIZE",
+    "patrol_topology_rq_semantic_threshold": "PATROL_TOPOLOGY_RQ_SEMANTIC_THRESHOLD",
+    "patrol_topology_rq_semantic_threshold_english": "PATROL_TOPOLOGY_RQ_SEMANTIC_THRESHOLD_ENGLISH",
+    "patrol_claim_rq_threshold": "PATROL_CLAIM_RQ_THRESHOLD",
+    "patrol_claim_rq_coarse_threshold": "PATROL_CLAIM_RQ_COARSE_THRESHOLD",
+    "patrol_claim_rq_rerank_threshold": "PATROL_RERANK_THRESHOLD",
+    "patrol_claim_rq_threshold_english": "PATROL_CLAIM_RQ_THRESHOLD_ENGLISH",
+    "patrol_claim_chunk_top_k": "PATROL_CLAIM_CHUNK_TOP_K",
+}
+
+
+def reset_patrol_runtime_caches() -> None:
+    """Drop cached Settings / embedding / patrol service singletons."""
+    get_settings.cache_clear()
+    get_embedding_client.cache_clear()
+    from backend.services.patrol_service import get_patrol_service
+
+    if hasattr(get_patrol_service, "cache_clear"):
+        get_patrol_service.cache_clear()
+
+
+def patch_patrol_settings(monkeypatch: pytest.MonkeyPatch, **overrides: bool | int | float | str) -> None:
+    """Override patrol-related settings via env vars and rebuild cached singletons."""
+    for key, value in overrides.items():
+        env_name = _PATROL_SETTING_ENV_KEYS[key]
+        if isinstance(value, bool):
+            monkeypatch.setenv(env_name, "true" if value else "false")
+        else:
+            monkeypatch.setenv(env_name, str(value))
+    reset_patrol_runtime_caches()
+
+
+@pytest.fixture(autouse=True)
+def _isolate_patrol_settings(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
+    """Prevent cross-test Settings / embedding singleton pollution in patrol suite."""
+    monkeypatch.setenv("LLM_MODE", "mock")
+    reset_patrol_runtime_caches()
+    yield
+    reset_patrol_runtime_caches()
 
 
 @pytest.fixture(autouse=True)
@@ -58,9 +103,9 @@ def patrol_graph_dir(tmp_path, monkeypatch):
     """Isolated GRAPH_DATA_DIR with cleared settings cache."""
     graph_dir = tmp_path / "graphs"
     monkeypatch.setenv("GRAPH_DATA_DIR", str(graph_dir))
-    get_settings.cache_clear()
+    reset_patrol_runtime_caches()
     yield graph_dir
-    get_settings.cache_clear()
+    reset_patrol_runtime_caches()
 
 
 @pytest.fixture

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import pytest
+from backend.config import get_settings
 from backend.patrol.method_overlap_topology import (
     has_topology_resonance,
     one_hop_neighbors,
@@ -55,7 +56,7 @@ async def test_has_topology_resonance_accepts_shared_dataset() -> None:
         left_graph.nodes[0],
         right_graph.nodes[0],
         embedding_client=_FakeEmbeddingClient(),
-        rq_threshold=0.75,
+        settings=get_settings(),
     )
 
 
@@ -79,7 +80,7 @@ async def test_has_topology_resonance_rejects_disjoint_neighborhoods() -> None:
         left_graph.nodes[0],
         right_graph.nodes[0],
         embedding_client=_FakeEmbeddingClient(),
-        rq_threshold=0.75,
+        settings=get_settings(),
     )
 
 
@@ -103,5 +104,5 @@ async def test_has_topology_resonance_accepts_semantically_similar_questions() -
         left_graph.nodes[0],
         right_graph.nodes[0],
         embedding_client=_FakeEmbeddingClient(),
-        rq_threshold=0.75,
+        settings=get_settings(),
     )

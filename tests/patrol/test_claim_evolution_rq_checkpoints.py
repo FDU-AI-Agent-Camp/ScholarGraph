@@ -14,6 +14,7 @@ from backend.schemas.paradigm import Paradigm
 from backend.schemas.patrol import ClaimEvolutionPoint, PatrolInsightStatus
 from tests.fixtures.patrol_golden_set import load_patrol_golden_set
 from tests.helpers.patrol_graphs import build_stem_graph_with_question_claim
+from tests.patrol.conftest import patch_patrol_settings
 
 _CHECKPOINT_COARSE_THRESHOLD = 0.42
 _CHECKPOINT_RERANK_THRESHOLD = 0.60
@@ -54,10 +55,12 @@ class _FixedScoreRerankerClient:
 
 @pytest.fixture
 def checkpoint_rq_gate_settings(monkeypatch: pytest.MonkeyPatch) -> None:
-    settings = get_settings()
-    monkeypatch.setattr(settings, "reranker_enabled", True)
-    monkeypatch.setattr(settings, "patrol_claim_rq_coarse_threshold", _CHECKPOINT_COARSE_THRESHOLD)
-    monkeypatch.setattr(settings, "patrol_claim_rq_rerank_threshold", _CHECKPOINT_RERANK_THRESHOLD)
+    patch_patrol_settings(
+        monkeypatch,
+        reranker_enabled=True,
+        patrol_claim_rq_coarse_threshold=_CHECKPOINT_COARSE_THRESHOLD,
+        patrol_claim_rq_rerank_threshold=_CHECKPOINT_RERANK_THRESHOLD,
+    )
 
 
 @pytest.mark.asyncio

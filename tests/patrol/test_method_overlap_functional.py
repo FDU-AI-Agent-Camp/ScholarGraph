@@ -29,6 +29,7 @@ from tests.helpers.patrol_graphs import (
     build_pca_mnist_synonym_golden_corpus,
     build_stem_graph_with_method_dataset_rq,
 )
+from tests.patrol.conftest import patch_patrol_settings
 
 _METHOD_OVERLAP_LOGGER = "backend.patrol.method_overlap"
 _GOLDEN_PAIR_LABEL = "PCA <-> Principal Component Analysis"
@@ -88,10 +89,6 @@ async def test_functional_topology_resonance_pca_synonym_golden_corpus_end_to_en
     assert normalize_label(left_methods[0].label) != normalize_label(right_methods[0].label)
 
     embedding_client = _GoldenPcaEmbeddingClient()
-    rq_threshold = settings.patrol_claim_rq_threshold_effective(
-        left_methods[0].label,
-        right_methods[0].label,
-    )
 
     # Production topology filter: shared MNIST dataset neighbor must resonate.
     assert await has_topology_resonance(
@@ -100,7 +97,7 @@ async def test_functional_topology_resonance_pca_synonym_golden_corpus_end_to_en
         left_methods[0],
         right_methods[0],
         embedding_client=embedding_client,
-        rq_threshold=rq_threshold,
+        settings=settings,
     )
 
     # Production semantic finder: embedding pre-screen + topology gate.
@@ -112,7 +109,7 @@ async def test_functional_topology_resonance_pca_synonym_golden_corpus_end_to_en
         embedding_client,
         settings.patrol_semantic_threshold,
         settings.patrol_max_matrix_size,
-        rq_threshold=rq_threshold,
+        settings=settings,
     )
     assert semantic_anchor is not None
     assert semantic_anchor.match_type == "semantic"
@@ -234,9 +231,8 @@ async def test_boundary_semantic_path_disabled_short_circuits_without_embedding(
     caplog: pytest.LogCaptureFixture,
 ) -> None:
     """软通路硬熔断：ENABLE_PATROL_SEMANTIC_PATH=false 时短路，绝不调用 EmbeddingClient。"""
+    patch_patrol_settings(monkeypatch, enable_patrol_semantic_path=False, patrol_semantic_threshold=0.75)
     settings = get_settings()
-    monkeypatch.setattr(settings, "enable_patrol_semantic_path", False)
-    monkeypatch.setattr(settings, "patrol_semantic_threshold", 0.75)
 
     graphs = {
         "stem-soft-a": build_stem_graph_with_method_dataset_rq(
@@ -344,9 +340,8 @@ async def test_boundary_topology_veto_rejects_nb_lr_high_embedding_noise(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """经典误配清洗：embedding≈0.90 通过初筛，但 Dataset_X/Y 拓扑交集为 0 → 一票否决。"""
+    patch_patrol_settings(monkeypatch, enable_patrol_semantic_path=True, patrol_semantic_threshold=0.88)
     settings = get_settings()
-    monkeypatch.setattr(settings, "enable_patrol_semantic_path", True)
-    monkeypatch.setattr(settings, "patrol_semantic_threshold", 0.88)
 
     graphs, paper_ids = _build_nb_lr_noise_live_graphs()
     left_id, right_id = paper_ids
@@ -375,17 +370,13 @@ async def test_boundary_topology_veto_rejects_nb_lr_high_embedding_noise(
     assert right_datasets == {"Dataset_Y"}
     assert normalize_label("Dataset_X") not in {normalize_label(label) for label in right_datasets}
 
-    rq_threshold = settings.patrol_claim_rq_threshold_effective(
-        left_methods[0].label,
-        right_methods[0].label,
-    )
     assert not await has_topology_resonance(
         left_graph,
         right_graph,
         left_methods[0],
         right_methods[0],
         embedding_client=embedding_client,
-        rq_threshold=rq_threshold,
+        settings=settings,
     )
 
     semantic_anchor = await find_semantic_method_overlap(
@@ -396,7 +387,7 @@ async def test_boundary_topology_veto_rejects_nb_lr_high_embedding_noise(
         embedding_client,
         settings.patrol_semantic_threshold,
         settings.patrol_max_matrix_size,
-        rq_threshold=rq_threshold,
+        settings=settings,
     )
     assert semantic_anchor is None
 
@@ -506,9 +497,7 @@ async def test_boundary_paradigm_gate_blocks_hss_before_topology_or_embedding(
     caplog: pytest.LogCaptureFixture,
 ) -> None:
     """范式门禁红灯：两篇 HSS 塞入相同 Method 标签，入口即拦截，不进入拓扑/向量计算。"""
-    settings = get_settings()
-    monkeypatch.setattr(settings, "enable_patrol_semantic_path", True)
-    monkeypatch.setattr(settings, "patrol_semantic_threshold", 0.88)
+    patch_patrol_settings(monkeypatch, enable_patrol_semantic_path=True, patrol_semantic_threshold=0.88)
 
     graphs, paper_ids = _build_hss_shared_soft_path_graphs()
     left_id, right_id = paper_ids
