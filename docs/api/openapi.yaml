@@ -630,30 +630,57 @@ components:
 
     MethodOverlapPoint:
       type: object
-      required: [mode, method, paper_a_usage, paper_b_usage]
+      required: [mode, overlap_type, overlap_label, paper_a_usage, paper_b_usage]
       properties:
         mode:
           type: string
           enum: [method_overlap]
+        overlap_type:
+          type: string
+          enum: [method, dataset, mixed]
+          description: Whether the point compares methods or datasets. Dual overlap emits two points (method + dataset); mixed is deprecated.
+        overlap_label:
+          type: string
+          description: The representative label of the overlapping item (method or dataset name).
+        overlap_score:
+          type: number
+          nullable: true
+          minimum: 0.0
+          maximum: 1.0
+          description: Significance score of the overlap. 1.0 for literal label match; 0.0-1.0 for semantic soft match.
+        match_type:
+          type: string
+          nullable: true
+          enum: [literal, semantic]
+          description: How the overlap was determined.
+        node_refs:
+          type: array
+          items:
+            $ref: "#/components/schemas/NodeRef"
+          description: Graph nodes anchored by this point; supports many-to-many literal overlaps.
         method:
           type: string
-          description: The overlapping method or dataset label.
+          description: Backwards-compatible alias for overlap_label.
         paper_a_usage:
           type: string
-          description: How paper A uses the overlapping method. MVP fallback is '用于 {method}' until LLM extraction is wired.
+          description: How paper A uses the overlapping item.
         paper_b_usage:
           type: string
-          description: How paper B uses the overlapping method. MVP fallback is '用于 {method}' until LLM extraction is wired.
+          description: How paper B uses the overlapping item.
         dataset_a:
           type: string
           nullable: true
         dataset_b:
           type: string
           nullable: true
+        evidence_summary:
+          type: string
+          nullable: true
+          description: Evidence-chain summary; may be null when the LLM does not produce one.
 
     ClaimEvolutionPoint:
       type: object
-      required: [mode, research_question, paper_a_claim, paper_b_claim, evidence_summary]
+      required: [mode, research_question]
       properties:
         mode:
           type: string
@@ -662,10 +689,27 @@ components:
           type: string
         paper_a_claim:
           type: string
+          nullable: true
+          description: Paper A's core claim; may be backfilled from VectorStore chunks when no Claim node exists.
         paper_b_claim:
           type: string
+          nullable: true
+          description: Paper B's core claim; may be backfilled from VectorStore chunks when no Claim node exists.
+        evolution_type:
+          type: string
+          nullable: true
+          enum: [inherit, contradict, refined]
+          description: Relationship between the two claims.
+        problem_fit_score:
+          type: integer
+          nullable: true
+          minimum: 0
+          maximum: 100
+          description: Research-question fit score; higher means the two papers address more similar problems.
         evidence_summary:
           type: string
+          nullable: true
+          description: Evidence-chain summary; may be null when the LLM does not produce one.
 
     PatrolRequest:
       type: object
@@ -732,6 +776,10 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/PatrolPoint"
+        meta:
+          type: object
+          additionalProperties: true
+          description: Machine-readable metadata about insight generation (e.g. RAG degradation flags).
 
     PatrolResponse:
       type: object

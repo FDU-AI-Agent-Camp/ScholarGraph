@@ -22,7 +22,8 @@ def test_all_four_point_types_serialize() -> None:
         LensClashPoint(mode="lens_clash", lens_a="LA", lens_b="LB", clash_aspect="ontology"),
         MethodOverlapPoint(
             mode="method_overlap",
-            method="PCA",
+            overlap_type="method",
+            overlap_label="PCA",
             paper_a_usage="降维",
             paper_b_usage="特征选择",
             dataset_a="MNIST",
@@ -47,6 +48,8 @@ def test_all_four_point_types_serialize() -> None:
         payload = insight.model_dump(mode="json")
         restored = PatrolInsight.model_validate(payload)
         assert restored.structured_points[0] == point
+        if isinstance(point, MethodOverlapPoint):
+            assert payload["structured_points"][0]["method"] == point.overlap_label
 
 
 def test_discriminator_rejects_unknown_mode() -> None:
@@ -92,7 +95,8 @@ def test_patrol_report_with_structured_points_round_trip() -> None:
                 structured_points=[
                     MethodOverlapPoint(
                         mode="method_overlap",
-                        method="PCA",
+                        overlap_type="method",
+                        overlap_label="PCA",
                         paper_a_usage="降维",
                         paper_b_usage="特征选择",
                     )

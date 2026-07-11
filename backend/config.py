@@ -7,6 +7,8 @@ from typing import Literal
 from pydantic import AliasChoices, Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+from backend.config_patrol import PatrolSettingsMixin
+
 # Different embedding models train with different vector-space densities.
 # Hard-coding a single threshold would break when switching models, so we keep
 # per-model defaults and allow explicit env overrides.
@@ -57,7 +59,7 @@ def _clustering_category(node_type: str) -> str:
     return category_map.get(node_type, "Concept")
 
 
-class Settings(BaseSettings):
+class Settings(PatrolSettingsMixin, BaseSettings):
     """Runtime configuration; values come from `.env` at repository root."""
 
     model_config = SettingsConfigDict(

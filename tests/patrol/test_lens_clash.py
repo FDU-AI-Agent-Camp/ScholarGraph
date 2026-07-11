@@ -59,6 +59,9 @@ async def test_build_lens_clash_insight_same_lens_summary() -> None:
     insight = await build_lens_clash_insight(graphs, ["hss-001", "hss-002"])
     assert insight is not None
     assert "未检出显著学派冲突" in insight.summary
+    point = insight.structured_points[0]
+    assert isinstance(point, LensClashPoint)
+    assert point.clash_aspect == "none"
 
 
 async def test_build_lens_clash_insight_uses_first_lens_when_multiple() -> None:

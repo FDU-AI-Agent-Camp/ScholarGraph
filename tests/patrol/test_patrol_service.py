@@ -45,7 +45,8 @@ async def test_patrol_service_returns_delegated_report() -> None:
         ["hss-001", "hss-002"],
         PatrolMode.LENS_CLASH,
         store=None,
-        vector_store=service._vector_store,
+        vector_store=None,
+        embedding_client=None,
     )
 
 
@@ -77,7 +78,12 @@ async def test_patrol_service_maps_method_overlap_insufficient_data_to_api_error
 
 
 async def test_patrol_service_delegates_method_overlap_with_vector_store() -> None:
-    service = PatrolService()
+    mock_vector_store = AsyncMock()
+    mock_embedding_client = AsyncMock()
+    service = PatrolService(
+        vector_store=mock_vector_store,
+        embedding_client=mock_embedding_client,
+    )
     expected = PatrolReport(
         mode=PatrolMode.METHOD_OVERLAP,
         paper_ids=["stem-001", "stem-002"],
@@ -92,7 +98,8 @@ async def test_patrol_service_delegates_method_overlap_with_vector_store() -> No
         ["stem-001", "stem-002"],
         PatrolMode.METHOD_OVERLAP,
         store=None,
-        vector_store=service._vector_store,
+        vector_store=mock_vector_store,
+        embedding_client=mock_embedding_client,
     )
 
 
@@ -113,7 +120,12 @@ async def test_patrol_service_maps_claim_evolution_insufficient_data_to_api_erro
 
 
 async def test_patrol_service_delegates_claim_evolution_with_vector_store() -> None:
-    service = PatrolService()
+    mock_vector_store = AsyncMock()
+    mock_embedding_client = AsyncMock()
+    service = PatrolService(
+        vector_store=mock_vector_store,
+        embedding_client=mock_embedding_client,
+    )
     expected = PatrolReport(
         mode=PatrolMode.CLAIM_EVOLUTION,
         paper_ids=["stem-001", "stem-002"],
@@ -128,5 +140,35 @@ async def test_patrol_service_delegates_claim_evolution_with_vector_store() -> N
         ["stem-001", "stem-002"],
         PatrolMode.CLAIM_EVOLUTION,
         store=None,
-        vector_store=service._vector_store,
+        vector_store=mock_vector_store,
+        embedding_client=mock_embedding_client,
     )
+
+
+async def test_patrol_service_lazy_loads_vector_store_only_for_rag_modes(monkeypatch) -> None:
+    created: list[str] = []
+
+    class _TrackingVectorStore:
+        def __init__(self, **_kwargs) -> None:
+            created.append("vector_store")
+
+    monkeypatch.setattr("backend.rag.vector_store.VectorStore", _TrackingVectorStore)
+    monkeypatch.setattr(
+        "backend.services.patrol_service.get_embedding_client",
+        lambda: AsyncMock(),
+    )
+
+    service = PatrolService()
+    with patch("backend.services.patrol_service.patrol_run", new_callable=AsyncMock) as run:
+        run.return_value = PatrolReport(
+            mode=PatrolMode.LENS_CLASH,
+            paper_ids=["hss-001", "hss-002"],
+            insights=[],
+            generated_at=datetime(2026, 5, 19, 11, 0, tzinfo=UTC),
+        )
+        await service.run_patrol(["hss-001", "hss-002"], PatrolMode.LENS_CLASH)
+
+    assert created == []
+    run.assert_awaited_once()
+    assert run.call_args.kwargs["vector_store"] is None
+    assert run.call_args.kwargs["embedding_client"] is None

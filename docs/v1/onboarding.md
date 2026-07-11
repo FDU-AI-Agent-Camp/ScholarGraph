@@ -87,6 +87,17 @@ uv run python scripts/probe_e10_live_exceptions.py
 
 日常开发优先跑默认 pytest（Mock LLM，不耗额度）。
 
+**Patrol `claim_evolution` 与 Reranker（live / 演示必读）**：
+
+| 变量 | 演示推荐 | 说明 |
+|------|----------|------|
+| `RERANKER_ENABLED` | `true` | `false` 时 claim_evolution **不走**粗筛 0.42 + 精排漏斗，回退严格双塔（中文 0.75 / 英文 0.55），易出现 `INSUFFICIENT_DATA` |
+| `RERANKER_MODEL` | 必填 | 如 `bge-reranker-v2-m3`；空则精排无法调用 |
+| `PATROL_CLAIM_RQ_COARSE_THRESHOLD` | `0.42`（默认） | 漏斗阶段 1，仅 `RERANKER_ENABLED=true` 时生效 |
+| `PATROL_RERANK_THRESHOLD` | `0.60`（默认） | 漏斗阶段 2 硬卡点 |
+
+启动后查看 `GET /api/v1/health` 的 `patrol_claim_rq_funnel_enabled` / `patrol_note`；live 模式配置不当时日志会输出 `patrol_config:` 警告。
+
 ### 后端同学禁止
 
 - 在仓库外全局 `pip install` 替代 `uv sync`

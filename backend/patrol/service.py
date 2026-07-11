@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING
 
 from backend.graph.store import GraphStore
 from backend.llm.client import LlmClient
+from backend.llm.embeddings import EmbeddingClient
 from backend.patrol.claim_evolution import build_claim_evolution_insight
 from backend.patrol.contradiction import build_contradiction_insight
 from backend.patrol.errors import PatrolError
@@ -30,6 +31,7 @@ async def run_patrol(
     store: GraphStore | None = None,
     graph_loader: GraphLoader | None = None,
     vector_store: VectorStore | None = None,
+    embedding_client: EmbeddingClient | None = None,
     llm_client: LlmClient | None = None,
 ) -> PatrolReport:
     """Run community patrol for exactly two papers."""
@@ -53,7 +55,12 @@ async def run_patrol(
             )
         insights = [insight]
     elif mode == PatrolMode.CONTRADICTION:
-        insight = await build_contradiction_insight(graphs, paper_ids, llm_client=llm_client)
+        insight = await build_contradiction_insight(
+            graphs,
+            paper_ids,
+            vector_store=vector_store,
+            llm_client=llm_client,
+        )
         if insight is None:
             raise PatrolError(
                 "PATROL_INSUFFICIENT_DATA",
@@ -66,6 +73,7 @@ async def run_patrol(
             graphs,
             paper_ids,
             vector_store=vector_store,
+            embedding_client=embedding_client,
             llm_client=llm_client,
         )
         if insight is None:
@@ -80,6 +88,7 @@ async def run_patrol(
             graphs,
             paper_ids,
             vector_store=vector_store,
+            embedding_client=embedding_client,
             llm_client=llm_client,
         )
         if insight is None:

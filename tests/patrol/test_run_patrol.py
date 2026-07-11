@@ -246,6 +246,44 @@ async def test_run_patrol_gracefully_degrades_without_vector_store(tmp_path: Pat
     assert len(report.insights) == 1
 
 
+async def test_run_patrol_contradiction_uses_vector_store() -> None:
+    """Orchestration must pass vector_store into build_contradiction_insight."""
+    from unittest.mock import AsyncMock
+
+    from tests.helpers.patrol_graphs import build_hss_graph_with_thesis
+
+    graphs = {
+        "hss-001": build_hss_graph_with_thesis(
+            "hss-001",
+            thesis_id="n_a",
+            thesis_label="论点 A",
+            sub_arguments=[("n_sub_a", "分论点 A")],
+        ),
+        "hss-002": build_hss_graph_with_thesis(
+            "hss-002",
+            thesis_id="n_b",
+            thesis_label="论点 B",
+            sub_arguments=[("n_sub_b", "分论点 B")],
+        ),
+    }
+    vector_store = AsyncMock()
+    vector_store.query_chunks.return_value = []
+    vector_store.exists.return_value = True
+    report = await run_patrol(
+        ["hss-001", "hss-002"],
+        PatrolMode.CONTRADICTION,
+        graph_loader=graphs.get,
+        vector_store=vector_store,
+    )
+    assert report.mode == PatrolMode.CONTRADICTION
+    assert len(report.insights) == 1
+    # vector_store should be queried for RAG context enrichment using the thesis label.
+    vector_store.query_chunks.assert_any_await("论点 A 引言 结论 核心论点 论证", paper_id="hss-001", top_k=3)
+    vector_store.query_chunks.assert_any_await("论点 B 引言 结论 核心论点 论证", paper_id="hss-002", top_k=3)
+    # No degradation flag because exists() returned True.
+    assert "patrol_rag_context_degraded" not in report.insights[0].meta
+
+
 async def test_run_patrol_contradiction_success() -> None:
     from tests.helpers.patrol_graphs import build_hss_graph_with_thesis
 

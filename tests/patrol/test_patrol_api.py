@@ -1,6 +1,7 @@
 """HTTP integration tests for POST /api/v1/patrol."""
 
 import pytest
+from backend.schemas.patrol_llm import ClaimEvolutionOutput, MethodOverlapOutput
 from httpx import AsyncClient
 from tests.helpers.patrol_graphs import (
     build_hss_graph_without_lens,
@@ -228,6 +229,151 @@ async def test_api_patrol_rejects_unsupported_mode_before_graph_load(
         json={"paper_ids": ["hss-001", "hss-002"], "mode": "unsupported_mode"},
     )
     assert response.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_api_method_overlap_e2e_contract(
+    api_client: AsyncClient,
+    patrol_graph_dir,
+    monkeypatch,
+) -> None:
+    """E2E contract test: method_overlap returns LLM-aligned structured points without placeholders."""
+    from backend.graph.store import GraphStore
+    from tests.helpers.patrol_graphs import build_stem_graph_with_method_dataset
+
+    llm_output = {
+        "summary": "两篇论文均使用 PCA 对图像特征进行降维处理。",
+        "comparison_details": [
+            {
+                "method_pair_name": "PCA <-> PCA",
+                "paper_a_usage": "论文 A 在 MNIST 上使用 PCA 保留 95% 方差进行降维。",
+                "paper_b_usage": "论文 B 在 CIFAR-10 上使用 PCA 保留 90% 方差进行降维。",
+                "evidence_summary": "两者都利用 PCA 降低输入维度，但论文 B 的数据集更复杂。",
+            },
+        ],
+    }
+
+    async def _mock_method_overlap_summary(context: str, *, llm_client=None) -> MethodOverlapOutput:
+        return MethodOverlapOutput.model_validate(llm_output)
+
+    monkeypatch.setattr(
+        "backend.patrol.method_overlap.generate_method_overlap_summary",
+        _mock_method_overlap_summary,
+    )
+
+    store = GraphStore(base_dir=patrol_graph_dir)
+    store.save(
+        build_stem_graph_with_method_dataset(
+            "stem-001",
+            method_label="PCA",
+            dataset_label="MNIST",
+        ),
+    )
+    store.save(
+        build_stem_graph_with_method_dataset(
+            "stem-002",
+            method_label="PCA",
+            dataset_label="CIFAR-10",
+        ),
+    )
+
+    response = await api_client.post(
+        "/api/v1/patrol",
+        json={"paper_ids": ["stem-001", "stem-002"], "mode": "method_overlap"},
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert_api_envelope(body)
+    data = body["data"]
+    assert data["mode"] == "method_overlap"
+    assert len(data["insights"]) == 1
+    insight = data["insights"][0]
+    assert insight["insight_id"] == "ins-method-overlap-001"
+    assert insight["status"] == "ready"
+    assert insight["summary"] == llm_output["summary"]
+
+    points = insight["structured_points"]
+    assert len(points) == 1
+    point = points[0]
+    assert point["mode"] == "method_overlap"
+    assert point["overlap_type"] == "method"
+    assert point["overlap_label"] == "PCA"
+    assert point["method"] == "PCA"  # backwards-compatible alias
+    assert point["overlap_score"] == 1.0
+    assert point["match_type"] == "literal"
+    assert point["paper_a_usage"] == llm_output["comparison_details"][0]["paper_a_usage"]
+    assert point["paper_b_usage"] == llm_output["comparison_details"][0]["paper_b_usage"]
+    assert point["evidence_summary"] == llm_output["comparison_details"][0]["evidence_summary"]
+    assert "用于" not in point["paper_a_usage"]
+    assert "用于" not in point["paper_b_usage"]
+    assert "placeholder" not in (point["paper_a_usage"] + point["paper_b_usage"]).lower()
+
+
+@pytest.mark.asyncio
+async def test_api_claim_evolution_e2e_contract(
+    api_client: AsyncClient,
+    patrol_graph_dir,
+    monkeypatch,
+) -> None:
+    """E2E contract test: claim_evolution returns strong-typed evolution_type without placeholders."""
+    from backend.graph.store import GraphStore
+    from tests.helpers.patrol_graphs import build_stem_graph_with_question_claim
+
+    llm_output = {
+        "evolution_type": "contradict",
+        "problem_fit_score": 88,
+        "comparison_summary": "两篇论文对 PCA 效果的结论存在分歧。",
+        "evidence_summary": "论文 A 认为准确率提升，论文 B 认为无显著变化。",
+    }
+
+    async def _mock_claim_evolution_summary(context: str, *, llm_client=None) -> ClaimEvolutionOutput:
+        return ClaimEvolutionOutput.model_validate(llm_output)
+
+    monkeypatch.setattr(
+        "backend.patrol.claim_evolution.generate_claim_evolution_summary",
+        _mock_claim_evolution_summary,
+    )
+
+    store = GraphStore(base_dir=patrol_graph_dir)
+    store.save(
+        build_stem_graph_with_question_claim(
+            "stem-001",
+            question_label="PCA 是否提升分类准确率？",
+            claim_label="准确率提升 5%",
+        ),
+    )
+    store.save(
+        build_stem_graph_with_question_claim(
+            "stem-002",
+            question_label="PCA 是否提升分类准确率？",
+            claim_label="准确率无显著变化",
+        ),
+    )
+
+    response = await api_client.post(
+        "/api/v1/patrol",
+        json={"paper_ids": ["stem-001", "stem-002"], "mode": "claim_evolution"},
+    )
+    assert response.status_code == 200
+    body = response.json()
+    assert_api_envelope(body)
+    data = body["data"]
+    assert data["mode"] == "claim_evolution"
+    insight = data["insights"][0]
+    assert insight["insight_id"] == "ins-claim-evolution-001"
+    assert insight["status"] == "ready"
+    assert insight["summary"] == llm_output["comparison_summary"]
+
+    points = insight["structured_points"]
+    assert len(points) == 1
+    point = points[0]
+    assert point["mode"] == "claim_evolution"
+    assert point["evolution_type"] == "contradict"
+    assert point["problem_fit_score"] == 88
+    assert point["paper_a_claim"] == "准确率提升 5%"
+    assert point["paper_b_claim"] == "准确率无显著变化"
+    assert point["evidence_summary"] == llm_output["evidence_summary"]
+    assert "未检出明确结论" not in (point["evidence_summary"] or "")
 
 
 @pytest.mark.asyncio
