@@ -91,14 +91,90 @@ def dispatch_citation(
     )
 
 
+_CONTEXT_TRUNCATED_SUFFIX = "…（检索上下文已截断，请优先依据上文与图谱节点作答）"
+_EMPTY_ENTITIES_PLACEHOLDER = "（暂无向量召回实体，请依据上方图谱节点作答）"
+_EMPTY_RELATIONS_PLACEHOLDER = "（暂无向量召回关系）"
+_EMPTY_CHUNKS_PLACEHOLDER = (
+    "（暂无原文片段 — 论文向量索引尚未就绪或无匹配结果，请依据图谱节点与关系作答）"
+)
+
+
+def _context_sections_total_len(entities_desc: str, relations_desc: str, chunks_desc: str) -> int:
+    return len(entities_desc) + len(relations_desc) + len(chunks_desc)
+
+
+def _trim_section_tail(section: str, *, excess: int) -> str:
+    if excess <= 0 or not section:
+        return section
+    lines = section.split("\n")
+    if len(lines) > 1:
+        return "\n".join(lines[:-1])
+    return section[: max(0, len(section) - excess)]
+
+
+def _apply_context_char_budget(
+    entities_desc: str,
+    relations_desc: str,
+    chunks_desc: str,
+    max_total_chars: int,
+) -> tuple[str, str, str]:
+    """Trim retrieval prompt sections when their combined length exceeds the budget."""
+    if _context_sections_total_len(entities_desc, relations_desc, chunks_desc) <= max_total_chars:
+        return entities_desc, relations_desc, chunks_desc
+
+    marker = _CONTEXT_TRUNCATED_SUFFIX
+    budget = max(max_total_chars - len(marker), 0)
+
+    while _context_sections_total_len(entities_desc, relations_desc, chunks_desc) > budget:
+        excess = _context_sections_total_len(entities_desc, relations_desc, chunks_desc) - budget
+        if chunks_desc:
+            chunks_desc = _trim_section_tail(chunks_desc, excess=excess)
+            continue
+        if relations_desc:
+            relations_desc = _trim_section_tail(relations_desc, excess=excess)
+            continue
+        if entities_desc:
+            entities_desc = _trim_section_tail(entities_desc, excess=excess)
+            continue
+        break
+
+    if chunks_desc:
+        chunks_desc = chunks_desc.rstrip() + marker
+    elif relations_desc:
+        relations_desc = relations_desc.rstrip() + marker
+    elif entities_desc:
+        entities_desc = entities_desc.rstrip() + marker
+
+    while _context_sections_total_len(entities_desc, relations_desc, chunks_desc) > max_total_chars:
+        excess = _context_sections_total_len(entities_desc, relations_desc, chunks_desc) - max_total_chars
+        if chunks_desc:
+            chunks_desc = chunks_desc[: max(0, len(chunks_desc) - excess)]
+            continue
+        if relations_desc:
+            relations_desc = relations_desc[: max(0, len(relations_desc) - excess)]
+            continue
+        if entities_desc:
+            entities_desc = entities_desc[: max(0, len(entities_desc) - excess)]
+            continue
+        break
+
+    return entities_desc, relations_desc, chunks_desc
+
+
 def format_retrieval_context(
     rc: RetrievalContext | None,
+    *,
+    max_total_chars: int | None = None,
 ) -> tuple[str, str, str]:
     """Format retrieval context into three prompt-section strings.
 
-    Returns ``(entities_desc, relations_desc, chunks_desc)``.  Each is an
-    empty string when the context is ``None`` or the corresponding collection
-    is empty.
+    Returns ``(entities_desc, relations_desc, chunks_desc)``.  When *rc* is
+    ``None`` (V1 graph-only mode), all three are empty strings.  When *rc* is
+    provided but collections are empty — e.g. vector index not ready — human-
+    readable placeholders guide the LLM to rely on graph nodes.
+
+    When *max_total_chars* is set, sections are trimmed in priority order:
+    chunks first, then relations, then entities.
     """
     if rc is None:
         return ("", "", "")
@@ -107,11 +183,15 @@ def format_retrieval_context(
     if rc.entities:
         lines = [f"- [{e.entity_id}] {e.label} ({e.node_type})" for e in rc.entities]
         entities_desc = "\n".join(lines)
+    else:
+        entities_desc = _EMPTY_ENTITIES_PLACEHOLDER
 
     relations_desc = ""
     if rc.relations:
         lines = [f"- [{r.relation_id}] {r.text[:200]}" for r in rc.relations]
         relations_desc = "\n".join(lines)
+    else:
+        relations_desc = _EMPTY_RELATIONS_PLACEHOLDER
 
     chunks_desc = ""
     if rc.chunks:
@@ -122,5 +202,15 @@ def format_retrieval_context(
                 page_info = f" [page {c.page_start}]"
             lines.append(f"- [{c.chunk_id}]{page_info} {c.text[:300]}")
         chunks_desc = "\n".join(lines)
+    else:
+        chunks_desc = _EMPTY_CHUNKS_PLACEHOLDER
+
+    if max_total_chars is not None:
+        entities_desc, relations_desc, chunks_desc = _apply_context_char_budget(
+            entities_desc,
+            relations_desc,
+            chunks_desc,
+            max_total_chars,
+        )
 
     return (entities_desc, relations_desc, chunks_desc)

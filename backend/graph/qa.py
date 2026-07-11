@@ -393,7 +393,15 @@ class _GraphQaEngine:
             edges_desc = "（无匹配关系）"
 
         # Build extra sections from RetrievalContext (V2 Phase 2).
-        entities_desc, relations_desc, chunks_desc = format_retrieval_context(retrieval_context)
+        from backend.config import get_settings
+
+        max_context_chars = (
+            get_settings().qa_retrieval_context_max_chars if retrieval_context is not None else None
+        )
+        entities_desc, relations_desc, chunks_desc = format_retrieval_context(
+            retrieval_context,
+            max_total_chars=max_context_chars,
+        )
 
         prompt = template.format(
             paradigm=graph.paradigm.value,
