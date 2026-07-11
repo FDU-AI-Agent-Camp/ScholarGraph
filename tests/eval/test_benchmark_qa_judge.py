@@ -15,7 +15,10 @@ from backend.rag.models import QAJudgeResult
 from backend.rag.qa_heuristics import run_heuristic_guardrails
 from backend.rag.qa_judge import (
     build_dual_track_evaluation,
+    compute_mean_hallucination_rate,
+    compute_question_hallucination_rate,
     format_judge_user_content,
+    hallucination_ci_pass,
     invoke_qa_judge,
 )
 from tests.conftest import REPO_ROOT
@@ -53,6 +56,20 @@ def test_qa_judge_result_schema_validation() -> None:
     )
     assert result.factual_consistency == 0.9
     assert result.hallucination_detected is False
+
+
+def test_hallucination_matrix_or_logic() -> None:
+    assert compute_question_hallucination_rate(heuristic_forbidden_hit=False, llm_judge_detected=False) == 0.0
+    assert compute_question_hallucination_rate(heuristic_forbidden_hit=True, llm_judge_detected=False) == 1.0
+    assert compute_question_hallucination_rate(heuristic_forbidden_hit=False, llm_judge_detected=True) == 1.0
+    assert compute_question_hallucination_rate(heuristic_forbidden_hit=True, llm_judge_detected=True) == 1.0
+
+
+def test_mean_hallucination_rate_ci_gate_requires_strict_zero() -> None:
+    assert compute_mean_hallucination_rate([0.0, 0.0, 0.0]) == 0.0
+    assert hallucination_ci_pass(0.0) is True
+    assert compute_mean_hallucination_rate([0.0, 1.0, 0.0]) == pytest.approx(1 / 3)
+    assert hallucination_ci_pass(1 / 3) is False
 
 
 def test_format_judge_user_content_includes_gold_payload() -> None:
@@ -246,4 +263,6 @@ async def test_benchmark_full_eval_mock_repeatable(benchmark_qa_module, tmp_path
     report = json.loads((tmp_path / "report.json").read_text(encoding="utf-8"))
     assert report["total_questions"] == 1
     assert report["results"][0]["evaluation"]["judge"]["reasoning"]
+    assert report["summary"]["mean_hallucination_rate"] == 0.0
+    assert report["summary"]["hallucination_pass"] is True
     assert "mean_semantic_alignment" in report["summary"]

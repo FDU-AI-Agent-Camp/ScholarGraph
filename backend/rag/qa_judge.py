@@ -15,6 +15,33 @@ from backend.rag.qa_heuristics import HeuristicGuardrailResult
 
 logger = logging.getLogger(__name__)
 
+HALLUCINATION_RATE_CLEAR = 0.0
+HALLUCINATION_RATE_TRIGGERED = 1.0
+
+
+def compute_question_hallucination_rate(
+    *,
+    heuristic_forbidden_hit: bool,
+    llm_judge_detected: bool,
+) -> float:
+    """Dual-track OR matrix: Final = ForbiddenHit ∨ JudgeDetected → 0% or 100%."""
+    if heuristic_forbidden_hit or llm_judge_detected:
+        return HALLUCINATION_RATE_TRIGGERED
+    return HALLUCINATION_RATE_CLEAR
+
+
+def compute_mean_hallucination_rate(per_question_rates: list[float]) -> float:
+    """Arithmetic mean of per-question hallucination rates over the golden set."""
+    if not per_question_rates:
+        return HALLUCINATION_RATE_CLEAR
+    return sum(per_question_rates) / len(per_question_rates)
+
+
+def hallucination_ci_pass(mean_rate: float) -> bool:
+    """CI red-line: mean hallucination rate must be strictly 0%."""
+    return mean_rate == HALLUCINATION_RATE_CLEAR
+
+
 JUDGE_SYSTEM_PROMPT = """\
 你是学术 QA 质量评估专家（LLM-as-a-Judge）。请根据金标上下文、模型回答与引用，进行语义裁判。
 
@@ -67,8 +94,11 @@ def build_dual_track_evaluation(
     judge: QAJudgeResult,
 ) -> dict[str, Any]:
     """Merge Track A (heuristics) and Track B (LLM Judge) into one report block."""
-    hallucination_fused = guardrails.forbidden_tripped or judge.hallucination_detected
-    hallucination_rate = 1.0 if hallucination_fused else 0.0
+    hallucination_rate = compute_question_hallucination_rate(
+        heuristic_forbidden_hit=guardrails.forbidden_tripped,
+        llm_judge_detected=judge.hallucination_detected,
+    )
+    hallucination_fused = hallucination_rate == HALLUCINATION_RATE_TRIGGERED
     return {
         "faithfulness": {
             "hallucination_rate": hallucination_rate,
@@ -100,7 +130,10 @@ def build_evaluation_fallback(
     judge_error: str | None = None,
 ) -> dict[str, Any]:
     """Heuristic-only evaluation when Judge invocation fails."""
-    hallucination_rate = 1.0 if guardrails.forbidden_tripped else 0.0
+    hallucination_rate = compute_question_hallucination_rate(
+        heuristic_forbidden_hit=guardrails.forbidden_tripped,
+        llm_judge_detected=False,
+    )
     payload: dict[str, Any] = {
         "faithfulness": {
             "hallucination_rate": hallucination_rate,
@@ -118,7 +151,7 @@ def build_evaluation_fallback(
         "dual_track": {
             "heuristic_passed": guardrails.passed,
             "semantic_factual_consistency": None,
-            "hallucination_fused": guardrails.forbidden_tripped,
+            "hallucination_fused": hallucination_rate == HALLUCINATION_RATE_TRIGGERED,
             "forbidden_tripped": guardrails.forbidden_tripped,
             "judge_hallucination_detected": None,
         },

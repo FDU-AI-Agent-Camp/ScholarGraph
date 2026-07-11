@@ -48,6 +48,8 @@ from backend.rag.qa_heuristics import run_heuristic_guardrails
 from backend.rag.qa_judge import (
     build_dual_track_evaluation,
     build_evaluation_fallback,
+    compute_mean_hallucination_rate,
+    hallucination_ci_pass,
     invoke_qa_judge,
 )  # noqa: E402
 
@@ -394,6 +396,8 @@ async def run_benchmark(args: argparse.Namespace) -> int:
     floor = golden.get("allowed_recall_floor", 0.80)
     mean_recall = _compute_mean_recall(results)
     mean_semantic_alignment = _compute_mean_semantic_alignment(results)
+    per_question_hallucination = _collect_per_question_hallucination_rates(results)
+    mean_hallucination_rate = compute_mean_hallucination_rate(per_question_hallucination)
 
     report = EvaluationReport(
         generated_at=datetime.now(UTC).isoformat(),
@@ -408,6 +412,8 @@ async def run_benchmark(args: argparse.Namespace) -> int:
             "mean_semantic_alignment": round(mean_semantic_alignment, 2),
             "recall_floor": floor,
             "recall_pass": mean_recall >= floor,
+            "mean_hallucination_rate": round(mean_hallucination_rate, 4),
+            "hallucination_pass": hallucination_ci_pass(mean_hallucination_rate) if not args.dry_run else None,
             "qa_model": get_settings().qa_model_effective,
             "judge_model": get_settings().judge_model_effective if not args.dry_run else None,
             "clients_isolated": clients_isolated if not args.dry_run else None,
@@ -424,12 +430,26 @@ async def run_benchmark(args: argparse.Namespace) -> int:
 
     _log_evaluation(report)
 
-    if any(r.get("evaluation", {}).get("faithfulness", {}).get("hallucination_rate", 0) > 0 for r in results):
-        print("\n[FAIL] RED LINE: Hallucination detected — CI must block merge.")
+    if not args.dry_run and not hallucination_ci_pass(mean_hallucination_rate):
+        print(
+            f"\n[FAIL] RED LINE: mean hallucination_rate={mean_hallucination_rate:.0%} "
+            f"({sum(per_question_hallucination)}/{len(per_question_hallucination)} questions) — "
+            "CI requires strictly 0%.",
+        )
         return EXIT_RED_LINE
 
     print(f"\n[OK] Success: {success_count}/{len(items)}")
     return EXIT_SUCCESS
+
+
+def _collect_per_question_hallucination_rates(results: list[dict[str, Any]]) -> list[float]:
+    """Collect per-question hallucination_rate values for golden-set averaging."""
+    rates: list[float] = []
+    for result in results:
+        rate = result.get("evaluation", {}).get("faithfulness", {}).get("hallucination_rate")
+        if rate is not None:
+            rates.append(float(rate))
+    return rates
 
 
 def _compute_mean_recall(results: list[dict[str, Any]]) -> float:
