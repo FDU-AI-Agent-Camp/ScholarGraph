@@ -312,24 +312,29 @@ RAG_TOP_K_RELATIONS=5
 
 ### 4.1 尺度路由
 
-`backend/rag/qa_router.py`：
+`backend/rag/qa_router.py`（实现：`backend/llm/qa_scale.py`）：
 
 ```python
 class QuestionScale(StrEnum):
-    SKELETON = "skeleton"    # 摘要 / 整体结构
-    DETAIL = "detail"        # 方法 / 数据 / 实验数值
-    CROSS_PAPER = "cross"    # 多篇对比（未来）
+    SUMMARY = "summary"          # 摘要 / 整体结构
+    DETAIL = "detail"            # 方法 / 论证关系 / 结构细节
+    VERIFICATION = "verification"  # 证据 / 材料 / 实验与指标
 
 def detect_question_scale(question: str) -> QuestionScale: ...
 ```
+
+与 `data/qa_golden_set.json` 的 ``scale`` 字段及 ``RetrievalContext.scale`` 使用同一套取值。
+
+**遗留别名**（早期草案 ``skeleton`` / ``cross``）：``skeleton`` → ``summary``；``cross``（多篇对比）保留给 Patrol，**不是** ``QuestionScale`` 成员。
 
 判定规则（V1 硬规则，后续可升级 LLM）：
 
 | 关键词/模式 | 尺度 |
 |---|---|
-| "核心论点" / "做了什么" / "摘要" / "整体" / "主要结论" | SKELETON |
-| "方法" / "数据集" / "实验" / "指标" / "数值" / "具体" / "第几页" / "多少" | DETAIL |
-| "对比" / "矛盾" / "两篇" / "差异" | CROSS_PAPER（暂不支持，返回 400 或引导 Patrol） |
+| "核心论点" / "做了什么" / "摘要" / "整体" / "主要结论" | SUMMARY |
+| "方法" / "具体" / "关系" / "分论点" / "采用了" | DETAIL |
+| "材料" / "证据" / "实验" / "数据集" / "哪些节点" / "如何论证" | VERIFICATION |
+| "对比" / "矛盾" / "两篇" / "差异" | 多篇对比（Patrol，非 QuestionScale） |
 
 ### 4.2 Hybrid Retriever
 
@@ -380,8 +385,9 @@ class RetrievalContext(BaseModel):
 ```
 
 混合策略：
-- `SKELETON`：只用 A 尺度（图谱拓扑子图）。
+- `SUMMARY`：只用 A 尺度（图谱拓扑子图）。
 - `DETAIL`：统一向量召回 Entities + Relations + Chunks，再与 A 尺度子图合并去重。
+- `VERIFICATION`：偏重 B 尺度（实体 / 关系 / 原文 chunk）。
 
 检索流程：
 1. 根据 `query_transform`（如有）转换问题；否则使用原始问题。
