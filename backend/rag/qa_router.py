@@ -32,12 +32,15 @@ _CROSS_PAPER_KEYWORDS: tuple[str, ...] = (
     "多篇文章",
     "跨论文",
     "另一篇文章",
+    "上一篇",
+    "上一篇论文",
 )
 
 _CROSS_PAPER_CN_PATTERNS: tuple[re.Pattern[str], ...] = (
     re.compile(r"对比.*(另一|其他|两篇)"),
     re.compile(r"(矛盾|差异).*(两篇|论文)"),
-    re.compile(r"compare\s+(?:this|the|that)?\s*.*\s+to\b", re.IGNORECASE),
+    re.compile(r"与.*上一篇"),
+    re.compile(r"相比.*(上一|另一|其他)"),
 )
 
 _PAPER_ID_RE = re.compile(r"\b([a-z][a-z0-9]*-\d{3,})\b", re.IGNORECASE)
@@ -106,6 +109,8 @@ _SUMMARY_KEYWORDS: tuple[str, ...] = (
     "summarize",
     "summary of the main",
     "main contributions",
+    "methodology of this work",
+    "summarize the methodology",
     "做了什么",
     "研究什么",
     "核心问题",

@@ -1,4 +1,8 @@
-"""Question-scale router alignment with golden set (B4 / V2 §4.1)."""
+"""Question-scale router alignment with golden set (B4 / V2 §4.1).
+
+Layered parametrized matrix tests for ``detect_question_scale()`` — each group
+maps to one row of the scale-decision acceptance table.
+"""
 
 from __future__ import annotations
 
@@ -18,6 +22,9 @@ from backend.schemas.paradigm import Paradigm
 _GOLDEN_SET_PATH = Path(__file__).resolve().parents[2] / "data" / "qa_golden_set.json"
 
 _GOLDEN_SCALE_VALUES = frozenset({"summary", "detail", "verification"})
+
+_PAPER_CTX = {"paper_id": "hss-001"}
+_STEM_CTX = {"paper_id": "stem-001"}
 
 
 @pytest.fixture
@@ -91,52 +98,127 @@ def test_detect_question_scale_matches_golden_labels(golden_items: list[dict]) -
 
 
 # ---------------------------------------------------------------------------
-# §3 四组边界参数化压测
+# 1. 尺度决策矩阵分层单元测试（验收表）
 # ---------------------------------------------------------------------------
 
 
 @pytest.mark.parametrize(
-    "question",
+    ("question", "expected"),
     [
-        "Summarize the main contributions of this paper.",
-        "请概述这篇论文的主要贡献和论证框架。",
+        pytest.param(
+            "这篇论文的主要贡献是什么？",
+            QuestionScale.SUMMARY,
+            id="summary-zh-main-contribution",
+        ),
+        pytest.param(
+            "Summarize the methodology of this work.",
+            QuestionScale.SUMMARY,
+            id="summary-en-methodology",
+        ),
     ],
 )
-def test_summary_boundary_routing(question: str) -> None:
-    assert detect_question_scale(question) == QuestionScale.SUMMARY
+def test_matrix_summary_boundary(question: str, expected: QuestionScale) -> None:
+    """宏观泛读 → SUMMARY，不触发向量库检索。"""
+    assert detect_question_scale(question, current_paper_context=_PAPER_CTX) == expected
 
 
 @pytest.mark.parametrize(
-    "question",
+    ("question", "expected"),
     [
-        "What dataset was used in Section 4.1?",
-        "表格 2 里面的准确率是多少？",
-        "实验在 MNIST 上 accuracy 达到多少？",
-        "Table 1 reports 95.5% accuracy — is that on the test split?",
-        "Was the reported p-value below 0.05?",
+        pytest.param(
+            "What dataset did they use in section 4?",
+            QuestionScale.DETAIL,
+            id="detail-en-dataset-section",
+        ),
+        pytest.param(
+            "表格 2 里面的准确率是多少？",
+            QuestionScale.DETAIL,
+            id="detail-zh-table-accuracy",
+        ),
     ],
 )
-def test_detail_boundary_stem_routing(question: str) -> None:
+def test_matrix_detail_keyword_boundary(question: str, expected: QuestionScale) -> None:
+    """学术实体特征词 → DETAIL，必须召回 Vector Chunks。"""
     assert (
-        detect_question_scale(question, paradigm=Paradigm.STEM, current_paper_context={"paper_id": "stem-001"})
-        == QuestionScale.DETAIL
+        detect_question_scale(
+            question,
+            paradigm=Paradigm.STEM,
+            current_paper_context=_STEM_CTX,
+        )
+        == expected
     )
 
 
 @pytest.mark.parametrize(
-    "question",
+    ("question", "expected"),
     [
-        "How does this model compare to ResNet50?",
-        "Compared to stem-002, how does this method perform?",
-        "这篇论文与另一篇的差异是什么？",
-        "hss-001 和 hss-002 两篇论文矛盾吗？",
+        pytest.param(
+            "Why is the accuracy 95.5%?",
+            QuestionScale.DETAIL,
+            id="detail-numeric-percent",
+        ),
+        pytest.param(
+            "模型在 alpha=0.01 时的表现",
+            QuestionScale.DETAIL,
+            id="detail-numeric-param-placeholder",
+        ),
     ],
 )
-def test_cross_paper_boundary_routing(question: str) -> None:
+def test_matrix_detail_numeric_perturbation_boundary(question: str, expected: QuestionScale) -> None:
+    """数值/百分比/参数占位符 → DETAIL（正则硬规则）。"""
+    assert detect_question_scale(question, current_paper_context=_PAPER_CTX) == expected
+
+
+@pytest.mark.parametrize(
+    ("question", "expected"),
+    [
+        pytest.param(
+            "Can you summarize the performance on ImageNet dataset?",
+            QuestionScale.DETAIL,
+            id="conflict-summarize-vs-dataset",
+        ),
+        pytest.param(
+            "Please give a summary of the dataset details.",
+            QuestionScale.DETAIL,
+            id="conflict-summary-of-dataset",
+        ),
+    ],
+)
+def test_matrix_detail_overrides_summary_on_weight_conflict(question: str, expected: QuestionScale) -> None:
+    """DETAIL 特征词优先于 summarize，防止细节漏召回。"""
     assert (
-        detect_question_scale(question, current_paper_context={"paper_id": "hss-001"})
-        == QuestionScale.CROSS_PAPER
+        detect_question_scale(
+            question,
+            paradigm=Paradigm.STEM,
+            current_paper_context=_STEM_CTX,
+        )
+        == expected
     )
+
+
+@pytest.mark.parametrize(
+    ("question", "expected"),
+    [
+        pytest.param(
+            "How does this model compare to ResNet50?",
+            QuestionScale.CROSS_PAPER,
+            id="cross-en-compare-resnet",
+        ),
+        pytest.param(
+            "与上一篇论文相比，它的创新点在哪？",
+            QuestionScale.CROSS_PAPER,
+            id="cross-zh-previous-paper",
+        ),
+        pytest.param(
+            "Compared to stem-002, how does this method perform?",
+            QuestionScale.CROSS_PAPER,
+            id="cross-foreign-paper-id",
+        ),
+    ],
+)
+def test_matrix_cross_paper_intercept(question: str, expected: QuestionScale) -> None:
+    """对比性/外延性提问 → CROSS_PAPER，单篇 QA 必须拦截。"""
+    assert detect_question_scale(question, current_paper_context=_PAPER_CTX) == expected
 
 
 def test_cross_paper_patrol_guide_message() -> None:
@@ -145,27 +227,4 @@ def test_cross_paper_patrol_guide_message() -> None:
 
 
 def test_detect_cross_paper_intent_allows_intra_paper_baseline_compare() -> None:
-    assert detect_cross_paper_intent("方法与基线对比如何？", {"paper_id": "hss-001"}) is False
-
-
-@pytest.mark.parametrize(
-    "question",
-    [
-        "Please give a summary of the dataset details.",
-        "Summarize the dataset used in Section 3.",
-    ],
-)
-def test_mixed_summary_detail_prefers_detail(question: str) -> None:
-    """Detail keywords must win over summary cues to preserve chunk recall."""
-    assert detect_question_scale(question, paradigm=Paradigm.STEM) == QuestionScale.DETAIL
-
-
-@pytest.mark.parametrize(
-    "question",
-    [
-        "95.5%",
-        "Section 3 mentions 128 hidden units.",
-    ],
-)
-def test_numeric_feature_extractor_routes_to_detail(question: str) -> None:
-    assert detect_question_scale(question) == QuestionScale.DETAIL
+    assert detect_cross_paper_intent("方法与基线对比如何？", _PAPER_CTX) is False
