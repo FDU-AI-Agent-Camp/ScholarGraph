@@ -84,7 +84,8 @@ async def test_d07_red_patrol_service_maps_patrol_error_to_api_envelope(
 ) -> None:
     """D-07 红灯：PatrolError → ApiError，供路由层返回标准 error envelope。"""
     _ = mock_llm_env
-    service = PatrolService()
+    vector_store = AsyncMock()
+    service = PatrolService(vector_store=vector_store)
 
     with patch(
         "backend.services.patrol_service.patrol_run",
