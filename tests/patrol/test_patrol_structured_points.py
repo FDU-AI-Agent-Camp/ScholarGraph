@@ -48,6 +48,8 @@ def test_all_four_point_types_serialize() -> None:
         payload = insight.model_dump(mode="json")
         restored = PatrolInsight.model_validate(payload)
         assert restored.structured_points[0] == point
+        if isinstance(point, MethodOverlapPoint):
+            assert payload["structured_points"][0]["method"] == point.overlap_label
 
 
 def test_discriminator_rejects_unknown_mode() -> None:

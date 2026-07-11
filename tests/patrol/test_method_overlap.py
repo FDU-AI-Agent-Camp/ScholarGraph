@@ -605,6 +605,140 @@ async def test_method_overlap_skips_both_hss_papers() -> None:
     assert insight.structured_points == []
 
 
+async def test_method_overlap_dual_overlap_flattens_to_method_and_dataset_points() -> None:
+    """卡点：双重重合扁平化 — method 与 dataset 同时撞车时产出恰好 2 个独立 Point。"""
+    llm_output = MethodOverlapOutput(
+        summary="两篇论文均在 MNIST 上使用 PCA 进行特征压缩。",
+        comparison_details=[
+            MethodComparativeDetail(
+                method_pair_name="PCA <-> PCA",
+                paper_a_usage="论文 A 在 MNIST 上用 PCA 降维。",
+                paper_b_usage="论文 B 在 MNIST 上用 PCA 提取主成分。",
+                evidence_summary="方法层面均通过 PCA 压缩 MNIST 特征。",
+            ),
+            MethodComparativeDetail(
+                method_pair_name="MNIST <-> MNIST",
+                paper_a_usage="论文 A 在 MNIST 手写数字基准上评估分类准确率。",
+                paper_b_usage="论文 B 复用 MNIST 基准比较不同降维维度。",
+                evidence_summary="两篇论文共享 MNIST 实验数据语境。",
+            ),
+        ],
+    )
+    with patch(
+        "backend.patrol.method_overlap.generate_method_overlap_summary",
+        new_callable=AsyncMock,
+        return_value=llm_output,
+    ):
+        graphs = {
+            "stem-001": build_stem_graph_with_method_dataset(
+                "stem-001",
+                method_id="m_pca_a",
+                method_label="PCA",
+                method_data={"usage": "PCA on MNIST"},
+                dataset_id="ds_mnist_a",
+                dataset_label="MNIST",
+                dataset_data={"description": "Handwritten digit benchmark"},
+            ),
+            "stem-002": build_stem_graph_with_method_dataset(
+                "stem-002",
+                method_id="m_pca_b",
+                method_label="PCA",
+                method_data={"usage": "PCA feature compression"},
+                dataset_id="ds_mnist_b",
+                dataset_label="MNIST",
+                dataset_data={"description": "Same digit benchmark"},
+            ),
+        }
+        insight = await build_method_overlap_insight(graphs, ["stem-001", "stem-002"])
+
+    assert insight is not None
+    assert insight.status == PatrolInsightStatus.READY
+    assert len(insight.structured_points) == 2
+
+    overlap_types = {point.overlap_type for point in insight.structured_points}
+    assert overlap_types == {OverlapType.METHOD, OverlapType.DATASET}
+
+    method_point = next(p for p in insight.structured_points if p.overlap_type == OverlapType.METHOD)
+    dataset_point = next(p for p in insight.structured_points if p.overlap_type == OverlapType.DATASET)
+    assert isinstance(method_point, MethodOverlapPoint)
+    assert isinstance(dataset_point, MethodOverlapPoint)
+    assert method_point.overlap_label == "PCA"
+    assert dataset_point.overlap_label == "MNIST"
+    assert method_point.evidence_summary == llm_output.comparison_details[0].evidence_summary
+    assert dataset_point.evidence_summary == llm_output.comparison_details[1].evidence_summary
+    assert {ref.node_id for ref in method_point.node_refs} == {"m_pca_a", "m_pca_b"}
+    assert {ref.node_id for ref in dataset_point.node_refs} == {"ds_mnist_a", "ds_mnist_b"}
+    assert {ref.node_id for ref in insight.node_refs} == {"m_pca_a", "m_pca_b", "ds_mnist_a", "ds_mnist_b"}
+
+
+async def test_method_overlap_many_to_many_node_refs_collect_all_variant_nodes() -> None:
+    """卡点：全量多对多 node_refs — 同标签多节点变体必须全部纳入 Point 锚定。"""
+    graphs = {
+        "stem-001": UnifiedPaperGraph(
+            paper_id="stem-001",
+            paradigm=Paradigm.STEM,
+            nodes=[
+                GraphNode(
+                    id="m_pca_intro",
+                    label="PCA",
+                    type=NodeType.METHOD,
+                    data={"usage": "PCA introduced in methodology section"},
+                ),
+                GraphNode(
+                    id="m_pca_experiment",
+                    label="PCA",
+                    type=NodeType.METHOD,
+                    data={"usage": "PCA applied in experiment pipeline"},
+                ),
+                GraphNode(id="ds_cifar_a", label="CIFAR-10", type=NodeType.DATASET, data={}),
+            ],
+            edges=[],
+        ),
+        "stem-002": UnifiedPaperGraph(
+            paper_id="stem-002",
+            paradigm=Paradigm.STEM,
+            nodes=[
+                GraphNode(
+                    id="m_pca_main",
+                    label="PCA",
+                    type=NodeType.METHOD,
+                    data={"usage": "PCA baseline in paper B"},
+                ),
+                GraphNode(
+                    id="m_pca_ablation",
+                    label="PCA",
+                    type=NodeType.METHOD,
+                    data={"usage": "PCA ablation variant in paper B"},
+                ),
+                GraphNode(id="ds_cifar_b", label="CIFAR-10", type=NodeType.DATASET, data={}),
+            ],
+            edges=[],
+        ),
+    }
+    insight = await build_method_overlap_insight(graphs, ["stem-001", "stem-002"])
+
+    assert insight is not None
+    assert insight.status == PatrolInsightStatus.READY
+    assert len(insight.structured_points) == 2
+
+    method_point = next(p for p in insight.structured_points if p.overlap_type == OverlapType.METHOD)
+    dataset_point = next(p for p in insight.structured_points if p.overlap_type == OverlapType.DATASET)
+    assert method_point.overlap_label == "PCA"
+    assert dataset_point.overlap_label == "CIFAR-10"
+
+    expected_method_ids = {"m_pca_intro", "m_pca_experiment", "m_pca_main", "m_pca_ablation"}
+    expected_dataset_ids = {"ds_cifar_a", "ds_cifar_b"}
+    assert {ref.node_id for ref in method_point.node_refs} == expected_method_ids
+    assert {ref.paper_id for ref in method_point.node_refs if ref.node_id.startswith("m_pca_")} == {
+        "stem-001",
+        "stem-002",
+    }
+    assert {ref.node_id for ref in dataset_point.node_refs} == expected_dataset_ids
+    assert {ref.node_id for ref in insight.node_refs} == expected_method_ids | expected_dataset_ids
+    assert len(method_point.node_refs) == len(expected_method_ids)
+    assert len(dataset_point.node_refs) == len(expected_dataset_ids)
+
+
 async def test_method_overlap_dataset_only_anchors_to_dataset_nodes() -> None:
     """Dataset-only overlap must produce DATASET point with dataset node refs and usage."""
     graphs = {
@@ -632,8 +766,9 @@ async def test_method_overlap_dataset_only_anchors_to_dataset_nodes() -> None:
     assert point.overlap_type == OverlapType.DATASET
     assert point.overlap_label == "MNIST"
     # node_refs must point to the dataset nodes, not the method nodes.
-    ref_ids = {ref.node_id for ref in insight.node_refs}
+    ref_ids = {ref.node_id for ref in point.node_refs}
     assert ref_ids == {"ds_mnist_001", "ds_mnist_002"}
+    assert {ref.node_id for ref in insight.node_refs} == ref_ids
     # Usage must come from the dataset description, not from the method label.
     assert "Handwritten" in point.paper_a_usage
     assert "tree ensembles" in point.paper_b_usage
@@ -990,17 +1125,20 @@ async def test_live_defect_pca_vs_principal_component_analysis_passes_with_mnist
 
     assert insight is not None
     assert insight.status == PatrolInsightStatus.READY
-    assert len(insight.structured_points) == 1
-    point = insight.structured_points[0]
-    assert isinstance(point, MethodOverlapPoint)
-    assert point.mode == "method_overlap"
-    assert point.overlap_type == OverlapType.METHOD
-    assert point.match_type == "semantic"
-    assert point.overlap_score is not None
-    assert point.overlap_score >= get_settings().patrol_semantic_threshold
-    assert point.method == "PCA"
-    assert point.overlap_label == "PCA"
-    assert {ref.label for ref in insight.node_refs} == {"PCA", "Principal Component Analysis"}
+    assert len(insight.structured_points) == 2
+    method_point = next(p for p in insight.structured_points if p.overlap_type == OverlapType.METHOD)
+    assert isinstance(method_point, MethodOverlapPoint)
+    assert method_point.mode == "method_overlap"
+    assert method_point.overlap_type == OverlapType.METHOD
+    assert method_point.match_type == "semantic"
+    assert method_point.overlap_score is not None
+    assert method_point.overlap_score >= get_settings().patrol_semantic_threshold
+    assert method_point.method == "PCA"
+    assert method_point.overlap_label == "PCA"
+    dataset_point = next(p for p in insight.structured_points if p.overlap_type == OverlapType.DATASET)
+    assert dataset_point.overlap_label == shared_dataset
+    assert {ref.label for ref in method_point.node_refs} == {"PCA", "Principal Component Analysis"}
+    assert {ref.label for ref in dataset_point.node_refs} == {shared_dataset}
 
 
 async def test_method_overlap_ready_with_semantic_method_match() -> None:
@@ -1030,15 +1168,17 @@ async def test_method_overlap_ready_with_semantic_method_match() -> None:
     )
     assert insight is not None
     assert insight.status == PatrolInsightStatus.READY
-    point = insight.structured_points[0]
-    assert isinstance(point, MethodOverlapPoint)
-    assert point.overlap_type == OverlapType.METHOD
-    assert point.match_type == "semantic"
-    assert point.overlap_score is not None
-    assert 0.0 < point.overlap_score < 1.0
-    assert point.overlap_score >= 0.88
-    assert point.method == "PCA"
-    assert point.overlap_label == "PCA"
+    method_point = next(p for p in insight.structured_points if p.overlap_type == OverlapType.METHOD)
+    assert isinstance(method_point, MethodOverlapPoint)
+    assert method_point.overlap_type == OverlapType.METHOD
+    assert method_point.match_type == "semantic"
+    assert method_point.overlap_score is not None
+    assert 0.0 < method_point.overlap_score < 1.0
+    assert method_point.overlap_score >= 0.88
+    assert method_point.method == "PCA"
+    assert method_point.overlap_label == "PCA"
+    dataset_point = next(p for p in insight.structured_points if p.overlap_type == OverlapType.DATASET)
+    assert dataset_point.overlap_label == shared_dataset
 
 
 async def test_method_overlap_insufficient_when_semantic_match_below_threshold() -> None:

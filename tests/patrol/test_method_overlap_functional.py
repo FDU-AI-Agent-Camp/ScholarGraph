@@ -157,24 +157,30 @@ async def test_functional_topology_resonance_pca_synonym_golden_corpus_end_to_en
     assert insight.status == PatrolInsightStatus.READY
     assert insight.summary == llm_output.summary
 
-    assert len(insight.structured_points) == 1
-    point = insight.structured_points[0]
-    assert isinstance(point, MethodOverlapPoint)
-    assert point.mode == "method_overlap"
-    assert point.overlap_type == OverlapType.METHOD
-    assert point.match_type == "semantic"
-    assert point.overlap_score is not None
-    assert point.overlap_score >= settings.patrol_semantic_threshold
-    assert point.method == "PCA"
-    assert point.overlap_label == "PCA"
-    assert point.paper_a_usage == llm_output.comparison_details[0].paper_a_usage
-    assert point.paper_b_usage == llm_output.comparison_details[0].paper_b_usage
-    assert point.evidence_summary == llm_output.comparison_details[0].evidence_summary
-    assert "PCA" in point.paper_a_usage
-    assert "Principal Component Analysis" in point.paper_b_usage
-    assert "MNIST" in point.evidence_summary
+    assert len(insight.structured_points) == 2
+    method_point = next(p for p in insight.structured_points if p.overlap_type == OverlapType.METHOD)
+    dataset_point = next(p for p in insight.structured_points if p.overlap_type == OverlapType.DATASET)
+    assert isinstance(method_point, MethodOverlapPoint)
+    assert method_point.mode == "method_overlap"
+    assert method_point.overlap_type == OverlapType.METHOD
+    assert method_point.match_type == "semantic"
+    assert method_point.overlap_score is not None
+    assert method_point.overlap_score >= settings.patrol_semantic_threshold
+    assert method_point.method == "PCA"
+    assert method_point.overlap_label == "PCA"
+    assert method_point.paper_a_usage == llm_output.comparison_details[0].paper_a_usage
+    assert method_point.paper_b_usage == llm_output.comparison_details[0].paper_b_usage
+    assert method_point.evidence_summary == llm_output.comparison_details[0].evidence_summary
+    assert "PCA" in method_point.paper_a_usage
+    assert "Principal Component Analysis" in method_point.paper_b_usage
+    assert "MNIST" in method_point.evidence_summary
+    assert isinstance(dataset_point, MethodOverlapPoint)
+    assert dataset_point.overlap_type == OverlapType.DATASET
+    assert dataset_point.overlap_label == "MNIST"
 
-    assert {ref.label for ref in insight.node_refs} == {"PCA", "Principal Component Analysis"}
+    assert {ref.label for ref in method_point.node_refs} == {"PCA", "Principal Component Analysis"}
+    assert {ref.label for ref in dataset_point.node_refs} == {"MNIST"}
+    assert {ref.label for ref in insight.node_refs} == {"PCA", "Principal Component Analysis", "MNIST"}
 
     context = mock_summary.call_args.args[0]
     assert _GOLDEN_PAIR_LABEL in context
