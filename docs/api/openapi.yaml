@@ -638,7 +638,7 @@ components:
         overlap_type:
           type: string
           enum: [method, dataset, mixed]
-          description: Whether the point compares methods, datasets, or both.
+          description: Whether the point compares methods or datasets. Dual overlap emits two points (method + dataset); mixed is deprecated.
         overlap_label:
           type: string
           description: The representative label of the overlapping item (method or dataset name).
@@ -653,6 +653,11 @@ components:
           nullable: true
           enum: [literal, semantic]
           description: How the overlap was determined.
+        node_refs:
+          type: array
+          items:
+            $ref: "#/components/schemas/NodeRef"
+          description: Graph nodes anchored by this point; supports many-to-many literal overlaps.
         method:
           type: string
           description: Backwards-compatible alias for overlap_label.
