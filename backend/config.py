@@ -296,6 +296,16 @@ class Settings(PatrolSettingsMixin, BaseSettings):
     rag_top_k_chunks: int = Field(default=5, ge=1, validation_alias="RAG_TOP_K_CHUNKS")
     rag_top_k_entities: int = Field(default=5, ge=1, validation_alias="RAG_TOP_K_ENTITIES")
     rag_top_k_relations: int = Field(default=5, ge=1, validation_alias="RAG_TOP_K_RELATIONS")
+    qa_retrieval_timeout_seconds: float = Field(
+        default=3.0,
+        gt=0.0,
+        validation_alias="QA_RETRIEVAL_TIMEOUT_SECONDS",
+    )
+    qa_retrieval_context_max_chars: int = Field(
+        default=12_000,
+        ge=500,
+        validation_alias="QA_RETRIEVAL_CONTEXT_MAX_CHARS",
+    )
 
     # ------------------------------------------------------------------
     # Cloud reranker for fine-grained semantic merge verification

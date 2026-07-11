@@ -1,0 +1,156 @@
+"""Hybrid graph + vector retrieval for multi-scale QA (V2 §4.2)."""
+
+from __future__ import annotations
+
+import asyncio
+import logging
+from collections.abc import Callable
+from typing import TYPE_CHECKING
+
+from backend.graph.query import GraphQuery
+from backend.rag.models import QuestionScale, RetrievalContext, RetrievedChunk, RetrievedEntity, RetrievedRelation
+
+if TYPE_CHECKING:
+    from backend.rag.vector_store import VectorStore
+    from backend.schemas.graph import UnifiedPaperGraph
+
+logger = logging.getLogger(__name__)
+
+_hybrid_retriever_singleton: HybridRetriever | None = None
+
+
+class HybridRetriever:
+    """Retrieve graph subgraph and vector evidence for one QA turn."""
+
+    def __init__(
+        self,
+        graph_query: GraphQuery | None = None,
+        vector_store: VectorStore | None = None,
+    ) -> None:
+        self._graph_query = graph_query or GraphQuery()
+        self._vector_store = vector_store
+
+    async def retrieve(
+        self,
+        paper_id: str,
+        question: str,
+        graph: UnifiedPaperGraph,
+        *,
+        scale: QuestionScale,
+        query_transform: Callable[[str], str] | None = None,
+        query_embedding: list[float] | None = None,
+        top_k: int | None = None,
+    ) -> RetrievalContext:
+        """Build a ``RetrievalContext`` for ``qa_stream()`` prompt injection.
+
+        Pipeline:
+            GraphQuery subgraph (A 尺度) → optional vector Top-K (B 尺度) → ``RetrievalContext``.
+
+        Args:
+            query_transform: Optional HyDE hook to rewrite *question* before embedding.
+            query_embedding: Reserved for pre-computed embeddings; unused in V1 text path.
+        """
+        _ = query_embedding  # HyDE / caller-supplied vectors — not wired in V1.
+
+        subgraph = self._graph_query.subgraph_for_question(graph, question)
+        entities: list[RetrievedEntity] = []
+        relations: list[RetrievedRelation] = []
+        chunks: list[RetrievedChunk] = []
+
+        if scale != QuestionScale.SUMMARY:
+            entities, relations, chunks = await self._retrieve_vectors(
+                paper_id,
+                question,
+                query_transform=query_transform,
+                top_k=top_k,
+            )
+
+        return RetrievalContext(
+            nodes=subgraph.get("nodes", []),
+            edges=subgraph.get("edges", []),
+            entities=entities,
+            relations=relations,
+            chunks=chunks,
+            scale=scale,
+        )
+
+    def build_graph_only_context(
+        self,
+        paper_id: str,
+        question: str,
+        graph: UnifiedPaperGraph,
+        *,
+        scale: QuestionScale,
+    ) -> RetrievalContext:
+        """Graph-only fallback when vector retrieval is unavailable or timed out."""
+        _ = paper_id
+        subgraph = self._graph_query.subgraph_for_question(graph, question)
+        return RetrievalContext(
+            nodes=subgraph.get("nodes", []),
+            edges=subgraph.get("edges", []),
+            entities=[],
+            relations=[],
+            chunks=[],
+            scale=scale,
+        )
+
+    async def _retrieve_vectors(
+        self,
+        paper_id: str,
+        question: str,
+        *,
+        query_transform: Callable[[str], str] | None,
+        top_k: int | None = None,
+    ) -> tuple[list[RetrievedEntity], list[RetrievedRelation], list[RetrievedChunk]]:
+        if self._vector_store is None:
+            return [], [], []
+
+        try:
+            index_ready = await self._vector_store.exists(paper_id)
+        except Exception:
+            logger.exception("hybrid_retriever index check failed for paper_id=%s", paper_id)
+            return [], [], []
+
+        if not index_ready:
+            logger.info("hybrid_retriever skip vectors: no index for paper_id=%s", paper_id)
+            return [], [], []
+
+        query_text = (query_transform(question) if query_transform else question).strip()
+        if not query_text:
+            return [], [], []
+
+        return await asyncio.gather(
+            self._vector_store.query_entities(query_text, paper_id=paper_id, top_k=top_k),
+            self._vector_store.query_relations(query_text, paper_id=paper_id, top_k=top_k),
+            self._vector_store.query_chunks(query_text, paper_id=paper_id, top_k=top_k),
+        )
+
+
+def create_hybrid_retriever(vector_store: VectorStore | None = None) -> HybridRetriever:
+    """Construct a HybridRetriever; default wiring uses the shared VectorStore."""
+    if vector_store is None:
+        from backend.rag.vector_store import VectorStore
+        from backend.services.paper_service import get_paper_service
+
+        vector_store = VectorStore(paper_service=get_paper_service())
+    return HybridRetriever(vector_store=vector_store)
+
+
+def bind_hybrid_retriever(retriever: HybridRetriever) -> None:
+    """Register the process-wide HybridRetriever (app lifespan / tests)."""
+    global _hybrid_retriever_singleton
+    _hybrid_retriever_singleton = retriever
+
+
+def reset_hybrid_retriever() -> None:
+    """Clear the process-wide HybridRetriever singleton."""
+    global _hybrid_retriever_singleton
+    _hybrid_retriever_singleton = None
+
+
+def get_hybrid_retriever() -> HybridRetriever:
+    """Return the app-bound HybridRetriever, creating one if unset."""
+    global _hybrid_retriever_singleton
+    if _hybrid_retriever_singleton is None:
+        _hybrid_retriever_singleton = create_hybrid_retriever()
+    return _hybrid_retriever_singleton

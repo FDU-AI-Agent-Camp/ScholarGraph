@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 from collections.abc import AsyncIterator
 from pathlib import Path
+from unittest.mock import AsyncMock
 
 import pytest
 from backend.config import get_settings
@@ -12,9 +13,10 @@ from backend.graph.qa import QaEvent, _GraphQaEngine
 from backend.graph.store import GraphStore
 from backend.llm.client import reset_llm_client_cache
 from backend.llm.mock_chat import MOCK_DISCLAIMER
+from backend.rag.hybrid_retriever import HybridRetriever, bind_hybrid_retriever
 from backend.schemas.graph import GraphEdge, GraphNode, UnifiedPaperGraph
 from backend.schemas.paradigm import Paradigm
-from httpx import ASGITransport, AsyncClient
+from httpx import AsyncClient
 from tests.api.conftest import assert_error_envelope
 from tests.graph.test_qa import _bad_llm, _fake_llm
 
@@ -29,15 +31,6 @@ def _parse_sse(body: str) -> list[tuple[str, dict]]:
             payload = json.loads(line.split(":", 1)[1].strip())
             events.append((event_name, payload))
     return events
-
-
-@pytest.fixture
-async def api_client() -> AsyncIterator[AsyncClient]:
-    from backend.main import app
-
-    transport = ASGITransport(app=app)
-    async with AsyncClient(transport=transport, base_url="http://test") as client:
-        yield client
 
 
 @pytest.fixture
@@ -70,6 +63,21 @@ def qa_graph_store(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> GraphStor
     return store
 
 
+@pytest.fixture(autouse=True)
+def _hybrid_retriever_without_vector_store() -> AsyncIterator[None]:
+    """Avoid ChromaDB init on every HTTP QA test; vectors are opt-in per test."""
+    from backend.main import app
+    from backend.rag.hybrid_retriever import HybridRetriever, bind_hybrid_retriever, reset_hybrid_retriever
+
+    retriever = HybridRetriever(vector_store=None)
+    app.state.hybrid_retriever = retriever
+    bind_hybrid_retriever(retriever)
+    yield
+    reset_hybrid_retriever()
+    if hasattr(app.state, "hybrid_retriever"):
+        delattr(app.state, "hybrid_retriever")
+
+
 @pytest.mark.asyncio
 async def test_qa_stream_http_emits_message_citation_done(
     api_client: AsyncClient,
@@ -79,8 +87,14 @@ async def test_qa_stream_http_emits_message_citation_done(
     llm_text = "核心论点[CITE:n1]涉及不平等。"
     engine = _GraphQaEngine(store=qa_graph_store, llm=_fake_llm(llm_text))
 
-    async def _fake_qa_stream(paper_id: str, question: str) -> AsyncIterator[QaEvent]:
-        async for evt in engine.stream(paper_id, question):
+    async def _fake_qa_stream(
+        paper_id: str,
+        question: str,
+        *,
+        retrieval_context=None,
+        llm=None,
+    ) -> AsyncIterator[QaEvent]:
+        async for evt in engine.stream(paper_id, question, retrieval_context=retrieval_context):
             yield evt
 
     monkeypatch.setattr("backend.graph.qa.qa_stream", _fake_qa_stream)
@@ -194,8 +208,14 @@ async def test_qa_stream_http_llm_error_event_in_sse(
 ) -> None:
     engine = _GraphQaEngine(store=qa_graph_store, llm=_bad_llm())
 
-    async def _fail_stream(paper_id: str, question: str) -> AsyncIterator[QaEvent]:
-        async for evt in engine.stream(paper_id, question):
+    async def _fail_stream(
+        paper_id: str,
+        question: str,
+        *,
+        retrieval_context=None,
+        llm=None,
+    ) -> AsyncIterator[QaEvent]:
+        async for evt in engine.stream(paper_id, question, retrieval_context=retrieval_context):
             yield evt
 
     monkeypatch.setattr("backend.graph.qa.qa_stream", _fail_stream)
@@ -209,3 +229,130 @@ async def test_qa_stream_http_llm_error_event_in_sse(
     error_evt = next((payload for name, payload in events if name == "error"), None)
     assert error_evt is not None
     assert error_evt["code"] == "QA_STREAM_ERROR"
+
+
+@pytest.mark.asyncio
+async def test_qa_stream_http_wires_hybrid_retrieval_context(
+    api_client: AsyncClient,
+    qa_graph_store: GraphStore,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """HTTP path: HybridRetriever.retrieve → qa_stream(retrieval_context=...)."""
+    from backend.rag.models import QuestionScale, RetrievalContext, RetrievedChunk
+
+    chunk = RetrievedChunk(
+        id="chunk:hss-001:c1",
+        paper_id="hss-001",
+        text="实验在 MNIST 上达到 95% 准确率。",
+        chunk_id="c1",
+        chunk_index=0,
+        char_start=0,
+        char_end=20,
+        page_start=5,
+    )
+    rc = RetrievalContext(scale=QuestionScale.DETAIL, chunks=[chunk])
+    hybrid_retriever = AsyncMock()
+    hybrid_retriever.retrieve = AsyncMock(return_value=rc)
+
+    captured: list[RetrievalContext | None] = []
+    llm_text = "参见原文[CITE:chunk:c1]。"
+    engine = _GraphQaEngine(store=qa_graph_store, llm=_fake_llm(llm_text))
+
+    async def _recording_qa_stream(
+        paper_id: str,
+        question: str,
+        *,
+        retrieval_context=None,
+        llm=None,
+    ) -> AsyncIterator[QaEvent]:
+        captured.append(retrieval_context)
+        async for evt in engine.stream(paper_id, question, retrieval_context=retrieval_context):
+            yield evt
+
+    monkeypatch.setattr("backend.graph.qa.qa_stream", _recording_qa_stream)
+    bind_hybrid_retriever(hybrid_retriever)
+    from backend.main import app
+
+    app.state.hybrid_retriever = hybrid_retriever
+
+    response = await api_client.post(
+        "/api/v1/papers/hss-001/qa/stream",
+        json={"question": "分论点如何支撑核心论点？"},
+    )
+    assert response.status_code == 200
+    assert captured and captured[0] is rc
+    hybrid_retriever.retrieve.assert_awaited_once()
+    assert hybrid_retriever.retrieve.await_args.kwargs["scale"] == QuestionScale.DETAIL
+
+    events = _parse_sse(response.text)
+    assert any(name == "citation" for name, _ in events)
+
+
+@pytest.mark.asyncio
+async def test_qa_stream_http_emits_warning_on_retrieval_timeout(
+    api_client: AsyncClient,
+    qa_graph_store: GraphStore,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Slow vector retrieval must not block SSE; emit warning and graph-only fallback."""
+    from backend.services.qa_retrieval import (
+        VECTOR_RETRIEVAL_TIMEOUT_CODE,
+        VECTOR_RETRIEVAL_TIMEOUT_MESSAGE,
+    )
+
+    async def slow_retrieve(*args, **kwargs):
+        import asyncio
+
+        await asyncio.sleep(0.05)
+        from backend.rag.models import RetrievalContext, QuestionScale
+
+        return RetrievalContext(scale=QuestionScale.DETAIL)
+
+    hybrid_retriever = HybridRetriever(vector_store=None)
+    hybrid_retriever.retrieve = slow_retrieve  # type: ignore[method-assign]
+    bind_hybrid_retriever(hybrid_retriever)
+    from backend.main import app
+
+    app.state.hybrid_retriever = hybrid_retriever
+    monkeypatch.setenv("QA_RETRIEVAL_TIMEOUT_SECONDS", "0.01")
+    get_settings.cache_clear()
+    reset_llm_client_cache()
+
+    response = await api_client.post(
+        "/api/v1/papers/hss-001/qa/stream",
+        json={"question": "分论点如何支撑核心论点？"},
+    )
+    assert response.status_code == 200
+
+    events = _parse_sse(response.text)
+    event_names = [name for name, _ in events]
+    assert event_names[0] == "warning"
+    warning = events[0][1]
+    assert warning["code"] == VECTOR_RETRIEVAL_TIMEOUT_CODE
+    assert warning["message"] == VECTOR_RETRIEVAL_TIMEOUT_MESSAGE
+    assert "message" in event_names
+    assert event_names[-1] == "done"
+
+
+@pytest.mark.asyncio
+async def test_qa_stream_http_blank_paper_without_vector_index_completes(
+    api_client: AsyncClient,
+    qa_graph_store: GraphStore,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Graph-only fallback when vector index is missing: SSE completes without error."""
+    _ = qa_graph_store
+    monkeypatch.setenv("LLM_MODE", "mock")
+    get_settings.cache_clear()
+    reset_llm_client_cache()
+
+    response = await api_client.post(
+        "/api/v1/papers/hss-001/qa/stream",
+        json={"question": "分论点如何支撑核心论点？"},
+    )
+    assert response.status_code == 200
+    events = _parse_sse(response.text)
+    event_names = [name for name, _ in events]
+    assert "error" not in event_names
+    assert "message" in event_names
+    assert event_names[-1] == "done"
