@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import numpy as np
 
+from backend.config import Settings
 from backend.llm.embeddings import EmbeddingClient
 from backend.patrol.method_overlap_topology import has_topology_resonance
 from backend.patrol.overlap_anchor import _OverlapAnchor
@@ -30,7 +31,7 @@ async def find_semantic_method_overlap(
     threshold: float,
     max_matrix_size: int,
     *,
-    rq_threshold: float,
+    settings: Settings,
 ) -> _OverlapAnchor | None:
     """Find the strongest topology-validated semantic method overlap across two papers.
 
@@ -76,7 +77,7 @@ async def find_semantic_method_overlap(
             left_method,
             right_method,
             embedding_client=embedding_client,
-            rq_threshold=rq_threshold,
+            settings=settings,
         ):
             continue
         return _OverlapAnchor(

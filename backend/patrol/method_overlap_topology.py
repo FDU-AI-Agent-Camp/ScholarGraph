@@ -13,6 +13,7 @@ from backend.patrol.similarity import cosine_similarity, normalize_label
 from backend.schemas.graph import GraphNode, NodeType, UnifiedPaperGraph
 
 if TYPE_CHECKING:
+    from backend.config import Settings
     from backend.llm.embeddings import EmbeddingClient
 
 _RESONANCE_NEIGHBOR_TYPES = frozenset(
@@ -85,7 +86,7 @@ async def _research_question_semantic_resonance(
     left_method: GraphNode,
     right_method: GraphNode,
     embedding_client: EmbeddingClient,
-    rq_threshold: float,
+    settings: Settings,
 ) -> bool:
     left_questions = [
         node for node in _typed_neighbors(left_graph, left_method) if node.type == NodeType.RESEARCH_QUESTION
@@ -104,9 +105,13 @@ async def _research_question_semantic_resonance(
 
     left_vectors = vectors[: len(left_labels)]
     right_vectors = vectors[len(left_labels) :]
-    for left_vector in left_vectors:
-        for right_vector in right_vectors:
-            if cosine_similarity(left_vector, right_vector) >= rq_threshold:
+    for left_idx, left_vector in enumerate(left_vectors):
+        for right_idx, right_vector in enumerate(right_vectors):
+            pair_threshold = settings.patrol_topology_rq_semantic_threshold_for(
+                left_questions[left_idx].label,
+                right_questions[right_idx].label,
+            )
+            if cosine_similarity(left_vector, right_vector) >= pair_threshold:
                 return True
     return False
 
@@ -118,7 +123,7 @@ async def has_topology_resonance(
     right_method: GraphNode,
     *,
     embedding_client: EmbeddingClient | None = None,
-    rq_threshold: float,
+    settings: Settings,
 ) -> bool:
     """Return True when method pair shares dataset or research-question neighborhood context."""
     if _dataset_resonance(left_graph, right_graph, left_method, right_method):
@@ -133,5 +138,5 @@ async def has_topology_resonance(
         left_method,
         right_method,
         embedding_client,
-        rq_threshold,
+        settings,
     )
