@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from backend.graph.store import GraphStore
-from backend.llm.qa_scale import QuestionScale
+from backend.rag.models import QuestionScale
 from backend.schemas.graph import UnifiedPaperGraph
 
 M2_DEMO_PAPER_ID = "hss-001"
@@ -25,17 +25,17 @@ class M2QuestionSample:
 
 M2_HSS_QUESTIONS: tuple[M2QuestionSample, ...] = (
     M2QuestionSample(
-        scale="summary",
+        scale=QuestionScale.SUMMARY,
         question="这篇论文做了什么？请给出核心论点总览。",
         expected_node_types=("Thesis",),
     ),
     M2QuestionSample(
-        scale="detail",
+        scale=QuestionScale.DETAIL,
         question="分论点如何支撑核心论点？",
         expected_node_types=("SubArgument", "Thesis"),
     ),
     M2QuestionSample(
-        scale="verification",
+        scale=QuestionScale.VERIFICATION,
         question="核心论点通过哪些材料、经何种理论视角被论证？",
         expected_node_types=("AnalyticalLens", "ObjectOrData", "Thesis"),
     ),
