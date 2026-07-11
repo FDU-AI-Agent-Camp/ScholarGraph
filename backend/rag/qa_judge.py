@@ -9,8 +9,9 @@ from typing import Any, cast
 from langchain_core.messages import HumanMessage, SystemMessage
 
 from backend.llm.client import LlmClient
-from backend.rag.models import QAJudgeResult
-from backend.rag.qa_heuristics import HeuristicGuardrailResult
+from backend.rag.models import JudgeMicroOutput, QAJudgeResult, TrackBJudgeSchema
+from backend.rag.qa_heuristics import HeuristicGuardrailResult, is_heuristic_hard_fuse_tripped
+from backend.rag.qa_judge_validate import resolve_judge_output
 from backend.rag.qa_judge_retry import run_with_judge_retry
 from backend.rag.qa_judge_structured import invoke_judge_structured_output
 
@@ -22,11 +23,11 @@ HALLUCINATION_RATE_TRIGGERED = 1.0
 
 def compute_question_hallucination_rate(
     *,
-    heuristic_forbidden_hit: bool,
+    heuristic_hard_fuse_hit: bool,
     llm_judge_detected: bool,
 ) -> float:
-    """Dual-track OR matrix: Final = ForbiddenHit ∨ JudgeDetected → 0% or 100%."""
-    if heuristic_forbidden_hit or llm_judge_detected:
+    """Dual-track OR matrix: Final = TrackAHardFuse ∨ JudgeDetected → 0% or 100%."""
+    if heuristic_hard_fuse_hit or llm_judge_detected:
         return HALLUCINATION_RATE_TRIGGERED
     return HALLUCINATION_RATE_CLEAR
 
@@ -44,17 +45,23 @@ def hallucination_ci_pass(mean_rate: float) -> bool:
 
 
 JUDGE_SYSTEM_PROMPT = """\
-你是学术 QA 质量评估专家（LLM-as-a-Judge）。请根据金标上下文、模型回答与引用，进行语义裁判。
+你是学术 QA 质量评估专家（LLM-as-a-Judge）。采用**自底向上（Bottom-Up）**评估：先逐句标注，宏观指标由系统根据你的标注自动汇总。
 
-## 评估维度
-1. **factual_consistency** (0.0-1.0): 回答中的事实、数值与逻辑断言与金标 required_patterns / 图谱期望的语义一致程度。
-2. **hallucination_detected** (boolean): 回答是否包含与金标矛盾、或完全无依据的编造事实/逻辑断言。
-   - 若回答命中 forbidden_patterns，通常应判为 true。
-3. **reasoning**: 对上述两项的详细理由。
+## Step 1 — 句子切片与逐句标注（你唯一需要输出的内容）
+1. 将 `answer_text` 切分为完整句子（保留原句文本，不要改写）。
+2. 对每个句子给出 `label`：
+   - **supported**：事实/数值/逻辑断言与金标 required_patterns、图谱期望、引用上下文一致。
+   - **hallucinated**：与金标矛盾、命中 forbidden_patterns、或无依据编造。
+   - **redundant**：重复、套话、绕圈，不增加有效信息（非幻觉，但冗余）。
 
-## 输出格式
-只输出 JSON，字段名必须与 schema 完全一致：factual_consistency, hallucination_detected, reasoning。
-不要输出 markdown 代码块。"""
+## 标注规则（范式补丁）
+- **STEM**：缺少金标要求的具体数值或 benchmark/dataset 的句子 → hallucinated。
+- **HSS**：仅泛化表述、未体现 required_patterns 制度/论证术语的句子 → hallucinated 或 redundant。
+- 若 `heuristic_guardrails.paradigm_aligned` 为 false，与范式相关的 unsupported 断言应标为 hallucinated。
+
+## 禁止
+- 不要输出 factual_consistency / hallucination_detected / reasoning — 系统会从 sentence_judgments 自动推导。
+- 不要输出 markdown 代码块；只输出 JSON：`{"sentence_judgments": [{"sentence": "...", "label": "supported|hallucinated|redundant"}, ...]}`"""
 
 
 def format_judge_user_content(
@@ -92,14 +99,15 @@ def format_judge_user_content(
 
 def build_dual_track_evaluation(
     guardrails: HeuristicGuardrailResult,
-    judge: QAJudgeResult,
+    judge: TrackBJudgeSchema,
 ) -> dict[str, Any]:
     """Merge Track A (heuristics) and Track B (LLM Judge) into one report block."""
     hallucination_rate = compute_question_hallucination_rate(
-        heuristic_forbidden_hit=guardrails.forbidden_tripped,
+        heuristic_hard_fuse_hit=is_heuristic_hard_fuse_tripped(guardrails),
         llm_judge_detected=judge.hallucination_detected,
     )
     hallucination_fused = hallucination_rate == HALLUCINATION_RATE_TRIGGERED
+    track_a_tripped = is_heuristic_hard_fuse_tripped(guardrails)
     return {
         "faithfulness": {
             "hallucination_rate": hallucination_rate,
@@ -110,13 +118,14 @@ def build_dual_track_evaluation(
             "graph_element_recall": round(guardrails.graph_element_recall, 4),
         },
         "directness": {
-            "verbosity_rate": 0.0,
-            "paradigm_aligned": not guardrails.has_forbidden_patterns,
+            "verbosity_rate": round(guardrails.verbosity_rate, 4),
+            "paradigm_aligned": guardrails.paradigm_aligned,
         },
         "guardrails": guardrails.to_dict(),
         "judge": judge.model_dump(),
         "dual_track": {
             "heuristic_passed": guardrails.passed,
+            "heuristic_hard_fuse_tripped": track_a_tripped,
             "semantic_factual_consistency": round(judge.factual_consistency, 4),
             "hallucination_fused": hallucination_fused,
             "forbidden_tripped": guardrails.forbidden_tripped,
@@ -132,9 +141,10 @@ def build_evaluation_fallback(
 ) -> dict[str, Any]:
     """Heuristic-only evaluation when Judge invocation fails."""
     hallucination_rate = compute_question_hallucination_rate(
-        heuristic_forbidden_hit=guardrails.forbidden_tripped,
+        heuristic_hard_fuse_hit=is_heuristic_hard_fuse_tripped(guardrails),
         llm_judge_detected=False,
     )
+    track_a_tripped = is_heuristic_hard_fuse_tripped(guardrails)
     payload: dict[str, Any] = {
         "faithfulness": {
             "hallucination_rate": hallucination_rate,
@@ -145,12 +155,13 @@ def build_evaluation_fallback(
             "graph_element_recall": round(guardrails.graph_element_recall, 4),
         },
         "directness": {
-            "verbosity_rate": 0.0,
-            "paradigm_aligned": not guardrails.has_forbidden_patterns,
+            "verbosity_rate": round(guardrails.verbosity_rate, 4),
+            "paradigm_aligned": guardrails.paradigm_aligned,
         },
         "guardrails": guardrails.to_dict(),
         "dual_track": {
             "heuristic_passed": guardrails.passed,
+            "heuristic_hard_fuse_tripped": track_a_tripped,
             "semantic_factual_consistency": None,
             "hallucination_fused": hallucination_rate == HALLUCINATION_RATE_TRIGGERED,
             "forbidden_tripped": guardrails.forbidden_tripped,
@@ -171,8 +182,8 @@ async def invoke_qa_judge(
     citations: list[dict[str, Any]],
     gold: dict[str, Any],
     guardrails: HeuristicGuardrailResult | None = None,
-) -> QAJudgeResult:
-    """Call the Judge model and parse a structured ``QAJudgeResult``."""
+) -> TrackBJudgeSchema:
+    """Run bottom-up Judge: Step 1 micro labels → Step 2 deterministic aggregation."""
     user_content = format_judge_user_content(
         question=question,
         paradigm=paradigm,
@@ -187,9 +198,11 @@ async def invoke_qa_judge(
     ]
 
     if client.is_mock:
-        structured = client.chat.with_structured_output(QAJudgeResult)
-        return cast(QAJudgeResult, await structured.ainvoke(messages))
+        structured = client.chat.with_structured_output(JudgeMicroOutput)
+        micro = cast(JudgeMicroOutput, await structured.ainvoke(messages))
+    else:
+        micro = await run_with_judge_retry(
+            lambda: invoke_judge_structured_output(client, messages, schema=JudgeMicroOutput),
+        )
 
-    return await run_with_judge_retry(
-        lambda: invoke_judge_structured_output(client, messages),
-    )
+    return resolve_judge_output(micro)

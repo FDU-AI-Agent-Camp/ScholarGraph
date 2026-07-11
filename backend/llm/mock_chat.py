@@ -9,7 +9,8 @@ from typing import Any
 from langchain_core.messages import BaseMessage
 
 from backend.llm.qa_scale import detect_question_scale, preferred_node_types
-from backend.rag.models import QAJudgeResult
+from backend.rag.models import JudgeMicroOutput, QAJudgeResult, SentenceJudgment, SentenceLabel
+from backend.rag.qa_judge_aggregate import aggregate_sentence_judgments, split_answer_sentences
 from backend.schemas.paradigm import Paradigm
 from backend.schemas.patrol_llm import PatrolSummaryOutput
 
@@ -38,8 +39,11 @@ class MockStructuredOutput:
         context = _human_content(messages)
         if self._schema is PatrolSummaryOutput:
             return PatrolSummaryOutput(summary=_mock_patrol_summary(context))
+        if self._schema is JudgeMicroOutput:
+            return _mock_qa_judge_micro(context)
         if self._schema is QAJudgeResult:
-            return _mock_qa_judge_result(context)
+            micro = _mock_qa_judge_micro(context)
+            return aggregate_sentence_judgments(micro.sentence_judgments)
         return self._schema.model_validate({"summary": _mock_patrol_summary(context)})
 
 
@@ -124,8 +128,8 @@ def _mock_patrol_summary(context: str) -> str:
     )
 
 
-def _mock_qa_judge_result(context: str) -> QAJudgeResult:
-    """Deterministic Judge scores derived from gold patterns and citations."""
+def _mock_qa_judge_micro(context: str) -> JudgeMicroOutput:
+    """Deterministic Step-1 sentence labels derived from gold patterns."""
     import json as _json
 
     payload: dict[str, Any] = {}
@@ -142,24 +146,23 @@ def _mock_qa_judge_result(context: str) -> QAJudgeResult:
     answer_text = str(payload.get("answer_text", ""))
     gold = payload.get("gold", {}) if isinstance(payload.get("gold"), dict) else {}
 
-    required_patterns = [str(p) for p in gold.get("required_patterns", [])]
     forbidden_patterns = [str(p) for p in gold.get("forbidden_patterns", [])]
+    sentences = split_answer_sentences(answer_text)
+    judgments: list[SentenceJudgment] = []
 
-    answer_lower = answer_text.lower()
-    has_forbidden = any(pattern.lower() in answer_lower for pattern in forbidden_patterns)
-    matched_required = sum(1 for pattern in required_patterns if pattern.lower() in answer_lower)
-    factual_consistency = (
-        1.0
-        if not required_patterns
-        else matched_required / len(required_patterns)
-    )
+    for sentence in sentences:
+        sentence_lower = sentence.lower()
+        if any(pattern.lower() in sentence_lower for pattern in forbidden_patterns):
+            label = SentenceLabel.HALLUCINATED
+        elif len(sentence.strip()) > 120:
+            label = SentenceLabel.REDUNDANT
+        else:
+            label = SentenceLabel.SUPPORTED
+        judgments.append(SentenceJudgment(sentence=sentence, label=label))
 
-    return QAJudgeResult(
-        factual_consistency=round(factual_consistency, 4),
-        hallucination_detected=has_forbidden,
-        reasoning=(
-            "Mock Judge："
-            f"required={matched_required}/{len(required_patterns)}, "
-            f"forbidden_hit={has_forbidden}."
-        ),
-    )
+    if not judgments:
+        placeholder = answer_text.strip() or "(empty answer)"
+        label = SentenceLabel.HALLUCINATED if not answer_text.strip() else SentenceLabel.SUPPORTED
+        judgments = [SentenceJudgment(sentence=placeholder, label=label)]
+
+    return JudgeMicroOutput(sentence_judgments=judgments)

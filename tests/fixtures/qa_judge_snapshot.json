@@ -1,5 +1,8 @@
 {
-  "factual_consistency": 0.92,
-  "hallucination_detected": false,
-  "reasoning": "Snapshot: answer cites expected graph nodes; numeric claims align with gold patterns; no forbidden STEM leakage detected."
+  "sentence_judgments": [
+    {
+      "sentence": "F1 达到 15% 在 ImageNet 上验证，引用节点与金标一致。",
+      "label": "supported"
+    }
+  ]
 }

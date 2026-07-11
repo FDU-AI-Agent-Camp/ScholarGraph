@@ -6,7 +6,7 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from backend.rag.models import QAJudgeResult
+from backend.rag.models import JudgeMicroOutput, QAJudgeResult, SentenceJudgment, SentenceLabel
 from backend.rag.qa_judge import invoke_qa_judge
 from backend.rag.qa_judge_retry import is_transient_judge_error, run_with_judge_retry
 
@@ -59,15 +59,15 @@ async def test_invoke_qa_judge_live_path_uses_retry(monkeypatch: pytest.MonkeyPa
 
     attempts = 0
 
-    async def _flaky_structured(_client: object, _messages: object, **_kwargs: object) -> QAJudgeResult:
+    async def _flaky_structured(_client: object, _messages: object, **_kwargs: object) -> JudgeMicroOutput:
         nonlocal attempts
         attempts += 1
         if attempts < 2:
             raise RuntimeError("503 temporarily unavailable")
-        return QAJudgeResult(
-            factual_consistency=1.0,
-            hallucination_detected=False,
-            reasoning="recovered",
+        return JudgeMicroOutput(
+            sentence_judgments=[
+                SentenceJudgment(sentence="recovered answer.", label=SentenceLabel.SUPPORTED),
+            ],
         )
 
     client = LlmClient()
@@ -76,10 +76,11 @@ async def test_invoke_qa_judge_live_path_uses_retry(monkeypatch: pytest.MonkeyPa
             client,
             question="q",
             paradigm="STEM",
-            answer_text="answer",
+            answer_text="recovered answer.",
             citations=[],
             gold={"required_patterns": [], "forbidden_patterns": [], "nodes": [], "edges": []},
         )
 
-    assert result.reasoning == "recovered"
+    assert "Bottom-up" in result.reasoning
+    assert result.hallucination_detected is False
     assert attempts == 2
