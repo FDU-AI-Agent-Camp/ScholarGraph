@@ -100,3 +100,65 @@ async def test_rq_gate_rerank_selects_best_passing_pair() -> None:
     assert aligned is not None
     assert aligned[0].id == "l1"
     assert aligned[1].id == "r2"
+
+
+class _FailingEmbeddingClient:
+    is_mock = False
+
+    async def embed_texts(self, texts: list[str]) -> list[list[float]]:
+        raise RuntimeError("embedding endpoint unavailable")
+
+
+class _FailingRerankerClient:
+    async def rerank_pairs(self, pairs: list[tuple[str, str]]) -> list[float]:
+        raise RuntimeError("reranker endpoint unavailable")
+
+
+@pytest.mark.asyncio
+async def test_rq_gate_degrades_when_embedding_fails() -> None:
+    left = GraphNode(id="l1", label="Q-A", type=NodeType.RESEARCH_QUESTION, data={})
+    right = GraphNode(id="r1", label="Q-B", type=NodeType.RESEARCH_QUESTION, data={})
+    settings = Settings(
+        reranker_enabled=True,
+        patrol_claim_rq_coarse_threshold=0.42,
+        patrol_claim_rq_rerank_threshold=0.60,
+    )
+
+    aligned = await align_research_question_pair(
+        [left],
+        [right],
+        embedding_client=_FailingEmbeddingClient(),
+        settings=settings,
+    )
+
+    assert aligned is None
+
+
+@pytest.mark.asyncio
+async def test_rq_gate_reranker_failure_falls_back_to_strict_embedding() -> None:
+    left = GraphNode(id="l1", label="Q-A", type=NodeType.RESEARCH_QUESTION, data={})
+    right = GraphNode(id="r1", label="Q-B", type=NodeType.RESEARCH_QUESTION, data={})
+    embedding = _GateEmbeddingClient(
+        {
+            "Q-A": [1.0, 0.0],
+            "Q-B": [0.95, 0.31],
+        }
+    )
+    settings = Settings(
+        reranker_enabled=True,
+        patrol_claim_rq_coarse_threshold=0.42,
+        patrol_claim_rq_rerank_threshold=0.60,
+        patrol_claim_rq_threshold=0.75,
+    )
+
+    aligned = await align_research_question_pair(
+        [left],
+        [right],
+        embedding_client=embedding,
+        settings=settings,
+        reranker_client=_FailingRerankerClient(),
+    )
+
+    assert aligned is not None
+    assert aligned[0].label == "Q-A"
+    assert aligned[1].label == "Q-B"

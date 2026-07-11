@@ -150,12 +150,20 @@ async def align_research_question_pair(
             return left, right
         return None
 
-    candidates = await _coarse_filter_candidates(
-        left_pool,
-        right_pool,
-        embedding_client,
-        settings.patrol_claim_rq_coarse_threshold,
-    )
+    try:
+        candidates = await _coarse_filter_candidates(
+            left_pool,
+            right_pool,
+            embedding_client,
+            settings.patrol_claim_rq_coarse_threshold,
+        )
+    except Exception as exc:  # noqa: BLE001
+        logger.warning(
+            "patrol_claim_rq_gate_degraded",
+            extra={"reason": "embedding_failed", "error": str(exc)},
+        )
+        return None
+
     if not candidates:
         logger.info(
             "claim_evolution_coarse_rejected", extra={"left_count": len(left_pool), "right_count": len(right_pool)}
@@ -163,12 +171,19 @@ async def align_research_question_pair(
         return None
 
     if settings.reranker_enabled:
-        return await _select_with_reranker(
-            candidates,
-            settings=settings,
-            reranker_client=reranker_client,
-            rerank_threshold=settings.patrol_claim_rq_rerank_threshold,
-            max_candidates=settings.patrol_claim_rq_max_rerank_candidates,
-        )
+        try:
+            return await _select_with_reranker(
+                candidates,
+                settings=settings,
+                reranker_client=reranker_client,
+                rerank_threshold=settings.patrol_claim_rq_rerank_threshold,
+                max_candidates=settings.patrol_claim_rq_max_rerank_candidates,
+            )
+        except Exception as exc:  # noqa: BLE001
+            logger.warning(
+                "patrol_claim_rq_gate_degraded",
+                extra={"reason": "reranker_failed", "error": str(exc)},
+            )
+            return _select_with_strict_embedding_fallback(candidates, settings=settings)
 
     return _select_with_strict_embedding_fallback(candidates, settings=settings)

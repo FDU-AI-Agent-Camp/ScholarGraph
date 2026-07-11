@@ -694,3 +694,36 @@ async def test_claim_evolution_two_stage_pipeline_passes_with_rerank(
     point = insight.structured_points[0]
     assert isinstance(point, ClaimEvolutionPoint)
     assert "社交媒体" in point.research_question
+
+
+class _ClaimEvolutionFailingEmbeddingClient:
+    is_mock = False
+
+    async def embed_texts(self, texts: list[str]) -> list[list[float]]:
+        raise RuntimeError("embedding endpoint unavailable")
+
+
+@pytest.mark.asyncio
+async def test_claim_evolution_rq_gate_embedding_failure_returns_insufficient_data() -> None:
+    """Embedding outage must degrade to INSUFFICIENT_DATA instead of bubbling 500."""
+    graphs = {
+        "stem-001": build_stem_graph_with_question_claim(
+            "stem-001",
+            question_label="PCA 是否提升分类准确率？",
+            claim_label="准确率提升 5%",
+        ),
+        "stem-002": build_stem_graph_with_question_claim(
+            "stem-002",
+            question_label="PCA 能否提高分类精度？",
+            claim_label="准确率无显著变化",
+        ),
+    }
+    insight = await build_claim_evolution_insight(
+        graphs,
+        ["stem-001", "stem-002"],
+        embedding_client=_ClaimEvolutionFailingEmbeddingClient(),
+    )
+
+    assert insight is not None
+    assert insight.status == PatrolInsightStatus.INSUFFICIENT_DATA
+    assert insight.structured_points == []

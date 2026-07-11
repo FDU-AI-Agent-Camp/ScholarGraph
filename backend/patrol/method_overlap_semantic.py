@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import logging
+
 import numpy as np
 
 from backend.config import Settings
@@ -11,6 +13,8 @@ from backend.patrol.overlap_anchor import _OverlapAnchor
 from backend.patrol.similarity import cosine_similarity_matrix
 from backend.schemas.graph import GraphNode, UnifiedPaperGraph
 from backend.schemas.patrol import OverlapType
+
+logger = logging.getLogger(__name__)
 
 
 def _embed_text_for_node(node: GraphNode) -> str:
@@ -53,38 +57,45 @@ async def find_semantic_method_overlap(
     if matrix_size > max_matrix_size:
         return None
 
-    texts = [_embed_text_for_node(node) for node in left_methods + right_methods]
-    vectors = await embedding_client.embed_texts(texts)
-    if len(vectors) != len(texts):
-        return None
+    try:
+        texts = [_embed_text_for_node(node) for node in left_methods + right_methods]
+        vectors = await embedding_client.embed_texts(texts)
+        if len(vectors) != len(texts):
+            return None
 
-    split_at = len(left_methods)
-    similarity = cosine_similarity_matrix(vectors[:split_at], vectors[split_at:])
-    if similarity.size == 0:
-        return None
+        split_at = len(left_methods)
+        similarity = cosine_similarity_matrix(vectors[:split_at], vectors[split_at:])
+        if similarity.size == 0:
+            return None
 
-    candidate_indices = [
-        np.unravel_index(index, similarity.shape)
-        for index in np.argsort(similarity, axis=None)[::-1]
-        if float(similarity[np.unravel_index(index, similarity.shape)]) >= threshold
-    ]
-    for left_idx, right_idx in candidate_indices:
-        left_method = left_methods[left_idx]
-        right_method = right_methods[right_idx]
-        if not await has_topology_resonance(
-            left_graph,
-            right_graph,
-            left_method,
-            right_method,
-            embedding_client=embedding_client,
-            settings=settings,
-        ):
-            continue
-        return _OverlapAnchor(
-            left_node=left_method,
-            right_node=right_method,
-            overlap_kind=OverlapType.METHOD,
-            match_type="semantic",
-            overlap_score=float(similarity[left_idx, right_idx]),
+        candidate_indices = [
+            np.unravel_index(index, similarity.shape)
+            for index in np.argsort(similarity, axis=None)[::-1]
+            if float(similarity[np.unravel_index(index, similarity.shape)]) >= threshold
+        ]
+        for left_idx, right_idx in candidate_indices:
+            left_method = left_methods[left_idx]
+            right_method = right_methods[right_idx]
+            if not await has_topology_resonance(
+                left_graph,
+                right_graph,
+                left_method,
+                right_method,
+                embedding_client=embedding_client,
+                settings=settings,
+            ):
+                continue
+            return _OverlapAnchor(
+                left_node=left_method,
+                right_node=right_method,
+                overlap_kind=OverlapType.METHOD,
+                match_type="semantic",
+                overlap_score=float(similarity[left_idx, right_idx]),
+            )
+    except Exception as exc:  # noqa: BLE001
+        logger.warning(
+            "patrol_semantic_overlap_degraded",
+            extra={"reason": "embedding_or_topology_failed", "error": str(exc)},
         )
+        return None
     return None

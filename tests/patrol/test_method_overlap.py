@@ -1293,3 +1293,81 @@ async def test_method_overlap_degrades_when_matrix_too_large(monkeypatch) -> Non
     assert insight is not None
     assert insight.status == PatrolInsightStatus.INSUFFICIENT_DATA
     assert insight.structured_points == []
+
+
+class _ExplodingEmbeddingClient:
+    """Simulates live embedding 404 / timeout without is_mock."""
+
+    is_mock = False
+
+    async def embed_texts(self, texts: list[str]) -> list[list[float]]:
+        raise RuntimeError("model `bge-m3` does not exist")
+
+
+@pytest.mark.asyncio
+async def test_find_semantic_method_overlap_degrades_on_embedding_failure() -> None:
+    from backend.patrol.method_overlap_semantic import find_semantic_method_overlap
+
+    graphs = {
+        "stem-001": build_stem_graph_with_method_dataset_rq(
+            "stem-001",
+            method_label="PCA",
+            dataset_label="MNIST",
+            question_label="Does PCA help?",
+        ),
+        "stem-002": build_stem_graph_with_method_dataset_rq(
+            "stem-002",
+            method_label="Principal Component Analysis",
+            dataset_label="MNIST",
+            question_label="Can PCA help?",
+        ),
+    }
+    left_graph = graphs["stem-001"]
+    right_graph = graphs["stem-002"]
+    left_methods = [node for node in left_graph.nodes if node.type == NodeType.METHOD]
+    right_methods = [node for node in right_graph.nodes if node.type == NodeType.METHOD]
+    settings = get_settings()
+
+    anchor = await find_semantic_method_overlap(
+        left_graph,
+        right_graph,
+        left_methods,
+        right_methods,
+        _ExplodingEmbeddingClient(),
+        settings.patrol_semantic_threshold,
+        settings.patrol_max_matrix_size,
+        settings=settings,
+    )
+
+    assert anchor is None
+
+
+@pytest.mark.asyncio
+async def test_method_overlap_semantic_embedding_failure_falls_back_to_dataset_literal(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Semantic path failure must not 500; literal dataset overlap still produces READY."""
+    patch_patrol_settings(monkeypatch, enable_patrol_semantic_path=True)
+
+    graphs = {
+        "stem-001": build_stem_graph_with_method_dataset(
+            "stem-001",
+            method_label="PCA",
+            dataset_label="MNIST",
+        ),
+        "stem-002": build_stem_graph_with_method_dataset(
+            "stem-002",
+            method_label="Principal Component Analysis",
+            dataset_label="MNIST",
+        ),
+    }
+    insight = await build_method_overlap_insight(
+        graphs,
+        ["stem-001", "stem-002"],
+        embedding_client=_ExplodingEmbeddingClient(),
+    )
+
+    assert insight is not None
+    assert insight.status == PatrolInsightStatus.READY
+    assert len(insight.structured_points) == 1
+    assert insight.structured_points[0].overlap_type == OverlapType.DATASET
