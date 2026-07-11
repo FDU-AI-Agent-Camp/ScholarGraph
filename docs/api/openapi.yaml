@@ -587,7 +587,129 @@ components:
 
     PatrolMode:
       type: string
-      enum: [lens_clash, contradiction]
+      enum: [lens_clash, contradiction, method_overlap, claim_evolution]
+
+    PatrolPoint:
+      type: object
+      required: [mode]
+      discriminator:
+        propertyName: mode
+      oneOf:
+        - $ref: "#/components/schemas/ContradictionPoint"
+        - $ref: "#/components/schemas/LensClashPoint"
+        - $ref: "#/components/schemas/MethodOverlapPoint"
+        - $ref: "#/components/schemas/ClaimEvolutionPoint"
+
+    ContradictionPoint:
+      type: object
+      required: [mode, point_a, point_b, conflict_type]
+      properties:
+        mode:
+          type: string
+          enum: [contradiction]
+        point_a:
+          type: string
+        point_b:
+          type: string
+        conflict_type:
+          type: string
+
+    LensClashPoint:
+      type: object
+      required: [mode, lens_a, lens_b, clash_aspect]
+      properties:
+        mode:
+          type: string
+          enum: [lens_clash]
+        lens_a:
+          type: string
+        lens_b:
+          type: string
+        clash_aspect:
+          type: string
+
+    MethodOverlapPoint:
+      type: object
+      required: [mode, overlap_type, overlap_label, paper_a_usage, paper_b_usage]
+      properties:
+        mode:
+          type: string
+          enum: [method_overlap]
+        overlap_type:
+          type: string
+          enum: [method, dataset, mixed]
+          description: Whether the point compares methods or datasets. Dual overlap emits two points (method + dataset); mixed is deprecated.
+        overlap_label:
+          type: string
+          description: The representative label of the overlapping item (method or dataset name).
+        overlap_score:
+          type: number
+          nullable: true
+          minimum: 0.0
+          maximum: 1.0
+          description: Significance score of the overlap. 1.0 for literal label match; 0.0-1.0 for semantic soft match.
+        match_type:
+          type: string
+          nullable: true
+          enum: [literal, semantic]
+          description: How the overlap was determined.
+        node_refs:
+          type: array
+          items:
+            $ref: "#/components/schemas/NodeRef"
+          description: Graph nodes anchored by this point; supports many-to-many literal overlaps.
+        method:
+          type: string
+          description: Backwards-compatible alias for overlap_label.
+        paper_a_usage:
+          type: string
+          description: How paper A uses the overlapping item.
+        paper_b_usage:
+          type: string
+          description: How paper B uses the overlapping item.
+        dataset_a:
+          type: string
+          nullable: true
+        dataset_b:
+          type: string
+          nullable: true
+        evidence_summary:
+          type: string
+          nullable: true
+          description: Evidence-chain summary; may be null when the LLM does not produce one.
+
+    ClaimEvolutionPoint:
+      type: object
+      required: [mode, research_question]
+      properties:
+        mode:
+          type: string
+          enum: [claim_evolution]
+        research_question:
+          type: string
+        paper_a_claim:
+          type: string
+          nullable: true
+          description: Paper A's core claim; may be backfilled from VectorStore chunks when no Claim node exists.
+        paper_b_claim:
+          type: string
+          nullable: true
+          description: Paper B's core claim; may be backfilled from VectorStore chunks when no Claim node exists.
+        evolution_type:
+          type: string
+          nullable: true
+          enum: [inherit, contradict, refined]
+          description: Relationship between the two claims.
+        problem_fit_score:
+          type: integer
+          nullable: true
+          minimum: 0
+          maximum: 100
+          description: Research-question fit score; higher means the two papers address more similar problems.
+        evidence_summary:
+          type: string
+          nullable: true
+          description: Evidence-chain summary; may be null when the LLM does not produce one.
 
     PatrolRequest:
       type: object
@@ -619,8 +741,12 @@ components:
       description: |
         Insight readiness status.
         `ready` means the insight was produced from a full LLM analysis.
-        `insufficient_data` means the graphs lacked required node types (Thesis/SubArgument)
-        and a deterministic template response was returned instead.
+        `insufficient_data` means the graphs lacked required node types or did not meet
+        the mode-specific comparison criteria. Examples:
+        - lens_clash: missing AnalyticalLens nodes.
+        - contradiction: missing Thesis or SubArgument nodes.
+        - method_overlap: no overlapping Method or Dataset labels.
+        - claim_evolution: ResearchQuestion/Thesis too dissimilar, or claims are identical.
 
     PatrolInsight:
       type: object
@@ -646,6 +772,14 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/NodeRef"
+        structured_points:
+          type: array
+          items:
+            $ref: "#/components/schemas/PatrolPoint"
+        meta:
+          type: object
+          additionalProperties: true
+          description: Machine-readable metadata about insight generation (e.g. RAG degradation flags).
 
     PatrolResponse:
       type: object

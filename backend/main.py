@@ -19,6 +19,8 @@ def create_app() -> FastAPI:
         logger.warning(
             "LLM_MODE=mock — 云服务尚未接入；问答 / 巡检 / 抽取使用本地 Mock 响应（见 GET /api/v1/health）",
         )
+    for patrol_warning in settings.patrol_config_warnings():
+        logger.warning("patrol_config: %s", patrol_warning)
     app = FastAPI(
         title="ScholarGraph API",
         version=API_VERSION,

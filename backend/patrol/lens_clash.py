@@ -4,8 +4,15 @@ from collections.abc import Mapping
 
 from backend.llm.client import LlmClient
 from backend.patrol.llm_summary import generate_patrol_summary
+from backend.patrol.node_selection import select_primary_node
+from backend.patrol.similarity import derive_clash_aspect
 from backend.schemas.graph import GraphNode, UnifiedPaperGraph
-from backend.schemas.patrol import NodeRef, PatrolInsight, PatrolMode
+from backend.schemas.patrol import (
+    LensClashPoint,
+    NodeRef,
+    PatrolInsight,
+    PatrolMode,
+)
 
 ANALYTICAL_LENS_NODE_TYPE = "AnalyticalLens"
 LENS_CLASH_INSIGHT_ID = "ins-lens-clash-001"
@@ -43,6 +50,13 @@ async def build_lens_clash_insight(
     )
     summary = llm_summary or _fallback_lens_clash_summary(left_lens.label, right_lens.label)
 
+    point = LensClashPoint(
+        mode="lens_clash",
+        lens_a=left_lens.label,
+        lens_b=right_lens.label,
+        clash_aspect=derive_clash_aspect(left_lens.label, right_lens.label),
+    )
+
     return PatrolInsight(
         insight_id=LENS_CLASH_INSIGHT_ID,
         title=LENS_CLASH_TITLE,
@@ -52,16 +66,14 @@ async def build_lens_clash_insight(
             NodeRef(paper_id=left_id, node_id=left_lens.id, label=left_lens.label),
             NodeRef(paper_id=right_id, node_id=right_lens.id, label=right_lens.label),
         ],
+        structured_points=[point],
     )
 
 
 def _primary_lens(graph: UnifiedPaperGraph | None) -> GraphNode | None:
     if graph is None:
         return None
-    lenses = analytical_lens_nodes(graph)
-    if not lenses:
-        return None
-    return lenses[0]
+    return select_primary_node(analytical_lens_nodes(graph), graph=graph)
 
 
 def _fallback_lens_clash_summary(left_label: str, right_label: str) -> str:

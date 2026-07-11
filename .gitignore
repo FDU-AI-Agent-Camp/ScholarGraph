@@ -2,6 +2,7 @@
 progress.md
 progress-v2.md
 problems.md
+problems-v2.md
 ui-design-progress.md
 
 # ── 密钥与环境（勿提交）────────────────────────────────
@@ -40,6 +41,7 @@ pip-wheel-metadata/
 # ── 运行时数据与产物（保留空目录占位）──────────────────
 data/*
 !data/.gitkeep
+!data/patrol_golden_set.json
 !data/corpus/
 !data/corpus/.gitkeep
 data/corpus/*.pdf
