@@ -133,5 +133,11 @@ async def _load_graph_for_retrieval(
     if graph is None:
         return None
 
-    scale = detect_question_scale(question, paradigm=graph.paradigm)
+    scale = detect_question_scale(
+        question,
+        paradigm=graph.paradigm,
+        current_paper_context={"paper_id": paper_id},
+    )
+    if scale == QuestionScale.CROSS_PAPER:
+        return None
     return graph, scale

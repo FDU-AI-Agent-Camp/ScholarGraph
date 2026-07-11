@@ -356,3 +356,21 @@ async def test_qa_stream_http_blank_paper_without_vector_index_completes(
     assert "error" not in event_names
     assert "message" in event_names
     assert event_names[-1] == "done"
+
+
+@pytest.mark.asyncio
+async def test_qa_stream_http_rejects_cross_paper_question_with_400(
+    api_client: AsyncClient,
+    qa_graph_store: GraphStore,
+) -> None:
+    """Cross-paper intent must return 400 and guide users to Patrol."""
+    _ = qa_graph_store
+    response = await api_client.post(
+        "/api/v1/papers/hss-001/qa/stream",
+        json={"question": "How does this model compare to ResNet50?"},
+    )
+    assert response.status_code == 400
+    body = response.json()
+    assert body["detail"] == (
+        "当前问答接口仅支持单篇论文深度解析。若要对比多篇论文，请前往 /patrol 跨论文巡航模块。"
+    )

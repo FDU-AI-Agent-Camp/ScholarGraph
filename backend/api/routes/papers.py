@@ -4,33 +4,21 @@ from collections.abc import AsyncIterator
 
 from fastapi import APIRouter, Depends, File, Query, UploadFile
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel, Field, field_validator
 
 from backend.api.deps import get_hybrid_retriever_dep, get_paper_service_dep, get_request_id
+from backend.api.qa_deps import verify_question_scale
 from backend.api.responses import paginated, success
 from backend.api.sse import QA_STREAM_HEADERS, format_sse_event
 from backend.graph.skeleton import build_skeleton_graph
 from backend.rag.hybrid_retriever import HybridRetriever
+from backend.rag.models import QuestionScale
 from backend.schemas.paper import PaperStatus
 from backend.schemas.paradigm import Paradigm
+from backend.schemas.qa_stream import QaStreamRequest
 from backend.services.paper_service import PaperService
 from backend.services.qa_retrieval import build_retrieval_context_with_fallback
 
 router = APIRouter(prefix="/papers")
-
-
-class QaStreamRequest(BaseModel):
-    question: str = Field(min_length=1, max_length=4000)
-    top_k: int | None = Field(default=None, ge=1, le=50)
-
-    @field_validator("question")
-    @classmethod
-    def strip_and_require_non_empty(cls, value: str) -> str:
-        trimmed = value.strip()
-        if not trimmed:
-            msg = "question must not be empty"
-            raise ValueError(msg)
-        return trimmed
 
 
 @router.get("")
@@ -130,6 +118,7 @@ async def stream_paper_qa(
     body: QaStreamRequest,
     service: PaperService = Depends(get_paper_service_dep),
     retriever: HybridRetriever = Depends(get_hybrid_retriever_dep),
+    _scale: QuestionScale = Depends(verify_question_scale),
 ) -> StreamingResponse:
     """SSE multi-scale QA — HybridRetriever → RetrievalContext → ``qa_stream()``."""
 

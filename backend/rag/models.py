@@ -13,17 +13,19 @@ from pydantic import BaseModel, Field, model_validator
 
 
 class QuestionScale(StrEnum):
-    """Three-scale routing for hybrid RAG (aligned with ``qa_golden_set.json`` ``scale``)."""
+    """Routing scales for hybrid RAG (aligned with ``qa_golden_set.json`` ``scale``)."""
 
     SUMMARY = "summary"  # 摘要 / 整体结构 — A 尺度
     DETAIL = "detail"  # 方法 / 论证关系 / 结构细节 — A+B
     VERIFICATION = "verification"  # 证据 / 材料 / 实验与指标 — B 尺度
+    CROSS_PAPER = "cross_paper"  # 跨论文对比 — Patrol 域，单篇 QA 熔断
 
 
-# Early V2 draft used ``skeleton`` / ``cross``; golden set and ``detect_question_scale`` use
-# ``summary`` / ``verification``. ``cross`` (multi-paper) is reserved for Patrol — not a scale yet.
+# Early V2 draft used ``skeleton`` / ``cross``; golden set uses ``summary`` / ``verification``.
+# ``cross`` legacy alias maps to ``cross_paper`` for Patrol-style multi-paper questions.
 QUESTION_SCALE_LEGACY_ALIASES: dict[str, str] = {
     "skeleton": QuestionScale.SUMMARY,
+    "cross": QuestionScale.CROSS_PAPER,
 }
 
 
