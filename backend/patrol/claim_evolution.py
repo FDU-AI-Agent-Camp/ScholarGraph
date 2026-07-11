@@ -6,13 +6,13 @@ import logging
 from collections.abc import Mapping
 from typing import TYPE_CHECKING, Any
 
-import numpy as np
-
 from backend.config import get_settings
 from backend.llm.client import LlmClient
 from backend.llm.embeddings import EmbeddingClient, get_embedding_client
 from backend.patrol.llm_summary import generate_claim_evolution_summary
+from backend.patrol.node_selection import select_primary_node
 from backend.patrol.rag_service import PatrolRAGService
+from backend.patrol.similarity import cosine_similarity
 from backend.schemas.graph import GraphNode, NodeType, UnifiedPaperGraph
 from backend.schemas.patrol import (
     ClaimEvolutionPoint,
@@ -50,21 +50,6 @@ def claim_nodes(graph: UnifiedPaperGraph | None) -> list[GraphNode]:
     return [node for node in graph.nodes if node.type in (NodeType.CLAIM, NodeType.FINDING)]
 
 
-def _primary_node(nodes: list[GraphNode]) -> GraphNode | None:
-    return nodes[0] if nodes else None
-
-
-def _cosine_similarity(left: list[float], right: list[float]) -> float:
-    """Return cosine similarity between two vectors."""
-    left_arr = np.asarray(left, dtype=np.float64)
-    right_arr = np.asarray(right, dtype=np.float64)
-    left_norm = np.linalg.norm(left_arr)
-    right_norm = np.linalg.norm(right_arr)
-    if left_norm == 0 or right_norm == 0:
-        return 0.0
-    return float(left_arr @ right_arr / (left_norm * right_norm))
-
-
 async def _question_similarity(
     left: GraphNode,
     right: GraphNode,
@@ -74,7 +59,7 @@ async def _question_similarity(
     vectors = await embedding_client.embed_texts([left.label, right.label])
     if len(vectors) != 2:
         return 0.0
-    return _cosine_similarity(vectors[0], vectors[1])
+    return cosine_similarity(vectors[0], vectors[1])
 
 
 async def _retrieve_claim_backfill_chunks(
@@ -149,8 +134,14 @@ async def build_claim_evolution_insight(
             node_refs=[],
         )
 
-    left_question = _primary_node(left_questions) or _primary_node(left_theses)
-    right_question = _primary_node(right_questions) or _primary_node(right_theses)
+    left_question = select_primary_node(left_questions, graph=left_graph) or select_primary_node(
+        left_theses,
+        graph=left_graph,
+    )
+    right_question = select_primary_node(right_questions, graph=right_graph) or select_primary_node(
+        right_theses,
+        graph=right_graph,
+    )
     assert left_question is not None and right_question is not None
 
     settings = get_settings()
@@ -161,7 +152,11 @@ async def build_claim_evolution_insight(
         questions_match = left_question.label.strip().lower() == right_question.label.strip().lower()
     else:
         similarity = await _question_similarity(left_question, right_question, embed_client)
-        questions_match = similarity >= settings.patrol_claim_rq_threshold
+        rq_threshold = settings.patrol_claim_rq_threshold_effective(
+            left_question.label,
+            right_question.label,
+        )
+        questions_match = similarity >= rq_threshold
 
     if not questions_match:
         summary = f"两篇论文 {left_id} 与 {right_id} 的研究问题/论点相似度不足，无法生成观点演进巡检报告。"
@@ -175,8 +170,8 @@ async def build_claim_evolution_insight(
         )
 
     # Backfill missing claims from VectorStore when available.
-    left_claim = _primary_node(claim_nodes(left_graph))
-    right_claim = _primary_node(claim_nodes(right_graph))
+    left_claim = select_primary_node(claim_nodes(left_graph), graph=left_graph)
+    right_claim = select_primary_node(claim_nodes(right_graph), graph=right_graph)
 
     left_claim_chunks: list[str] = []
     right_claim_chunks: list[str] = []
@@ -197,6 +192,23 @@ async def build_claim_evolution_insight(
 
     left_claim_text = _format_claim(left_claim.label if left_claim else None, left_claim_chunks)
     right_claim_text = _format_claim(right_claim.label if right_claim else None, right_claim_chunks)
+
+    if left_claim_text is None and right_claim_text is None:
+        summary = (
+            f"两篇论文 {left_id} 与 {right_id} 均未检出明确结论（Claim/Finding），"
+            "且向量索引中无可召回的相关段落，无法生成观点演进巡检报告。"
+        )
+        return PatrolInsight(
+            insight_id=CLAIM_EVOLUTION_INSIGHT_ID,
+            title=CLAIM_EVOLUTION_TITLE,
+            summary=summary,
+            status=PatrolInsightStatus.INSUFFICIENT_DATA,
+            paper_ids=[left_id, right_id],
+            node_refs=[
+                NodeRef(paper_id=left_id, node_id=left_question.id, label=left_question.label),
+                NodeRef(paper_id=right_id, node_id=right_question.id, label=right_question.label),
+            ],
+        )
 
     context, meta = await _build_claim_evolution_context(
         graphs,

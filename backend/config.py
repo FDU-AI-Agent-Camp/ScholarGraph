@@ -288,6 +288,15 @@ class Settings(BaseSettings):
         validation_alias="PATROL_CLAIM_RQ_THRESHOLD",
         description="Cosine-similarity threshold for claim-evolution research-question recall.",
     )
+    patrol_claim_rq_threshold_english: float = Field(
+        default=0.55,
+        ge=0.0,
+        le=1.0,
+        validation_alias="PATROL_CLAIM_RQ_THRESHOLD_ENGLISH",
+        description=(
+            "Lower cosine-similarity threshold applied when either research question label is predominantly English."
+        ),
+    )
     patrol_claim_chunk_top_k: int = Field(
         default=3,
         ge=1,
@@ -513,6 +522,14 @@ class Settings(BaseSettings):
             DEFAULT_EMBEDDING_MODEL_THRESHOLDS["default"],
         )
         return thresholds["knn"]
+
+    def patrol_claim_rq_threshold_effective(self, *labels: str) -> float:
+        """Return the claim-evolution RQ gate threshold, with English-aware relaxation."""
+        from backend.patrol.similarity import is_predominantly_english
+
+        if any(is_predominantly_english(label) for label in labels if label.strip()):
+            return self.patrol_claim_rq_threshold_english
+        return self.patrol_claim_rq_threshold
 
     @property
     def llm_model_fallback_effective(self) -> str | None:

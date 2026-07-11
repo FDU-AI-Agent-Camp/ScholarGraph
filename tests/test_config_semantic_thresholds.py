@@ -48,3 +48,12 @@ class TestSemanticThresholdDefaults:
         )
         assert settings.semantic_similarity_threshold_effective == 0.92
         assert settings.semantic_knn_threshold_effective == 0.88
+
+    def test_patrol_claim_rq_threshold_english_default(self) -> None:
+        settings = Settings(
+            _env_file=None,
+            patrol_claim_rq_threshold=0.75,
+            patrol_claim_rq_threshold_english=0.55,
+        )
+        assert settings.patrol_claim_rq_threshold_effective("PCA 是否提升分类准确率？") == 0.75
+        assert settings.patrol_claim_rq_threshold_effective("Does PCA improve classification accuracy?") == 0.55

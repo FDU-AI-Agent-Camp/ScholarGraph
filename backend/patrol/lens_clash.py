@@ -4,6 +4,8 @@ from collections.abc import Mapping
 
 from backend.llm.client import LlmClient
 from backend.patrol.llm_summary import generate_patrol_summary
+from backend.patrol.node_selection import select_primary_node
+from backend.patrol.similarity import derive_clash_aspect
 from backend.schemas.graph import GraphNode, UnifiedPaperGraph
 from backend.schemas.patrol import (
     LensClashPoint,
@@ -52,7 +54,7 @@ async def build_lens_clash_insight(
         mode="lens_clash",
         lens_a=left_lens.label,
         lens_b=right_lens.label,
-        clash_aspect="analytical_framework",
+        clash_aspect=derive_clash_aspect(left_lens.label, right_lens.label),
     )
 
     return PatrolInsight(
@@ -71,10 +73,7 @@ async def build_lens_clash_insight(
 def _primary_lens(graph: UnifiedPaperGraph | None) -> GraphNode | None:
     if graph is None:
         return None
-    lenses = analytical_lens_nodes(graph)
-    if not lenses:
-        return None
-    return lenses[0]
+    return select_primary_node(analytical_lens_nodes(graph), graph=graph)
 
 
 def _fallback_lens_clash_summary(left_label: str, right_label: str) -> str:

@@ -466,3 +466,87 @@ async def test_claim_evolution_llm_structured_output_populates_fields() -> None:
     assert point.evolution_type == EvolutionType.CONTRADICT
     assert point.problem_fit_score == 88
     assert point.evidence_summary == "A 认为提升 5%，B 认为无显著变化。"
+
+
+async def test_claim_evolution_insufficient_when_no_claims_and_no_chunks() -> None:
+    """Both papers lack Claim nodes and VectorStore returns nothing -> INSUFFICIENT_DATA."""
+    from backend.schemas.graph import GraphNode, NodeType, UnifiedPaperGraph
+    from backend.schemas.paradigm import Paradigm
+
+    vector_store = AsyncMock()
+    vector_store.query_chunks.return_value = []
+
+    graphs = {
+        "stem-001": UnifiedPaperGraph(
+            paper_id="stem-001",
+            paradigm=Paradigm.STEM,
+            nodes=[GraphNode(id="n_q", label="Q1", type=NodeType.RESEARCH_QUESTION, data={})],
+            edges=[],
+        ),
+        "stem-002": UnifiedPaperGraph(
+            paper_id="stem-002",
+            paradigm=Paradigm.STEM,
+            nodes=[GraphNode(id="n_q", label="Q1", type=NodeType.RESEARCH_QUESTION, data={})],
+            edges=[],
+        ),
+    }
+    insight = await build_claim_evolution_insight(
+        graphs,
+        ["stem-001", "stem-002"],
+        vector_store=vector_store,
+        embedding_client=_FakeEmbeddingClient(),
+    )
+    assert insight is not None
+    assert insight.status == PatrolInsightStatus.INSUFFICIENT_DATA
+    assert insight.structured_points == []
+    assert "未检出明确结论" in insight.summary
+
+
+async def test_claim_evolution_english_questions_use_lower_threshold(monkeypatch) -> None:
+    """English paraphrases around 0.71 cosine should pass the relaxed RQ gate."""
+    from backend.schemas.graph import GraphNode, NodeType, UnifiedPaperGraph
+    from backend.schemas.paradigm import Paradigm
+
+    settings = get_settings()
+    monkeypatch.setattr(settings, "patrol_claim_rq_threshold", 0.75)
+    monkeypatch.setattr(settings, "patrol_claim_rq_threshold_english", 0.55)
+
+    class _EnglishEmbeddingClient:
+        is_mock = False
+
+        async def embed_texts(self, texts: list[str]) -> list[list[float]]:
+            return [
+                [1.0, 0.0, 0.0],
+                [0.71, 0.71, 0.0],
+            ]
+
+    left_question = "Does PCA improve classification accuracy on benchmark datasets?"
+    right_question = "Can principal component analysis boost classifier performance?"
+
+    graphs = {
+        "stem-001": UnifiedPaperGraph(
+            paper_id="stem-001",
+            paradigm=Paradigm.STEM,
+            nodes=[
+                GraphNode(id="n_q", label=left_question, type=NodeType.RESEARCH_QUESTION, data={}),
+                GraphNode(id="n_c", label="Accuracy improves by 5%", type=NodeType.CLAIM, data={}),
+            ],
+            edges=[],
+        ),
+        "stem-002": UnifiedPaperGraph(
+            paper_id="stem-002",
+            paradigm=Paradigm.STEM,
+            nodes=[
+                GraphNode(id="n_q", label=right_question, type=NodeType.RESEARCH_QUESTION, data={}),
+                GraphNode(id="n_c", label="No significant change", type=NodeType.CLAIM, data={}),
+            ],
+            edges=[],
+        ),
+    }
+    insight = await build_claim_evolution_insight(
+        graphs,
+        ["stem-001", "stem-002"],
+        embedding_client=_EnglishEmbeddingClient(),
+    )
+    assert insight is not None
+    assert insight.status == PatrolInsightStatus.READY

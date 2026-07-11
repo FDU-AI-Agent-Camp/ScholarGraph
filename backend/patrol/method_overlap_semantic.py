@@ -6,6 +6,7 @@ import numpy as np
 
 from backend.llm.embeddings import EmbeddingClient
 from backend.patrol.overlap_anchor import _OverlapAnchor
+from backend.patrol.similarity import cosine_similarity_matrix
 from backend.schemas.graph import GraphNode
 from backend.schemas.patrol import OverlapType
 
@@ -17,23 +18,6 @@ def _embed_text_for_node(node: GraphNode) -> str:
     if isinstance(description, str) and description.strip():
         parts.append(description.strip())
     return " ".join(parts)
-
-
-def _cosine_similarity_matrix(
-    left_vectors: list[list[float]],
-    right_vectors: list[list[float]],
-) -> np.ndarray:
-    """Compute the cross cosine-similarity matrix between two vector sets."""
-    left = np.asarray(left_vectors, dtype=np.float64)
-    right = np.asarray(right_vectors, dtype=np.float64)
-    left_norms = np.linalg.norm(left, axis=1, keepdims=True)
-    right_norms = np.linalg.norm(right, axis=1, keepdims=True)
-    # Avoid division by zero; zero vectors will produce all-zero similarities.
-    left_norms[left_norms == 0] = 1.0
-    right_norms[right_norms == 0] = 1.0
-    left_normalized = left / left_norms
-    right_normalized = right / right_norms
-    return left_normalized @ right_normalized.T
 
 
 async def find_semantic_method_overlap(
@@ -66,7 +50,7 @@ async def find_semantic_method_overlap(
         return None
 
     split_at = len(left_methods)
-    similarity = _cosine_similarity_matrix(vectors[:split_at], vectors[split_at:])
+    similarity = cosine_similarity_matrix(vectors[:split_at], vectors[split_at:])
     if similarity.size == 0:
         return None
 

@@ -7,7 +7,9 @@ from typing import TYPE_CHECKING, Any
 
 from backend.llm.client import LlmClient
 from backend.patrol.llm_summary import generate_patrol_summary
+from backend.patrol.node_selection import select_primary_node
 from backend.patrol.rag_service import PatrolRAGService
+from backend.patrol.similarity import derive_conflict_type
 from backend.schemas.graph import GraphNode, UnifiedPaperGraph
 from backend.schemas.patrol import (
     ContradictionPoint,
@@ -128,7 +130,7 @@ async def build_contradiction_insight(
         mode="contradiction",
         point_a=left_thesis.label,
         point_b=right_thesis.label,
-        conflict_type="potential",
+        conflict_type=derive_conflict_type(left_thesis.label, right_thesis.label),
     )
 
     return PatrolInsight(
@@ -149,10 +151,7 @@ async def build_contradiction_insight(
 def _primary_thesis(graph: UnifiedPaperGraph | None) -> GraphNode | None:
     if graph is None:
         return None
-    theses = thesis_nodes(graph)
-    if not theses:
-        return None
-    return theses[0]
+    return select_primary_node(thesis_nodes(graph), graph=graph)
 
 
 async def _build_contradiction_context(

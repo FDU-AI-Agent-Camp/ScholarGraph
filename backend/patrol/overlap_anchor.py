@@ -5,13 +5,9 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Literal
 
+from backend.patrol.similarity import normalize_label
 from backend.schemas.graph import GraphNode
 from backend.schemas.patrol import OverlapType
-
-
-def _normalize_label(label: str) -> str:
-    """Normalize a node label for overlap comparison."""
-    return label.strip().lower()
 
 
 @dataclass(frozen=True)
@@ -37,7 +33,7 @@ class _OverlapAnchor:
     @property
     def overlap_label(self) -> str:
         """Short representative label for the overlapping item."""
-        if _normalize_label(self.left_node.label) == _normalize_label(self.right_node.label):
+        if normalize_label(self.left_node.label) == normalize_label(self.right_node.label):
             return self.left_node.label
         # Prefer the shorter label as the canonical representative for semantic pairs.
         left = self.left_node.label

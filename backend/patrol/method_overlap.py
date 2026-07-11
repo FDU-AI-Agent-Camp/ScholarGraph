@@ -13,6 +13,7 @@ from backend.patrol.llm_summary import generate_method_overlap_summary
 from backend.patrol.method_overlap_semantic import find_semantic_method_overlap
 from backend.patrol.overlap_anchor import _OverlapAnchor
 from backend.patrol.rag_service import PatrolRAGService
+from backend.patrol.similarity import normalize_label
 from backend.schemas.graph import GraphNode, NodeType, UnifiedPaperGraph
 from backend.schemas.paradigm import Paradigm
 from backend.schemas.patrol import (
@@ -46,15 +47,6 @@ def dataset_nodes(graph: UnifiedPaperGraph | None) -> list[GraphNode]:
     return [node for node in graph.nodes if node.type == NodeType.DATASET]
 
 
-def _primary_node(nodes: list[GraphNode]) -> GraphNode | None:
-    return nodes[0] if nodes else None
-
-
-def _normalize(label: str) -> str:
-    """Normalize a node label for overlap comparison."""
-    return label.strip().lower()
-
-
 def _extract_usage(node: GraphNode) -> str:
     """Extract a usage description for a method node.
 
@@ -84,12 +76,12 @@ def _find_overlap_pairs(
     """
     right_by_label: dict[str, list[GraphNode]] = {}
     for node in right_nodes:
-        right_by_label.setdefault(_normalize(node.label), []).append(node)
+        right_by_label.setdefault(normalize_label(node.label), []).append(node)
 
     seen: set[str] = set()
     anchors: list[_OverlapAnchor] = []
     for left_node in left_nodes:
-        normalized = _normalize(left_node.label)
+        normalized = normalize_label(left_node.label)
         if normalized in seen:
             continue
         right_matches = right_by_label.get(normalized)

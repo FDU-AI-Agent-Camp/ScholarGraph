@@ -125,6 +125,9 @@ async def test_build_contradiction_insight_same_thesis_uses_fallback() -> None:
     assert insight is not None
     assert insight.status == PatrolInsightStatus.READY
     assert "未检出显著论证矛盾" in insight.summary
+    point = insight.structured_points[0]
+    assert isinstance(point, ContradictionPoint)
+    assert point.conflict_type == "none"
 
 
 async def test_build_contradiction_insight_returns_none_for_wrong_paper_count() -> None:
