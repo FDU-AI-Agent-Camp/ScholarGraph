@@ -133,3 +133,28 @@ class PatrolSettingsMixin:
         if any(is_predominantly_english(label) for label in labels if label.strip()):
             return self.patrol_claim_rq_threshold_english
         return self.patrol_claim_rq_threshold
+
+    def patrol_claim_rq_funnel_enabled(self) -> bool:
+        """True when claim_evolution uses coarse recall + cross-encoder rerank (TD-4 funnel)."""
+        return bool(self.reranker_enabled and self.reranker_model.strip())  # type: ignore[attr-defined]
+
+    def patrol_config_warnings(self) -> list[str]:
+        """Return live-mode Patrol config advisories (empty under ``LLM_MODE=mock``)."""
+        if self.is_llm_mock:  # type: ignore[attr-defined]
+            return []
+
+        warnings: list[str] = []
+        if not self.reranker_enabled:  # type: ignore[attr-defined]
+            warnings.append(
+                "RERANKER_ENABLED=false：claim_evolution 不走粗筛 "
+                f"{self.patrol_claim_rq_coarse_threshold} + 精排 {self.patrol_claim_rq_rerank_threshold} 漏斗，"
+                f"而回退严格双塔阈值（中文 {self.patrol_claim_rq_threshold} / "
+                f"英文 {self.patrol_claim_rq_threshold_english}），易出现大量 INSUFFICIENT_DATA；"
+                "演示/生产请设置 RERANKER_ENABLED=true 并配置 RERANKER_MODEL。"
+            )
+        elif not self.reranker_model.strip():  # type: ignore[attr-defined]
+            warnings.append(
+                "RERANKER_ENABLED=true 但 RERANKER_MODEL 为空：claim_evolution 精排无法调用，"
+                "将降级为严格双塔阈值或 INSUFFICIENT_DATA。"
+            )
+        return warnings
