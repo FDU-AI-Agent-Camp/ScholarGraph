@@ -108,6 +108,7 @@ npm run dev
 - 错误态：
   - `409 GRAPH_NOT_READY`：先执行 `run_patrol.py --seed-demo-graphs`
   - `422 PATROL_INSUFFICIENT_DATA`：切换 mode 或检查图谱节点类型
+- **`claim_evolution` 演示（live 模式）**：确认 `GET /api/v1/health` 中 `patrol_claim_rq_funnel_enabled=true`；否则需在 `.env` 设置 `RERANKER_ENABLED=true` 与 `RERANKER_MODEL`（见 [onboarding §3](../onboarding.md)）
 
 CLI 对照（可选）：
 

@@ -489,6 +489,8 @@ SSE `citation` 事件字段：
 
 触发：两篇论文 `ResearchQuestion` 或 `Thesis` 相似，但结论不同。
 
+**部署配置（live / 演示）**：RQ 对齐采用 TD-4 两阶段漏斗——双塔粗筛（`PATROL_CLAIM_RQ_COARSE_THRESHOLD`，默认 0.42）→ Cross-Encoder 精排（`PATROL_RERANK_THRESHOLD`，默认 0.60）。**需 `RERANKER_ENABLED=true` 且配置 `RERANKER_MODEL`**；默认 `.env.example` 中 `RERANKER_ENABLED=false` 会回退严格双塔阈值（中文 0.75 / 英文 0.55），与 CI 金标门禁行为不一致，易导致大量 `INSUFFICIENT_DATA`。启动后见 `GET /api/v1/health` 的 `patrol_note`。
+
 输出结构：
 
 ```json
