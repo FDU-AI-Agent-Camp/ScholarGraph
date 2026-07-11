@@ -1,7 +1,9 @@
 """Unit tests for claim_evolution patrol mode."""
 
+import math
 from unittest.mock import AsyncMock, patch
 
+import pytest
 from backend.config import get_settings
 from backend.patrol.claim_evolution import build_claim_evolution_insight
 from backend.schemas.patrol import (
@@ -550,3 +552,139 @@ async def test_claim_evolution_english_questions_use_lower_threshold(monkeypatch
     )
     assert insight is not None
     assert insight.status == PatrolInsightStatus.READY
+
+
+_MACRO_SOCIAL_LABEL = "社交媒体与政治参与的关系研究"
+_MICRO_WEIBO_LABEL = "微博使用对投票率的影响"
+_MACRO_MICRO_COSINE = 0.75
+_MICRO_VECTOR = [_MACRO_MICRO_COSINE, math.sqrt(1.0 - _MACRO_MICRO_COSINE**2)]
+
+
+class _MacroMicroGranularityEmbeddingClient:
+    """High bi-encoder cosine but semantically misaligned macro vs micro questions."""
+
+    is_mock = False
+
+    async def embed_texts(self, texts: list[str]) -> list[list[float]]:
+        vectors: dict[str, list[float]] = {
+            _MACRO_SOCIAL_LABEL: [1.0, 0.0],
+            _MICRO_WEIBO_LABEL: _MICRO_VECTOR.copy(),
+            "社交媒体使用是否促进青年政治参与？": [1.0, 0.0],
+            "社交媒体对青年政治参与有何影响？": [0.96, 0.28],
+        }
+        return [vectors.get(text, [0.0, 0.0]).copy() for text in texts]
+
+
+class _MockPatrolRerankerClient:
+    """Deterministic rerank scores keyed by (left_label, right_label)."""
+
+    def __init__(self, scores: dict[tuple[str, str], float]) -> None:
+        self._scores = scores
+
+    async def rerank_pair(self, text_a: str, text_b: str) -> float:
+        return self._scores.get((text_a, text_b), 0.0)
+
+    async def rerank_pairs(self, pairs: list[tuple[str, str]]) -> list[float]:
+        return [await self.rerank_pair(left, right) for left, right in pairs]
+
+
+async def test_claim_evolution_rerank_blocks_macro_micro_granularity_mismatch(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """卡点：粗筛放行但 Cross-Encoder 精排拦截宏微观粒度不平行的误配对。"""
+    from backend.schemas.graph import GraphNode, NodeType, UnifiedPaperGraph
+    from backend.schemas.paradigm import Paradigm
+
+    settings = get_settings()
+    monkeypatch.setattr(settings, "reranker_enabled", True)
+    monkeypatch.setattr(settings, "patrol_claim_rq_coarse_threshold", 0.42)
+    monkeypatch.setattr(settings, "patrol_claim_rq_rerank_threshold", 0.60)
+
+    graphs = {
+        "hss-macro": UnifiedPaperGraph(
+            paper_id="hss-macro",
+            paradigm=Paradigm.HSS,
+            nodes=[
+                GraphNode(id="n_thesis", label=_MACRO_SOCIAL_LABEL, type=NodeType.THESIS, data={}),
+                GraphNode(id="n_claim", label="社交媒体显著提升政治参与", type=NodeType.CLAIM, data={}),
+            ],
+            edges=[],
+        ),
+        "hss-micro": UnifiedPaperGraph(
+            paper_id="hss-micro",
+            paradigm=Paradigm.HSS,
+            nodes=[
+                GraphNode(id="n_thesis", label=_MICRO_WEIBO_LABEL, type=NodeType.THESIS, data={}),
+                GraphNode(id="n_claim", label="微博投票率略有提升", type=NodeType.CLAIM, data={}),
+            ],
+            edges=[],
+        ),
+    }
+    reranker = _MockPatrolRerankerClient(
+        {
+            (_MACRO_SOCIAL_LABEL, _MICRO_WEIBO_LABEL): 0.45,
+            (_MICRO_WEIBO_LABEL, _MACRO_SOCIAL_LABEL): 0.45,
+        }
+    )
+    insight = await build_claim_evolution_insight(
+        graphs,
+        ["hss-macro", "hss-micro"],
+        embedding_client=_MacroMicroGranularityEmbeddingClient(),
+        reranker_client=reranker,
+    )
+
+    assert insight is not None
+    assert insight.status == PatrolInsightStatus.INSUFFICIENT_DATA
+    assert insight.structured_points == []
+
+
+async def test_claim_evolution_two_stage_pipeline_passes_with_rerank(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """卡点：粗筛 + Cross-Encoder 精排均通过后进入 READY 下游。"""
+    settings = get_settings()
+    monkeypatch.setattr(settings, "reranker_enabled", True)
+    monkeypatch.setattr(settings, "patrol_claim_rq_coarse_threshold", 0.42)
+    monkeypatch.setattr(settings, "patrol_claim_rq_rerank_threshold", 0.60)
+
+    graphs = {
+        "hss-001": build_hss_graph_with_question_claim(
+            "hss-001",
+            thesis_label="社交媒体使用是否促进青年政治参与？",
+            claim_label="社交媒体显著提升政治参与意愿",
+        ),
+        "hss-002": build_hss_graph_with_question_claim(
+            "hss-002",
+            thesis_label="社交媒体对青年政治参与有何影响？",
+            claim_label="社交媒体的影响被算法过滤气泡削弱",
+        ),
+    }
+    reranker = _MockPatrolRerankerClient(
+        {
+            (
+                "社交媒体使用是否促进青年政治参与？",
+                "社交媒体对青年政治参与有何影响？",
+            ): 0.82,
+            (
+                "社交媒体对青年政治参与有何影响？",
+                "社交媒体使用是否促进青年政治参与？",
+            ): 0.82,
+        }
+    )
+    with patch(
+        "backend.patrol.claim_evolution.generate_claim_evolution_summary",
+        new_callable=AsyncMock,
+        return_value=None,
+    ):
+        insight = await build_claim_evolution_insight(
+            graphs,
+            ["hss-001", "hss-002"],
+            embedding_client=_MacroMicroGranularityEmbeddingClient(),
+            reranker_client=reranker,
+        )
+
+    assert insight is not None
+    assert insight.status == PatrolInsightStatus.READY
+    point = insight.structured_points[0]
+    assert isinstance(point, ClaimEvolutionPoint)
+    assert "社交媒体" in point.research_question
