@@ -1,0 +1,5 @@
+{
+  "factual_consistency": 0.92,
+  "hallucination_detected": false,
+  "reasoning": "Snapshot: answer cites expected graph nodes; numeric claims align with gold patterns; no forbidden STEM leakage detected."
+}

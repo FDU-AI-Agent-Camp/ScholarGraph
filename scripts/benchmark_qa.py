@@ -5,6 +5,9 @@
 收集回答后调用 Judge 模型进行结构化评估，输出 JSON report 到
 ``data/benchmark_reports/qa-{timestamp}.json``。
 
+并发控制：默认 ``asyncio.Semaphore(3)`` 限制金标评估并发；Judge live 调用
+对限流/超时类 transient 错误自动 tenacity 指数退避重试（3 次，2~30s）。
+
 Usage (from repo root)::
 
     uv run python scripts/benchmark_qa.py
@@ -63,7 +66,7 @@ EXIT_RED_LINE = 3  # Hallucination detected — CI must fail
 _GOLDEN_SET_PATH = _REPO_ROOT / "data" / "qa_golden_set.json"
 _REPORT_DIR = _REPO_ROOT / "data" / "benchmark_reports"
 _EVAL_LOG_PATH = _REPO_ROOT / "data" / "logs" / "evaluation.log"
-_DEFAULT_JUDGE_CONCURRENCY = 4
+_DEFAULT_BENCHMARK_CONCURRENCY = 3
 
 
 @dataclass(frozen=True, slots=True)
@@ -124,8 +127,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument(
         "--concurrency",
         type=int,
-        default=_DEFAULT_JUDGE_CONCURRENCY,
-        help=f"并行评估并发数 (default: {_DEFAULT_JUDGE_CONCURRENCY})",
+        default=_DEFAULT_BENCHMARK_CONCURRENCY,
+        help=f"金标评估最大并发数 (Semaphore, default: {_DEFAULT_BENCHMARK_CONCURRENCY})",
     )
     return parser.parse_args(argv)
 
@@ -347,7 +350,7 @@ async def run_benchmark(args: argparse.Namespace) -> int:
             f"(dry-run — Judge skipped)",
         )
 
-    semaphore = asyncio.Semaphore(max(args.concurrency, 1))
+    semaphore = asyncio.Semaphore(max(1, min(args.concurrency, 10)))
     tasks = [
         _eval_item_with_semaphore(
             semaphore,

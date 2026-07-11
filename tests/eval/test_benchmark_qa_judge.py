@@ -7,6 +7,7 @@ import json
 import os
 import sys
 from pathlib import Path
+from unittest.mock import patch
 
 import pytest
 
@@ -22,6 +23,7 @@ from backend.rag.qa_judge import (
     invoke_qa_judge,
 )
 from tests.conftest import REPO_ROOT
+from tests.fixtures.qa_judge_snapshot import load_qa_judge_snapshot
 
 _BENCHMARK_SCRIPT = REPO_ROOT / "scripts" / "benchmark_qa.py"
 
@@ -266,3 +268,66 @@ async def test_benchmark_full_eval_mock_repeatable(benchmark_qa_module, tmp_path
     assert report["summary"]["mean_hallucination_rate"] == 0.0
     assert report["summary"]["hallucination_pass"] is True
     assert "mean_semantic_alignment" in report["summary"]
+
+
+@pytest.mark.asyncio
+async def test_benchmark_judge_snapshot_repeatable_no_token_cost(benchmark_qa_module, tmp_path: Path) -> None:
+    """Non-dry-run benchmark uses static Judge snapshot — repeatable, zero live tokens."""
+    mod = benchmark_qa_module
+    graph_dir = tmp_path / "graphs"
+    graph_dir.mkdir()
+    mod.seed_m2_qa_graph(graph_dir)
+
+    golden_path = tmp_path / "golden.json"
+    golden_path.write_text(
+        json.dumps(
+            {
+                "version": "test",
+                "allowed_recall_floor": 0.5,
+                "items": [
+                    {
+                        "question": "STEM F1 是多少？",
+                        "paradigm": "STEM",
+                        "paper_id": "hss-001",
+                        "scale": "detail",
+                        "gold": {
+                            "nodes": ["n1"],
+                            "edges": [],
+                            "required_patterns": ["15%"],
+                            "forbidden_patterns": [],
+                        },
+                    }
+                ],
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+    snapshot = load_qa_judge_snapshot()
+
+    async def _return_snapshot(*_args: object, **_kwargs: object) -> QAJudgeResult:
+        return snapshot
+
+    report_paths = [tmp_path / f"report_{i}.json" for i in range(2)]
+    reasoning_values: list[str] = []
+
+    for report_path in report_paths:
+        args = mod.parse_args(
+            [
+                "--golden-file",
+                str(golden_path),
+                "--graph-dir",
+                str(graph_dir),
+                "--concurrency",
+                "1",
+                "--output",
+                str(report_path),
+            ],
+        )
+        with patch.object(mod, "invoke_qa_judge", side_effect=_return_snapshot):
+            exit_code = await mod.run_benchmark(args)
+        assert exit_code == mod.EXIT_SUCCESS
+        report = json.loads(report_path.read_text(encoding="utf-8"))
+        reasoning_values.append(report["results"][0]["evaluation"]["judge"]["reasoning"])
+
+    assert reasoning_values[0] == reasoning_values[1] == snapshot.reasoning
