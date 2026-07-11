@@ -18,7 +18,7 @@ from typing import TYPE_CHECKING
 
 from backend.graph.query import GraphQuery
 from backend.graph.store import GraphStore
-from backend.llm.client import LlmClient, get_llm_client
+from backend.llm.client import LlmClient, get_qa_llm_client
 from backend.schemas.graph import UnifiedPaperGraph
 from backend.schemas.paper import PaperStatus
 from backend.services.paper_service import PaperService, get_paper_service
@@ -164,6 +164,7 @@ async def qa_stream(
     question: str,
     *,
     retrieval_context: "RetrievalContext | None" = None,
+    llm: LlmClient | None = None,
 ) -> AsyncIterator[QaEvent]:
     """Stream multi-scale QA events for the SSE endpoint.
 
@@ -178,8 +179,10 @@ async def qa_stream(
         retrieval_context: Optional hybrid retrieval context from
             ``HybridRetriever.retrieve()`` (V2 Phase 2).  When ``None``,
             QA falls back to pure graph mode (V1 behaviour).
+        llm: Optional QA Generator client. Defaults to ``get_qa_llm_client()``
+            (``LLM_MODEL_QA``), decoupled from the Judge evaluator.
     """
-    engine = _GraphQaEngine()
+    engine = _GraphQaEngine(llm=llm)
     async for evt in engine.stream(paper_id, question, retrieval_context=retrieval_context):
         yield evt
 
@@ -201,7 +204,7 @@ class _GraphQaEngine:
         paper_service: PaperService | None = None,
     ) -> None:
         self._store = store or GraphStore()
-        self._llm = llm or get_llm_client()
+        self._llm = llm or get_qa_llm_client()
         self._query = query or GraphQuery()
         self._paper_service = paper_service or get_paper_service()
 
