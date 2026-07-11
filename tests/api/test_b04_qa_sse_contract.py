@@ -107,7 +107,8 @@ async def test_b04_route_streams_real_qa_without_monkeypatch(
     assert MOCK_DISCLAIMER in messages
 
     citation = next(payload for name, payload in events if name == "citation")
-    assert citation.keys() >= {"paper_id", "node_id", "label"}
+    assert citation.keys() >= {"paper_id", "node_id", "label", "type"}
+    assert citation["type"] == "node"
     assert citation["paper_id"] == "hss-001"
     graph = GraphStore(base_dir=b04_qa_env).load("hss-001")
     assert graph is not None
