@@ -12,7 +12,7 @@ from unittest.mock import patch
 import pytest
 
 from backend.llm.client import get_judge_llm_client, get_qa_llm_client, reset_llm_client_cache
-from backend.rag.models import QAJudgeResult
+from backend.rag.models import QAJudgeResult, SentenceJudgment, SentenceLabel
 from backend.rag.qa_heuristics import run_heuristic_guardrails
 from backend.rag.qa_judge import (
     build_dual_track_evaluation,
@@ -52,19 +52,23 @@ def _mock_llm_env(monkeypatch: pytest.MonkeyPatch) -> None:
 
 def test_qa_judge_result_schema_validation() -> None:
     result = QAJudgeResult(
+        sentence_judgments=[
+            SentenceJudgment(sentence="事实一致。", label=SentenceLabel.SUPPORTED),
+        ],
         factual_consistency=0.9,
         hallucination_detected=False,
         reasoning="Facts align with gold patterns.",
     )
     assert result.factual_consistency == 0.9
     assert result.hallucination_detected is False
+    assert len(result.sentence_judgments) == 1
 
 
 def test_hallucination_matrix_or_logic() -> None:
-    assert compute_question_hallucination_rate(heuristic_forbidden_hit=False, llm_judge_detected=False) == 0.0
-    assert compute_question_hallucination_rate(heuristic_forbidden_hit=True, llm_judge_detected=False) == 1.0
-    assert compute_question_hallucination_rate(heuristic_forbidden_hit=False, llm_judge_detected=True) == 1.0
-    assert compute_question_hallucination_rate(heuristic_forbidden_hit=True, llm_judge_detected=True) == 1.0
+    assert compute_question_hallucination_rate(heuristic_hard_fuse_hit=False, llm_judge_detected=False) == 0.0
+    assert compute_question_hallucination_rate(heuristic_hard_fuse_hit=True, llm_judge_detected=False) == 1.0
+    assert compute_question_hallucination_rate(heuristic_hard_fuse_hit=False, llm_judge_detected=True) == 1.0
+    assert compute_question_hallucination_rate(heuristic_hard_fuse_hit=True, llm_judge_detected=True) == 1.0
 
 
 def test_mean_hallucination_rate_ci_gate_requires_strict_zero() -> None:
@@ -109,9 +113,10 @@ async def test_invoke_qa_judge_mock_returns_structured_result() -> None:
         },
     )
     assert isinstance(result, QAJudgeResult)
+    assert result.sentence_judgments
     assert result.factual_consistency >= 0.5
     assert result.hallucination_detected is False
-    assert result.reasoning
+    assert result.reasoning.startswith("Bottom-up")
 
 
 def test_build_dual_track_fuses_forbidden_and_judge_hallucination() -> None:
@@ -121,13 +126,18 @@ def test_build_dual_track_fuses_forbidden_and_judge_hallucination() -> None:
         {"required_patterns": [], "forbidden_patterns": ["PCR"], "nodes": [], "edges": []},
     )
     judge = QAJudgeResult(
-        factual_consistency=0.2,
+        sentence_judgments=[
+            SentenceJudgment(sentence="包含 PCR", label=SentenceLabel.HALLUCINATED),
+        ],
+        factual_consistency=0.0,
         hallucination_detected=True,
         reasoning="Forbidden pattern detected.",
     )
     evaluation = build_dual_track_evaluation(guardrails, judge)
     assert evaluation["faithfulness"]["hallucination_rate"] == 1.0
-    assert evaluation["faithfulness"]["semantic_alignment"] == 0.2
+    assert evaluation["faithfulness"]["semantic_alignment"] == 0.0
+    assert evaluation["directness"]["verbosity_rate"] == guardrails.verbosity_rate
+    assert evaluation["directness"]["paradigm_aligned"] is False
     assert evaluation["dual_track"]["heuristic_passed"] is False
     assert evaluation["guardrails"]["forbidden_tripped"] is True
 
@@ -304,9 +314,23 @@ async def test_benchmark_judge_snapshot_repeatable_no_token_cost(benchmark_qa_mo
         encoding="utf-8",
     )
     snapshot = load_qa_judge_snapshot()
+    compliant_answer = "F1 达到 15% 在 ImageNet 上验证，引用节点 [CITE:n1]。"
+
+    class _CompliantQaResult:
+        question = "STEM F1 是多少？"
+        paper_id = "hss-001"
+        answer_text = compliant_answer
+        citations = [{"type": "node", "node_id": "n1"}]
+        error_code = None
+        elapsed_ms = 1
+
+    async def _fake_run_single_qa(_paper_id: str, _question: str, **_kwargs: object) -> _CompliantQaResult:
+        return _CompliantQaResult()
 
     async def _return_snapshot(*_args: object, **_kwargs: object) -> QAJudgeResult:
         return snapshot
+
+    mod.run_single_qa = _fake_run_single_qa  # type: ignore[method-assign]
 
     report_paths = [tmp_path / f"report_{i}.json" for i in range(2)]
     reasoning_values: list[str] = []

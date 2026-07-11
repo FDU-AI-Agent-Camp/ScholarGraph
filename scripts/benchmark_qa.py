@@ -67,6 +67,9 @@ _GOLDEN_SET_PATH = _REPO_ROOT / "data" / "qa_golden_set.json"
 _REPORT_DIR = _REPO_ROOT / "data" / "benchmark_reports"
 _EVAL_LOG_PATH = _REPO_ROOT / "data" / "logs" / "evaluation.log"
 _DEFAULT_BENCHMARK_CONCURRENCY = 3
+# Align with docs/v2/rag-requirements.md QA_VERBOSITY_CEILING — yellow warning only, not P0 CI block.
+_DEFAULT_QA_VERBOSITY_CEILING = 0.15
+_REDUNDANT_SUSPECT_TAG = "REDUNDANT_SUSPECT"
 
 
 @dataclass(frozen=True, slots=True)
@@ -229,7 +232,12 @@ async def run_full_eval(
     gold = item.get("gold", {})
 
     result = await run_single_qa(paper_id, question, qa_client=qa_client)
-    guardrails = run_heuristic_guardrails(result.answer_text, result.citations, gold)
+    guardrails = run_heuristic_guardrails(
+        result.answer_text,
+        result.citations,
+        gold,
+        paradigm=item.get("paradigm"),
+    )
 
     judge_elapsed_ms = 0
     judge_error: str | None = None
@@ -374,6 +382,10 @@ async def run_benchmark(args: argparse.Namespace) -> int:
         faithfulness = eval_data.get("faithfulness", {})
         hallucination_rate = faithfulness.get("hallucination_rate", 0.0)
         semantic_alignment = faithfulness.get("semantic_alignment", faithfulness.get("entailment_rate", 0.0))
+        verbosity_rate = _extract_verbosity_rate(r)
+
+        if not args.dry_run:
+            _maybe_flag_redundant_suspect(r, verbosity_rate=verbosity_rate, question=question)
 
         if hallucination_rate > 0:
             print(f"  [RED] hallucination_rate={hallucination_rate}")
@@ -401,6 +413,8 @@ async def run_benchmark(args: argparse.Namespace) -> int:
     mean_semantic_alignment = _compute_mean_semantic_alignment(results)
     per_question_hallucination = _collect_per_question_hallucination_rates(results)
     mean_hallucination_rate = compute_mean_hallucination_rate(per_question_hallucination)
+    verbosity_ceiling = _resolve_verbosity_ceiling()
+    redundant_suspects = _collect_redundant_suspects(results)
 
     report = EvaluationReport(
         generated_at=datetime.now(UTC).isoformat(),
@@ -417,6 +431,9 @@ async def run_benchmark(args: argparse.Namespace) -> int:
             "recall_pass": mean_recall >= floor,
             "mean_hallucination_rate": round(mean_hallucination_rate, 4),
             "hallucination_pass": hallucination_ci_pass(mean_hallucination_rate) if not args.dry_run else None,
+            "verbosity_ceiling": verbosity_ceiling if not args.dry_run else None,
+            "redundant_suspect_count": len(redundant_suspects) if not args.dry_run else None,
+            "redundant_suspect_questions": redundant_suspects if not args.dry_run else None,
             "qa_model": get_settings().qa_model_effective,
             "judge_model": get_settings().judge_model_effective if not args.dry_run else None,
             "clients_isolated": clients_isolated if not args.dry_run else None,
@@ -433,6 +450,12 @@ async def run_benchmark(args: argparse.Namespace) -> int:
 
     _log_evaluation(report)
 
+    if not args.dry_run and redundant_suspects:
+        print(
+            f"\n[WARN] 🟡 {len(redundant_suspects)} question(s) exceed verbosity ceiling "
+            f"{verbosity_ceiling:.0%} — tagged [{_REDUNDANT_SUSPECT_TAG}] for manual review.",
+        )
+
     if not args.dry_run and not hallucination_ci_pass(mean_hallucination_rate):
         print(
             f"\n[FAIL] RED LINE: mean hallucination_rate={mean_hallucination_rate:.0%} "
@@ -443,6 +466,69 @@ async def run_benchmark(args: argparse.Namespace) -> int:
 
     print(f"\n[OK] Success: {success_count}/{len(items)}")
     return EXIT_SUCCESS
+
+
+def _resolve_verbosity_ceiling() -> float:
+    """Resolve QA verbosity yellow-line threshold (env override, default 0.15)."""
+    raw = os.environ.get("QA_VERBOSITY_CEILING", str(_DEFAULT_QA_VERBOSITY_CEILING))
+    try:
+        return float(raw)
+    except ValueError:
+        logger.warning("invalid QA_VERBOSITY_CEILING=%r — fallback to %.2f", raw, _DEFAULT_QA_VERBOSITY_CEILING)
+        return _DEFAULT_QA_VERBOSITY_CEILING
+
+
+def _extract_verbosity_rate(result: dict[str, Any]) -> float | None:
+    directness = result.get("evaluation", {}).get("directness", {})
+    rate = directness.get("verbosity_rate")
+    if rate is None:
+        return None
+    return float(rate)
+
+
+def _maybe_flag_redundant_suspect(
+    result: dict[str, Any],
+    *,
+    verbosity_rate: float | None,
+    question: str,
+) -> bool:
+    """Mark high-verbosity answers for manual review — never fails CI."""
+    if verbosity_rate is None:
+        return False
+
+    ceiling = _resolve_verbosity_ceiling()
+    if verbosity_rate <= ceiling:
+        return False
+
+    result["redundant_suspect"] = True
+    result["verbosity_warning"] = _REDUNDANT_SUSPECT_TAG
+    logger.warning(
+        "🟡 verbosity_rate=%.4f > ceiling %.4f — [%s] question=%s",
+        verbosity_rate,
+        ceiling,
+        _REDUNDANT_SUSPECT_TAG,
+        question[:120],
+    )
+    print(
+        f"  [🟡 {_REDUNDANT_SUSPECT_TAG}] verbosity_rate={verbosity_rate:.2%} > ceiling {ceiling:.0%}",
+    )
+    return True
+
+
+def _collect_redundant_suspects(results: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Summarize questions flagged as verbosity suspects for the report summary."""
+    suspects: list[dict[str, Any]] = []
+    for result in results:
+        if not result.get("redundant_suspect"):
+            continue
+        suspects.append(
+            {
+                "question": result.get("question", ""),
+                "verbosity_rate": _extract_verbosity_rate(result),
+                "tag": _REDUNDANT_SUSPECT_TAG,
+            },
+        )
+    return suspects
 
 
 def _collect_per_question_hallucination_rates(results: list[dict[str, Any]]) -> list[float]:
