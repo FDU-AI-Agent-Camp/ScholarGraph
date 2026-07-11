@@ -20,6 +20,7 @@ __all__ = [
     "build_stem_graph_dataset_only",
     "build_stem_graph_with_method_dataset",
     "build_stem_graph_with_method_dataset_rq",
+    "build_pca_mnist_synonym_golden_corpus",
     "build_stem_graph_with_question_claim",
     "seed_corpus_patrol_graphs",
     "seed_patrol_graphs",
@@ -103,6 +104,44 @@ def build_stem_graph_with_method_dataset(
             ),
         ],
     )
+
+
+def build_pca_mnist_synonym_golden_corpus() -> tuple[dict[str, UnifiedPaperGraph], tuple[str, str]]:
+    """Golden STEM corpus for Plan C functional verification.
+
+    Paper A uses label ``PCA``; paper B uses ``Principal Component Analysis``.
+    Both methods share the normalized dataset label ``MNIST`` via EVALUATED_ON edges.
+    """
+    shared_dataset = "MNIST"
+    paper_a_id = "stem-golden-a"
+    paper_b_id = "stem-golden-b"
+    graphs = {
+        paper_a_id: build_stem_graph_with_method_dataset(
+            paper_a_id,
+            method_id="n_method_pca",
+            method_label="PCA",
+            method_data={
+                "description": "Principal-component linear projection for digit images",
+                "usage": "Applied PCA to MNIST pixel vectors before k-NN classification",
+            },
+            dataset_id="n_dataset_mnist_a",
+            dataset_label=shared_dataset,
+            dataset_data={"description": "28x28 handwritten digit benchmark"},
+        ),
+        paper_b_id: build_stem_graph_with_method_dataset(
+            paper_b_id,
+            method_id="n_method_pca_full",
+            method_label="Principal Component Analysis",
+            method_data={
+                "description": "Orthogonal basis projection retaining top eigen-directions",
+                "usage": "Principal Component Analysis compressed MNIST features to 50 dimensions",
+            },
+            dataset_id="n_dataset_mnist_b",
+            dataset_label=shared_dataset,
+            dataset_data={"description": "28x28 handwritten digit benchmark"},
+        ),
+    }
+    return graphs, (paper_a_id, paper_b_id)
 
 
 def build_stem_graph_with_method_dataset_rq(
