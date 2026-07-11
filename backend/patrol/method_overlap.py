@@ -182,6 +182,11 @@ async def build_method_overlap_insight(
             )
             if semantic_anchor is not None:
                 method_anchors = [semantic_anchor]
+        else:
+            logger.info(
+                "skipped_due_to_semantic_path_disabled",
+                extra={"paper_ids": [left_id, right_id]},
+            )
 
     node_refs: list[NodeRef] = []
     for anchor in method_anchors:
