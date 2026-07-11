@@ -47,7 +47,12 @@ from backend.llm.client import (  # noqa: E402
     reset_llm_client_cache,
 )
 from backend.llm.roles import clients_are_isolated  # noqa: E402
+from backend.rag.hybrid_retriever import HybridRetriever, bind_hybrid_retriever, reset_hybrid_retriever  # noqa: E402
+from backend.rag.models import QuestionScale  # noqa: E402
 from backend.rag.qa_heuristics import run_heuristic_guardrails
+from backend.rag.qa_router import detect_question_scale  # noqa: E402
+from backend.schemas.paradigm import Paradigm  # noqa: E402
+from backend.services.qa_service import QaService  # noqa: E402
 from backend.rag.qa_judge import (
     build_dual_track_evaluation,
     build_evaluation_fallback,
@@ -70,6 +75,10 @@ _DEFAULT_BENCHMARK_CONCURRENCY = 3
 # Align with docs/v2/rag-requirements.md QA_VERBOSITY_CEILING — yellow warning only, not P0 CI block.
 _DEFAULT_QA_VERBOSITY_CEILING = 0.15
 _REDUNDANT_SUSPECT_TAG = "REDUNDANT_SUSPECT"
+_RECALL_GATE_DETAIL_SCALES = frozenset({QuestionScale.DETAIL.value, "detail"})
+_VECTOR_BRANCH_SCALES = frozenset(
+    {QuestionScale.DETAIL.value, QuestionScale.VERIFICATION.value, "detail", "verification"},
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -82,6 +91,11 @@ class QaResult:
     citations: list[dict[str, Any]] = field(default_factory=list)
     error_code: str | None = None
     elapsed_ms: int = 0
+    ttft_ms: int | None = None
+    detected_scale: str | None = None
+    gold_scale: str | None = None
+    scale_routing_match: bool | None = None
+    vector_branch_invoked: bool | None = None
 
 
 @dataclass
@@ -155,25 +169,93 @@ def load_golden_set(path: Path) -> dict[str, Any]:
     return data
 
 
+def _build_benchmark_qa_service(graph_dir: Path) -> QaService:
+    """Wire graph store + graph-only HybridRetriever for reproducible benchmark runs."""
+    store = seed_m2_qa_graph(graph_dir)
+    retriever = HybridRetriever(vector_store=None)
+    bind_hybrid_retriever(retriever)
+    return QaService(store=store, hybrid_retriever=retriever)
+
+
+def _resolve_detected_scale(
+    question: str,
+    paper_id: str,
+    *,
+    paradigm: str | None,
+) -> QuestionScale:
+    parsed_paradigm = Paradigm(paradigm) if paradigm in {p.value for p in Paradigm} else None
+    return detect_question_scale(
+        question,
+        paradigm=parsed_paradigm,
+        current_paper_context={"paper_id": paper_id},
+    )
+
+
+def _vector_branch_invoked(scale: QuestionScale) -> bool:
+    return scale.value in _VECTOR_BRANCH_SCALES
+
+
+def _routing_fields(
+    item: dict[str, Any],
+    paper_id: str,
+) -> dict[str, Any]:
+    detected = _resolve_detected_scale(
+        item["question"],
+        paper_id,
+        paradigm=item.get("paradigm"),
+    )
+    gold_scale = str(item.get("scale", ""))
+    return {
+        "detected_scale": detected.value,
+        "gold_scale": gold_scale,
+        "scale_routing_match": detected.value == gold_scale,
+        "vector_branch_invoked": _vector_branch_invoked(detected),
+    }
+
+
 async def run_single_qa(
     paper_id: str,
     question: str,
     *,
     qa_client: LlmClient | None = None,
+    qa_service: QaService | None = None,
+    routing_meta: dict[str, Any] | None = None,
 ) -> QaResult:
-    """Execute one QA turn via the Generator client and collect SSE output."""
-    result = QaResult(question=question, paper_id=paper_id)
+    """Execute one QA turn via QaService (hybrid routing) and collect SSE output."""
+    meta = routing_meta or {}
+    result = QaResult(
+        question=question,
+        paper_id=paper_id,
+        detected_scale=meta.get("detected_scale"),
+        gold_scale=meta.get("gold_scale"),
+        scale_routing_match=meta.get("scale_routing_match"),
+        vector_branch_invoked=meta.get("vector_branch_invoked"),
+    )
     start = time.monotonic()
+    ttft_ms: int | None = None
+
+    stream = (
+        qa_service.stream(paper_id, question, llm=qa_client)
+        if qa_service is not None
+        else qa_stream(paper_id, question, llm=qa_client)
+    )
 
     try:
-        async for evt in qa_stream(paper_id, question, llm=qa_client):
+        async for evt in stream:
             if evt.event == "message":
+                if ttft_ms is None:
+                    ttft_ms = int((time.monotonic() - start) * 1000)
                 result = QaResult(
                     question=question,
                     paper_id=paper_id,
                     answer_text=result.answer_text + evt.data.get("delta", ""),
                     citations=result.citations,
                     elapsed_ms=int((time.monotonic() - start) * 1000),
+                    ttft_ms=ttft_ms,
+                    detected_scale=result.detected_scale,
+                    gold_scale=result.gold_scale,
+                    scale_routing_match=result.scale_routing_match,
+                    vector_branch_invoked=result.vector_branch_invoked,
                 )
             elif evt.event == "citation":
                 result.citations.append(evt.data)
@@ -185,6 +267,11 @@ async def run_single_qa(
                     citations=result.citations,
                     error_code=evt.data.get("code"),
                     elapsed_ms=int((time.monotonic() - start) * 1000),
+                    ttft_ms=ttft_ms,
+                    detected_scale=result.detected_scale,
+                    gold_scale=result.gold_scale,
+                    scale_routing_match=result.scale_routing_match,
+                    vector_branch_invoked=result.vector_branch_invoked,
                 )
     except Exception as exc:
         result = QaResult(
@@ -194,6 +281,11 @@ async def run_single_qa(
             citations=result.citations,
             error_code=f"EXCEPTION: {exc}",
             elapsed_ms=int((time.monotonic() - start) * 1000),
+            ttft_ms=ttft_ms,
+            detected_scale=result.detected_scale,
+            gold_scale=result.gold_scale,
+            scale_routing_match=result.scale_routing_match,
+            vector_branch_invoked=result.vector_branch_invoked,
         )
 
     return result
@@ -204,10 +296,24 @@ async def run_dry_eval(
     *,
     paper_id: str,
     qa_client: LlmClient | None = None,
+    qa_service: QaService | None = None,
 ) -> dict[str, Any]:
     """Minimal check: can we get a non-empty answer with at least one citation?"""
     question = item["question"]
-    result = await run_single_qa(paper_id, question, qa_client=qa_client)
+    routing = _routing_fields(item, paper_id)
+    result = await run_single_qa(
+        paper_id,
+        question,
+        qa_client=qa_client,
+        qa_service=qa_service,
+        routing_meta=routing,
+    )
+    guardrails = run_heuristic_guardrails(
+        result.answer_text,
+        result.citations,
+        item.get("gold", {}),
+        paradigm=item.get("paradigm"),
+    )
     return {
         "question": question,
         "paper_id": paper_id,
@@ -216,6 +322,10 @@ async def run_dry_eval(
         "citation_count": len(result.citations),
         "error_code": result.error_code,
         "elapsed_ms": result.elapsed_ms,
+        "ttft_ms": result.ttft_ms,
+        **routing,
+        "graph_element_recall": guardrails.graph_element_recall,
+        "numeric_match": guardrails.numeric_match,
         "passed": (result.error_code is None and len(result.answer_text) > 0),
     }
 
@@ -226,12 +336,20 @@ async def run_full_eval(
     paper_id: str,
     qa_client: LlmClient,
     judge_client: LlmClient,
+    qa_service: QaService | None = None,
 ) -> dict[str, Any]:
     """Run QA (Generator) then dual-track heuristic + Judge evaluation."""
     question = item["question"]
     gold = item.get("gold", {})
+    routing = _routing_fields(item, paper_id)
 
-    result = await run_single_qa(paper_id, question, qa_client=qa_client)
+    result = await run_single_qa(
+        paper_id,
+        question,
+        qa_client=qa_client,
+        qa_service=qa_service,
+        routing_meta=routing,
+    )
     guardrails = run_heuristic_guardrails(
         result.answer_text,
         result.citations,
@@ -275,6 +393,10 @@ async def run_full_eval(
         "citations": result.citations,
         "error_code": result.error_code,
         "elapsed_ms": result.elapsed_ms,
+        "ttft_ms": result.ttft_ms,
+        **routing,
+        "graph_element_recall": guardrails.graph_element_recall,
+        "numeric_match": guardrails.numeric_match,
         "judge_elapsed_ms": judge_elapsed_ms,
         "judge_error": judge_error,
         "evaluation": evaluation,
@@ -291,17 +413,24 @@ async def _eval_item_with_semaphore(
     paper_id: str,
     qa_client: LlmClient | None,
     judge_client: LlmClient | None,
+    qa_service: QaService | None,
     dry_run: bool,
 ) -> dict[str, Any]:
     async with semaphore:
         if dry_run:
-            return await run_dry_eval(item, paper_id=paper_id, qa_client=qa_client)
+            return await run_dry_eval(
+                item,
+                paper_id=paper_id,
+                qa_client=qa_client,
+                qa_service=qa_service,
+            )
         assert qa_client is not None and judge_client is not None
         return await run_full_eval(
             item,
             paper_id=paper_id,
             qa_client=qa_client,
             judge_client=judge_client,
+            qa_service=qa_service,
         )
 
 
@@ -337,8 +466,9 @@ async def run_benchmark(args: argparse.Namespace) -> int:
     get_settings.cache_clear()
     reset_llm_client_cache()
 
-    seed_m2_qa_graph(graph_dir)
+    qa_service = _build_benchmark_qa_service(graph_dir)
     print(f"[INFO] graph_dir={graph_dir}")
+    print("[INFO] qa_router wired via QaService + HybridRetriever(vector_store=None)")
 
     qa_client = get_qa_llm_client()
     judge_client: LlmClient | None = None
@@ -366,11 +496,15 @@ async def run_benchmark(args: argparse.Namespace) -> int:
             paper_id=item.get("paper_id", M2_DEMO_PAPER_ID),
             qa_client=qa_client,
             judge_client=judge_client,
+            qa_service=qa_service,
             dry_run=args.dry_run,
         )
         for item in items
     ]
-    results = await asyncio.gather(*tasks)
+    try:
+        results = await asyncio.gather(*tasks)
+    finally:
+        reset_hybrid_retriever()
 
     success_count = 0
     failed_count = 0
@@ -415,6 +549,7 @@ async def run_benchmark(args: argparse.Namespace) -> int:
     mean_hallucination_rate = compute_mean_hallucination_rate(per_question_hallucination)
     verbosity_ceiling = _resolve_verbosity_ceiling()
     redundant_suspects = _collect_redundant_suspects(results)
+    routing_summary = _compute_routing_summary(results, items)
 
     report = EvaluationReport(
         generated_at=datetime.now(UTC).isoformat(),
@@ -437,6 +572,7 @@ async def run_benchmark(args: argparse.Namespace) -> int:
             "qa_model": get_settings().qa_model_effective,
             "judge_model": get_settings().judge_model_effective if not args.dry_run else None,
             "clients_isolated": clients_isolated if not args.dry_run else None,
+            "routing": routing_summary,
         },
     )
 
@@ -449,6 +585,7 @@ async def run_benchmark(args: argparse.Namespace) -> int:
     print(f"\n[INFO] Report written to {output_path}")
 
     _log_evaluation(report)
+    _print_routing_summary(routing_summary)
 
     if not args.dry_run and redundant_suspects:
         print(
@@ -539,6 +676,132 @@ def _collect_per_question_hallucination_rates(results: list[dict[str, Any]]) -> 
         if rate is not None:
             rates.append(float(rate))
     return rates
+
+
+def _mean_ttft_for_scale(results: list[dict[str, Any]], scale: str) -> float | None:
+    ttfts = [
+        float(r["ttft_ms"])
+        for r in results
+        if r.get("detected_scale") == scale and r.get("ttft_ms") is not None
+    ]
+    if not ttfts:
+        return None
+    return sum(ttfts) / len(ttfts)
+
+
+def _compute_routing_summary(results: list[dict[str, Any]], items: list[dict[str, Any]]) -> dict[str, Any]:
+    """Aggregate scale routing accuracy, TTFT by scale, and detail recall gate."""
+    scale_matches = [bool(r.get("scale_routing_match")) for r in results if r.get("scale_routing_match") is not None]
+    summary_ttft = _mean_ttft_for_scale(results, QuestionScale.SUMMARY.value)
+    detail_ttft = _mean_ttft_for_scale(results, QuestionScale.DETAIL.value)
+    verification_ttft = _mean_ttft_for_scale(results, QuestionScale.VERIFICATION.value)
+
+    ttft_improvement_ratio: float | None = None
+    if summary_ttft is not None and detail_ttft is not None and detail_ttft > 0:
+        ttft_improvement_ratio = round(detail_ttft / summary_ttft, 2)
+
+    recall_gate = _compute_detail_recall_gate(results, items)
+    vector_wiring = _compute_vector_branch_wiring(results)
+
+    return {
+        "scale_detection_accuracy": round(sum(scale_matches) / max(len(scale_matches), 1), 2),
+        "mean_ttft_ms_summary": round(summary_ttft, 1) if summary_ttft is not None else None,
+        "mean_ttft_ms_detail": round(detail_ttft, 1) if detail_ttft is not None else None,
+        "mean_ttft_ms_verification": round(verification_ttft, 1) if verification_ttft is not None else None,
+        "summary_ttft_ratio_vs_detail": ttft_improvement_ratio,
+        "vector_branch_wiring": vector_wiring,
+        "detail_recall_gate": recall_gate,
+    }
+
+
+def _compute_vector_branch_wiring(results: list[dict[str, Any]]) -> dict[str, Any]:
+    """Shadow check: SUMMARY must skip vectors; DETAIL/VERIFICATION must invoke branch."""
+    summary_items = [r for r in results if r.get("detected_scale") == QuestionScale.SUMMARY.value]
+    detail_items = [r for r in results if r.get("detected_scale") == QuestionScale.DETAIL.value]
+    verification_items = [r for r in results if r.get("detected_scale") == QuestionScale.VERIFICATION.value]
+    return {
+        "summary_skip_vector_count": sum(1 for r in summary_items if r.get("vector_branch_invoked") is False),
+        "summary_total": len(summary_items),
+        "detail_invoke_vector_count": sum(1 for r in detail_items if r.get("vector_branch_invoked") is True),
+        "detail_total": len(detail_items),
+        "verification_invoke_vector_count": sum(
+            1 for r in verification_items if r.get("vector_branch_invoked") is True
+        ),
+        "verification_total": len(verification_items),
+        "wiring_pass": (
+            all(r.get("vector_branch_invoked") is False for r in summary_items)
+            and all(r.get("vector_branch_invoked") is True for r in detail_items)
+            and all(r.get("vector_branch_invoked") is True for r in verification_items)
+        ),
+    }
+
+
+def _extract_graph_element_recall(result: dict[str, Any]) -> float:
+    eval_recall = result.get("evaluation", {}).get("completeness", {}).get("graph_element_recall")
+    if eval_recall is not None:
+        return float(eval_recall)
+    if result.get("graph_element_recall") is not None:
+        return float(result["graph_element_recall"])
+    return 0.0
+
+
+def _extract_numeric_match(result: dict[str, Any]) -> bool:
+    guardrails = result.get("evaluation", {}).get("guardrails", {})
+    if "numeric_match" in guardrails:
+        return bool(guardrails["numeric_match"])
+    if result.get("numeric_match") is not None:
+        return bool(result["numeric_match"])
+    return True
+
+
+def _compute_detail_recall_gate(results: list[dict[str, Any]], items: list[dict[str, Any]]) -> dict[str, Any]:
+    """Recall gate for detail cohort — prefer STEM detail items when present."""
+    cohort: list[tuple[dict[str, Any], dict[str, Any]]] = [
+        (item, result)
+        for item, result in zip(items, results, strict=True)
+        if item.get("scale") in _RECALL_GATE_DETAIL_SCALES
+    ]
+    stem_detail = [(item, result) for item, result in cohort if item.get("paradigm") == Paradigm.STEM.value]
+    if stem_detail:
+        cohort = stem_detail
+
+    if not cohort:
+        return {"count": 0, "graph_element_recall_min": None, "recall_gate_pass": True, "numeric_gate_pass": True}
+
+    recalls = [_extract_graph_element_recall(result) for _, result in cohort]
+    numeric_flags = [_extract_numeric_match(result) for _, result in cohort]
+    recall_min = min(recalls)
+    return {
+        "count": len(cohort),
+        "cohort": "stem_detail" if stem_detail else "detail",
+        "graph_element_recall_min": round(recall_min, 4),
+        "graph_element_recall_values": [round(v, 4) for v in recalls],
+        "recall_gate_pass": recall_min >= 1.0,
+        "numeric_gate_pass": all(numeric_flags),
+    }
+
+
+def _print_routing_summary(routing: dict[str, Any]) -> None:
+    print("\n[INFO] --- QA Router Benchmark Metrics ---")
+    print(f"  scale_detection_accuracy={routing.get('scale_detection_accuracy')}")
+    print(f"  mean_ttft_ms_summary={routing.get('mean_ttft_ms_summary')}")
+    print(f"  mean_ttft_ms_detail={routing.get('mean_ttft_ms_detail')}")
+    print(f"  mean_ttft_ms_verification={routing.get('mean_ttft_ms_verification')}")
+    ratio = routing.get("summary_ttft_ratio_vs_detail")
+    if ratio is not None:
+        print(f"  summary_ttft_ratio_vs_detail={ratio}x (detail/summary — higher means summary is faster)")
+    wiring = routing.get("vector_branch_wiring", {})
+    print(
+        f"  vector_branch_wiring: summary_skip={wiring.get('summary_skip_vector_count')}/"
+        f"{wiring.get('summary_total')}, detail_invoke={wiring.get('detail_invoke_vector_count')}/"
+        f"{wiring.get('detail_total')}, pass={wiring.get('wiring_pass')}",
+    )
+    gate = routing.get("detail_recall_gate", {})
+    print(
+        f"  detail_recall_gate: count={gate.get('count')}, "
+        f"min_recall={gate.get('graph_element_recall_min')}, "
+        f"pass={gate.get('recall_gate_pass')}",
+    )
 
 
 def _compute_mean_recall(results: list[dict[str, Any]]) -> float:
