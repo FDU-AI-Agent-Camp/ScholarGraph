@@ -5,9 +5,10 @@ from __future__ import annotations
 import numpy as np
 
 from backend.llm.embeddings import EmbeddingClient
+from backend.patrol.method_overlap_topology import has_topology_resonance
 from backend.patrol.overlap_anchor import _OverlapAnchor
 from backend.patrol.similarity import cosine_similarity_matrix
-from backend.schemas.graph import GraphNode
+from backend.schemas.graph import GraphNode, UnifiedPaperGraph
 from backend.schemas.patrol import OverlapType
 
 
@@ -21,16 +22,23 @@ def _embed_text_for_node(node: GraphNode) -> str:
 
 
 async def find_semantic_method_overlap(
+    left_graph: UnifiedPaperGraph,
+    right_graph: UnifiedPaperGraph,
     left_methods: list[GraphNode],
     right_methods: list[GraphNode],
     embedding_client: EmbeddingClient,
     threshold: float,
     max_matrix_size: int,
+    *,
+    rq_threshold: float,
 ) -> _OverlapAnchor | None:
-    """Find the strongest semantic method overlap across two papers.
+    """Find the strongest topology-validated semantic method overlap across two papers.
 
-    Returns the best matching anchor plus the cosine score, or ``None`` when no
-    pair exceeds the threshold or the matrix is too large.
+    Pipeline:
+    1. Build cosine-similarity matrix on ``label + description``.
+    2. Collect candidate pairs with score >= *threshold*, highest first.
+    3. Apply 1-hop neighborhood resonance filter (Dataset / ResearchQuestion).
+    4. Return the first surviving pair, or ``None`` when all candidates are noise.
     """
     if not left_methods or not right_methods:
         return None
@@ -54,17 +62,28 @@ async def find_semantic_method_overlap(
     if similarity.size == 0:
         return None
 
-    best_index = int(np.argmax(similarity))
-    best_flat = np.unravel_index(best_index, similarity.shape)
-    best_score = float(similarity[best_flat])
-    if best_score < threshold:
-        return None
-
-    left_idx, right_idx = best_flat
-    return _OverlapAnchor(
-        left_node=left_methods[left_idx],
-        right_node=right_methods[right_idx],
-        overlap_kind=OverlapType.METHOD,
-        match_type="semantic",
-        overlap_score=best_score,
-    )
+    candidate_indices = [
+        np.unravel_index(index, similarity.shape)
+        for index in np.argsort(similarity, axis=None)[::-1]
+        if float(similarity[np.unravel_index(index, similarity.shape)]) >= threshold
+    ]
+    for left_idx, right_idx in candidate_indices:
+        left_method = left_methods[left_idx]
+        right_method = right_methods[right_idx]
+        if not await has_topology_resonance(
+            left_graph,
+            right_graph,
+            left_method,
+            right_method,
+            embedding_client=embedding_client,
+            rq_threshold=rq_threshold,
+        ):
+            continue
+        return _OverlapAnchor(
+            left_node=left_method,
+            right_node=right_method,
+            overlap_kind=OverlapType.METHOD,
+            match_type="semantic",
+            overlap_score=float(similarity[left_idx, right_idx]),
+        )
+    return None

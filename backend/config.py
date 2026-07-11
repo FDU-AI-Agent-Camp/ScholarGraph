@@ -267,12 +267,17 @@ class Settings(BaseSettings):
     )
 
     # Patrol semantic overlap settings
+    enable_patrol_semantic_path: bool = Field(
+        default=True,
+        validation_alias="ENABLE_PATROL_SEMANTIC_PATH",
+        description="When false, method_overlap only uses literal label matching.",
+    )
     patrol_semantic_threshold: float = Field(
-        default=0.75,
+        default=0.88,
         ge=0.0,
         le=1.0,
         validation_alias="PATROL_SEMANTIC_THRESHOLD",
-        description="Cosine-similarity threshold for soft method-overlap detection.",
+        description="Cosine-similarity threshold for soft method-overlap matrix pre-screening.",
     )
     patrol_max_matrix_size: int = Field(
         default=500,

@@ -165,16 +165,23 @@ async def build_method_overlap_insight(
 
     if not method_anchors:
         settings = get_settings()
-        client = embedding_client or get_embedding_client()
-        semantic_anchor = await find_semantic_method_overlap(
-            left_methods,
-            right_methods,
-            client,
-            settings.patrol_semantic_threshold,
-            settings.patrol_max_matrix_size,
-        )
-        if semantic_anchor is not None:
-            method_anchors = [semantic_anchor]
+        if settings.enable_patrol_semantic_path:
+            client = embedding_client or get_embedding_client()
+            assert left_graph is not None and right_graph is not None
+            semantic_anchor = await find_semantic_method_overlap(
+                left_graph,
+                right_graph,
+                left_methods,
+                right_methods,
+                client,
+                settings.patrol_semantic_threshold,
+                settings.patrol_max_matrix_size,
+                rq_threshold=settings.patrol_claim_rq_threshold_effective(
+                    *(node.label for node in left_methods + right_methods),
+                ),
+            )
+            if semantic_anchor is not None:
+                method_anchors = [semantic_anchor]
 
     node_refs: list[NodeRef] = []
     for anchor in method_anchors:
