@@ -392,8 +392,8 @@ describe('PaperDetailView', () => {
             onDone?: (data: { answer_id: string }) => void
           },
         ) => {
-          handlers.onCitation?.({ paper_id: 'hss-001', node_id: 'n1', label: '核心论点' })
-          handlers.onCitation?.({ paper_id: 'hss-001', node_id: 'n2', label: '分论点' })
+          handlers.onCitation?.({ type: 'node', paper_id: 'hss-001', node_id: 'n1', label: '核心论点' })
+          handlers.onCitation?.({ type: 'node', paper_id: 'hss-001', node_id: 'n2', label: '分论点' })
           handlers.onDone?.({ answer_id: 'ans-1' })
         },
       )
@@ -757,7 +757,7 @@ describe('PaperDetailView', () => {
           },
         ) => {
           handlers.onMessage?.({ delta: '片段' })
-          handlers.onCitation?.({ paper_id: 'hss-001', node_id: 'n1', label: '核心论点' })
+          handlers.onCitation?.({ type: 'node', paper_id: 'hss-001', node_id: 'n1', label: '核心论点' })
           handlers.onDone?.({ answer_id: 'ans-1', answer: '完整答案' })
         },
       )
@@ -791,7 +791,7 @@ describe('PaperDetailView', () => {
             onDone?: (data: { answer_id: string }) => void
           },
         ) => {
-          handlers.onCitation?.({ paper_id: 'hss-001', node_id: 'n1', label: '核心论点' })
+          handlers.onCitation?.({ type: 'node', paper_id: 'hss-001', node_id: 'n1', label: '核心论点' })
           handlers.onDone?.({ answer_id: 'ans-1' })
         },
       )

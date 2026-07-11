@@ -8,6 +8,7 @@ import { parseQaStreamEvent } from '@/api/qaStream'
 import type { UnifiedPaperGraph } from '@/api/types'
 import { cssToken } from '@/utils/cssTokens'
 import { appendUniqueCitation, buildHighlightStateMap, toG6GraphPayload } from '@/utils/paperGraph'
+import { citationNodeId } from '@/utils/qaCitations'
 import { DESIGN_SPEC_SEMANTIC_COLORS, loadDesignTokenMap, readFrontendSource } from '@/test/helpers/designTokens'
 import { answerPanelTypographyMatchesBaseline, citationTagMixedLayout } from '@/test/helpers/copyDiscipline'
 import { answerPanelStyleBlockHasNoAnimation, extractStyleBlocks } from '@/test/helpers/motionDiscipline'
@@ -17,7 +18,7 @@ describe('graph + QA SSE integration (fixtures)', () => {
     const graph = graphFixture.data as UnifiedPaperGraph
     const citationEvent = parseQaStreamEvent(
       'citation',
-      JSON.stringify({ paper_id: 'hss-001', node_id: 'n1', label: '核心论点' }),
+      JSON.stringify({ type: 'node', paper_id: 'hss-001', node_id: 'n1', label: '核心论点' }),
     )
     expect(citationEvent?.type).toBe('citation')
     if (citationEvent?.type !== 'citation') {
@@ -27,14 +28,14 @@ describe('graph + QA SSE integration (fixtures)', () => {
     const citations = appendUniqueCitation([], citationEvent.data)
     const nodeIds = toG6GraphPayload(graph).nodes.map((node) => node.id)
     const lastCitation = citations[citations.length - 1]
-    const highlight = buildHighlightStateMap(nodeIds, lastCitation?.node_id)
+    const highlight = buildHighlightStateMap(nodeIds, citationNodeId(lastCitation!))
 
     expect(highlight.n1).toBe('active')
     expect(highlight.n2).toEqual([])
   })
 
   it('deduplicates repeated citation SSE frames during one answer stream', () => {
-    const payload = JSON.stringify({ paper_id: 'hss-001', node_id: 'n1', label: '核心论点' })
+    const payload = JSON.stringify({ type: 'node', paper_id: 'hss-001', node_id: 'n1', label: '核心论点' })
     const first = parseQaStreamEvent('citation', payload)
     const second = parseQaStreamEvent('citation', payload)
     expect(first?.type).toBe('citation')
@@ -78,18 +79,18 @@ describe('graph + QA SSE integration (fixtures)', () => {
     const graph = graphFixture.data as UnifiedPaperGraph
     const nodeIds = toG6GraphPayload(graph).nodes.map((node) => node.id)
 
-    const firstCitation = { paper_id: 'hss-001', node_id: 'n1', label: '核心论点' }
-    const secondCitation = { paper_id: 'hss-001', node_id: 'n2', label: '分论点' }
+    const firstCitation = { type: 'node' as const, paper_id: 'hss-001', node_id: 'n1', label: '核心论点' }
+    const secondCitation = { type: 'node' as const, paper_id: 'hss-001', node_id: 'n2', label: '分论点' }
 
     let citations = appendUniqueCitation([], firstCitation)
     citations = appendUniqueCitation(citations, secondCitation)
 
-    let highlightNodeId = citations[citations.length - 1]?.node_id ?? null
+    let highlightNodeId = citationNodeId(citations[citations.length - 1]!)
     let states = buildHighlightStateMap(nodeIds, highlightNodeId)
     expect(states.n2).toBe('active')
     expect(states.n1).toEqual([])
 
-    highlightNodeId = citations[0]?.node_id ?? null
+    highlightNodeId = citationNodeId(citations[0]!)
     states = buildHighlightStateMap(nodeIds, highlightNodeId)
     expect(states.n1).toBe('active')
     expect(states.n2).toEqual([])

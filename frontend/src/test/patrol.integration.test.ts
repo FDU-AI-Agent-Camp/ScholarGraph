@@ -33,8 +33,8 @@ describe('patrol integration (fixtures + API + form)', () => {
     })
     expect(result.data.generated_at).toBe('2026-05-19T11:00:00Z')
     expect(result.data.insights[0]?.node_refs).toEqual([
-      { paper_id: 'hss-001', node_id: 'n_lens_a', label: '消费社会' },
-      { paper_id: 'hss-002', node_id: 'n_lens_b', label: '公共领域' },
+      { type: 'node', paper_id: 'hss-001', node_id: 'n_lens_a', label: '消费社会' },
+      { type: 'node', paper_id: 'hss-002', node_id: 'n_lens_b', label: '公共领域' },
     ])
     postSpy.mockRestore()
   })

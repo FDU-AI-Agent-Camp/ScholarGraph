@@ -51,7 +51,7 @@ function buildM2MockSseFrames(sample: (typeof M2_HSS_QUESTIONS)[number]) {
     { event: 'message', data: { delta: `【${sample.scaleTag}】根据知识图谱上下文，` } },
     {
       event: 'citation',
-      data: { paper_id: 'hss-001', node_id: sample.expectedNodeId, label: node?.label ?? sample.expectedNodeId },
+      data: { type: 'node', paper_id: 'hss-001', node_id: sample.expectedNodeId, label: node?.label ?? sample.expectedNodeId },
     },
     { event: 'message', data: { delta: MOCK_DISCLAIMER } },
     { event: 'done', data: { answer_id: 'ans-hss-001' } },
@@ -158,6 +158,10 @@ describe('V1 DoD A-09 — M2 multi-scale QA FE↔BE', () => {
         return
       }
 
+      expect(citation.data.type).toBe('node')
+      if (citation.data.type !== 'node') {
+        return
+      }
       expect(citation.data.node_id).toBe(sample.expectedNodeId)
       expect(citation.data.label).toBe(nodeIndex[sample.expectedNodeId]?.label)
 
@@ -219,7 +223,7 @@ describe('V1 DoD A-09 — M2 multi-scale QA FE↔BE', () => {
 
   describe('boundary — parser and UI guards', () => {
     it('appendUniqueCitation deduplicates repeated SSE citation frames', () => {
-      const cite = { paper_id: 'hss-001', node_id: 'n1', label: '核心论点' }
+      const cite = { type: 'node' as const, paper_id: 'hss-001', node_id: 'n1', label: '核心论点' }
       const once = appendUniqueCitation([], cite)
       const twice = appendUniqueCitation(once, cite)
       expect(twice).toHaveLength(1)
