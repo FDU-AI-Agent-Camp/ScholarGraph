@@ -2,7 +2,7 @@
 """QA 金标回归脚本 (V2 Phase 4).
 
 读取 ``data/qa_golden_set.json`` 中的金标问题，逐题调用 ``qa_stream``，
-收集回答后调用 Judge 模型进行五维度评估，输出 JSON report 到
+收集回答后调用 Judge 模型进行结构化评估，输出 JSON report 到
 ``data/benchmark_reports/qa-{timestamp}.json``。
 
 Usage (from repo root)::
@@ -37,6 +37,19 @@ if str(_REPO_ROOT) not in sys.path:
 from backend.config import get_settings  # noqa: E402
 from backend.graph.qa import qa_stream  # noqa: E402
 from backend.graph.qa_samples import M2_DEMO_PAPER_ID, seed_m2_qa_graph  # noqa: E402
+from backend.llm.client import (  # noqa: E402
+    LlmClient,
+    get_judge_llm_client,
+    get_qa_llm_client,
+    reset_llm_client_cache,
+)
+from backend.llm.roles import clients_are_isolated  # noqa: E402
+from backend.rag.qa_heuristics import run_heuristic_guardrails
+from backend.rag.qa_judge import (
+    build_dual_track_evaluation,
+    build_evaluation_fallback,
+    invoke_qa_judge,
+)  # noqa: E402
 
 logger = logging.getLogger(__name__)
 
@@ -48,65 +61,7 @@ EXIT_RED_LINE = 3  # Hallucination detected — CI must fail
 _GOLDEN_SET_PATH = _REPO_ROOT / "data" / "qa_golden_set.json"
 _REPORT_DIR = _REPO_ROOT / "data" / "benchmark_reports"
 _EVAL_LOG_PATH = _REPO_ROOT / "data" / "logs" / "evaluation.log"
-
-# ---------------------------------------------------------------------------
-# Judge prompt
-# ---------------------------------------------------------------------------
-
-_JUDGE_SYSTEM_PROMPT = """\
-你是学术 QA 质量评估专家（LLM-as-a-Judge）。请根据以下维度评估给定回答的质量。
-
-## 评估维度
-1. **faithfulness.hallucination_rate** (0.0-1.0): 回答中编造了上下文以外的信息的句子比例。
-2. **faithfulness.entailment_rate** (0.0-1.0): 回答中能从上下文推出的句子比例。
-3. **completeness.graph_element_recall** (0.0-1.0): 金标中期望的图谱节点/边被回答覆盖的比例。
-4. **directness.verbosity_rate** (0.0-1.0): 回答中冗余/绕圈内容的占比。
-5. **directness.paradigm_aligned** (boolean): 回答是否符合问题标的论文范式（HSS/STEM）。
-
-## 输出格式
-只输出 JSON，包含上述五个维度的评估结果。"""
-
-
-_JUDGE_OUTPUT_SCHEMA = {
-    "type": "object",
-    "properties": {
-        "faithfulness": {
-            "type": "object",
-            "properties": {
-                "hallucination_rate": {"type": "number", "minimum": 0.0, "maximum": 1.0},
-                "entailment_rate": {"type": "number", "minimum": 0.0, "maximum": 1.0},
-            },
-            "required": ["hallucination_rate", "entailment_rate"],
-        },
-        "completeness": {
-            "type": "object",
-            "properties": {
-                "graph_element_recall": {"type": "number", "minimum": 0.0, "maximum": 1.0},
-            },
-            "required": ["graph_element_recall"],
-        },
-        "directness": {
-            "type": "object",
-            "properties": {
-                "verbosity_rate": {"type": "number", "minimum": 0.0, "maximum": 1.0},
-                "paradigm_aligned": {"type": "boolean"},
-            },
-            "required": ["verbosity_rate", "paradigm_aligned"],
-        },
-        "sentence_judgments": {
-            "type": "array",
-            "items": {
-                "type": "object",
-                "properties": {
-                    "sentence": {"type": "string"},
-                    "label": {"type": "string", "enum": ["supported", "hallucinated", "redundant"]},
-                },
-                "required": ["sentence", "label"],
-            },
-        },
-    },
-    "required": ["faithfulness", "completeness", "directness", "sentence_judgments"],
-}
+_DEFAULT_JUDGE_CONCURRENCY = 4
 
 
 @dataclass(frozen=True, slots=True)
@@ -164,6 +119,12 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         default=None,
         help="图谱目录（默认 GRAPH_DATA_DIR env）",
     )
+    parser.add_argument(
+        "--concurrency",
+        type=int,
+        default=_DEFAULT_JUDGE_CONCURRENCY,
+        help=f"并行评估并发数 (default: {_DEFAULT_JUDGE_CONCURRENCY})",
+    )
     return parser.parse_args(argv)
 
 
@@ -186,13 +147,18 @@ def load_golden_set(path: Path) -> dict[str, Any]:
     return data
 
 
-async def run_single_qa(paper_id: str, question: str) -> QaResult:
-    """Execute one QA turn and collect output."""
+async def run_single_qa(
+    paper_id: str,
+    question: str,
+    *,
+    qa_client: LlmClient | None = None,
+) -> QaResult:
+    """Execute one QA turn via the Generator client and collect SSE output."""
     result = QaResult(question=question, paper_id=paper_id)
     start = time.monotonic()
 
     try:
-        async for evt in qa_stream(paper_id, question):
+        async for evt in qa_stream(paper_id, question, llm=qa_client):
             if evt.event == "message":
                 result = QaResult(
                     question=question,
@@ -229,10 +195,11 @@ async def run_dry_eval(
     item: dict[str, Any],
     *,
     paper_id: str,
+    qa_client: LlmClient | None = None,
 ) -> dict[str, Any]:
     """Minimal check: can we get a non-empty answer with at least one citation?"""
     question = item["question"]
-    result = await run_single_qa(paper_id, question)
+    result = await run_single_qa(paper_id, question, qa_client=qa_client)
     return {
         "question": question,
         "paper_id": paper_id,
@@ -249,40 +216,41 @@ async def run_full_eval(
     item: dict[str, Any],
     *,
     paper_id: str,
-    judge_client: Any | None = None,
+    qa_client: LlmClient,
+    judge_client: LlmClient,
 ) -> dict[str, Any]:
-    """Run QA + Judge evaluation."""
+    """Run QA (Generator) then dual-track heuristic + Judge evaluation."""
     question = item["question"]
     gold = item.get("gold", {})
 
-    result = await run_single_qa(paper_id, question)
+    result = await run_single_qa(paper_id, question, qa_client=qa_client)
+    guardrails = run_heuristic_guardrails(result.answer_text, result.citations, gold)
 
-    # Simple pattern-based check (no LLM judge cost).
-    passed_patterns = True
-    for pattern in gold.get("required_patterns", []):
-        if pattern.lower() not in result.answer_text.lower():
-            passed_patterns = False
-            break
+    judge_elapsed_ms = 0
+    judge_error: str | None = None
+    evaluation: dict[str, Any] = {}
 
-    has_forbidden = False
-    for pattern in gold.get("forbidden_patterns", []):
-        if pattern.lower() in result.answer_text.lower():
-            has_forbidden = True
-            break
-
-    # Check graph element recall against gold nodes/edges.
-    cited_node_ids = {c.get("node_id", "") for c in result.citations if c.get("type") in (None, "node")}
-    cited_edge_ids = {c.get("edge_id", "") for c in result.citations if c.get("type") == "edge"}
-    expected_nodes = set(gold.get("nodes", []))
-    expected_edges = set(gold.get("edges", []))
-
-    node_recall = len(cited_node_ids & expected_nodes) / max(len(expected_nodes), 1)
-    edge_recall = len(cited_edge_ids & expected_edges) / max(len(expected_edges), 1)
-    graph_element_recall = (
-        (node_recall + edge_recall) / max(len(expected_nodes) + len(expected_edges), 1) * 2
-        if (len(expected_nodes) + len(expected_edges)) > 0
-        else 1.0
-    )
+    if result.error_code is None and result.answer_text.strip():
+        judge_start = time.monotonic()
+        try:
+            judge_result = await invoke_qa_judge(
+                judge_client,
+                question=question,
+                paradigm=item.get("paradigm"),
+                answer_text=result.answer_text,
+                citations=result.citations,
+                gold=gold,
+                guardrails=guardrails,
+            )
+            evaluation = build_dual_track_evaluation(guardrails, judge_result)
+        except Exception as exc:
+            judge_error = str(exc)
+            logger.exception("judge_eval_failed question=%s", question[:80])
+            evaluation = build_evaluation_fallback(guardrails, judge_error=judge_error)
+        judge_elapsed_ms = int((time.monotonic() - judge_start) * 1000)
+    else:
+        evaluation = build_evaluation_fallback(guardrails)
+        evaluation["skipped_judge"] = True
 
     return {
         "question": question,
@@ -294,22 +262,56 @@ async def run_full_eval(
         "citations": result.citations,
         "error_code": result.error_code,
         "elapsed_ms": result.elapsed_ms,
-        "evaluation": {
-            "faithfulness": {
-                "hallucination_rate": 0.0 if not has_forbidden else 1.0,
-                "entailment_rate": 1.0 if passed_patterns else 0.5,
-            },
-            "completeness": {
-                "graph_element_recall": round(graph_element_recall, 2),
-            },
-            "directness": {
-                "verbosity_rate": 0.0,
-                "paradigm_aligned": True,
-            },
-        },
-        "passed_required_patterns": passed_patterns,
-        "has_forbidden_patterns": has_forbidden,
+        "judge_elapsed_ms": judge_elapsed_ms,
+        "judge_error": judge_error,
+        "evaluation": evaluation,
+        "passed_required_patterns": guardrails.passed_required_patterns,
+        "has_forbidden_patterns": guardrails.has_forbidden_patterns,
+        "guardrails_passed": guardrails.passed,
     }
+
+
+async def _eval_item_with_semaphore(
+    semaphore: asyncio.Semaphore,
+    item: dict[str, Any],
+    *,
+    paper_id: str,
+    qa_client: LlmClient | None,
+    judge_client: LlmClient | None,
+    dry_run: bool,
+) -> dict[str, Any]:
+    async with semaphore:
+        if dry_run:
+            return await run_dry_eval(item, paper_id=paper_id, qa_client=qa_client)
+        assert qa_client is not None and judge_client is not None
+        return await run_full_eval(
+            item,
+            paper_id=paper_id,
+            qa_client=qa_client,
+            judge_client=judge_client,
+        )
+
+
+def _log_dual_model_bindings(qa_client: LlmClient, judge_client: LlmClient) -> bool:
+    """Print Generator/Judge bindings and return whether they are isolated."""
+    settings = get_settings()
+    isolated = clients_are_isolated(qa_client, judge_client)
+    print(
+        f"[INFO] Generator (QA): model={settings.qa_model_effective}, "
+        f"endpoint={qa_client.api_base_url or '(default)'}, role={qa_client.role}",
+    )
+    print(
+        f"[INFO] Judge: model={settings.judge_model_effective}, "
+        f"endpoint={judge_client.api_base_url or '(default)'}, role={judge_client.role}",
+    )
+    if settings.is_llm_live and not isolated:
+        print(
+            "[WARN] QA 与 Judge 共享相同 model/endpoint/key — "
+            "建议配置 LLM_MODEL_QA / LLM_MODEL_JUDGE 及独立 QA_API_KEY / JUDGE_API_KEY。",
+        )
+    else:
+        print(f"[INFO] Generator/Judge isolated={isolated}")
+    return isolated
 
 
 async def run_benchmark(args: argparse.Namespace) -> int:
@@ -320,31 +322,53 @@ async def run_benchmark(args: argparse.Namespace) -> int:
     graph_dir.mkdir(parents=True, exist_ok=True)
     os.environ["GRAPH_DATA_DIR"] = str(graph_dir)
     get_settings.cache_clear()
+    reset_llm_client_cache()
 
-    # Seed demo graph so QA has data to work with.
     seed_m2_qa_graph(graph_dir)
     print(f"[INFO] graph_dir={graph_dir}")
 
-    results: list[dict[str, Any]] = []
+    qa_client = get_qa_llm_client()
+    judge_client: LlmClient | None = None
+    clients_isolated = True
+    if not args.dry_run:
+        judge_client = get_judge_llm_client()
+        clients_isolated = _log_dual_model_bindings(qa_client, judge_client)
+        settings = get_settings()
+        print(
+            f"[INFO] Judge timeout={settings.judge_timeout_seconds}s, "
+            f"concurrency={args.concurrency}",
+        )
+    else:
+        settings = get_settings()
+        print(
+            f"[INFO] Generator (QA): model={settings.qa_model_effective} "
+            f"(dry-run — Judge skipped)",
+        )
+
+    semaphore = asyncio.Semaphore(max(args.concurrency, 1))
+    tasks = [
+        _eval_item_with_semaphore(
+            semaphore,
+            item,
+            paper_id=item.get("paper_id", M2_DEMO_PAPER_ID),
+            qa_client=qa_client,
+            judge_client=judge_client,
+            dry_run=args.dry_run,
+        )
+        for item in items
+    ]
+    results = await asyncio.gather(*tasks)
+
     success_count = 0
     failed_count = 0
-
-    for idx, item in enumerate(items, start=1):
+    for idx, (item, r) in enumerate(zip(items, results, strict=True), start=1):
         question = item["question"]
-        paper_id = item.get("paper_id", M2_DEMO_PAPER_ID)
         print(f"\n[{idx}/{len(items)}] {question[:60]}...")
 
-        if args.dry_run:
-            r = await run_dry_eval(item, paper_id=paper_id)
-        else:
-            r = await run_full_eval(item, paper_id=paper_id)
-
-        results.append(r)
-
-        # Check CI gate levels.
         eval_data = r.get("evaluation", {})
         faithfulness = eval_data.get("faithfulness", {})
         hallucination_rate = faithfulness.get("hallucination_rate", 0.0)
+        semantic_alignment = faithfulness.get("semantic_alignment", faithfulness.get("entailment_rate", 0.0))
 
         if hallucination_rate > 0:
             print(f"  [RED] hallucination_rate={hallucination_rate}")
@@ -352,16 +376,24 @@ async def run_benchmark(args: argparse.Namespace) -> int:
         elif r.get("error_code"):
             print(f"  [SKIP] error_code={r['error_code']}")
             failed_count += 1
-        elif r.get("passed", True) is False:
-            print("  [WARN] strict evaluation not passed")
+        elif r.get("judge_error"):
+            print(f"  [FAIL] judge_error={r['judge_error']}")
+            failed_count += 1
+        elif r.get("guardrails_passed", r.get("evaluation", {}).get("guardrails", {}).get("passed", True)) is False:
+            print("  [WARN] heuristic guardrails not passed")
             failed_count += 1
         else:
-            print(f"  [OK] answer_length={r['answer_length']}, citations={r['citation_count']}")
+            alignment_suffix = ""
+            if eval_data:
+                alignment_suffix = f", semantic_alignment={semantic_alignment}"
+            print(
+                f"  [OK] answer_length={r['answer_length']}, citations={r['citation_count']}{alignment_suffix}",
+            )
             success_count += 1
 
-    # Generate report.
     floor = golden.get("allowed_recall_floor", 0.80)
     mean_recall = _compute_mean_recall(results)
+    mean_semantic_alignment = _compute_mean_semantic_alignment(results)
 
     report = EvaluationReport(
         generated_at=datetime.now(UTC).isoformat(),
@@ -369,16 +401,19 @@ async def run_benchmark(args: argparse.Namespace) -> int:
         total_questions=len(items),
         success_count=success_count,
         failed_count=failed_count,
-        results=results,
+        results=list(results),
         summary={
             "success_rate": success_count / max(len(items), 1),
             "mean_graph_element_recall": round(mean_recall, 2),
+            "mean_semantic_alignment": round(mean_semantic_alignment, 2),
             "recall_floor": floor,
             "recall_pass": mean_recall >= floor,
+            "qa_model": get_settings().qa_model_effective,
+            "judge_model": get_settings().judge_model_effective if not args.dry_run else None,
+            "clients_isolated": clients_isolated if not args.dry_run else None,
         },
     )
 
-    # Write report.
     _REPORT_DIR.mkdir(parents=True, exist_ok=True)
     output_path = args.output or (_REPORT_DIR / f"qa-{datetime.now(UTC).strftime('%Y%m%dT%H%M%SZ')}.json")
     output_path.write_text(
@@ -387,10 +422,8 @@ async def run_benchmark(args: argparse.Namespace) -> int:
     )
     print(f"\n[INFO] Report written to {output_path}")
 
-    # Write evaluation log.
     _log_evaluation(report)
 
-    # CI gate.
     if any(r.get("evaluation", {}).get("faithfulness", {}).get("hallucination_rate", 0) > 0 for r in results):
         print("\n[FAIL] RED LINE: Hallucination detected — CI must block merge.")
         return EXIT_RED_LINE
@@ -404,6 +437,18 @@ def _compute_mean_recall(results: list[dict[str, Any]]) -> float:
     if not recals:
         return 0.0
     return sum(recals) / len(recals)
+
+
+def _compute_mean_semantic_alignment(results: list[dict[str, Any]]) -> float:
+    alignments = [
+        r.get("evaluation", {})
+        .get("faithfulness", {})
+        .get("semantic_alignment", r.get("evaluation", {}).get("faithfulness", {}).get("entailment_rate", 0.0))
+        for r in results
+    ]
+    if not alignments:
+        return 0.0
+    return sum(alignments) / len(alignments)
 
 
 def _log_evaluation(report: EvaluationReport) -> None:
