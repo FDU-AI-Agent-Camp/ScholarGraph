@@ -11,6 +11,7 @@ from langchain_core.messages import HumanMessage, SystemMessage
 from backend.llm.client import LlmClient
 from backend.rag.models import QAJudgeResult
 from backend.rag.qa_heuristics import HeuristicGuardrailResult
+from backend.rag.qa_judge_retry import run_with_judge_retry
 from backend.rag.qa_judge_structured import invoke_judge_structured_output
 
 logger = logging.getLogger(__name__)
@@ -189,4 +190,6 @@ async def invoke_qa_judge(
         structured = client.chat.with_structured_output(QAJudgeResult)
         return cast(QAJudgeResult, await structured.ainvoke(messages))
 
-    return await invoke_judge_structured_output(client, messages)
+    return await run_with_judge_retry(
+        lambda: invoke_judge_structured_output(client, messages),
+    )
