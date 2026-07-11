@@ -1,0 +1,47 @@
+[
+  {
+    "event": "message",
+    "data": { "delta": "根据检索上下文，" }
+  },
+  {
+    "event": "citation",
+    "data": {
+      "type": "node",
+      "paper_id": "hss-001",
+      "node_id": "n1",
+      "label": "核心论点"
+    }
+  },
+  {
+    "event": "citation",
+    "data": {
+      "type": "edge",
+      "paper_id": "hss-001",
+      "edge_id": "e_supports_01",
+      "label": "分论点 → 核心论点"
+    }
+  },
+  {
+    "event": "citation",
+    "data": {
+      "type": "chunk",
+      "paper_id": "hss-001",
+      "chunk_id": "hss-001-00001",
+      "label": "片段 hss-001-00001",
+      "text_preview": "制度一旦形成便会产生路径依赖。"
+    }
+  },
+  {
+    "event": "citation",
+    "data": {
+      "type": "page",
+      "paper_id": "hss-001",
+      "page": 12,
+      "label": "第12页"
+    }
+  },
+  {
+    "event": "done",
+    "data": { "answer_id": "ans-550e8400" }
+  }
+]

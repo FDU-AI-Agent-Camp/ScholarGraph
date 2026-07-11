@@ -4,7 +4,7 @@ info:
   version: 1.0.0
   description: |
     V1 冻结契约。人文档见 docs/v1/api-contract.md。
-    SSE 仅 POST /papers/{paper_id}/qa/stream。
+    SSE 仅 POST /papers/{paper_id}/qa/stream；V2 多类型 citation 见 docs/api/sse-qa.md。
 
 servers:
   - url: http://localhost:8000/api/v1
@@ -189,11 +189,43 @@ paths:
               $ref: "#/components/schemas/QaStreamRequest"
       responses:
         "200":
-          description: SSE stream
+          description: |
+            `text/event-stream; charset=utf-8`。帧格式见 docs/api/sse-qa.md。
+            Wire 为 SSE 文本；`components/schemas/QaStream*` 描述各 `event:` 的 JSON data 载荷。
           content:
             text/event-stream:
               schema:
                 type: string
+                description: |
+                  SSE 帧序列。每帧 `event:` + `data:`（单行 JSON）。
+                  citation 载荷 schema 见 `#/components/schemas/QaStreamCitation`。
+              examples:
+                v2MultiTypeCitation:
+                  summary: V2 多类型 citation 示例
+                  value: |
+                    event: message
+                    data: {"delta":"根据检索上下文，"}
+
+                    event: citation
+                    data: {"type":"node","paper_id":"hss-001","node_id":"n1","label":"核心论点"}
+
+                    event: citation
+                    data: {"type":"edge","paper_id":"hss-001","edge_id":"e1","label":"分论点 → 核心论点"}
+
+                    event: citation
+                    data: {"type":"chunk","paper_id":"hss-001","chunk_id":"hss-001-00001","label":"片段 hss-001-00001","text_preview":"制度一旦形成便会产生路径依赖。"}
+
+                    event: citation
+                    data: {"type":"page","paper_id":"hss-001","page":12,"label":"第12页"}
+
+                    event: done
+                    data: {"answer_id":"ans-550e8400"}
+        "400":
+          description: CROSS_PAPER — 跨论文问题，引导使用 Patrol
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
         "404":
           $ref: "#/components/responses/NotFound"
         "409":
@@ -584,6 +616,124 @@ components:
         question:
           type: string
           minLength: 1
+
+    QaStreamMessageData:
+      type: object
+      required: [delta]
+      properties:
+        delta:
+          type: string
+          description: LLM 增量文本片段
+
+    QaStreamCitationType:
+      type: string
+      enum: [node, edge, chunk, page]
+      description: |
+        V2 citation 判别字段，与 backend.graph.qa_v2.dispatch_citation 一致。
+        缺省 `type` 时 FE 应视为 `node`（V1 兼容）。
+
+    QaStreamCitationNode:
+      type: object
+      required: [type, paper_id, node_id, label]
+      properties:
+        type:
+          type: string
+          enum: [node]
+        paper_id:
+          type: string
+        node_id:
+          type: string
+        label:
+          type: string
+          description: 图谱节点展示名
+
+    QaStreamCitationEdge:
+      type: object
+      required: [type, paper_id, edge_id, label]
+      properties:
+        type:
+          type: string
+          enum: [edge]
+        paper_id:
+          type: string
+        edge_id:
+          type: string
+        label:
+          type: string
+          description: 通常为 `"{source_label} → {target_label}"`
+
+    QaStreamCitationChunk:
+      type: object
+      required: [type, paper_id, chunk_id, label, text_preview]
+      properties:
+        type:
+          type: string
+          enum: [chunk]
+        paper_id:
+          type: string
+        chunk_id:
+          type: string
+        label:
+          type: string
+          description: 通常为 `"片段 {chunk_id}"`
+        text_preview:
+          type: string
+          maxLength: 120
+          description: 原文片段预览（最多 120 字符）
+
+    QaStreamCitationPage:
+      type: object
+      required: [type, paper_id, page, label]
+      properties:
+        type:
+          type: string
+          enum: [page]
+        paper_id:
+          type: string
+        page:
+          oneOf:
+            - type: integer
+            - type: string
+          description: 页码；非整数引用（如 appendix）时为 string
+        label:
+          type: string
+          description: 通常为 `"第{page}页"`
+
+    QaStreamCitation:
+      description: |
+        SSE `event: citation` 的 JSON data。由 LLM 输出 `[CITE:...]` 经 dispatch_citation 解析。
+      oneOf:
+        - $ref: "#/components/schemas/QaStreamCitationNode"
+        - $ref: "#/components/schemas/QaStreamCitationEdge"
+        - $ref: "#/components/schemas/QaStreamCitationChunk"
+        - $ref: "#/components/schemas/QaStreamCitationPage"
+      discriminator:
+        propertyName: type
+        mapping:
+          node: "#/components/schemas/QaStreamCitationNode"
+          edge: "#/components/schemas/QaStreamCitationEdge"
+          chunk: "#/components/schemas/QaStreamCitationChunk"
+          page: "#/components/schemas/QaStreamCitationPage"
+
+    QaStreamDoneData:
+      type: object
+      required: [answer_id]
+      properties:
+        answer_id:
+          type: string
+        answer:
+          type: string
+          description: 可选；完整答案快照
+
+    QaStreamErrorData:
+      type: object
+      required: [message]
+      properties:
+        code:
+          type: string
+          description: 流内异常常见 `QA_STREAM_ERROR`
+        message:
+          type: string
 
     PatrolMode:
       type: string
