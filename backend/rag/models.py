@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 from enum import StrEnum
-from typing import Protocol
+from typing import Protocol, Self
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 # ---------------------------------------------------------------------------
 # Question-scale routing (Phase 2 — rag-qa-evaluation / rag-hybrid-retriever)
@@ -125,28 +125,80 @@ class EmbeddingClientProtocol(Protocol):
 # ---------------------------------------------------------------------------
 
 
-class QAJudgeResult(BaseModel):
-    """Structured output from the LLM-as-a-Judge QA evaluation pass (Track B)."""
+class SentenceLabel(StrEnum):
+    """Per-sentence entailment label for bottom-up Judge (Track B Step 1)."""
 
+    SUPPORTED = "supported"
+    HALLUCINATED = "hallucinated"
+    REDUNDANT = "redundant"
+
+
+class SentenceJudgment(BaseModel):
+    """One sentence from the model answer with a micro-level label."""
+
+    sentence: str = Field(
+        ...,
+        min_length=1,
+        description="The exact substring sentence from the model answer.",
+    )
+    label: SentenceLabel = Field(
+        ...,
+        description="Evaluation label for this specific sentence.",
+    )
+
+
+class JudgeMicroOutput(BaseModel):
+    """Step 1 LLM binding — micro sentence labels only (macro derived in code)."""
+
+    sentence_judgments: list[SentenceJudgment] = Field(
+        ...,
+        min_length=1,
+        description="Break down the model answer into sentences and judge them one by one.",
+    )
+
+
+class TrackBJudgeSchema(BaseModel):
+    """Full Track B Judge output: micro sentence_judgments + macro scores (asymmetric nesting)."""
+
+    sentence_judgments: list[SentenceJudgment] = Field(
+        ...,
+        min_length=1,
+        description="Break down the model answer into sentences and judge them one by one.",
+    )
+    hallucination_detected: bool = Field(
+        ...,
+        description="Must be true if ANY sentence is labeled as 'hallucinated'.",
+    )
     factual_consistency: float = Field(
         ...,
         ge=0.0,
         le=1.0,
-        description="Score from 0.0 to 1.0 indicating semantic alignment of facts with the golden context.",
-    )
-    hallucination_detected: bool = Field(
-        ...,
-        description="True if the model answer contains facts or logical claims contradictory to or unsupported by context.",
+        description="Macro score (0.0-1.0) based on the percentage of supported semantic logic.",
     )
     reasoning: str = Field(
         ...,
         min_length=1,
-        description="Detailed justification for the above metrics.",
+        description="Detailed justification connecting the sentence judgments to the macro scores.",
     )
 
+    @model_validator(mode="after")
+    def verify_consistency(self) -> Self:
+        """Reject macro/micro contradictions (e.g. hallucinated sentence but macro flag false)."""
+        has_hallucinated_sentence = any(
+            item.label == SentenceLabel.HALLUCINATED for item in self.sentence_judgments
+        )
+        if has_hallucinated_sentence and not self.hallucination_detected:
+            raise ValueError(
+                "Macro 'hallucination_detected' must be True if hallucinated sentences exist.",
+            )
+        return self
 
-# Public alias for benchmark / Instructor-style structured Judge contracts.
-JudgeSchema = QAJudgeResult
+
+# Backward-compatible alias used across benchmark / API reports.
+QAJudgeResult = TrackBJudgeSchema
+
+# LLM structured-output binding: Step 1 micro schema only — macro fields computed in code.
+JudgeSchema = JudgeMicroOutput
 
 
 class RetrievalContext(BaseModel):
