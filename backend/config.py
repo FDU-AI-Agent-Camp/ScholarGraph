@@ -291,7 +291,28 @@ class Settings(BaseSettings):
         ge=0.0,
         le=1.0,
         validation_alias="PATROL_CLAIM_RQ_THRESHOLD",
-        description="Cosine-similarity threshold for claim-evolution research-question recall.",
+        description="Strict cosine gate used when reranker is disabled (legacy fallback).",
+    )
+    patrol_claim_rq_coarse_threshold: float = Field(
+        default=0.42,
+        ge=0.0,
+        le=1.0,
+        validation_alias="PATROL_CLAIM_RQ_COARSE_THRESHOLD",
+        description="Stage-1 bi-encoder coarse recall threshold for claim_evolution RQ pairing.",
+    )
+    patrol_claim_rq_rerank_threshold: float = Field(
+        default=0.60,
+        ge=0.0,
+        le=1.0,
+        validation_alias="PATROL_RERANK_THRESHOLD",
+        description="Stage-2 cross-encoder rerank hard gate for claim_evolution RQ pairing.",
+    )
+    patrol_claim_rq_max_rerank_candidates: int = Field(
+        default=8,
+        ge=1,
+        le=32,
+        validation_alias="PATROL_CLAIM_RQ_MAX_RERANK_CANDIDATES",
+        description="Max coarse RQ pairs forwarded to reranker per insight build.",
     )
     patrol_claim_rq_threshold_english: float = Field(
         default=0.55,

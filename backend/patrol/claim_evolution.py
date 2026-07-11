@@ -9,10 +9,10 @@ from typing import TYPE_CHECKING, Any
 from backend.config import get_settings
 from backend.llm.client import LlmClient
 from backend.llm.embeddings import EmbeddingClient, get_embedding_client
+from backend.patrol.claim_evolution_rq_gate import align_research_question_pair
 from backend.patrol.llm_summary import generate_claim_evolution_summary
 from backend.patrol.node_selection import select_primary_node
 from backend.patrol.rag_service import PatrolRAGService
-from backend.patrol.similarity import cosine_similarity
 from backend.schemas.graph import GraphNode, NodeType, UnifiedPaperGraph
 from backend.schemas.patrol import (
     ClaimEvolutionPoint,
@@ -24,6 +24,7 @@ from backend.schemas.patrol import (
 )
 
 if TYPE_CHECKING:
+    from backend.llm.reranker import RerankerClient
     from backend.rag.vector_store import VectorStore
 
 logger = logging.getLogger(__name__)
@@ -50,16 +51,15 @@ def claim_nodes(graph: UnifiedPaperGraph | None) -> list[GraphNode]:
     return [node for node in graph.nodes if node.type in (NodeType.CLAIM, NodeType.FINDING)]
 
 
-async def _question_similarity(
-    left: GraphNode,
-    right: GraphNode,
-    embedding_client: EmbeddingClient,
-) -> float:
-    """Compute embedding cosine similarity between two question/thesis nodes."""
-    vectors = await embedding_client.embed_texts([left.label, right.label])
-    if len(vectors) != 2:
-        return 0.0
-    return cosine_similarity(vectors[0], vectors[1])
+def _dedupe_question_nodes(nodes: list[GraphNode]) -> list[GraphNode]:
+    seen: set[str] = set()
+    unique: list[GraphNode] = []
+    for node in nodes:
+        if node.id in seen:
+            continue
+        seen.add(node.id)
+        unique.append(node)
+    return unique
 
 
 async def _retrieve_claim_backfill_chunks(
@@ -94,12 +94,13 @@ async def build_claim_evolution_insight(
     vector_store: VectorStore | None = None,
     llm_client: LlmClient | None = None,
     embedding_client: EmbeddingClient | None = None,
+    reranker_client: RerankerClient | None = None,
 ) -> PatrolInsight | None:
     """Compare research questions and claims across two papers.
 
     Pipeline:
     1. Require ResearchQuestion or Thesis on both sides.
-    2. Compute embedding cosine similarity between primary questions; gate below threshold.
+    2. Two-stage RQ gate: bi-encoder coarse recall → cross-encoder rerank (when enabled).
     3. Backfill missing Claim nodes from VectorStore using the research question as query.
     4. Ask LLM for structured NLI-style output (evolution_type, problem_fit_score, summary).
     """
@@ -134,31 +135,20 @@ async def build_claim_evolution_insight(
             node_refs=[],
         )
 
-    left_question = select_primary_node(left_questions, graph=left_graph) or select_primary_node(
-        left_theses,
-        graph=left_graph,
-    )
-    right_question = select_primary_node(right_questions, graph=right_graph) or select_primary_node(
-        right_theses,
-        graph=right_graph,
-    )
-    assert left_question is not None and right_question is not None
+    left_question_pool = _dedupe_question_nodes(left_questions + left_theses)
+    right_question_pool = _dedupe_question_nodes(right_questions + right_theses)
 
     settings = get_settings()
     embed_client = embedding_client or get_embedding_client()
 
-    # Mock embeddings are non-informative; fall back to a fast literal equality gate.
-    if getattr(embed_client, "is_mock", False):
-        questions_match = left_question.label.strip().lower() == right_question.label.strip().lower()
-    else:
-        similarity = await _question_similarity(left_question, right_question, embed_client)
-        rq_threshold = settings.patrol_claim_rq_threshold_effective(
-            left_question.label,
-            right_question.label,
-        )
-        questions_match = similarity >= rq_threshold
-
-    if not questions_match:
+    aligned_pair = await align_research_question_pair(
+        left_question_pool,
+        right_question_pool,
+        embedding_client=embed_client,
+        settings=settings,
+        reranker_client=reranker_client,
+    )
+    if aligned_pair is None:
         summary = f"两篇论文 {left_id} 与 {right_id} 的研究问题/论点相似度不足，无法生成观点演进巡检报告。"
         return PatrolInsight(
             insight_id=CLAIM_EVOLUTION_INSIGHT_ID,
@@ -168,6 +158,8 @@ async def build_claim_evolution_insight(
             paper_ids=[left_id, right_id],
             node_refs=[],
         )
+
+    left_question, right_question = aligned_pair
 
     # Backfill missing claims from VectorStore when available.
     left_claim = select_primary_node(claim_nodes(left_graph), graph=left_graph)
