@@ -125,6 +125,26 @@ class EmbeddingClientProtocol(Protocol):
 # ---------------------------------------------------------------------------
 
 
+class QAJudgeResult(BaseModel):
+    """Structured output from the LLM-as-a-Judge QA evaluation pass (Track B)."""
+
+    factual_consistency: float = Field(
+        ...,
+        ge=0.0,
+        le=1.0,
+        description="Score from 0.0 to 1.0 indicating semantic alignment of facts with the golden context.",
+    )
+    hallucination_detected: bool = Field(
+        ...,
+        description="True if the model answer contains facts or logical claims contradictory to or unsupported by context.",
+    )
+    reasoning: str = Field(
+        ...,
+        min_length=1,
+        description="Detailed justification for the above metrics.",
+    )
+
+
 class RetrievalContext(BaseModel):
     """Complete retrieval result passed to QA / Patrol prompt builders.
 

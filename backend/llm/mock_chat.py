@@ -9,6 +9,7 @@ from typing import Any
 from langchain_core.messages import BaseMessage
 
 from backend.llm.qa_scale import detect_question_scale, preferred_node_types
+from backend.rag.models import QAJudgeResult
 from backend.schemas.paradigm import Paradigm
 from backend.schemas.patrol_llm import PatrolSummaryOutput
 
@@ -37,6 +38,8 @@ class MockStructuredOutput:
         context = _human_content(messages)
         if self._schema is PatrolSummaryOutput:
             return PatrolSummaryOutput(summary=_mock_patrol_summary(context))
+        if self._schema is QAJudgeResult:
+            return _mock_qa_judge_result(context)
         return self._schema.model_validate({"summary": _mock_patrol_summary(context)})
 
 
@@ -118,4 +121,45 @@ def _mock_patrol_summary(context: str) -> str:
     return (
         f"{MOCK_PATROL_PREFIX}基于两篇论文的图谱节点差异生成摘要（未调用华为云 LLM）。"
         f"上下文摘要：{context[:120]}… {MOCK_DISCLAIMER}"
+    )
+
+
+def _mock_qa_judge_result(context: str) -> QAJudgeResult:
+    """Deterministic Judge scores derived from gold patterns and citations."""
+    import json as _json
+
+    payload: dict[str, Any] = {}
+    fence_start = context.find("```json")
+    if fence_start >= 0:
+        json_start = context.find("{", fence_start)
+        json_end = context.rfind("}")
+        if json_start >= 0 and json_end > json_start:
+            try:
+                payload = _json.loads(context[json_start : json_end + 1])
+            except _json.JSONDecodeError:
+                payload = {}
+
+    answer_text = str(payload.get("answer_text", ""))
+    gold = payload.get("gold", {}) if isinstance(payload.get("gold"), dict) else {}
+
+    required_patterns = [str(p) for p in gold.get("required_patterns", [])]
+    forbidden_patterns = [str(p) for p in gold.get("forbidden_patterns", [])]
+
+    answer_lower = answer_text.lower()
+    has_forbidden = any(pattern.lower() in answer_lower for pattern in forbidden_patterns)
+    matched_required = sum(1 for pattern in required_patterns if pattern.lower() in answer_lower)
+    factual_consistency = (
+        1.0
+        if not required_patterns
+        else matched_required / len(required_patterns)
+    )
+
+    return QAJudgeResult(
+        factual_consistency=round(factual_consistency, 4),
+        hallucination_detected=has_forbidden,
+        reasoning=(
+            "Mock Judge："
+            f"required={matched_required}/{len(required_patterns)}, "
+            f"forbidden_hit={has_forbidden}."
+        ),
     )
