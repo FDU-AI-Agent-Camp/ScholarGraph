@@ -16,8 +16,10 @@ from pathlib import Path
 import pytest
 
 _GOLDEN_SET_PATH = Path(__file__).resolve().parents[2] / "data" / "qa_golden_set.json"
+from backend.rag.models import QuestionScale
+
 _VALID_PARADIGMS = {"STEM", "HSS"}
-_VALID_SCALES = {"summary", "detail", "verification"}
+_VALID_SCALES = {scale.value for scale in QuestionScale}
 
 
 @pytest.fixture
