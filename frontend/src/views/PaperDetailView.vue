@@ -14,7 +14,7 @@ import { RouteName } from '@/router/meta'
 import { usePaperStore } from '@/stores/paper'
 import { resolveClassifyWarningMessages } from '@/utils/classifyWarnings'
 import { resolveExtractWarningMessages } from '@/utils/extractWarnings'
-import { appendUniqueCitation, citationKey } from '@/utils/qaCitations'
+import { appendUniqueCitation, citationDisplayId, citationKey } from '@/utils/qaCitations'
 
 const PaperGraph = defineAsyncComponent(() => import('@/components/graph/PaperGraph.vue'))
 
@@ -102,7 +102,9 @@ async function ask(): Promise<void> {
         },
         onCitation: (data) => {
           citations.value = appendUniqueCitation(citations.value, data)
-          highlightNodeId.value = data.node_id
+          if (data.type === 'node') {
+            highlightNodeId.value = data.node_id
+          }
         },
         onDone: (data) => {
           if (data.answer) {
@@ -126,7 +128,9 @@ function stopStream(): void {
 }
 
 function focusCitation(citation: QaStreamCitationData): void {
-  highlightNodeId.value = citation.node_id
+  if (citation.type === 'node') {
+    highlightNodeId.value = citation.node_id
+  }
 }
 
 function openFullGraph(): void {
@@ -219,8 +223,8 @@ function onGraphNodeClick(nodeId: string): void {
                   v-for="item in citations"
                   :key="citationKey(item)"
                   :label="item.label"
-                  :node-id="item.node_id"
-                  :active="item.node_id === highlightNodeId"
+                  :node-id="citationDisplayId(item)"
+                  :active="item.type === 'node' && item.node_id === highlightNodeId"
                   @click="focusCitation(item)"
                 />
               </div>

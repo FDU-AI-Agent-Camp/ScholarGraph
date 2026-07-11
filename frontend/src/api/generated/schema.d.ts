@@ -353,8 +353,152 @@ export interface components {
         QaStreamRequest: {
             question: string;
         };
+        QaStreamMessageData: {
+            /** @description LLM 增量文本片段 */
+            delta: string;
+        };
+        /**
+         * @description V2 citation 判别字段，与 backend.graph.qa_v2.dispatch_citation 一致。
+         *     缺省 `type` 时 FE 应视为 `node`（V1 兼容）。
+         * @enum {string}
+         */
+        QaStreamCitationType: "node" | "edge" | "chunk" | "page";
+        QaStreamCitationNode: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "node";
+            paper_id: string;
+            node_id: string;
+            /** @description 图谱节点展示名 */
+            label: string;
+        };
+        QaStreamCitationEdge: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "edge";
+            paper_id: string;
+            edge_id: string;
+            /** @description 通常为 `"{source_label} → {target_label}"` */
+            label: string;
+        };
+        QaStreamCitationChunk: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "chunk";
+            paper_id: string;
+            chunk_id: string;
+            /** @description 通常为 `"片段 {chunk_id}"` */
+            label: string;
+            /** @description 原文片段预览（最多 120 字符） */
+            text_preview: string;
+        };
+        QaStreamCitationPage: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "page";
+            paper_id: string;
+            /** @description 页码；非整数引用（如 appendix）时为 string */
+            page: number | string;
+            /** @description 通常为 `"第{page}页"` */
+            label: string;
+        };
+        /** @description SSE `event: citation` 的 JSON data。由 LLM 输出 `[CITE:...]` 经 dispatch_citation 解析。 */
+        QaStreamCitation: components["schemas"]["QaStreamCitationNode"] | components["schemas"]["QaStreamCitationEdge"] | components["schemas"]["QaStreamCitationChunk"] | components["schemas"]["QaStreamCitationPage"];
+        QaStreamDoneData: {
+            answer_id: string;
+            /** @description 可选；完整答案快照 */
+            answer?: string;
+        };
+        QaStreamErrorData: {
+            /** @description 流内异常常见 `QA_STREAM_ERROR` */
+            code?: string;
+            message: string;
+        };
         /** @enum {string} */
-        PatrolMode: "lens_clash" | "contradiction";
+        PatrolMode: "lens_clash" | "contradiction" | "method_overlap" | "claim_evolution";
+        PatrolPoint: components["schemas"]["ContradictionPoint"] | components["schemas"]["LensClashPoint"] | components["schemas"]["MethodOverlapPoint"] | components["schemas"]["ClaimEvolutionPoint"];
+        ContradictionPoint: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            mode: "ContradictionPoint";
+            point_a: string;
+            point_b: string;
+            conflict_type: string;
+        };
+        LensClashPoint: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            mode: "LensClashPoint";
+            lens_a: string;
+            lens_b: string;
+            clash_aspect: string;
+        };
+        MethodOverlapPoint: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            mode: "MethodOverlapPoint";
+            /**
+             * @description Whether the point compares methods or datasets. Dual overlap emits two points (method + dataset); mixed is deprecated.
+             * @enum {string}
+             */
+            overlap_type: "method" | "dataset" | "mixed";
+            /** @description The representative label of the overlapping item (method or dataset name). */
+            overlap_label: string;
+            /** @description Significance score of the overlap. 1.0 for literal label match; 0.0-1.0 for semantic soft match. */
+            overlap_score?: number | null;
+            /**
+             * @description How the overlap was determined.
+             * @enum {string|null}
+             */
+            match_type?: "literal" | "semantic" | null;
+            /** @description Graph nodes anchored by this point; supports many-to-many literal overlaps. */
+            node_refs?: components["schemas"]["NodeRef"][];
+            /** @description Backwards-compatible alias for overlap_label. */
+            method?: string;
+            /** @description How paper A uses the overlapping item. */
+            paper_a_usage: string;
+            /** @description How paper B uses the overlapping item. */
+            paper_b_usage: string;
+            dataset_a?: string | null;
+            dataset_b?: string | null;
+            /** @description Evidence-chain summary; may be null when the LLM does not produce one. */
+            evidence_summary?: string | null;
+        };
+        ClaimEvolutionPoint: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            mode: "ClaimEvolutionPoint";
+            research_question: string;
+            /** @description Paper A's core claim; may be backfilled from VectorStore chunks when no Claim node exists. */
+            paper_a_claim?: string | null;
+            /** @description Paper B's core claim; may be backfilled from VectorStore chunks when no Claim node exists. */
+            paper_b_claim?: string | null;
+            /**
+             * @description Relationship between the two claims.
+             * @enum {string|null}
+             */
+            evolution_type?: "inherit" | "contradict" | "refined" | null;
+            /** @description Research-question fit score; higher means the two papers address more similar problems. */
+            problem_fit_score?: number | null;
+            /** @description Evidence-chain summary; may be null when the LLM does not produce one. */
+            evidence_summary?: string | null;
+        };
         PatrolRequest: {
             paper_ids: string[];
             mode: components["schemas"]["PatrolMode"];
@@ -367,8 +511,12 @@ export interface components {
         /**
          * @description Insight readiness status.
          *     `ready` means the insight was produced from a full LLM analysis.
-         *     `insufficient_data` means the graphs lacked required node types (Thesis/SubArgument)
-         *     and a deterministic template response was returned instead.
+         *     `insufficient_data` means the graphs lacked required node types or did not meet
+         *     the mode-specific comparison criteria. Examples:
+         *     - lens_clash: missing AnalyticalLens nodes.
+         *     - contradiction: missing Thesis or SubArgument nodes.
+         *     - method_overlap: no overlapping Method or Dataset labels.
+         *     - claim_evolution: ResearchQuestion/Thesis too dissimilar, or claims are identical.
          * @enum {string}
          */
         PatrolInsightStatus: "ready" | "insufficient_data";
@@ -381,6 +529,11 @@ export interface components {
             has_contradiction?: boolean | null;
             paper_ids: string[];
             node_refs: components["schemas"]["NodeRef"][];
+            structured_points?: components["schemas"]["PatrolPoint"][];
+            /** @description Machine-readable metadata about insight generation (e.g. RAG degradation flags). */
+            meta?: {
+                [key: string]: unknown;
+            };
         };
         PatrolResponse: {
             data?: {
@@ -631,13 +784,25 @@ export interface operations {
             };
         };
         responses: {
-            /** @description SSE stream */
+            /**
+             * @description `text/event-stream; charset=utf-8`。帧格式见 docs/api/sse-qa.md。
+             *     Wire 为 SSE 文本；`components/schemas/QaStream*` 描述各 `event:` 的 JSON data 载荷。
+             */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
                     "text/event-stream": string;
+                };
+            };
+            /** @description CROSS_PAPER — 跨论文问题，引导使用 Patrol */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
             404: components["responses"]["NotFound"];
