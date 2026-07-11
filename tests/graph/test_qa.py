@@ -147,6 +147,86 @@ class TestQaStreamEvents:
 
 
 # ---------------------------------------------------------------------------
+# V2 citation types (rag-qa-evaluation)
+# ---------------------------------------------------------------------------
+
+
+class TestQaStreamV2Citations:
+    """Cover edge, chunk, and page citation SSE events."""
+
+    async def test_yields_edge_citation_with_joined_label(
+        self,
+        store_with_graph: GraphStore,
+    ) -> None:
+        llm = _fake_llm("关系[CITE:edge:e1]连接了两个节点。")
+        engine = _GraphQaEngine(store=store_with_graph, llm=llm)
+
+        events = [evt async for evt in engine.stream("hss-001", "关系是什么？")]
+        citation_events = [e for e in events if e.event == "citation"]
+        assert len(citation_events) >= 1
+        cite = citation_events[0]
+        assert cite.data["type"] == "edge"
+        assert cite.data["edge_id"] == "e1"
+        assert cite.data["paper_id"] == "hss-001"
+        # label should be auto-joined from source -> target
+        assert "→" in cite.data["label"]
+
+    async def test_yields_chunk_citation_with_text_preview(
+        self,
+        store_with_graph: GraphStore,
+    ) -> None:
+        llm = _fake_llm("原文[CITE:chunk:c1]中有详细描述。")
+        engine = _GraphQaEngine(store=store_with_graph, llm=llm)
+
+        events = [evt async for evt in engine.stream("hss-001", "原文内容？")]
+        citation_events = [e for e in events if e.event == "citation"]
+        assert len(citation_events) >= 1
+        cite = citation_events[0]
+        assert cite.data["type"] == "chunk"
+        assert cite.data["chunk_id"] == "c1"
+        assert cite.data["paper_id"] == "hss-001"
+
+    async def test_yields_page_citation_with_page_number(
+        self,
+        store_with_graph: GraphStore,
+    ) -> None:
+        llm = _fake_llm("参看[CITE:page:12]的论述。")
+        engine = _GraphQaEngine(store=store_with_graph, llm=llm)
+
+        events = [evt async for evt in engine.stream("hss-001", "第几页？")]
+        citation_events = [e for e in events if e.event == "citation"]
+        assert len(citation_events) >= 1
+        cite = citation_events[0]
+        assert cite.data["type"] == "page"
+        assert cite.data["page"] == 12
+        assert cite.data["paper_id"] == "hss-001"
+
+    async def test_node_citation_has_type_node_attached(self, store_with_graph: GraphStore) -> None:
+        """V1 backward-compat: bare [CITE:n1] gets type=node with node_id."""
+        llm = _fake_llm("核心论点[CITE:n1]是关键。")
+        engine = _GraphQaEngine(store=store_with_graph, llm=llm)
+
+        events = [evt async for evt in engine.stream("hss-001", "test")]
+        citation_events = [e for e in events if e.event == "citation"]
+        assert len(citation_events) >= 1
+        cite = citation_events[0]
+        assert cite.data["type"] == "node"
+        assert cite.data["node_id"] == "n1"
+
+    async def test_mixed_citations_in_one_stream(self, store_with_graph: GraphStore) -> None:
+        llm = _fake_llm("论点[CITE:n1]由关系[CITE:edge:e1]连接，原文[CITE:chunk:c1]有详述，见[CITE:page:5]。")
+        engine = _GraphQaEngine(store=store_with_graph, llm=llm)
+
+        events = [evt async for evt in engine.stream("hss-001", "test")]
+        citation_events = [e for e in events if e.event == "citation"]
+        types = {c.data["type"] for c in citation_events}
+        assert "node" in types
+        assert "edge" in types
+        assert "chunk" in types
+        assert "page" in types
+
+
+# ---------------------------------------------------------------------------
 # error paths
 # ---------------------------------------------------------------------------
 

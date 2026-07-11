@@ -1,13 +1,20 @@
-"""Multi-scale QA over paper graph (BE-3).
+"""Multi-scale QA over paper graph (BE-3 / V2 RAG Phase 2).
 
 Exposes ``qa_stream()`` — an async generator that yields ``QaEvent``
 objects for the SSE route in ``backend/api/routes/papers.py``.
+
+V2 extensions (rag-qa-evaluation):
+- Multi-type citation markers: ``[CITE:node_id]`` / ``[CITE:edge:{eid}]`` /
+  ``[CITE:chunk:{cid}]`` / ``[CITE:page:{n}]``.
+- Edge citation labels auto-joined from source/target node labels.
+- Optional ``RetrievalContext`` for hybrid graph + vector QA prompt.
 """
 
 import logging
 import re
 from collections.abc import AsyncIterator
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from backend.graph.query import GraphQuery
 from backend.graph.store import GraphStore
@@ -16,13 +23,25 @@ from backend.schemas.graph import UnifiedPaperGraph
 from backend.schemas.paper import PaperStatus
 from backend.services.paper_service import PaperService, get_paper_service
 
+if TYPE_CHECKING:
+    from backend.rag.models import RetrievalContext
+
+from backend.graph.qa_v2 import (
+    build_chunk_text_cache,
+    dispatch_citation,
+    format_retrieval_context,
+)
+
 logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
-# Inline citation pattern: LLM emits [CITE:node_id] markers; the generator
-# splits on them and emits discrete ``citation`` SSE events.
+# Inline citation patterns — V2 supports four citation formats:
+#   [CITE:node_id]        → node reference (existing V1)
+#   [CITE:edge:{edge_id}] → edge / relation reference
+#   [CITE:chunk:{chunk_id}] → source-text chunk reference
+#   [CITE:page:{page}]     → page-number reference
 # ---------------------------------------------------------------------------
-_CITE_RE = re.compile(r"\[CITE:(\S+?)\]")
+_CITE_RE = re.compile(r"\[CITE:(edge:|chunk:|page:)?(\S+?)\]")
 _CITE_DELIM = "[CITE:"
 
 # Injected into the QA prompt when the user queries an MVP skeleton graph.
@@ -53,6 +72,21 @@ def _split_incomplete_cite(buffer: str) -> tuple[str, str] | None:
     return None
 
 
+def _build_edge_label_cache(graph: UnifiedPaperGraph) -> dict[str, str]:
+    """Build a cache mapping edge ids to human-readable auto-joined labels.
+
+    Format: ``"{source_label} → {target_label}"`` or
+    ``"{source_label} --[{relation_type}]--> {target_label}"``.
+    """
+    node_labels: dict[str, str] = {n.id: n.label for n in graph.nodes}
+    cache: dict[str, str] = {}
+    for edge in graph.edges:
+        source_label = node_labels.get(edge.source, edge.source)
+        target_label = node_labels.get(edge.target, edge.target)
+        cache[edge.id] = f"{source_label} → {target_label}"
+    return cache
+
+
 # ---------------------------------------------------------------------------
 # Resolve the prompts directory once at import time.
 # ---------------------------------------------------------------------------
@@ -70,9 +104,24 @@ _FALLBACK_QA_PROMPT = """\
 ### 关系
 {edges}
 
+### 相关实体
+{entities}
+
+### 相关关系描述
+{relations}
+
+### 相关原文片段
+{chunks}
+
+## 引用要求
+- 引用图谱节点时使用格式 [CITE:节点ID]
+- 引用图谱关系时使用格式 [CITE:edge:边ID]
+- 引用原文片段时使用格式 [CITE:chunk:片段ID] 或 [CITE:page:页码]
+
 ## 回答要求
-- 根据图谱上下文回答问题，引用具体节点作为依据。
-- 引用节点时使用格式 [CITE:节点ID]。
+- 根据图谱上下文回答问题，引用具体来源作为依据。
+- 细节/数值问题优先用原文片段回答。
+- 若上下文不足，明确说明"根据已有信息无法判断"。
 - 使用中文回答。
 
 ## 用户问题
@@ -110,16 +159,28 @@ class QaEvent:
 # ---------------------------------------------------------------------------
 
 
-async def qa_stream(paper_id: str, question: str) -> AsyncIterator[QaEvent]:
+async def qa_stream(
+    paper_id: str,
+    question: str,
+    *,
+    retrieval_context: "RetrievalContext | None" = None,
+) -> AsyncIterator[QaEvent]:
     """Stream multi-scale QA events for the SSE endpoint.
 
     Usage by BE-L (in ``backend/api/routes/papers.py``)::
 
         async for evt in qa_stream(paper_id, body.question):
             yield f"event: {evt.event}\\ndata: {json.dumps(evt.data)}\\n\\n"
+
+    Args:
+        paper_id: Target paper.
+        question: User question string.
+        retrieval_context: Optional hybrid retrieval context from
+            ``HybridRetriever.retrieve()`` (V2 Phase 2).  When ``None``,
+            QA falls back to pure graph mode (V1 behaviour).
     """
     engine = _GraphQaEngine()
-    async for evt in engine.stream(paper_id, question):
+    async for evt in engine.stream(paper_id, question, retrieval_context=retrieval_context):
         yield evt
 
 
@@ -150,11 +211,16 @@ class _GraphQaEngine:
         self,
         paper_id: str,
         question: str,
+        *,
+        retrieval_context: "RetrievalContext | None" = None,
     ) -> AsyncIterator[QaEvent]:
         """Yield ``QaEvent`` items for a single QA turn.
 
         Allows QA over an MVP skeleton graph while the full pipeline is still
         running, as long as ``preview_available`` has been marked.
+
+        When *retrieval_context* is provided, the prompt is enriched with
+        vector-retrieved entities, relations, and chunks (V2 hybrid RAG).
         """
         try:
             paper = await self._paper_service.get_paper(paper_id)
@@ -190,11 +256,19 @@ class _GraphQaEngine:
             return
 
         subgraph = self._query.subgraph_for_question(graph, question)
-        prompt = self._build_prompt(graph, subgraph, question, is_preview=is_preview)
+        prompt = self._build_prompt(
+            graph,
+            subgraph,
+            question,
+            is_preview=is_preview,
+            retrieval_context=retrieval_context,
+        )
+
+        chunks_list = retrieval_context.chunks if retrieval_context else None
 
         answer_id = f"ans-{paper_id}"
         try:
-            async for evt in self._stream_llm(prompt, graph, paper_id):
+            async for evt in self._stream_llm(prompt, graph, paper_id, chunks=chunks_list):
                 yield evt
         except Exception as exc:
             logger.exception("qa_stream failed for paper_id=%s", paper_id)
@@ -209,10 +283,14 @@ class _GraphQaEngine:
         prompt: str,
         graph: UnifiedPaperGraph,
         paper_id: str,
+        *,
+        chunks: list | None = None,
     ) -> AsyncIterator[QaEvent]:
-        """Stream LLM response, splitting on [CITE:...] markers."""
+        """Stream LLM response, splitting on [CITE:...] markers of all four types."""
         buffer = ""
         node_label_cache: dict[str, str] = {n.id: n.label for n in graph.nodes}
+        edge_label_cache: dict[str, str] = _build_edge_label_cache(graph)
+        chunk_text_cache: dict[str, str] = build_chunk_text_cache(chunks)
 
         async for chunk in self._llm.chat.astream(prompt):
             delta: str = ""
@@ -236,11 +314,15 @@ class _GraphQaEngine:
                     if text_before:
                         yield QaEvent("message", {"delta": text_before})
 
-                    node_id = match.group(1)
-                    label = node_label_cache.get(node_id, node_id)
-                    yield QaEvent(
-                        "citation",
-                        {"paper_id": paper_id, "node_id": node_id, "label": label},
+                    prefix = match.group(1) or ""
+                    cite_value = match.group(2)
+                    yield dispatch_citation(
+                        prefix,
+                        cite_value,
+                        paper_id,
+                        node_label_cache,
+                        edge_label_cache,
+                        chunk_text_cache,
                     )
                     buffer = buffer[match.end() :]
                     continue
@@ -258,7 +340,7 @@ class _GraphQaEngine:
 
                 break
 
-        # Drain remaining buffer (process any trailing complete cites first).
+        # Drain remaining buffer (process any complete trailing cites first).
         while buffer:
             match = _CITE_RE.search(buffer)
             if not match:
@@ -270,11 +352,15 @@ class _GraphQaEngine:
             if text_before:
                 yield QaEvent("message", {"delta": text_before})
 
-            node_id = match.group(1)
-            label = node_label_cache.get(node_id, node_id)
-            yield QaEvent(
-                "citation",
-                {"paper_id": paper_id, "node_id": node_id, "label": label},
+            prefix = match.group(1) or ""
+            cite_value = match.group(2)
+            yield dispatch_citation(
+                prefix,
+                cite_value,
+                paper_id,
+                node_label_cache,
+                edge_label_cache,
+                chunk_text_cache,
             )
             buffer = buffer[match.end() :]
 
@@ -285,8 +371,14 @@ class _GraphQaEngine:
         question: str,
         *,
         is_preview: bool = False,
+        retrieval_context: "RetrievalContext | None" = None,
     ) -> str:
-        """Format the QA prompt with graph context."""
+        """Format the QA prompt with graph context.
+
+        When *retrieval_context* is provided, the template is enriched with
+        additional placeholder sections for entities, relations, and chunks
+        (V2 hybrid RAG).
+        """
         template = self._load_prompt_template()
 
         nodes_desc = "\n".join(f"- [{n['id']}] {n['label']} (类型: {n['type']})" for n in subgraph.get("nodes", []))
@@ -297,10 +389,16 @@ class _GraphQaEngine:
         if not edges_desc:
             edges_desc = "（无匹配关系）"
 
+        # Build extra sections from RetrievalContext (V2 Phase 2).
+        entities_desc, relations_desc, chunks_desc = format_retrieval_context(retrieval_context)
+
         prompt = template.format(
             paradigm=graph.paradigm.value,
             nodes=nodes_desc,
             edges=edges_desc,
+            entities=entities_desc,
+            relations=relations_desc,
+            chunks=chunks_desc,
             question=question,
         )
         if is_preview:
