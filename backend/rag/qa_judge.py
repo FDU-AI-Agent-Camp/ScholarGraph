@@ -9,9 +9,9 @@ from typing import Any, cast
 from langchain_core.messages import HumanMessage, SystemMessage
 
 from backend.llm.client import LlmClient
-from backend.llm.structured_output import ainvoke_structured
 from backend.rag.models import QAJudgeResult
 from backend.rag.qa_heuristics import HeuristicGuardrailResult
+from backend.rag.qa_judge_structured import invoke_judge_structured_output
 
 logger = logging.getLogger(__name__)
 
@@ -189,4 +189,4 @@ async def invoke_qa_judge(
         structured = client.chat.with_structured_output(QAJudgeResult)
         return cast(QAJudgeResult, await structured.ainvoke(messages))
 
-    return await ainvoke_structured(client, QAJudgeResult, messages)
+    return await invoke_judge_structured_output(client, messages)

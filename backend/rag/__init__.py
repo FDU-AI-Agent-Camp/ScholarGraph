@@ -5,6 +5,7 @@ from backend.rag.handlers import index_paper_for_rag
 from backend.rag.indexing import graph_to_entities, graph_to_relations
 from backend.rag.models import (
     EmbeddingClientProtocol,
+    JudgeSchema,
     PaperChunk,
     PaperEntity,
     PaperRelation,
@@ -23,6 +24,7 @@ __all__ = [
     "PaperChunk",
     "PaperEntity",
     "PaperRelation",
+    "JudgeSchema",
     "QAJudgeResult",
     "QuestionScale",
     "RetrievalContext",

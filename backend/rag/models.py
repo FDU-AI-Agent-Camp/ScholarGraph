@@ -145,6 +145,10 @@ class QAJudgeResult(BaseModel):
     )
 
 
+# Public alias for benchmark / Instructor-style structured Judge contracts.
+JudgeSchema = QAJudgeResult
+
+
 class RetrievalContext(BaseModel):
     """Complete retrieval result passed to QA / Patrol prompt builders.
 
