@@ -142,6 +142,7 @@ async def stream_paper_qa(
             paper_id,
             body.question,
             retrieval_context=retrieval_result.context,
+            retrieval_warning=retrieval_result.warning_event,
         ):
             yield format_sse_event(evt.event, evt.data)
 

@@ -15,9 +15,12 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from backend.schemas.chunk_preview import ResolvedChunkPreview
+
 if TYPE_CHECKING:
     from backend.graph.qa import QaEvent
     from backend.graph.query import GraphQuery
+    from backend.rag.chunk_preview import ChunkPreviewContext
     from backend.rag.models import RetrievalContext
     from backend.schemas.graph import UnifiedPaperGraph
 
@@ -42,9 +45,13 @@ def dispatch_citation(
     node_label_cache: dict[str, str],
     edge_label_cache: dict[str, str],
     chunk_text_cache: dict[str, str],
+    *,
+    chunk_preview: ResolvedChunkPreview | None = None,
+    chunk_text_preview: str | None = None,
 ) -> QaEvent:
     """Build one ``citation`` SSE event from a matched [CITE:...] marker."""
     from backend.graph.qa import QaEvent  # lazy – avoids circular import
+    from backend.schemas.chunk_preview import ChunkPreviewState
 
     if prefix == "edge:":
         label = edge_label_cache.get(cite_value, cite_value)
@@ -58,7 +65,19 @@ def dispatch_citation(
             },
         )
     if prefix == "chunk:":
-        text_preview = chunk_text_cache.get(cite_value, "")[:120]
+        from backend.rag.chunk_preview import preview_from_cache
+
+        if chunk_preview is not None:
+            resolved = chunk_preview
+        elif chunk_text_preview is not None:
+            resolved = ResolvedChunkPreview.ready(chunk_text_preview)
+        else:
+            cached = preview_from_cache(chunk_text_cache, cite_value)
+            resolved = (
+                ResolvedChunkPreview.ready(cached)
+                if cached
+                else ResolvedChunkPreview.degraded(ChunkPreviewState.HALLUCINATED_ID)
+            )
         return QaEvent(
             "citation",
             {
@@ -66,7 +85,8 @@ def dispatch_citation(
                 "paper_id": paper_id,
                 "chunk_id": cite_value,
                 "label": f"片段 {cite_value}",
-                "text_preview": text_preview,
+                "text_preview": resolved.text_preview,
+                "preview_state": resolved.preview_state.value,
             },
         )
     if prefix == "page:":
@@ -94,6 +114,40 @@ def dispatch_citation(
             "node_id": cite_value,
             "label": label,
         },
+    )
+
+
+async def dispatch_citation_async(
+    prefix: str,
+    cite_value: str,
+    paper_id: str,
+    node_label_cache: dict[str, str],
+    edge_label_cache: dict[str, str],
+    chunk_text_cache: dict[str, str],
+    *,
+    preview_ctx: ChunkPreviewContext | None = None,
+) -> QaEvent:
+    """Async citation dispatch with L2 chunk preview resolution on cache miss (B10)."""
+    if prefix == "chunk:":
+        from backend.rag.chunk_preview import resolve_chunk_text_preview
+
+        resolved = await resolve_chunk_text_preview(cite_value, chunk_text_cache, preview_ctx)
+        return dispatch_citation(
+            prefix,
+            cite_value,
+            paper_id,
+            node_label_cache,
+            edge_label_cache,
+            chunk_text_cache,
+            chunk_preview=resolved,
+        )
+    return dispatch_citation(
+        prefix,
+        cite_value,
+        paper_id,
+        node_label_cache,
+        edge_label_cache,
+        chunk_text_cache,
     )
 
 

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import re
+from functools import lru_cache
 from pathlib import Path
 
 from backend.rag.models import RetrievedChunk
@@ -18,6 +19,24 @@ class StaticMockVectorStore:
 
     def __init__(self, chunks_by_paper: dict[str, list[RetrievedChunk]]) -> None:
         self._chunks_by_paper = chunks_by_paper
+        self._bind_chunk_text_lru()
+
+    def _bind_chunk_text_lru(self) -> None:
+        @lru_cache(maxsize=512)
+        def _get_chunk_text_cached(paper_id: str, chunk_id: str) -> str:
+            text = self._fetch_chunk_text(paper_id, chunk_id)
+            return text if text else ""
+
+        self._get_chunk_text_cached = _get_chunk_text_cached
+
+    def clear_chunk_text_lru(self) -> None:
+        self._get_chunk_text_cached.cache_clear()
+
+    def _fetch_chunk_text(self, paper_id: str, chunk_id: str) -> str | None:
+        for chunk in self._chunks_by_paper.get(paper_id, []):
+            if chunk.chunk_id == chunk_id:
+                return chunk.text
+        return None
 
     @classmethod
     def load(cls, path: Path = _DEFAULT_FIXTURE_PATH) -> StaticMockVectorStore:
@@ -94,6 +113,11 @@ class StaticMockVectorStore:
         )
         limit = top_k if top_k is not None and top_k > 0 else len(ranked)
         return ranked[:limit]
+
+    async def get_chunk_text(self, paper_id: str, chunk_id: str) -> str | None:
+        """Return fixture chunk text by logical id (L2 citation preview lookup)."""
+        cached = self._get_chunk_text_cached(paper_id, chunk_id)
+        return cached if cached else None
 
 
 def _score_chunk(query_text: str, chunk_text: str) -> int:

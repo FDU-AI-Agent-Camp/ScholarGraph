@@ -56,6 +56,7 @@ class QaService:
             paper_id,
             question,
             retrieval_context=retrieval_result.context,
+            retrieval_warning=retrieval_result.warning_event,
             llm=llm,
         ):
             yield evt

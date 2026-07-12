@@ -24,11 +24,12 @@ from backend.schemas.paper import PaperStatus
 from backend.services.paper_service import PaperService, get_paper_service
 
 if TYPE_CHECKING:
+    from backend.rag.chunk_preview import ChunkPreviewContext
     from backend.rag.models import RetrievalContext
 
 from backend.graph.qa_v2 import (
     build_chunk_text_cache,
-    dispatch_citation,
+    dispatch_citation_async,
     format_retrieval_context,
     format_subgraph_sections,
     freeze_retrieval_context,
@@ -167,6 +168,7 @@ async def qa_stream(
     question: str,
     *,
     retrieval_context: "RetrievalContext | None" = None,
+    retrieval_warning: dict[str, str] | None = None,
     llm: LlmClient | None = None,
 ) -> AsyncIterator[QaEvent]:
     """Stream multi-scale QA events for the SSE endpoint.
@@ -182,11 +184,18 @@ async def qa_stream(
         retrieval_context: Optional hybrid retrieval context from
             ``HybridRetriever.retrieve()`` (V2 Phase 2).  When ``None``,
             QA falls back to pure graph mode (V1 behaviour).
+        retrieval_warning: Optional warning metadata from retrieval fallback
+            (e.g. vector timeout) for chunk preview placeholder classification.
         llm: Optional QA Generator client. Defaults to ``get_qa_llm_client()``
             (``LLM_MODEL_QA``), decoupled from the Judge evaluator.
     """
     engine = _GraphQaEngine(llm=llm)
-    async for evt in engine.stream(paper_id, question, retrieval_context=retrieval_context):
+    async for evt in engine.stream(
+        paper_id,
+        question,
+        retrieval_context=retrieval_context,
+        retrieval_warning=retrieval_warning,
+    ):
         yield evt
 
 
@@ -219,6 +228,7 @@ class _GraphQaEngine:
         question: str,
         *,
         retrieval_context: "RetrievalContext | None" = None,
+        retrieval_warning: dict[str, str] | None = None,
     ) -> AsyncIterator[QaEvent]:
         """Yield ``QaEvent`` items for a single QA turn.
 
@@ -230,6 +240,16 @@ class _GraphQaEngine:
         """
         if retrieval_context is not None:
             retrieval_context = freeze_retrieval_context(retrieval_context)
+
+        from backend.rag.chunk_preview import build_chunk_preview_context
+        from backend.rag.hybrid_retriever import get_hybrid_retriever
+
+        retriever = get_hybrid_retriever()
+        preview_ctx = await build_chunk_preview_context(
+            paper_id,
+            retrieval_warning=retrieval_warning,
+            vector_store=retriever.vector_store,
+        )
 
         try:
             paper = await self._paper_service.get_paper(paper_id)
@@ -282,7 +302,13 @@ class _GraphQaEngine:
 
         answer_id = f"ans-{paper_id}"
         try:
-            async for evt in self._stream_llm(prompt, graph, paper_id, chunks=chunks_list):
+            async for evt in self._stream_llm(
+                prompt,
+                graph,
+                paper_id,
+                chunks=chunks_list,
+                preview_ctx=preview_ctx,
+            ):
                 yield evt
         except Exception as exc:
             logger.exception("qa_stream failed for paper_id=%s", paper_id)
@@ -299,6 +325,7 @@ class _GraphQaEngine:
         paper_id: str,
         *,
         chunks: list | None = None,
+        preview_ctx: "ChunkPreviewContext | None" = None,
     ) -> AsyncIterator[QaEvent]:
         """Stream LLM response, splitting on [CITE:...] markers of all four types."""
         buffer = ""
@@ -330,13 +357,14 @@ class _GraphQaEngine:
 
                     prefix = match.group(1) or ""
                     cite_value = match.group(2)
-                    yield dispatch_citation(
+                    yield await dispatch_citation_async(
                         prefix,
                         cite_value,
                         paper_id,
                         node_label_cache,
                         edge_label_cache,
                         chunk_text_cache,
+                        preview_ctx=preview_ctx,
                     )
                     buffer = buffer[match.end() :]
                     continue
@@ -368,13 +396,14 @@ class _GraphQaEngine:
 
             prefix = match.group(1) or ""
             cite_value = match.group(2)
-            yield dispatch_citation(
+            yield await dispatch_citation_async(
                 prefix,
                 cite_value,
                 paper_id,
                 node_label_cache,
                 edge_label_cache,
                 chunk_text_cache,
+                preview_ctx=preview_ctx,
             )
             buffer = buffer[match.end() :]
 

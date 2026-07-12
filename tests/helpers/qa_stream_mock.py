@@ -16,10 +16,16 @@ def qa_stream_from_engine(engine: Any):
         question: str,
         *,
         retrieval_context: Any = None,
+        retrieval_warning: dict[str, str] | None = None,
         llm: Any = None,
     ) -> AsyncIterator[QaEvent]:
         _ = llm
-        async for evt in engine.stream(paper_id, question, retrieval_context=retrieval_context):
+        async for evt in engine.stream(
+            paper_id,
+            question,
+            retrieval_context=retrieval_context,
+            retrieval_warning=retrieval_warning,
+        ):
             yield evt
 
     return _mock_stream

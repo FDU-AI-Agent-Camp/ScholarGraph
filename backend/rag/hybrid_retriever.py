@@ -30,6 +30,11 @@ class HybridRetriever:
         self._graph_query = graph_query or GraphQuery()
         self._vector_store = vector_store
 
+    @property
+    def vector_store(self) -> VectorStore | None:
+        """Bound vector store for L2 chunk preview lookup and retrieval."""
+        return self._vector_store
+
     async def retrieve(
         self,
         paper_id: str,
