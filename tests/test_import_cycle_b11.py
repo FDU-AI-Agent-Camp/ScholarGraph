@@ -37,9 +37,14 @@ def test_b11_graph_qa_stream_lazy_export() -> None:
 
 def test_b11_eval_collection_imports_llm_client_first() -> None:
     """Mirror pytest tests/eval/ ordering: llm.client before benchmark scripts."""
-    for name in list(sys.modules):
-        if name.startswith("backend."):
-            sys.modules.pop(name, None)
+    for name in (
+        "scripts.benchmark_qa",
+        "backend.llm.client",
+        "backend.rag.qa_router",
+        "backend.rag",
+        "backend.graph",
+    ):
+        sys.modules.pop(name, None)
 
     importlib.import_module("backend.llm.client")
     importlib.import_module("scripts.benchmark_qa")
