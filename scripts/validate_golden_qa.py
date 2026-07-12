@@ -19,6 +19,11 @@ Usage (from repo root)::
     uv run python scripts/validate_golden_qa.py --no-strict   # 本地：未知 paper 缺失 → [SKIP]
     uv run python scripts/validate_golden_qa.py --allow-skip  # --no-strict 别名
     uv run python scripts/validate_golden_qa.py --no-auto-seed
+
+Stream routing (CI grep / ``> log.txt`` 重定向)::
+
+    stdout — [INFO] 进度、[OK] 汇总
+    stderr — [SKIP]、[ERROR]、❌ FAIL、[FAIL] 阻断摘要
 """
 
 from __future__ import annotations
@@ -44,6 +49,8 @@ from backend.graph.qa_samples import (  # noqa: E402
 )
 from backend.graph.store import GraphStore  # noqa: E402
 from backend.rag.qa_heuristics import _PATTERN_NUMBER_RE, resolve_gold_chunk_ids  # noqa: E402
+from backend.schemas.graph import UnifiedPaperGraph  # noqa: E402
+from pydantic import ValidationError  # noqa: E402
 
 EXIT_SUCCESS = 0
 EXIT_DATA_DRIFT = 1  # 金标引用的 ID 在已加载图谱/索引中过期
@@ -274,6 +281,46 @@ def validate_stem_detail_gold(case_id: str, gold: dict[str, Any]) -> list[str]:
     return errors
 
 
+def graph_file_path(graph_dir: Path, paper_id: str) -> Path:
+    """Return on-disk path for a paper graph JSON file."""
+    return graph_dir / f"{paper_id}.json"
+
+
+def load_paper_graph_safe(
+    paper_id: str,
+    *,
+    graph_dir: Path,
+) -> tuple[Any | None, str | None]:
+    """Load a graph JSON file, treating missing/corrupt files as infrastructure faults.
+
+    Returns ``(graph, None)`` on success, ``(None, None)`` when the file is absent,
+    or ``(None, error_message)`` when the file exists but is unreadable or invalid.
+    """
+    path = graph_file_path(graph_dir, paper_id)
+    if not path.is_file():
+        return None, None
+
+    try:
+        raw = path.read_text(encoding="utf-8")
+    except OSError as exc:
+        return None, f"graph file unreadable: {path} ({exc})"
+
+    if not raw.strip():
+        return None, f"graph file is empty (0 bytes): {path}"
+
+    try:
+        payload = json.loads(raw)
+    except json.JSONDecodeError as exc:
+        return None, f"graph file contains invalid JSON: {path} ({exc.msg})"
+
+    try:
+        graph = UnifiedPaperGraph.model_validate(payload)
+    except ValidationError as exc:
+        return None, f"graph file schema invalid: {path} ({exc.error_count()} errors)"
+
+    return graph, None
+
+
 def resolve_paper_graph(
     paper_id: str,
     store: GraphStore,
@@ -288,20 +335,26 @@ def resolve_paper_graph(
 
     Returns ``(graph, status)`` where *status* is ``None`` (ok), ``"skip"``, or ``"fail"``.
     """
-    graph = store.load(paper_id)
+    graph, load_error = load_paper_graph_safe(paper_id, graph_dir=graph_dir)
+    if load_error is not None:
+        print(f"[ERROR] {load_error}", file=sys.stderr)
+        return None, "fail"
     if graph is not None:
         return graph, None
 
     if policy.auto_seed and paper_id in BUILTIN_QA_PAPER_IDS:
         seed_builtin_qa_graph(graph_dir, paper_id, quiet=not verbose)
-        graph = store.load(paper_id)
+        graph, load_error = load_paper_graph_safe(paper_id, graph_dir=graph_dir)
+        if load_error is not None:
+            print(f"[ERROR] {load_error}", file=sys.stderr)
+            return None, "fail"
         if graph is not None:
             if verbose:
                 print(f"[INFO] auto-seeded builtin demo graph {paper_id}")
             return graph, None
 
     if policy.allow_skip:
-        print(f"[SKIP] 图谱未就绪: {paper_id} (--no-strict / --allow-skip)")
+        print(f"[SKIP] 图谱未就绪: {paper_id} (--no-strict / --allow-skip)", file=sys.stderr)
         return None, "skip"
 
     print(
@@ -333,6 +386,19 @@ def validate_chunk_id_format(chunk_id: str, *, expected_paper_id: str) -> str | 
             f"does not match item paper_id={expected_paper_id!r}"
         )
     return None
+
+
+def resolve_exit_code(
+    *,
+    graph_not_ready: bool,
+    all_valid: bool,
+) -> int:
+    """Exit priority: Infrastructure (2) > Data Drift (1) > Success (0)."""
+    if graph_not_ready:
+        return EXIT_INFRASTRUCTURE_ERROR
+    if not all_valid:
+        return EXIT_DATA_DRIFT
+    return EXIT_SUCCESS
 
 
 def validate(args: argparse.Namespace) -> int:
@@ -387,14 +453,6 @@ def validate(args: argparse.Namespace) -> int:
         edge_ids = {e.id for e in graph.edges}
         print(f"[INFO] {pid}: {len(node_ids)} nodes, {len(edge_ids)} edges loaded")
 
-    if graph_not_ready:
-        print(
-            "\n[FAIL] Infrastructure Error (exit 2): 图谱基础文件缺失且无法 auto-seed 自举。"
-            "本地开发可用 --no-strict / --allow-skip。",
-            file=sys.stderr,
-        )
-        return EXIT_INFRASTRUCTURE_ERROR
-
     for paper_id, chunk_ids in ((pid, chunk_index.known_chunk_ids(pid)) for pid in paper_ids):
         if chunk_ids is not None:
             print(f"[INFO] mock vector index {paper_id}: {len(chunk_ids)} chunk_ids")
@@ -408,7 +466,10 @@ def validate(args: argparse.Namespace) -> int:
         graph = graphs.get(paper_id)
         if graph is None:
             if paper_id in skipped_papers:
-                print(f"  [{idx}] [SKIP]: {case_id} — paper {paper_id!r} graph missing")
+                print(
+                    f"  [{idx}] [SKIP]: {case_id} — paper {paper_id!r} graph missing",
+                    file=sys.stderr,
+                )
                 continue
             print(f"  [{idx}] ❌ FAIL: {case_id} — paper {paper_id!r} graph missing", file=sys.stderr)
             continue
@@ -465,22 +526,32 @@ def validate(args: argparse.Namespace) -> int:
                 )
                 all_valid = False
 
-    if all_valid:
+    exit_code = resolve_exit_code(graph_not_ready=graph_not_ready, all_valid=all_valid)
+
+    if exit_code == EXIT_SUCCESS:
         if skipped_papers:
             print(
-                f"\n[OK] 已校验项通过；{len(skipped_papers)} 个 paper 因 --no-strict 跳过: "
-                f"{sorted(skipped_papers)}",
+                f"\n[OK] 已校验项通过；{len(skipped_papers)} 个 paper 因 --no-strict 跳过: {sorted(skipped_papers)}",
             )
         else:
             print(f"\n[OK] 所有 {len(items)} 个金标问题的 graph/chunk ID 引用均有效。")
         return EXIT_SUCCESS
 
-    print(
-        f"\n[FAIL] Data Drift Error (exit 1): 金标引用的 graph/chunk ID 已过期或非法，"
-        f"请更新 {args.golden_file} 或相关 manifest/graph 后重新运行。",
-        file=sys.stderr,
-    )
-    return EXIT_DATA_DRIFT
+    if not all_valid:
+        print(
+            f"\n[FAIL] Data Drift Error (exit 1): 金标引用的 graph/chunk ID 已过期或非法，"
+            f"请更新 {args.golden_file} 或相关 manifest/graph 后重新运行。",
+            file=sys.stderr,
+        )
+
+    if graph_not_ready:
+        print(
+            "\n[FAIL] Infrastructure Error (exit 2): 图谱基础文件缺失且无法 auto-seed 自举。"
+            "本地开发可用 --no-strict / --allow-skip。",
+            file=sys.stderr,
+        )
+
+    return exit_code
 
 
 def main(argv: list[str] | None = None) -> int:
