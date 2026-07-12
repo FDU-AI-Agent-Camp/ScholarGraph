@@ -1,0 +1,9 @@
+{
+  "paper_id": "stem-001",
+  "description": "Mock vector-store chunk index for STEM QA golden-set validation (aligns with backend.rag.chunking chunk_id format).",
+  "chunk_ids": [
+    "stem-001:chunk:42",
+    "stem-001:chunk:43",
+    "stem-001:chunk:44"
+  ]
+}
