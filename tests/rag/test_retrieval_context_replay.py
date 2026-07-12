@@ -61,7 +61,7 @@ def replay_graph_env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> GraphSt
     get_settings.cache_clear()
     reset_llm_client_cache()
 
-    from tests.rag.test_context_source_unification import _hss_graph, _seed_graph_store
+    from tests.rag.test_context_source_unification import _seed_graph_store
 
     return _seed_graph_store(graph_dir)
 

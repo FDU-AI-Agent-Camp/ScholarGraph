@@ -19,15 +19,19 @@ _REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
-from backend.config import get_settings
-from backend.graph.qa import _GraphQaEngine
-from backend.graph.store import GraphStore
-from backend.rag.hybrid_retriever import HybridRetriever
-from backend.rag.models import QuestionScale
-from backend.rag.retrieval_context_io import build_replay_bundle, dump_replay_bundle, enrich_hss_detail_replay_vectors
-from backend.schemas.graph import UnifiedPaperGraph
-from backend.services.paper_fixture_seed import seed_from_fixtures
-from backend.services.paper_service import PaperService
+from backend.config import get_settings  # noqa: E402
+from backend.graph.qa import _GraphQaEngine  # noqa: E402
+from backend.graph.store import GraphStore  # noqa: E402
+from backend.rag.hybrid_retriever import HybridRetriever  # noqa: E402
+from backend.rag.models import QuestionScale  # noqa: E402
+from backend.rag.retrieval_context_io import (  # noqa: E402
+    build_replay_bundle,
+    dump_replay_bundle,
+    enrich_hss_detail_replay_vectors,
+)
+from backend.schemas.graph import UnifiedPaperGraph  # noqa: E402
+from backend.services.paper_fixture_seed import seed_from_fixtures  # noqa: E402
+from backend.services.paper_service import PaperService  # noqa: E402
 
 PAPER_ID = "hss-001"
 QUESTION = "分论点如何支撑核心论点？"

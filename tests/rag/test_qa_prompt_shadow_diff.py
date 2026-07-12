@@ -14,7 +14,6 @@ from backend.graph.store import GraphStore
 from backend.llm.client import reset_llm_client_cache
 from backend.rag.hybrid_retriever import HybridRetriever
 from backend.rag.models import QuestionScale, RetrievalContext
-from backend.schemas.graph import UnifiedPaperGraph
 
 from tests.graph.test_qa import _FakeChunk
 
@@ -72,7 +71,7 @@ def shadow_graph_env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> GraphSt
     get_settings.cache_clear()
     reset_llm_client_cache()
 
-    from tests.rag.test_context_source_unification import _hss_graph, _seed_graph_store
+    from tests.rag.test_context_source_unification import _seed_graph_store
 
     return _seed_graph_store(graph_dir)
 
@@ -158,9 +157,7 @@ async def test_v1_v2_shadow_diff_with_fixture_graph_hss(
     get_settings.cache_clear()
     reset_llm_client_cache()
 
-    fixture_path = (
-        Path(__file__).resolve().parents[2] / "docs" / "api" / "fixtures" / "graph-hss.json"
-    )
+    fixture_path = Path(__file__).resolve().parents[2] / "docs" / "api" / "fixtures" / "graph-hss.json"
     graph_payload = json.loads(fixture_path.read_text(encoding="utf-8"))
     graph = UnifiedPaperGraph.model_validate(graph_payload["data"])
     graph = graph.model_copy(update={"paper_id": "hss-001"})

@@ -73,7 +73,7 @@ def main(argv: list[str] | None = None) -> int:
     steps: list[tuple[str, list[str]]] = [
         ("ruff check", ruff_check_cmd),
         ("ruff format", ruff_format_cmd),
-        ("pyright", ["pyright", "backend"]),
+        ("pyright", [sys.executable, "-m", "pyright", "backend"]),
     ]
     if not args.lint_only:
         # Use ``python -m pytest`` to avoid Windows entry-point canonicalisation issues.

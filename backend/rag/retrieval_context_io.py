@@ -8,7 +8,7 @@ from pathlib import Path
 
 from pydantic import BaseModel, Field
 
-from backend.rag.models import QuestionScale, RetrievalContext, RetrievedChunk, RetrievedEntity, RetrievedRelation
+from backend.rag.models import RetrievalContext, RetrievedChunk, RetrievedEntity, RetrievedRelation
 
 REPLAY_SCHEMA_VERSION = 1
 
