@@ -3,11 +3,9 @@
 from __future__ import annotations
 
 from typing import Any
-from unittest.mock import AsyncMock, patch
+from unittest.mock import patch
 
 import pytest
-from pydantic import ValidationError
-
 from backend.rag.models import SentenceJudgment, SentenceLabel, TrackBJudgeSchema
 from backend.rag.qa_heuristics import run_heuristic_guardrails
 from backend.rag.qa_judge import build_dual_track_evaluation, invoke_qa_judge
@@ -16,6 +14,7 @@ from backend.rag.qa_judge_validate import (
     resolve_judge_output,
     safe_parse_track_b_judge,
 )
+from pydantic import ValidationError
 
 
 def test_raw_contradictory_payload_triggers_validation_error() -> None:
@@ -158,10 +157,7 @@ async def test_invoke_qa_judge_mock_intercept_returns_repaired_five_sentence_cas
     get_settings.cache_clear()
     reset_llm_client_cache()
 
-    judgments = [
-        {"sentence": f"句{i}。", "label": "hallucinated" if i <= 2 else "supported"}
-        for i in range(1, 6)
-    ]
+    judgments = [{"sentence": f"句{i}。", "label": "hallucinated" if i <= 2 else "supported"} for i in range(1, 6)]
     adversarial = {
         "sentence_judgments": judgments,
         "hallucination_detected": False,

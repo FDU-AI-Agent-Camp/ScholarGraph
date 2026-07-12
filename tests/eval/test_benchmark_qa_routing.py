@@ -7,7 +7,6 @@ import sys
 from typing import Any
 
 import pytest
-
 from tests.conftest import REPO_ROOT
 
 _BENCHMARK_SCRIPT = REPO_ROOT / "scripts" / "benchmark_qa.py"

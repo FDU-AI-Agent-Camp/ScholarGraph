@@ -74,11 +74,7 @@ async def build_retrieval_context_with_fallback(
         return RetrievalBuildResult(context=None)
 
     graph, scale = loaded
-    resolved_timeout = (
-        timeout_seconds
-        if timeout_seconds is not None
-        else get_settings().qa_retrieval_timeout_seconds
-    )
+    resolved_timeout = timeout_seconds if timeout_seconds is not None else get_settings().qa_retrieval_timeout_seconds
 
     try:
         context = await asyncio.wait_for(

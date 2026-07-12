@@ -9,11 +9,11 @@ from typing import Any, cast
 from langchain_core.messages import HumanMessage, SystemMessage
 
 from backend.llm.client import LlmClient
-from backend.rag.models import JudgeMicroOutput, QAJudgeResult, TrackBJudgeSchema
+from backend.rag.models import JudgeMicroOutput, TrackBJudgeSchema
 from backend.rag.qa_heuristics import HeuristicGuardrailResult, is_heuristic_hard_fuse_tripped
-from backend.rag.qa_judge_validate import resolve_judge_output
 from backend.rag.qa_judge_retry import run_with_judge_retry
 from backend.rag.qa_judge_structured import invoke_judge_structured_output
+from backend.rag.qa_judge_validate import resolve_judge_output
 
 logger = logging.getLogger(__name__)
 
@@ -45,7 +45,8 @@ def hallucination_ci_pass(mean_rate: float) -> bool:
 
 
 JUDGE_SYSTEM_PROMPT = """\
-你是学术 QA 质量评估专家（LLM-as-a-Judge）。采用**自底向上（Bottom-Up）**评估：先逐句标注，宏观指标由系统根据你的标注自动汇总。
+你是学术 QA 质量评估专家（LLM-as-a-Judge）。采用**自底向上（Bottom-Up）**评估：
+先逐句标注，宏观指标由系统根据你的标注自动汇总。
 
 ## Step 1 — 句子切片与逐句标注（你唯一需要输出的内容）
 1. 将 `answer_text` 切分为完整句子（保留原句文本，不要改写）。
@@ -61,7 +62,8 @@ JUDGE_SYSTEM_PROMPT = """\
 
 ## 禁止
 - 不要输出 factual_consistency / hallucination_detected / reasoning — 系统会从 sentence_judgments 自动推导。
-- 不要输出 markdown 代码块；只输出 JSON：`{"sentence_judgments": [{"sentence": "...", "label": "supported|hallucinated|redundant"}, ...]}`"""
+- 不要输出 markdown 代码块；只输出 JSON：
+  `{"sentence_judgments": [{"sentence": "...", "label": "supported|hallucinated|redundant"}, ...]}`"""
 
 
 def format_judge_user_content(
@@ -91,10 +93,7 @@ def format_judge_user_content(
     }
     if guardrails is not None:
         payload["heuristic_guardrails"] = guardrails.to_dict()
-    return (
-        "请评估以下 QA 回答。\n\n"
-        f"```json\n{json.dumps(payload, ensure_ascii=False, indent=2)}\n```"
-    )
+    return f"请评估以下 QA 回答。\n\n```json\n{json.dumps(payload, ensure_ascii=False, indent=2)}\n```"
 
 
 def build_dual_track_evaluation(

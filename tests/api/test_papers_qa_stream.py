@@ -304,7 +304,7 @@ async def test_qa_stream_http_emits_warning_on_retrieval_timeout(
         import asyncio
 
         await asyncio.sleep(0.05)
-        from backend.rag.models import RetrievalContext, QuestionScale
+        from backend.rag.models import QuestionScale, RetrievalContext
 
         return RetrievalContext(scale=QuestionScale.DETAIL)
 
@@ -371,6 +371,4 @@ async def test_qa_stream_http_rejects_cross_paper_question_with_400(
     )
     assert response.status_code == 400
     body = response.json()
-    assert body["detail"] == (
-        "当前问答接口仅支持单篇论文深度解析。若要对比多篇论文，请前往 /patrol 跨论文巡航模块。"
-    )
+    assert body["detail"] == ("当前问答接口仅支持单篇论文深度解析。若要对比多篇论文，请前往 /patrol 跨论文巡航模块。")

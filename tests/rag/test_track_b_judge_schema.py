@@ -3,9 +3,8 @@
 from __future__ import annotations
 
 import pytest
-from pydantic import ValidationError
-
 from backend.rag.models import SentenceJudgment, SentenceLabel, TrackBJudgeSchema
+from pydantic import ValidationError
 
 
 def test_track_b_schema_accepts_consistent_macro_and_micro() -> None:

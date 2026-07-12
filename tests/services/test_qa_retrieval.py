@@ -6,7 +6,6 @@ import asyncio
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
-
 from backend.graph.store import GraphStore
 from backend.rag.hybrid_retriever import HybridRetriever
 from backend.rag.models import QuestionScale, RetrievedChunk

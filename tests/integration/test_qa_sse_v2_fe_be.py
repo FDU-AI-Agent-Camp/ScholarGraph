@@ -14,9 +14,10 @@ from backend.graph.store import GraphStore
 from backend.llm.client import reset_llm_client_cache
 from backend.main import create_app
 from backend.rag.hybrid_retriever import HybridRetriever, bind_hybrid_retriever, reset_hybrid_retriever
-from backend.schemas.graph import GraphEdge, GraphNode, UnifiedPaperGraph
+from backend.schemas.graph import GraphNode, UnifiedPaperGraph
 from backend.schemas.paradigm import Paradigm
 from httpx import ASGITransport, AsyncClient
+
 from tests.graph.test_qa import _fake_llm
 
 REPO_ROOT = Path(__file__).resolve().parents[2]

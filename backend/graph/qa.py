@@ -395,9 +395,7 @@ class _GraphQaEngine:
         # Build extra sections from RetrievalContext (V2 Phase 2).
         from backend.config import get_settings
 
-        max_context_chars = (
-            get_settings().qa_retrieval_context_max_chars if retrieval_context is not None else None
-        )
+        max_context_chars = get_settings().qa_retrieval_context_max_chars if retrieval_context is not None else None
         entities_desc, relations_desc, chunks_desc = format_retrieval_context(
             retrieval_context,
             max_total_chars=max_context_chars,

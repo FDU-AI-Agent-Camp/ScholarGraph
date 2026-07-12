@@ -5,7 +5,6 @@ from __future__ import annotations
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
-
 from backend.graph.store import GraphStore
 from backend.rag.models import QuestionScale, RetrievalContext, RetrievedChunk
 from backend.schemas.graph import GraphNode, UnifiedPaperGraph

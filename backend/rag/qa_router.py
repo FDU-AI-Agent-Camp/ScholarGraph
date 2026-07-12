@@ -13,9 +13,7 @@ from typing import Any
 from backend.rag.models import QuestionScale, coerce_question_scale
 from backend.schemas.paradigm import Paradigm
 
-CROSS_PAPER_PATROL_GUIDE = (
-    "当前问答接口仅支持单篇论文深度解析。若要对比多篇论文，请前往 /patrol 跨论文巡航模块。"
-)
+CROSS_PAPER_PATROL_GUIDE = "当前问答接口仅支持单篇论文深度解析。若要对比多篇论文，请前往 /patrol 跨论文巡航模块。"
 
 _CROSS_PAPER_KEYWORDS: tuple[str, ...] = (
     "compare to",

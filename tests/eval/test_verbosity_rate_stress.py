@@ -9,7 +9,6 @@ from __future__ import annotations
 from typing import Any
 
 import pytest
-
 from backend.rag.models import QAJudgeResult, SentenceJudgment, SentenceLabel
 from backend.rag.qa_heuristics import (
     compute_verbosity_rate,

@@ -332,13 +332,9 @@ def run_heuristic_guardrails(
     """Run Track A: forbidden fuse, pattern gates, numeric/dataset extraction checks."""
     answer_lower = answer_text.lower()
 
-    passed_required = all(
-        str(pattern).lower() in answer_lower for pattern in gold.get("required_patterns", [])
-    )
+    passed_required = all(str(pattern).lower() in answer_lower for pattern in gold.get("required_patterns", []))
     forbidden_hits = [
-        str(pattern)
-        for pattern in gold.get("forbidden_patterns", [])
-        if str(pattern).lower() in answer_lower
+        str(pattern) for pattern in gold.get("forbidden_patterns", []) if str(pattern).lower() in answer_lower
     ]
     has_forbidden = bool(forbidden_hits)
     forbidden_tripped = has_forbidden
@@ -366,13 +362,7 @@ def run_heuristic_guardrails(
         expected_datasets=expected_datasets,
     )
 
-    passed = (
-        not forbidden_tripped
-        and passed_required
-        and numeric_ok
-        and dataset_ok
-        and paradigm_aligned
-    )
+    passed = not forbidden_tripped and passed_required and numeric_ok and dataset_ok and paradigm_aligned
 
     return HeuristicGuardrailResult(
         passed_required_patterns=passed_required,

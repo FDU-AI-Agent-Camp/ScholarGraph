@@ -2,11 +2,10 @@
 
 from __future__ import annotations
 
-from unittest.mock import AsyncMock, patch
+from unittest.mock import patch
 
 import pytest
-
-from backend.rag.models import JudgeMicroOutput, QAJudgeResult, SentenceJudgment, SentenceLabel
+from backend.rag.models import JudgeMicroOutput, SentenceJudgment, SentenceLabel
 from backend.rag.qa_judge import invoke_qa_judge
 from backend.rag.qa_judge_retry import is_transient_judge_error, run_with_judge_retry
 
@@ -49,8 +48,8 @@ async def test_run_with_judge_retry_does_not_retry_deterministic_errors() -> Non
 
 @pytest.mark.asyncio
 async def test_invoke_qa_judge_live_path_uses_retry(monkeypatch: pytest.MonkeyPatch) -> None:
-    from backend.llm.client import LlmClient, reset_llm_client_cache
     from backend.config import get_settings
+    from backend.llm.client import LlmClient, reset_llm_client_cache
 
     monkeypatch.setenv("LLM_MODE", "live")
     monkeypatch.setenv("SCHOLARGRAPH_API_KEY", "test-key")

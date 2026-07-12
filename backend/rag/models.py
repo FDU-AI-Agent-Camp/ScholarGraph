@@ -199,9 +199,7 @@ class TrackBJudgeSchema(BaseModel):
     @model_validator(mode="after")
     def verify_consistency(self) -> Self:
         """Reject macro/micro contradictions (e.g. hallucinated sentence but macro flag false)."""
-        has_hallucinated_sentence = any(
-            item.label == SentenceLabel.HALLUCINATED for item in self.sentence_judgments
-        )
+        has_hallucinated_sentence = any(item.label == SentenceLabel.HALLUCINATED for item in self.sentence_judgments)
         if has_hallucinated_sentence and not self.hallucination_detected:
             raise ValueError(
                 "Macro 'hallucination_detected' must be True if hallucinated sentences exist.",

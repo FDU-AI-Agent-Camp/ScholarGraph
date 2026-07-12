@@ -5,7 +5,6 @@ from __future__ import annotations
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
-
 from backend.graph.query import GraphQuery
 from backend.rag.hybrid_retriever import HybridRetriever
 from backend.rag.models import QuestionScale, RetrievedChunk

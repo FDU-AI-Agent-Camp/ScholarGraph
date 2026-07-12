@@ -130,11 +130,7 @@ async def test_detail_question_e2e_recalls_vector_chunks_in_sse(qa_e2e_client: A
             body += chunk
 
     events = _parse_sse_stream(body)
-    chunk_citations = [
-        payload
-        for name, payload in events
-        if name == "citation" and payload.get("type") == "chunk"
-    ]
+    chunk_citations = [payload for name, payload in events if name == "citation" and payload.get("type") == "chunk"]
     assert len(chunk_citations) > 0, f"expected chunk citations, got events={events}"
     assert chunk_citations[0]["chunk_id"] == "c1"
     assert chunk_citations[0]["paper_id"] == "hss-001"

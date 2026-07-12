@@ -10,7 +10,6 @@ import json
 from pathlib import Path
 
 import pytest
-
 from backend.rag.models import QuestionScale, coerce_question_scale
 from backend.rag.qa_router import (
     CROSS_PAPER_PATROL_GUIDE,
@@ -91,9 +90,7 @@ def test_detect_question_scale_matches_golden_labels(golden_items: list[dict]) -
             current_paper_context={"paper_id": item["paper_id"]},
         )
         if detected != expected:
-            mismatches.append(
-                f"item {idx}: gold={expected.value} detected={detected.value} q={item['question']!r}"
-            )
+            mismatches.append(f"item {idx}: gold={expected.value} detected={detected.value} q={item['question']!r}")
     assert not mismatches, "Golden scale mismatches:\n" + "\n".join(mismatches)
 
 

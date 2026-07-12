@@ -123,10 +123,7 @@ async def v2_citation_client(
     app.state.hybrid_retriever = retriever
     bind_hybrid_retriever(retriever)
 
-    llm_text = (
-        "论点[CITE:n1]由关系[CITE:edge:e1]连接，"
-        "原文[CITE:chunk:c1]有详述，见[CITE:page:12]。"
-    )
+    llm_text = "论点[CITE:n1]由关系[CITE:edge:e1]连接，原文[CITE:chunk:c1]有详述，见[CITE:page:12]。"
     monkeypatch.setattr("backend.graph.qa.get_qa_llm_client", lambda: _fake_llm(llm_text))
 
     transport = ASGITransport(app=app)

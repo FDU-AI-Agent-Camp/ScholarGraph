@@ -94,9 +94,7 @@ def dispatch_citation(
 _CONTEXT_TRUNCATED_SUFFIX = "…（检索上下文已截断，请优先依据上文与图谱节点作答）"
 _EMPTY_ENTITIES_PLACEHOLDER = "（暂无向量召回实体，请依据上方图谱节点作答）"
 _EMPTY_RELATIONS_PLACEHOLDER = "（暂无向量召回关系）"
-_EMPTY_CHUNKS_PLACEHOLDER = (
-    "（暂无原文片段 — 论文向量索引尚未就绪或无匹配结果，请依据图谱节点与关系作答）"
-)
+_EMPTY_CHUNKS_PLACEHOLDER = "（暂无原文片段 — 论文向量索引尚未就绪或无匹配结果，请依据图谱节点与关系作答）"
 
 
 def _context_sections_total_len(entities_desc: str, relations_desc: str, chunks_desc: str) -> int:

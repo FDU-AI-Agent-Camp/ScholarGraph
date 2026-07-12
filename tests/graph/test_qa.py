@@ -253,9 +253,7 @@ class TestQaStreamBoundaryHandling:
         ]
         assert not any(evt.event == "error" for evt in events)
         assert events[-1].event == "done"
-        node_citations = [
-            evt for evt in events if evt.event == "citation" and evt.data.get("type") == "node"
-        ]
+        node_citations = [evt for evt in events if evt.event == "citation" and evt.data.get("type") == "node"]
         assert len(node_citations) >= 1
 
 

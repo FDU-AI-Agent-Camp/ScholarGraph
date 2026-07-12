@@ -9,14 +9,13 @@ from __future__ import annotations
 from typing import Any
 
 import pytest
-
+from backend.rag.models import QAJudgeResult, SentenceJudgment, SentenceLabel
 from backend.rag.qa_heuristics import (
     extract_numbers_from_text,
     is_heuristic_hard_fuse_tripped,
     numeric_values_match,
     run_heuristic_guardrails,
 )
-from backend.rag.models import QAJudgeResult, SentenceJudgment, SentenceLabel
 from backend.rag.qa_judge import build_dual_track_evaluation
 
 STEM_REL_TOL = 1e-3

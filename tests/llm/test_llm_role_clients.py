@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import pytest
-
 from backend.config import get_settings
 from backend.llm.client import get_judge_llm_client, get_qa_llm_client, reset_llm_client_cache
 from backend.llm.roles import LlmRole, clients_are_isolated, resolve_llm_binding

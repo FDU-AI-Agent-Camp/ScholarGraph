@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import pytest
-
 from backend.rag.qa_heuristics import (
     compute_verbosity_rate,
     derive_golden_reference_text,

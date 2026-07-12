@@ -49,17 +49,17 @@ from backend.llm.client import (  # noqa: E402
 from backend.llm.roles import clients_are_isolated  # noqa: E402
 from backend.rag.hybrid_retriever import HybridRetriever, bind_hybrid_retriever, reset_hybrid_retriever  # noqa: E402
 from backend.rag.models import QuestionScale  # noqa: E402
-from backend.rag.qa_heuristics import run_heuristic_guardrails
-from backend.rag.qa_router import detect_question_scale  # noqa: E402
-from backend.schemas.paradigm import Paradigm  # noqa: E402
-from backend.services.qa_service import QaService  # noqa: E402
-from backend.rag.qa_judge import (
+from backend.rag.qa_heuristics import run_heuristic_guardrails  # noqa: E402
+from backend.rag.qa_judge import (  # noqa: E402
     build_dual_track_evaluation,
     build_evaluation_fallback,
     compute_mean_hallucination_rate,
     hallucination_ci_pass,
     invoke_qa_judge,
-)  # noqa: E402
+)
+from backend.rag.qa_router import detect_question_scale  # noqa: E402
+from backend.schemas.paradigm import Paradigm  # noqa: E402
+from backend.services.qa_service import QaService  # noqa: E402
 
 logger = logging.getLogger(__name__)
 
@@ -478,14 +478,12 @@ async def run_benchmark(args: argparse.Namespace) -> int:
         clients_isolated = _log_dual_model_bindings(qa_client, judge_client)
         settings = get_settings()
         print(
-            f"[INFO] Judge timeout={settings.judge_timeout_seconds}s, "
-            f"concurrency={args.concurrency}",
+            f"[INFO] Judge timeout={settings.judge_timeout_seconds}s, concurrency={args.concurrency}",
         )
     else:
         settings = get_settings()
         print(
-            f"[INFO] Generator (QA): model={settings.qa_model_effective} "
-            f"(dry-run — Judge skipped)",
+            f"[INFO] Generator (QA): model={settings.qa_model_effective} (dry-run — Judge skipped)",
         )
 
     semaphore = asyncio.Semaphore(max(1, min(args.concurrency, 10)))
@@ -679,11 +677,7 @@ def _collect_per_question_hallucination_rates(results: list[dict[str, Any]]) -> 
 
 
 def _mean_ttft_for_scale(results: list[dict[str, Any]], scale: str) -> float | None:
-    ttfts = [
-        float(r["ttft_ms"])
-        for r in results
-        if r.get("detected_scale") == scale and r.get("ttft_ms") is not None
-    ]
+    ttfts = [float(r["ttft_ms"]) for r in results if r.get("detected_scale") == scale and r.get("ttft_ms") is not None]
     if not ttfts:
         return None
     return sum(ttfts) / len(ttfts)
