@@ -8,6 +8,8 @@ from typing import Any
 
 import yaml
 from backend.graph.qa_v2 import dispatch_citation
+from backend.schemas.chunk_preview import QaStreamCitationChunkContract
+from tests.helpers.chunk_preview_contract import enforce_chunk_citation_contract
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 OPENAPI = REPO_ROOT / "docs" / "api" / "openapi.yaml"
@@ -64,6 +66,8 @@ def test_b6_fixture_frames_validate_against_openapi_fields() -> None:
         if frame["event"] != "citation":
             continue
         _assert_citation_payload(frame["data"])
+        if frame["data"].get("type") == "chunk":
+            enforce_chunk_citation_contract(frame["data"])
 
 
 def test_b6_dispatch_citation_outputs_match_openapi_fields() -> None:
@@ -80,3 +84,6 @@ def test_b6_dispatch_citation_outputs_match_openapi_fields() -> None:
     for evt in events:
         assert evt.event == "citation"
         _assert_citation_payload(evt.data)
+        if evt.data.get("type") == "chunk":
+            validated = QaStreamCitationChunkContract.model_validate(evt.data)
+            assert validated.preview_state is not None

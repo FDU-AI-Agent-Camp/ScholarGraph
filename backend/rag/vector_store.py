@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import sys
-from functools import lru_cache, partial
+from functools import partial
 from typing import TYPE_CHECKING, cast
 
 from backend.rag.models import (
@@ -18,6 +18,7 @@ from backend.rag.models import (
     RetrievedRelation,
     VectorEvidenceType,
 )
+from backend.rag.vector_store_chunk_text import ChunkTextLookupMixin
 from backend.rag.vector_store_utils import (
     ChromaMetadata,
     ChromaWhere,
@@ -51,7 +52,7 @@ __all__ = [
 ]
 
 
-class VectorStore:
+class VectorStore(ChunkTextLookupMixin):
     """Thin ChromaDB wrapper used by downstream RAG retrieval modules."""
 
     def __init__(
@@ -104,20 +105,6 @@ class VectorStore:
             client.get_or_create_collection(name=self._settings.chromadb_relation_collection, embedding_function=None),
         )
         self._bind_chunk_text_lru()
-
-    def _bind_chunk_text_lru(self) -> None:
-        """Attach a per-instance ``functools.lru_cache`` for repeated L2 chunk lookups."""
-
-        @lru_cache(maxsize=512)
-        def _get_chunk_text_cached(paper_id: str, chunk_id: str, run_id: str) -> str:
-            text = self._fetch_chunk_text_sync(paper_id, chunk_id, run_id or None)
-            return text if text else ""
-
-        self._get_chunk_text_cached = _get_chunk_text_cached
-
-    def clear_chunk_text_lru(self) -> None:
-        """Invalidate cached chunk text (e.g. after index replace/delete)."""
-        self._get_chunk_text_cached.cache_clear()
 
     async def replace_paper_index(
         self,
@@ -304,39 +291,6 @@ class VectorStore:
                 top_k=top_k if top_k is not None else self._default_top_k(VectorEvidenceType.CHUNK),
             ),
         )
-
-    async def get_chunk_text(self, paper_id: str, chunk_id: str) -> str | None:
-        """Fetch chunk document text by logical ``chunk_id`` (L2 citation preview lookup)."""
-        if not paper_id or not chunk_id:
-            return None
-
-        run_id: str | None = None
-        if self._paper_service is not None:
-            run_id = self._paper_service.get_active_run_id(paper_id)
-
-        cached = await asyncio.to_thread(
-            self._get_chunk_text_cached,
-            paper_id,
-            chunk_id,
-            run_id or "",
-        )
-        return cached if cached else None
-
-    def _fetch_chunk_text_sync(self, paper_id: str, chunk_id: str, run_id: str | None) -> str | None:
-        """Uncached Chroma read — wrapped by ``_get_chunk_text_cached``."""
-        where: ChromaWhere = {
-            "$and": [
-                self._build_where(paper_id, run_id=run_id),
-                {"chunk_id": chunk_id},
-                {"evidence_type": VectorEvidenceType.CHUNK.value},
-            ],
-        }
-        result = self._chunk_collection.get(where=where, limit=1, include=["documents"])
-        documents = result.get("documents") if isinstance(result, dict) else None
-        if not documents:
-            return None
-        first = documents[0]
-        return first if isinstance(first, str) and first.strip() else None
 
     async def query_entities(
         self,
