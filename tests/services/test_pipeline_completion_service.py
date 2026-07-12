@@ -29,10 +29,12 @@ def test_finalize_validates_persists_and_marks_ready(
 
     persistence.save.assert_called_once()
     assert result.paper_id == registered_paper
-    paper = get_paper_service()._papers[registered_paper]
+    import asyncio
+
+    paper = asyncio.run(get_paper_service().get_paper(registered_paper))
     assert paper.status == PaperStatus.READY
     assert paper.classification == sample_classification
-    status = get_paper_service()._status[registered_paper]
+    status = asyncio.run(get_paper_service().get_status(registered_paper))
     assert status.stage == PipelineStage.READY
     assert status.percent == 100
 

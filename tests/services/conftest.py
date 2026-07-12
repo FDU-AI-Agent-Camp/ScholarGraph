@@ -1,12 +1,16 @@
 """Shared fixtures for service-layer tests."""
 
+from __future__ import annotations
+
+import asyncio
 from datetime import UTC, datetime
 
 import pytest
 from backend.schemas.graph import GraphEdge, GraphNode, UnifiedPaperGraph
-from backend.schemas.paper import PaperDetail, PaperStatus
+from backend.schemas.paper import PaperStatus
 from backend.schemas.paradigm import Paradigm, ParadigmClassification
 from backend.services.paper_service import get_paper_service
+from tests.helpers.persistence_testkit import register_test_paper, reset_persistence_singletons
 
 
 @pytest.fixture
@@ -37,23 +41,10 @@ def sample_graph() -> UnifiedPaperGraph:
 
 
 @pytest.fixture
-def registered_paper() -> str:
+def registered_paper(persistence_env) -> str:
     paper_id = "svc-test-paper"
-    now = datetime.now(UTC)
-    service = get_paper_service()
-    service._papers[paper_id] = PaperDetail(
-        paper_id=paper_id,
-        title="service test",
-        status=PaperStatus.PENDING,
-        created_at=now,
-        updated_at=now,
-    )
-    service._status.pop(paper_id, None)
-    service._head_refine_warnings.pop(paper_id, None)
-    service._classify_warnings.pop(paper_id, None)
-    service._extract_warnings.pop(paper_id, None)
-    service._refined_classifier_input.pop(paper_id, None)
-    service._refined_head.pop(paper_id, None)
+    asyncio.run(register_test_paper(paper_id, title="service test"))
+    reset_persistence_singletons()
     from backend.graph.head_store import HeadStore
 
     HeadStore()._path(paper_id).unlink(missing_ok=True)
