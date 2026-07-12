@@ -86,7 +86,7 @@ class PipelineRepository:
 
         async with get_async_session_factory()() as session:
             await self._begin_immediate(session)
-            run = await session.get(PipelineRunRow, paper_id)
+            run = await session.get(PipelineRunRow, paper_id, with_for_update=True)
             if run is None:
                 msg = f"pipeline run not found: {paper_id}"
                 raise KeyError(msg)
