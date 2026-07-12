@@ -705,6 +705,9 @@ uv run python scripts/validate_golden_qa.py --no-strict
 | 1 | 图谱已加载，金标 node/edge/chunk ID 缺失/过期 | Data Drift（金标过期） |
 | 2 | 图谱/金标文件缺失且无法 auto-seed | Infrastructure（环境不健壮） |
 
+**退出码优先级（混合失效矩阵）**：全量扫描金标后聚合判定 —
+`Infrastructure (2) > Data Drift (1) > Success (0)`；同时存在 drift 与 infra 时返回 **2**。
+
 ---
 
 ## 7. 配置项汇总
