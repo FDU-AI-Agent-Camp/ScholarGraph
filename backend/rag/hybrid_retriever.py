@@ -8,6 +8,7 @@ from collections.abc import Callable
 from typing import TYPE_CHECKING
 
 from backend.graph.query import GraphQuery
+from backend.rag.exceptions import VectorStoreUnavailableError
 from backend.rag.models import (
     QuestionScale,
     RetrievalContext,
@@ -16,7 +17,6 @@ from backend.rag.models import (
     RetrievedRelation,
 )
 from backend.rag.protocols import VectorStoreProtocol
-from backend.rag.exceptions import VectorStoreUnavailableError
 
 if TYPE_CHECKING:
     from backend.rag.vector_store import VectorStore

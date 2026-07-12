@@ -5,17 +5,18 @@ from __future__ import annotations
 import inspect
 from typing import Any, get_type_hints
 
-import pytest
 import backend.rag.hybrid_retriever as hybrid_retriever_module
 import backend.rag.protocols as protocols_module
 import backend.rag.static_mock_vector_store as static_mock_module
 import backend.rag.vector_store as vector_store_module
-import tests.helpers.vector_store_doubles as vector_store_doubles_module
+import pytest
 from backend.rag.hybrid_retriever import HybridRetriever
 from backend.rag.models import RetrievedChunk, RetrievedEntity, RetrievedRelation
 from backend.rag.protocols import VectorStoreProtocol
 from backend.rag.static_mock_vector_store import StaticMockVectorStore
 from backend.rag.vector_store import VectorStore
+
+import tests.helpers.vector_store_doubles as vector_store_doubles_module
 from tests.helpers.vector_store_doubles import SlowGetChunkStore
 
 _QUERY_METHODS = ("query_chunks", "query_entities", "query_relations")
@@ -160,7 +161,10 @@ def test_hybrid_retriever_retrieve_vectors_query_embedding_type_closed() -> None
     retrieve_sig = inspect.signature(HybridRetriever.retrieve)
 
     assert retrieve_vectors_hints["query_embedding"] == list[float] | None
-    assert retrieve_vectors_sig.parameters["query_embedding"].annotation == retrieve_sig.parameters["query_embedding"].annotation
+    assert (
+        retrieve_vectors_sig.parameters["query_embedding"].annotation
+        == retrieve_sig.parameters["query_embedding"].annotation
+    )
     assert str(retrieve_vectors_sig.parameters["query_embedding"].annotation) == "list[float] | None"
     assert retrieve_vectors_sig.parameters["query_embedding"].default is inspect.Parameter.empty
     assert retrieve_sig.parameters["query_embedding"].default is None

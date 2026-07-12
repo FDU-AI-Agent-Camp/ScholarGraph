@@ -18,9 +18,10 @@ from backend.rag.models import (
     RetrievedRelation,
     VectorEvidenceType,
 )
-from backend.rag.vector_store_chunk_text import ChunkTextLookupMixin
 from backend.rag.protocols import VectorStoreProtocol
+from backend.rag.vector_store_chunk_text import ChunkTextLookupMixin
 from backend.rag.vector_store_utils import (
+    DEFAULT_EMBEDDING_DIMENSION,
     ChromaMetadata,
     ChromaWhere,
     CollectionProtocol,
@@ -35,7 +36,6 @@ from backend.rag.vector_store_utils import (
     _result_has_ids,
     _validate_evidence_paper_ids,
     clean_metadata,
-    DEFAULT_EMBEDDING_DIMENSION,
     query_evidence_collection,
 )
 

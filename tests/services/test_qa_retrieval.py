@@ -145,9 +145,7 @@ async def test_vector_store_unavailable_logs_underlying_exception_stack(tmp_path
     )
 
     outage_logs = [
-        record
-        for record in caplog.records
-        if "qa_retrieval_vector_store_unavailable" in record.getMessage()
+        record for record in caplog.records if "qa_retrieval_vector_store_unavailable" in record.getMessage()
     ]
     assert len(outage_logs) == 1
     assert outage_logs[0].exc_info is not None

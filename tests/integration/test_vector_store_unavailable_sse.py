@@ -85,9 +85,7 @@ async def test_stem_qa_sse_emits_vector_store_warning_before_message(
     assert "text/event-stream" in response.headers.get("content-type", "")
 
     outage_logs = [
-        record
-        for record in caplog.records
-        if "qa_retrieval_vector_store_unavailable" in record.getMessage()
+        record for record in caplog.records if "qa_retrieval_vector_store_unavailable" in record.getMessage()
     ]
     assert len(outage_logs) == 1
     assert outage_logs[0].exc_info is not None
