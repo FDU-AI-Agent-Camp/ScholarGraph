@@ -10,7 +10,6 @@ from pathlib import Path
 from unittest.mock import patch
 
 import pytest
-
 from backend.llm.client import get_judge_llm_client, get_qa_llm_client, reset_llm_client_cache
 from backend.rag.models import QAJudgeResult, SentenceJudgment, SentenceLabel
 from backend.rag.qa_heuristics import run_heuristic_guardrails
@@ -200,16 +199,15 @@ async def test_run_full_eval_detects_forbidden_via_dual_track(benchmark_qa_modul
         },
     }
 
-    class _FakeQaResult:
-        question = "test"
-        paper_id = "hss-001"
-        answer_text = "回答包含 PCR 编造内容"
-        citations: list[dict] = []
-        error_code = None
-        elapsed_ms = 1
-
     async def _fake_run_single_qa(_paper_id: str, _question: str, **_kwargs: object) -> object:
-        return _FakeQaResult()
+        return mod.QaResult(
+            question="test",
+            paper_id="hss-001",
+            answer_text="回答包含 PCR 编造内容",
+            citations=[],
+            elapsed_ms=1,
+            ttft_ms=1,
+        )
 
     mod.run_single_qa = _fake_run_single_qa  # type: ignore[method-assign]
     result = await mod.run_full_eval(
@@ -316,16 +314,15 @@ async def test_benchmark_judge_snapshot_repeatable_no_token_cost(benchmark_qa_mo
     snapshot = load_qa_judge_snapshot()
     compliant_answer = "F1 达到 15% 在 ImageNet 上验证，引用节点 [CITE:n1]。"
 
-    class _CompliantQaResult:
-        question = "STEM F1 是多少？"
-        paper_id = "hss-001"
-        answer_text = compliant_answer
-        citations = [{"type": "node", "node_id": "n1"}]
-        error_code = None
-        elapsed_ms = 1
-
-    async def _fake_run_single_qa(_paper_id: str, _question: str, **_kwargs: object) -> _CompliantQaResult:
-        return _CompliantQaResult()
+    async def _fake_run_single_qa(_paper_id: str, _question: str, **_kwargs: object) -> mod.QaResult:
+        return mod.QaResult(
+            question="STEM F1 是多少？",
+            paper_id="hss-001",
+            answer_text=compliant_answer,
+            citations=[{"type": "node", "node_id": "n1"}],
+            elapsed_ms=1,
+            ttft_ms=1,
+        )
 
     async def _return_snapshot(*_args: object, **_kwargs: object) -> QAJudgeResult:
         return snapshot

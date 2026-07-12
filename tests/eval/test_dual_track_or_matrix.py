@@ -12,11 +12,9 @@ from __future__ import annotations
 import importlib.util
 import os
 import sys
-from dataclasses import dataclass
 from typing import Any
 
 import pytest
-
 from backend.llm.client import get_judge_llm_client, get_qa_llm_client, reset_llm_client_cache
 from backend.rag.models import QAJudgeResult, SentenceJudgment, SentenceLabel
 from backend.rag.qa_heuristics import is_heuristic_hard_fuse_tripped, run_heuristic_guardrails
@@ -187,16 +185,6 @@ def _mock_llm_env(monkeypatch: pytest.MonkeyPatch) -> None:
     reset_llm_client_cache()
 
 
-@dataclass
-class _FakeQaResult:
-    answer_text: str
-    citations: list[dict[str, Any]]
-    question: str = "boundary test"
-    paper_id: str = "hss-001"
-    error_code: None = None
-    elapsed_ms: int = 1
-
-
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
     ("state_id", "answer_text", "gold", "paradigm", "judge_detected", "expected_rate"),
@@ -221,9 +209,16 @@ async def test_run_full_eval_or_matrix_with_forced_qa_and_judge(
     os.environ.setdefault("GRAPH_DATA_DIR", str(REPO_ROOT / "data" / "graphs"))
 
     item = {"question": "boundary", "paradigm": paradigm, "gold": gold}
-    fake = _FakeQaResult(answer_text=answer_text, citations=[{"type": "node", "node_id": "n1"}])
+    fake = mod.QaResult(
+        question="boundary test",
+        paper_id="hss-001",
+        answer_text=answer_text,
+        citations=[{"type": "node", "node_id": "n1"}],
+        elapsed_ms=1,
+        ttft_ms=1,
+    )
 
-    async def _fake_run_single_qa(_paper_id: str, _question: str, **_kwargs: object) -> _FakeQaResult:
+    async def _fake_run_single_qa(_paper_id: str, _question: str, **_kwargs: object) -> mod.QaResult:
         return fake
 
     async def _fake_invoke_qa_judge(*_args: object, **_kwargs: object) -> QAJudgeResult:

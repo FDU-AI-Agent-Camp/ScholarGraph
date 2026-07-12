@@ -19,7 +19,7 @@ MOCK_PATROL_PREFIX = "【Mock 巡检摘要】"
 _MOCK_CHUNK_SIZE = 8
 _NODE_LINE_RE = re.compile(r"- \[(?P<id>\S+)\] (?P<label>.+?) \(类型: (?P<type>\w+)\)")
 _PARADIGM_RE = re.compile(r"## 当前论文范式\s*\n\s*(\w+)", re.MULTILINE)
-_QUESTION_RE = re.compile(r"## 用户问题\s*\n(.+?)(?:\n## |\Z)", re.DOTALL)
+_QUESTION_RE = re.compile(r"## 用户问题(?:\r?\n)+?(.*?)(?=\r?\n##|\Z)", re.DOTALL)
 
 
 class MockChunk:
