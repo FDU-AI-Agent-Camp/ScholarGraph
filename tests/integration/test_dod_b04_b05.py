@@ -6,13 +6,12 @@
 from __future__ import annotations
 
 import json
-from collections.abc import AsyncIterator
 from pathlib import Path
 
 import pytest
 from backend.api.sse import QA_STREAM_HEADERS, format_sse_event
 from backend.config import get_settings
-from backend.graph.qa import QaEvent, _GraphQaEngine
+from backend.graph.qa import _GraphQaEngine
 from backend.graph.store import GraphStore
 from backend.llm.mock_chat import MOCK_DISCLAIMER
 from httpx import AsyncClient
@@ -185,12 +184,9 @@ async def test_b04_red_llm_failure_emits_qa_stream_error_in_sse(
 ) -> None:
     store = GraphStore(base_dir=mock_llm_env)
     engine = _GraphQaEngine(store=store, llm=_bad_llm())
+    from tests.helpers.qa_stream_mock import qa_stream_from_engine
 
-    async def _fail_stream(paper_id: str, question: str) -> AsyncIterator[QaEvent]:
-        async for evt in engine.stream(paper_id, question):
-            yield evt
-
-    monkeypatch.setattr("backend.graph.qa.qa_stream", _fail_stream)
+    monkeypatch.setattr("backend.graph.qa.qa_stream", qa_stream_from_engine(engine))
 
     response = await api_client.post(
         "/api/v1/papers/hss-001/qa/stream",
@@ -214,12 +210,9 @@ async def test_b05_citation_unknown_node_id_falls_back_to_node_id_label(
     """Boundary: LLM cites a node absent from graph — label falls back to node_id."""
     llm_text = "引用未知节点[CITE:ghost-node]完成。"
     engine = _GraphQaEngine(store=GraphStore(base_dir=mock_llm_env), llm=_fake_llm(llm_text))
+    from tests.helpers.qa_stream_mock import qa_stream_from_engine
 
-    async def _ghost_stream(paper_id: str, question: str) -> AsyncIterator[QaEvent]:
-        async for evt in engine.stream(paper_id, question):
-            yield evt
-
-    monkeypatch.setattr("backend.graph.qa.qa_stream", _ghost_stream)
+    monkeypatch.setattr("backend.graph.qa.qa_stream", qa_stream_from_engine(engine))
 
     response = await api_client.post(
         "/api/v1/papers/hss-001/qa/stream",

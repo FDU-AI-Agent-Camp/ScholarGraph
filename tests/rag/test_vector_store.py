@@ -70,9 +70,18 @@ class FakeCollection:
         limit: int | None = None,
         include: list[str] | None = None,
     ) -> dict[str, Any]:
-        del include
-        ids = [record_id for record_id, record in self.records.items() if _matches_where(record["metadata"], where)]
-        return {"ids": ids[:limit]}
+        rows = [
+            (record_id, record)
+            for record_id, record in self.records.items()
+            if _matches_where(record["metadata"], where)
+        ]
+        if limit is not None:
+            rows = rows[:limit]
+        ids = [record_id for record_id, _record in rows]
+        result: dict[str, Any] = {"ids": ids}
+        if include and "documents" in include:
+            result["documents"] = [[record["document"] for _record_id, record in rows]]
+        return result
 
     def delete(self, *, where: ChromaWhere | None = None) -> None:
         for record_id, record in list(self.records.items()):
@@ -83,6 +92,11 @@ class FakeCollection:
 def _matches_where(metadata: ChromaMetadata, where: ChromaWhere | None) -> bool:
     if where is None:
         return True
+    if "$and" in where:
+        clauses = where["$and"]
+        if not isinstance(clauses, list):
+            return False
+        return all(_matches_where(metadata, clause) for clause in clauses)
     return all(metadata.get(key) == value for key, value in where.items())
 
 
@@ -636,3 +650,32 @@ async def test_failed_replace_cleans_up_partial_orphan_run() -> None:
     # Relations failed before writing, so the orphan cleanup only removed
     # the successfully-written chunk/entity records for the new run.
     assert not relations.records
+
+
+def test_parse_query_results_skips_stale_chroma_rows_with_null_documents() -> None:
+    from backend.rag.vector_store_utils import _parse_query_results
+
+    raw_result = {
+        "ids": [["ghost-id", "chunk:paper-1:0"]],
+        "documents": [[None, "valid chunk text"]],
+        "metadatas": [
+            [
+                {},
+                {
+                    "paper_id": "paper-1",
+                    "chunk_id": "paper-1:chunk:0",
+                    "chunk_index": 0,
+                    "source": "pymupdf",
+                    "char_start": 0,
+                    "char_end": 16,
+                },
+            ],
+        ],
+        "distances": [[305.0, 0.1]],
+    }
+
+    results = _parse_query_results(raw_result, evidence_type=VectorEvidenceType.CHUNK)
+
+    assert len(results) == 1
+    assert results[0].text == "valid chunk text"
+    assert results[0].paper_id == "paper-1"

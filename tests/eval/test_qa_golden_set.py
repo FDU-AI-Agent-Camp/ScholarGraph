@@ -14,10 +14,12 @@ import json
 from pathlib import Path
 
 import pytest
+from backend.rag.models import QuestionScale
 
 _GOLDEN_SET_PATH = Path(__file__).resolve().parents[2] / "data" / "qa_golden_set.json"
+
 _VALID_PARADIGMS = {"STEM", "HSS"}
-_VALID_SCALES = {"summary", "detail", "verification"}
+_VALID_SCALES = {scale.value for scale in QuestionScale}
 
 
 @pytest.fixture
@@ -84,10 +86,20 @@ def test_golden_items_have_required_patterns(golden_data: dict) -> None:
 
 
 def test_golden_items_diverse_paradigms(golden_data: dict) -> None:
-    """Golden set should ideally have both HSS and (future) STEM questions."""
-    paradigms = {item.get("paradigm") for item in golden_data["items"]}
-    assert "HSS" in paradigms, "金标集应包含 HSS 范式问题"
-    # STEM items may be empty for now — that's fine for V2 milestone.
+    golden_set = golden_data["items"]
+    paradigms = {item["paradigm"] for item in golden_set}
+    assert "HSS" in paradigms, "Missing HSS paradigm cases"
+    assert "STEM" in paradigms, "Acceptance Failed: STEM paradigm cases must be present in Golden Set!"
+
+    stem_details = [item for item in golden_set if item["paradigm"] == "STEM" and item["scale"] == "detail"]
+    assert len(stem_details) >= 2, "Acceptance Failed: at least 2 STEM detail cases required for chunk recall gate"
+
+    for case in stem_details:
+        case_id = case.get("id", case["question"][:40])
+        gold = case.get("gold", {})
+        assert len(gold.get("required_patterns", [])) > 0, f"STEM detail case {case_id} must contain required_patterns"
+        paragraphs = [str(p).strip() for p in gold.get("paragraphs", []) if str(p).strip()]
+        assert len(paragraphs) > 0, f"STEM detail case {case_id} must preserve chunk references in gold.paragraphs"
 
 
 def test_no_duplicate_questions(golden_data: dict) -> None:

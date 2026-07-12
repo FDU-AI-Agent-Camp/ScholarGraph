@@ -8,6 +8,7 @@ from pydantic import AliasChoices, Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from backend.config_patrol import PatrolSettingsMixin
+from backend.config_qa import QaSettingsMixin
 
 # Different embedding models train with different vector-space densities.
 # Hard-coding a single threshold would break when switching models, so we keep
@@ -59,7 +60,7 @@ def _clustering_category(node_type: str) -> str:
     return category_map.get(node_type, "Concept")
 
 
-class Settings(PatrolSettingsMixin, BaseSettings):
+class Settings(PatrolSettingsMixin, QaSettingsMixin, BaseSettings):
     """Runtime configuration; values come from `.env` at repository root."""
 
     model_config = SettingsConfigDict(
@@ -267,24 +268,6 @@ class Settings(PatrolSettingsMixin, BaseSettings):
         le=1024,
         validation_alias="EMBEDDING_BATCH_SIZE",
     )
-
-    # RAG / ChromaDB settings
-    chromadb_path: str = Field(default="./data/chroma", validation_alias="CHROMADB_PATH")
-    chromadb_chunk_collection: str = Field(default="paper_chunks", validation_alias="CHROMADB_CHUNK_COLLECTION")
-    chromadb_entity_collection: str = Field(default="paper_entities", validation_alias="CHROMADB_ENTITY_COLLECTION")
-    chromadb_relation_collection: str = Field(
-        default="paper_relations", validation_alias="CHROMADB_RELATION_COLLECTION"
-    )
-    rag_chunk_size_chars: int = Field(default=1500, ge=200, validation_alias="RAG_CHUNK_SIZE_CHARS")
-    rag_chunk_overlap_ratio: float = Field(default=0.20, ge=0.0, lt=1.0, validation_alias="RAG_CHUNK_OVERLAP_RATIO")
-    rag_chunk_min_chunk_chars: int = Field(default=200, ge=1, validation_alias="RAG_CHUNK_MIN_CHUNK_CHARS")
-    rag_chunk_include_references: bool = Field(default=False, validation_alias="RAG_CHUNK_INCLUDE_REFERENCES")
-    rag_chunk_min_soft_boundary_window_chars: int = Field(
-        default=200, ge=50, validation_alias="RAG_CHUNK_MIN_SOFT_BOUNDARY_WINDOW_CHARS"
-    )
-    rag_top_k_chunks: int = Field(default=5, ge=1, validation_alias="RAG_TOP_K_CHUNKS")
-    rag_top_k_entities: int = Field(default=5, ge=1, validation_alias="RAG_TOP_K_ENTITIES")
-    rag_top_k_relations: int = Field(default=5, ge=1, validation_alias="RAG_TOP_K_RELATIONS")
 
     # ------------------------------------------------------------------
     # Cloud reranker for fine-grained semantic merge verification

@@ -126,15 +126,12 @@ async def test_a05_qa_sse_llm_failure_emits_error_event(
     """Simulated live LLM outage → QA_STREAM_ERROR inside SSE (still 200 stream)."""
     from backend.graph.qa import _GraphQaEngine
 
+    from tests.helpers.qa_stream_mock import qa_stream_from_engine
+
     _ = mock_llm_env
     store = GraphStore(base_dir=mock_llm_env)
     engine = _GraphQaEngine(store=store, llm=_bad_llm())
-
-    async def _failing_stream(paper_id: str, question: str):
-        async for evt in engine.stream(paper_id, question):
-            yield evt
-
-    monkeypatch.setattr("backend.graph.qa.qa_stream", _failing_stream)
+    monkeypatch.setattr("backend.graph.qa.qa_stream", qa_stream_from_engine(engine))
 
     response = await api_client.post(
         "/api/v1/papers/hss-001/qa/stream",

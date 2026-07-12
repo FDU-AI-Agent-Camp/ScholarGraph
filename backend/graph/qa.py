@@ -18,18 +18,22 @@ from typing import TYPE_CHECKING
 
 from backend.graph.query import GraphQuery
 from backend.graph.store import GraphStore
-from backend.llm.client import LlmClient, get_llm_client
+from backend.llm.client import LlmClient, get_qa_llm_client
 from backend.schemas.graph import UnifiedPaperGraph
 from backend.schemas.paper import PaperStatus
 from backend.services.paper_service import PaperService, get_paper_service
 
 if TYPE_CHECKING:
+    from backend.rag.chunk_preview import ChunkPreviewContext
     from backend.rag.models import RetrievalContext
 
 from backend.graph.qa_v2 import (
     build_chunk_text_cache,
-    dispatch_citation,
+    dispatch_citation_async,
     format_retrieval_context,
+    format_subgraph_sections,
+    freeze_retrieval_context,
+    resolve_prompt_subgraph,
 )
 
 logger = logging.getLogger(__name__)
@@ -164,6 +168,8 @@ async def qa_stream(
     question: str,
     *,
     retrieval_context: "RetrievalContext | None" = None,
+    retrieval_warning: dict[str, str] | None = None,
+    llm: LlmClient | None = None,
 ) -> AsyncIterator[QaEvent]:
     """Stream multi-scale QA events for the SSE endpoint.
 
@@ -178,9 +184,18 @@ async def qa_stream(
         retrieval_context: Optional hybrid retrieval context from
             ``HybridRetriever.retrieve()`` (V2 Phase 2).  When ``None``,
             QA falls back to pure graph mode (V1 behaviour).
+        retrieval_warning: Optional warning metadata from retrieval fallback
+            (e.g. vector timeout) for chunk preview placeholder classification.
+        llm: Optional QA Generator client. Defaults to ``get_qa_llm_client()``
+            (``LLM_MODEL_QA``), decoupled from the Judge evaluator.
     """
-    engine = _GraphQaEngine()
-    async for evt in engine.stream(paper_id, question, retrieval_context=retrieval_context):
+    engine = _GraphQaEngine(llm=llm)
+    async for evt in engine.stream(
+        paper_id,
+        question,
+        retrieval_context=retrieval_context,
+        retrieval_warning=retrieval_warning,
+    ):
         yield evt
 
 
@@ -201,7 +216,7 @@ class _GraphQaEngine:
         paper_service: PaperService | None = None,
     ) -> None:
         self._store = store or GraphStore()
-        self._llm = llm or get_llm_client()
+        self._llm = llm or get_qa_llm_client()
         self._query = query or GraphQuery()
         self._paper_service = paper_service or get_paper_service()
 
@@ -213,6 +228,7 @@ class _GraphQaEngine:
         question: str,
         *,
         retrieval_context: "RetrievalContext | None" = None,
+        retrieval_warning: dict[str, str] | None = None,
     ) -> AsyncIterator[QaEvent]:
         """Yield ``QaEvent`` items for a single QA turn.
 
@@ -222,6 +238,19 @@ class _GraphQaEngine:
         When *retrieval_context* is provided, the prompt is enriched with
         vector-retrieved entities, relations, and chunks (V2 hybrid RAG).
         """
+        if retrieval_context is not None:
+            retrieval_context = freeze_retrieval_context(retrieval_context)
+
+        from backend.rag.chunk_preview import build_chunk_preview_context
+        from backend.rag.hybrid_retriever import get_hybrid_retriever
+
+        retriever = get_hybrid_retriever()
+        preview_ctx = await build_chunk_preview_context(
+            paper_id,
+            retrieval_warning=retrieval_warning,
+            vector_store=retriever.vector_store,
+        )
+
         try:
             paper = await self._paper_service.get_paper(paper_id)
         except Exception:
@@ -255,7 +284,12 @@ class _GraphQaEngine:
             yield QaEvent("done", {"answer_id": ""})
             return
 
-        subgraph = self._query.subgraph_for_question(graph, question)
+        subgraph = resolve_prompt_subgraph(
+            graph,
+            question,
+            retrieval_context,
+            graph_query=self._query,
+        )
         prompt = self._build_prompt(
             graph,
             subgraph,
@@ -268,7 +302,13 @@ class _GraphQaEngine:
 
         answer_id = f"ans-{paper_id}"
         try:
-            async for evt in self._stream_llm(prompt, graph, paper_id, chunks=chunks_list):
+            async for evt in self._stream_llm(
+                prompt,
+                graph,
+                paper_id,
+                chunks=chunks_list,
+                preview_ctx=preview_ctx,
+            ):
                 yield evt
         except Exception as exc:
             logger.exception("qa_stream failed for paper_id=%s", paper_id)
@@ -285,6 +325,7 @@ class _GraphQaEngine:
         paper_id: str,
         *,
         chunks: list | None = None,
+        preview_ctx: "ChunkPreviewContext | None" = None,
     ) -> AsyncIterator[QaEvent]:
         """Stream LLM response, splitting on [CITE:...] markers of all four types."""
         buffer = ""
@@ -316,13 +357,14 @@ class _GraphQaEngine:
 
                     prefix = match.group(1) or ""
                     cite_value = match.group(2)
-                    yield dispatch_citation(
+                    yield await dispatch_citation_async(
                         prefix,
                         cite_value,
                         paper_id,
                         node_label_cache,
                         edge_label_cache,
                         chunk_text_cache,
+                        preview_ctx=preview_ctx,
                     )
                     buffer = buffer[match.end() :]
                     continue
@@ -354,13 +396,14 @@ class _GraphQaEngine:
 
             prefix = match.group(1) or ""
             cite_value = match.group(2)
-            yield dispatch_citation(
+            yield await dispatch_citation_async(
                 prefix,
                 cite_value,
                 paper_id,
                 node_label_cache,
                 edge_label_cache,
                 chunk_text_cache,
+                preview_ctx=preview_ctx,
             )
             buffer = buffer[match.end() :]
 
@@ -375,22 +418,23 @@ class _GraphQaEngine:
     ) -> str:
         """Format the QA prompt with graph context.
 
-        When *retrieval_context* is provided, the template is enriched with
-        additional placeholder sections for entities, relations, and chunks
-        (V2 hybrid RAG).
+        A-scale ``{nodes}/{edges}`` come from the *subgraph* dict, which
+        ``stream()`` resolves from ``RetrievalContext`` (SSOT) or ``GraphQuery``
+        fallback.  B-scale sections are formatted from *retrieval_context* when
+        provided (V2 hybrid RAG).
         """
         template = self._load_prompt_template()
 
-        nodes_desc = "\n".join(f"- [{n['id']}] {n['label']} (类型: {n['type']})" for n in subgraph.get("nodes", []))
-        edges_desc = "\n".join(f"- {e['source']} --[{e['label']}]--> {e['target']}" for e in subgraph.get("edges", []))
-
-        if not nodes_desc:
-            nodes_desc = "（图谱中暂无匹配节点）"
-        if not edges_desc:
-            edges_desc = "（无匹配关系）"
+        nodes_desc, edges_desc = format_subgraph_sections(subgraph)
 
         # Build extra sections from RetrievalContext (V2 Phase 2).
-        entities_desc, relations_desc, chunks_desc = format_retrieval_context(retrieval_context)
+        from backend.config import get_settings
+
+        max_context_chars = get_settings().qa_retrieval_context_max_chars if retrieval_context is not None else None
+        entities_desc, relations_desc, chunks_desc = format_retrieval_context(
+            retrieval_context,
+            max_total_chars=max_context_chars,
+        )
 
         prompt = template.format(
             paradigm=graph.paradigm.value,

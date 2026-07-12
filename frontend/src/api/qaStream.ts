@@ -8,6 +8,7 @@ import type {
   QaStreamMessageData,
   QaStreamServerEvent,
 } from './types'
+import type { ChunkPreviewState } from '@/utils/qaCitations'
 
 export type { QaStreamCitationData, QaStreamDoneData, QaStreamErrorData, QaStreamMessageData, QaStreamServerEvent }
 
@@ -20,6 +21,64 @@ export interface QaStreamHandlers {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null
+}
+
+function parseChunkPreviewState(raw: unknown): ChunkPreviewState {
+  const value = String(raw ?? 'ready')
+  switch (value) {
+    case 'ready':
+    case 'indexing':
+    case 'retrieval_timeout':
+    case 'l2_timeout':
+    case 'hallucinated_id':
+      return value
+    default:
+      return 'ready'
+  }
+}
+
+function parseCitationPayload(payload: Record<string, unknown>): QaStreamCitationData | null {
+  const paperId = String(payload.paper_id ?? '')
+  const label = String(payload.label ?? '')
+  const citationType = payload.type != null ? String(payload.type) : 'node'
+
+  switch (citationType) {
+    case 'node':
+      return {
+        type: 'node',
+        paper_id: paperId,
+        node_id: String(payload.node_id ?? ''),
+        label,
+      }
+    case 'edge':
+      return {
+        type: 'edge',
+        paper_id: paperId,
+        edge_id: String(payload.edge_id ?? ''),
+        label,
+      }
+    case 'chunk':
+      return {
+        type: 'chunk',
+        paper_id: paperId,
+        chunk_id: String(payload.chunk_id ?? ''),
+        label,
+        text_preview: String(payload.text_preview ?? ''),
+        preview_state: parseChunkPreviewState(payload.preview_state),
+      }
+    case 'page': {
+      const rawPage = payload.page
+      const page = typeof rawPage === 'number' && Number.isFinite(rawPage) ? rawPage : String(rawPage ?? '')
+      return {
+        type: 'page',
+        paper_id: paperId,
+        page,
+        label,
+      }
+    }
+    default:
+      return null
+  }
 }
 
 /** Parse one SSE frame into a discriminated union (exported for tests). */
@@ -37,15 +96,10 @@ export function parseQaStreamEvent(eventName: string, rawData: string): QaStream
   switch (eventName) {
     case 'message':
       return { type: 'message', data: { delta: String(payload.delta ?? '') } }
-    case 'citation':
-      return {
-        type: 'citation',
-        data: {
-          paper_id: String(payload.paper_id ?? ''),
-          node_id: String(payload.node_id ?? ''),
-          label: String(payload.label ?? ''),
-        },
-      }
+    case 'citation': {
+      const citation = parseCitationPayload(payload)
+      return citation ? { type: 'citation', data: citation } : null
+    }
     case 'done':
       return {
         type: 'done',

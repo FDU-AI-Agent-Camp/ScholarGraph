@@ -1,12 +1,15 @@
 """Graph storage, query, GraphRAG, and LangGraph pipeline."""
 
-from backend.graph.qa import QaEvent, qa_stream
 from backend.graph.query import GraphQuery
 from backend.graph.store import GraphStore
 
 
 def __getattr__(name: str) -> object:
-    """Lazily expose workflow symbols to break the import cycle with services."""
+    """Lazily expose heavy symbols to break import cycles with llm.client."""
+    if name in ("QaEvent", "qa_stream"):
+        from backend.graph.qa import QaEvent, qa_stream
+
+        return qa_stream if name == "qa_stream" else QaEvent
     if name in (
         "build_paper_pipeline_graph",
         "get_compiled_paper_pipeline",

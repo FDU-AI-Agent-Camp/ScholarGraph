@@ -3,6 +3,9 @@ defineProps<{
   label: string
   nodeId: string
   active?: boolean
+  preview?: string
+  previewPlaceholder?: boolean
+  previewTooltip?: string
 }>()
 
 const emit = defineEmits<{
@@ -15,19 +18,37 @@ function onClick(): void {
 </script>
 
 <template>
-  <button
-    type="button"
-    class="tag-citation citation-tag"
-    :class="{ 'tag-citation--active': active }"
-    :aria-pressed="active ? 'true' : 'false'"
-    @click="onClick"
-  >
-    <span class="tag-citation__label">{{ label }}</span>
-    <span class="tag-citation__node-id">({{ nodeId }})</span>
-  </button>
+  <div class="tag-citation-wrap">
+    <button
+      type="button"
+      class="tag-citation citation-tag"
+      :class="{ 'tag-citation--active': active }"
+      :aria-pressed="active ? 'true' : 'false'"
+      @click="onClick"
+    >
+      <span class="tag-citation__label">{{ label }}</span>
+      <span class="tag-citation__node-id">({{ nodeId }})</span>
+    </button>
+    <p
+      v-if="preview"
+      class="tag-citation__preview"
+      :class="{ 'tag-citation__preview--placeholder': previewPlaceholder }"
+      :title="previewTooltip"
+    >
+      {{ preview }}
+    </p>
+  </div>
 </template>
 
 <style scoped>
+.tag-citation-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--spacing-4);
+  max-width: 100%;
+}
+
 .tag-citation {
   display: inline-flex;
   align-items: center;
@@ -74,5 +95,20 @@ function onClick(): void {
   font-family: var(--font-mono);
   font-size: var(--text-mono-size);
   line-height: var(--text-mono-leading);
+}
+
+.tag-citation__preview {
+  margin: 0;
+  padding: 0 var(--spacing-4);
+  max-width: 100%;
+  color: var(--color-text-secondary);
+  font-size: var(--text-caption-size, 0.8125rem);
+  line-height: 1.4;
+  word-break: break-word;
+}
+
+.tag-citation__preview--placeholder {
+  color: var(--color-citation-preview-placeholder);
+  font-style: italic;
 }
 </style>

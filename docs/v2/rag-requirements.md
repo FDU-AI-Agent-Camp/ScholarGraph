@@ -312,24 +312,29 @@ RAG_TOP_K_RELATIONS=5
 
 ### 4.1 尺度路由
 
-`backend/rag/qa_router.py`：
+`backend/rag/qa_router.py`（实现：`backend/llm/qa_scale.py`）：
 
 ```python
 class QuestionScale(StrEnum):
-    SKELETON = "skeleton"    # 摘要 / 整体结构
-    DETAIL = "detail"        # 方法 / 数据 / 实验数值
-    CROSS_PAPER = "cross"    # 多篇对比（未来）
+    SUMMARY = "summary"          # 摘要 / 整体结构
+    DETAIL = "detail"            # 方法 / 论证关系 / 结构细节
+    VERIFICATION = "verification"  # 证据 / 材料 / 实验与指标
 
 def detect_question_scale(question: str) -> QuestionScale: ...
 ```
+
+与 `data/qa_golden_set.json` 的 ``scale`` 字段及 ``RetrievalContext.scale`` 使用同一套取值。
+
+**遗留别名**（早期草案 ``skeleton`` / ``cross``）：``skeleton`` → ``summary``；``cross``（多篇对比）保留给 Patrol，**不是** ``QuestionScale`` 成员。
 
 判定规则（V1 硬规则，后续可升级 LLM）：
 
 | 关键词/模式 | 尺度 |
 |---|---|
-| "核心论点" / "做了什么" / "摘要" / "整体" / "主要结论" | SKELETON |
-| "方法" / "数据集" / "实验" / "指标" / "数值" / "具体" / "第几页" / "多少" | DETAIL |
-| "对比" / "矛盾" / "两篇" / "差异" | CROSS_PAPER（暂不支持，返回 400 或引导 Patrol） |
+| "核心论点" / "做了什么" / "摘要" / "整体" / "主要结论" | SUMMARY |
+| "方法" / "具体" / "关系" / "分论点" / "采用了" | DETAIL |
+| "材料" / "证据" / "实验" / "数据集" / "哪些节点" / "如何论证" | VERIFICATION |
+| "对比" / "矛盾" / "两篇" / "差异" | 多篇对比（Patrol，非 QuestionScale） |
 
 ### 4.2 Hybrid Retriever
 
@@ -379,9 +384,41 @@ class RetrievalContext(BaseModel):
     scale: QuestionScale
 ```
 
+**Single Source of Truth（B7 统一可信源）**
+
+``HybridRetriever.retrieve()`` 每轮只查询一次图谱与向量，组装完整 ``RetrievalContext``。
+``QaEngine`` 为纯消费组件，不再在 Prompt 拼装阶段重复调用 ``GraphQuery``：
+
+```text
+HTTP / Benchmark → HybridRetriever.retrieve() → RetrievalContext
+  ├─ nodes/edges     → Prompt {nodes}/{edges}   （RC 非空时唯一来源）
+  └─ entities/relations/chunks → Prompt 向量段   （format_retrieval_context）
+       ↓
+qa_stream(..., retrieval_context=RC) → QaEngine._build_prompt()
+```
+
+**降级（Fallback）**：
+
+- **全量降级**：当 ``retrieval_context is None``，或 ``nodes`` 与 ``edges`` 均为空
+  （V1 单测 / 未走 HybridRetriever 的路径）时，``QaEngine`` 惰性调用
+  ``GraphQuery.subgraph_for_question()``，保持 M2 / A-09 向后兼容。
+- **局部降级（半挂空挡）**：当 RC 仅含 ``nodes`` 或仅含 ``edges`` 时（例如分布式检索
+  抖动导致边丢失），复用已有切片，**仅对缺失的一半**触发一次 ``GraphQuery`` 回填，
+  避免 Prompt 关系链空白或重复全量查图。
+- **不可变快照**：``QaEngine.stream()`` 入口对 RC 执行 ``model_copy(deep=True)``
+  （``freeze_retrieval_context``），防止 SSE 并发消费者 ``.clear()`` / 原地改 dict
+  污染 Prompt 拼装。
+- **离线 Replay**：``RetrievalContextReplayBundle``（``backend/rag/retrieval_context_io.py``）
+  将 RC + 问题 + golden Prompt 固化为 JSON；CI 在阻断 ``GraphQuery`` / ``HybridRetriever``
+  后反序列化 RC 直喂 ``qa_stream``，验证 Prompt 字节级一致，支撑 Prompt Tuning 流水线。
+- **影子 Diff（M2 回归）**：同一问题分别走 V1（``retrieval_context=None`` → GraphQuery）
+  与 V2（RC SSOT），对 Prompt 的 ``### 节点`` / ``### 关系`` 切片做排序 + 去空白后
+  字符级比对（``subgraph_sections_shadow_fingerprint``），``Diff == 0``。
+
 混合策略：
-- `SKELETON`：只用 A 尺度（图谱拓扑子图）。
+- `SUMMARY`：只用 A 尺度（图谱拓扑子图）。
 - `DETAIL`：统一向量召回 Entities + Relations + Chunks，再与 A 尺度子图合并去重。
+- `VERIFICATION`：偏重 B 尺度（实体 / 关系 / 原文 chunk）。
 
 检索流程：
 1. 根据 `query_transform`（如有）转换问题；否则使用原始问题。
@@ -632,9 +669,44 @@ Judge 输出 JSON：
 ### 6.5 金标维护
 
 新增 `scripts/validate_golden_qa.py`：
-- 遍历金标中的 `node_id` / `edge_id`
-- 校验是否仍存在于 `data/graphs/` 样本中
-- 发现过期引用时抛出 Error，提示重刷
+- 遍历金标中的 `node_id` / `edge_id` / chunk ID
+- 校验是否仍存在于 `data/graphs/` 样本、chunk manifest 与 mock 向量索引中
+- 发现过期引用时 **exit 1**
+
+**图谱 bootstrap（B8）** — 默认 **strict=True** + 内置样本静默 auto-seed：
+
+```text
+validate (strict) → paper 图谱存在? → 强校验 gold IDs
+                  → 缺失且 hss-001/stem-001 → 静默 seed → 重试
+                  → 缺失且未知 paper → exit 2
+                  → --no-strict / --allow-skip（仅本地，CI 强制 strict）
+```
+
+| 标志 | 默认 | 说明 |
+|------|------|------|
+| `--strict` / `--no-strict` | strict | 未知 paper 图谱缺失是否阻断 (exit 2) |
+| `--allow-skip` | off | `--no-strict` 别名；**CI 中无效** |
+| `--no-auto-seed` | off | 禁用 hss-001/stem-001 静默自举 |
+| `--verbose` | off | 打印 auto-seed 日志 |
+
+```bash
+# CI / 门禁（默认 strict + auto-seed）
+uv run python scripts/validate_golden_qa.py --graph-dir ./data/graphs
+
+# 本地：允许跳过尚未 ingest 的 paper
+uv run python scripts/validate_golden_qa.py --no-strict
+```
+
+**Exit codes（CI 分层捕获）**：
+
+| Code | 场景 | 含义 |
+|------|------|------|
+| 0 | 全部通过，或 `--no-strict` 下无损 SKIP | Success |
+| 1 | 图谱已加载，金标 node/edge/chunk ID 缺失/过期 | Data Drift（金标过期） |
+| 2 | 图谱/金标文件缺失且无法 auto-seed | Infrastructure（环境不健壮） |
+
+**退出码优先级（混合失效矩阵）**：全量扫描金标后聚合判定 —
+`Infrastructure (2) > Data Drift (1) > Success (0)`；同时存在 drift 与 infra 时返回 **2**。
 
 ---
 

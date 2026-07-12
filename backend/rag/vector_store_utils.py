@@ -156,6 +156,18 @@ def _optional_str(value: Any) -> str | None:
     return str(value) if value is not None else None
 
 
+def _is_usable_query_row(*, result_id: Any, document: Any, paper_id: str) -> bool:
+    """Drop stale Chroma hits that can appear during concurrent delete/reindex races."""
+    if not str(result_id).strip():
+        return False
+    if not paper_id.strip():
+        return False
+    if document is None:
+        return False
+    text = str(document).strip()
+    return bool(text) and text != "None"
+
+
 def _parse_query_results(
     raw_result: dict[str, Any],
     *,
@@ -170,11 +182,14 @@ def _parse_query_results(
     for index, result_id in enumerate(ids):
         raw_metadata = _item_at(metadatas, index, default={}) or {}
         metadata = clean_metadata(raw_metadata)
-        text = str(_item_at(documents, index, default=""))
+        document = _item_at(documents, index, default=None)
+        paper_id = str(metadata.get("paper_id", ""))
+        if not _is_usable_query_row(result_id=result_id, document=document, paper_id=paper_id):
+            continue
+        text = str(document)
         distance = _item_at(distances, index, default=None)
         parsed_distance = float(distance) if isinstance(distance, int | float) else None
 
-        paper_id = str(metadata.get("paper_id", ""))
         if evidence_type == VectorEvidenceType.CHUNK:
             results.append(
                 RetrievedChunk(

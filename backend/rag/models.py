@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 from enum import StrEnum
-from typing import Protocol
+from typing import Protocol, Self
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 # ---------------------------------------------------------------------------
 # Question-scale routing (Phase 2 — rag-qa-evaluation / rag-hybrid-retriever)
@@ -13,11 +13,26 @@ from pydantic import BaseModel, Field
 
 
 class QuestionScale(StrEnum):
-    """Three-scale routing for hybrid RAG."""
+    """Routing scales for hybrid RAG (aligned with ``qa_golden_set.json`` ``scale``)."""
 
-    SKELETON = "skeleton"  # 摘要 / 整体结构 — A 尺度
-    DETAIL = "detail"  # 方法 / 数据 / 实验数值 — B 尺度
-    CROSS_PAPER = "cross"  # 多篇对比（未来）
+    SUMMARY = "summary"  # 摘要 / 整体结构 — A 尺度
+    DETAIL = "detail"  # 方法 / 论证关系 / 结构细节 — A+B
+    VERIFICATION = "verification"  # 证据 / 材料 / 实验与指标 — B 尺度
+    CROSS_PAPER = "cross_paper"  # 跨论文对比 — Patrol 域，单篇 QA 熔断
+
+
+# Early V2 draft used ``skeleton`` / ``cross``; golden set uses ``summary`` / ``verification``.
+# ``cross`` legacy alias maps to ``cross_paper`` for Patrol-style multi-paper questions.
+QUESTION_SCALE_LEGACY_ALIASES: dict[str, str] = {
+    "skeleton": QuestionScale.SUMMARY,
+    "cross": QuestionScale.CROSS_PAPER,
+}
+
+
+def coerce_question_scale(value: str) -> QuestionScale:
+    """Parse a scale string from golden JSON, API, or legacy docs."""
+    normalized = QUESTION_SCALE_LEGACY_ALIASES.get(value, value)
+    return QuestionScale(normalized)
 
 
 class VectorEvidenceType(StrEnum):
@@ -26,6 +41,22 @@ class VectorEvidenceType(StrEnum):
     CHUNK = "chunk"
     ENTITY = "entity"
     RELATION = "relation"
+
+
+class ChunkPreviewDegradedMessage(StrEnum):
+    """Canonical degraded ``text_preview`` copy — SSOT for BE/FE contract (B10).
+
+    Only these exact strings may appear when ``preview_state`` is not ``ready``.
+    Frontend sidebar styling keys off ``preview_state``; arbitrary fallback strings
+    (e.g. ``"[Timeout]"``) must never be emitted.
+    """
+
+    INDEXING = "[Context indexing in progress, please refresh later]"
+    VECTOR_RETRIEVAL_TIMEOUT = "[Vector retrieval timeout, preview unavailable]"
+    HALLUCINATED_ID = "[Reference verification failed: Hallucinated ID]"
+
+
+CHUNK_PREVIEW_DEGRADED_WHITELIST: frozenset[str] = frozenset(member.value for member in ChunkPreviewDegradedMessage)
 
 
 class PaperChunk(BaseModel):
@@ -125,13 +156,103 @@ class EmbeddingClientProtocol(Protocol):
 # ---------------------------------------------------------------------------
 
 
-class RetrievalContext(BaseModel):
-    """Complete retrieval result passed to QA / Patrol prompt builders.
+class SentenceLabel(StrEnum):
+    """Per-sentence entailment label for bottom-up Judge (Track B Step 1)."""
 
-    Members:
-        nodes / edges: graph topology subgraph (A 尺度).
-        entities / relations / chunks: vector recall results (B 尺度).
-        scale: the resolved question scale.
+    SUPPORTED = "supported"
+    HALLUCINATED = "hallucinated"
+    REDUNDANT = "redundant"
+
+
+class SentenceJudgment(BaseModel):
+    """One sentence from the model answer with a micro-level label."""
+
+    sentence: str = Field(
+        ...,
+        min_length=1,
+        description="The exact substring sentence from the model answer.",
+    )
+    label: SentenceLabel = Field(
+        ...,
+        description="Evaluation label for this specific sentence.",
+    )
+
+
+class JudgeMicroOutput(BaseModel):
+    """Step 1 LLM binding — micro sentence labels only (macro derived in code)."""
+
+    sentence_judgments: list[SentenceJudgment] = Field(
+        ...,
+        min_length=1,
+        description="Break down the model answer into sentences and judge them one by one.",
+    )
+
+
+class TrackBJudgeSchema(BaseModel):
+    """Full Track B Judge output: micro sentence_judgments + macro scores (asymmetric nesting)."""
+
+    sentence_judgments: list[SentenceJudgment] = Field(
+        ...,
+        min_length=1,
+        description="Break down the model answer into sentences and judge them one by one.",
+    )
+    hallucination_detected: bool = Field(
+        ...,
+        description="Must be true if ANY sentence is labeled as 'hallucinated'.",
+    )
+    factual_consistency: float = Field(
+        ...,
+        ge=0.0,
+        le=1.0,
+        description="Macro score (0.0-1.0) based on the percentage of supported semantic logic.",
+    )
+    reasoning: str = Field(
+        ...,
+        min_length=1,
+        description="Detailed justification connecting the sentence judgments to the macro scores.",
+    )
+
+    @model_validator(mode="after")
+    def verify_consistency(self) -> Self:
+        """Reject macro/micro contradictions (e.g. hallucinated sentence but macro flag false)."""
+        has_hallucinated_sentence = any(item.label == SentenceLabel.HALLUCINATED for item in self.sentence_judgments)
+        if has_hallucinated_sentence and not self.hallucination_detected:
+            raise ValueError(
+                "Macro 'hallucination_detected' must be True if hallucinated sentences exist.",
+            )
+        return self
+
+
+# Backward-compatible alias used across benchmark / API reports.
+QAJudgeResult = TrackBJudgeSchema
+
+# LLM structured-output binding: Step 1 micro schema only — macro fields computed in code.
+JudgeSchema = JudgeMicroOutput
+
+
+class RetrievalContext(BaseModel):
+    """Complete retrieval result — single source of truth for QA prompt context.
+
+    ``HybridRetriever.retrieve()`` assembles one ``RetrievalContext`` per turn.
+    ``QaEngine`` consumes it without re-querying the graph when subgraph fields
+    are populated.
+
+    Prompt contract (authoritative sources):
+        - ``nodes`` / ``edges``: A-scale topology → template ``{nodes}`` /
+          ``{edges}`` placeholders. When either list is non-empty, ``QaEngine``
+          MUST use these fields and MUST NOT call ``GraphQuery`` again.
+        - ``entities`` / ``relations`` / ``chunks``: B-scale vector recall →
+          ``{entities}`` / ``{relations}`` / ``{chunks}`` via
+          ``format_retrieval_context()``.
+        - ``scale``: resolved question scale for routing metrics.
+
+    Fallback: when ``nodes`` and ``edges`` are both empty (or RC is ``None``),
+    ``QaEngine`` lazily calls ``GraphQuery.subgraph_for_question()`` for V1 /
+    legacy tests that bypass ``HybridRetriever``.
+
+    Immutability: ``QaEngine.stream()`` deep-snapshots RC via
+    ``freeze_retrieval_context()`` before prompt assembly so async SSE consumers
+    cannot mutate shared references mid-flight.
     """
 
     nodes: list[dict] = Field(default_factory=list)

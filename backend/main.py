@@ -1,6 +1,7 @@
 """FastAPI application factory."""
 
 import logging
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -11,6 +12,28 @@ from backend.config import get_settings
 from backend.constants import API_VERSION
 
 logger = logging.getLogger(__name__)
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Initialize long-lived RAG clients once; routes reuse via ``app.state``."""
+    from backend.rag.hybrid_retriever import bind_hybrid_retriever, create_hybrid_retriever, reset_hybrid_retriever
+
+    preconfigured = getattr(app.state, "hybrid_retriever", None)
+    if preconfigured is not None:
+        bind_hybrid_retriever(preconfigured)
+        logger.info("HybridRetriever reused from pre-configured app.state")
+    else:
+        retriever = create_hybrid_retriever()
+        app.state.hybrid_retriever = retriever
+        bind_hybrid_retriever(retriever)
+        logger.info("HybridRetriever initialized and bound to app.state")
+    try:
+        yield
+    finally:
+        reset_hybrid_retriever()
+        if hasattr(app.state, "hybrid_retriever"):
+            delattr(app.state, "hybrid_retriever")
 
 
 def create_app() -> FastAPI:
@@ -27,6 +50,7 @@ def create_app() -> FastAPI:
         docs_url="/docs",
         redoc_url="/redoc",
         openapi_url="/openapi.json",
+        lifespan=lifespan,
     )
     app.add_middleware(
         CORSMiddleware,

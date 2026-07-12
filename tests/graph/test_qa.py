@@ -227,6 +227,37 @@ class TestQaStreamV2Citations:
 
 
 # ---------------------------------------------------------------------------
+# boundary handling (§4 checklist)
+# ---------------------------------------------------------------------------
+
+
+class TestQaStreamBoundaryHandling:
+    async def test_empty_retrieval_context_completes_without_error(
+        self,
+        store_with_graph: GraphStore,
+    ) -> None:
+        """Blank vector index: RC.chunks=[] must not raise IndexError; graph citations still work."""
+        from backend.rag.models import QuestionScale, RetrievalContext
+
+        rc = RetrievalContext(scale=QuestionScale.DETAIL)
+        llm = _fake_llm("依据图谱，核心论点[CITE:n1]说明问题。")
+        engine = _GraphQaEngine(store=store_with_graph, llm=llm)
+
+        events = [
+            evt
+            async for evt in engine.stream(
+                "hss-001",
+                "分论点如何支撑核心论点？",
+                retrieval_context=rc,
+            )
+        ]
+        assert not any(evt.event == "error" for evt in events)
+        assert events[-1].event == "done"
+        node_citations = [evt for evt in events if evt.event == "citation" and evt.data.get("type") == "node"]
+        assert len(node_citations) >= 1
+
+
+# ---------------------------------------------------------------------------
 # error paths
 # ---------------------------------------------------------------------------
 

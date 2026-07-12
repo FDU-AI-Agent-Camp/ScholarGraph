@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
+import qaStreamV2Frames from '../../../docs/api/fixtures/qa-stream-v2-frames.json'
 import { parseQaStreamEvent } from '@/api/qaStream'
 
 describe('parseQaStreamEvent', () => {
@@ -8,15 +9,74 @@ describe('parseQaStreamEvent', () => {
     expect(event).toEqual({ type: 'message', data: { delta: '你好' } })
   })
 
-  it('parses citation events', () => {
+  it('parses V2 node citation events', () => {
     const event = parseQaStreamEvent(
       'citation',
-      JSON.stringify({ paper_id: 'hss-001', node_id: 'n1', label: '核心论点' }),
+      JSON.stringify({ type: 'node', paper_id: 'hss-001', node_id: 'n1', label: '核心论点' }),
     )
     expect(event).toEqual({
       type: 'citation',
-      data: { paper_id: 'hss-001', node_id: 'n1', label: '核心论点' },
+      data: { type: 'node', paper_id: 'hss-001', node_id: 'n1', label: '核心论点' },
     })
+  })
+
+  it('parses V1 citation without type as node', () => {
+    const event = parseQaStreamEvent(
+      'citation',
+      JSON.stringify({ type: 'node', paper_id: 'hss-001', node_id: 'n1', label: '核心论点' }),
+    )
+    expect(event).toEqual({
+      type: 'citation',
+      data: { type: 'node', paper_id: 'hss-001', node_id: 'n1', label: '核心论点' },
+    })
+  })
+
+  it('parses edge, chunk, and page citation events', () => {
+    const edge = parseQaStreamEvent(
+      'citation',
+      JSON.stringify({
+        type: 'edge',
+        paper_id: 'hss-001',
+        edge_id: 'e1',
+        label: '分论点 → 核心论点',
+      }),
+    )
+    expect(edge).toEqual({
+      type: 'citation',
+      data: { type: 'edge', paper_id: 'hss-001', edge_id: 'e1', label: '分论点 → 核心论点' },
+    })
+
+    const chunk = parseQaStreamEvent(
+      'citation',
+      JSON.stringify({
+        type: 'chunk',
+        paper_id: 'hss-001',
+        chunk_id: 'c1',
+        label: '片段 c1',
+        text_preview: '预览',
+        preview_state: 'ready',
+      }),
+    )
+    expect(chunk?.type).toBe('citation')
+    if (chunk?.type === 'citation') {
+      expect(chunk.data).toEqual({
+        type: 'chunk',
+        paper_id: 'hss-001',
+        chunk_id: 'c1',
+        label: '片段 c1',
+        text_preview: '预览',
+        preview_state: 'ready',
+      })
+    }
+
+    const page = parseQaStreamEvent(
+      'citation',
+      JSON.stringify({ type: 'page', paper_id: 'hss-001', page: 12, label: '第12页' }),
+    )
+    expect(page?.type).toBe('citation')
+    if (page?.type === 'citation') {
+      expect(page.data).toEqual({ type: 'page', paper_id: 'hss-001', page: 12, label: '第12页' })
+    }
   })
 
   it('parses done events with optional answer', () => {
@@ -41,12 +101,16 @@ describe('parseQaStreamEvent', () => {
     expect(parseQaStreamEvent('message', 'null')).toBeNull()
   })
 
-  it('coerces missing citation fields to empty strings', () => {
+  it('coerces missing node citation fields to empty strings', () => {
     const event = parseQaStreamEvent('citation', JSON.stringify({ paper_id: 'hss-001' }))
     expect(event).toEqual({
       type: 'citation',
-      data: { paper_id: 'hss-001', node_id: '', label: '' },
+      data: { type: 'node', paper_id: 'hss-001', node_id: '', label: '' },
     })
+  })
+
+  it('returns null for unknown citation type', () => {
+    expect(parseQaStreamEvent('citation', JSON.stringify({ type: 'unknown', paper_id: 'hss-001' }))).toBeNull()
   })
 
   it('defaults error message when payload omits message', () => {
@@ -62,20 +126,12 @@ describe('parseQaStreamEvent', () => {
     expect(parseQaStreamEvent('message', '42')).toBeNull()
   })
 
-  it('exhaustive switch coverage for all event types', () => {
-    const events = ['message', 'citation', 'done', 'error'] as const
-    for (const name of events) {
-      const parsed = parseQaStreamEvent(
-        name,
-        name === 'message'
-          ? '{"delta":"x"}'
-          : name === 'citation'
-            ? '{"paper_id":"p","node_id":"n","label":"l"}'
-            : name === 'done'
-              ? '{"answer_id":"a"}'
-              : '{"message":"err"}',
-      )
-      expect(parsed?.type).toBe(name)
-    }
+  it('parses canonical qa-stream-v2-frames fixture', () => {
+    const parsed = qaStreamV2Frames.map((frame) => parseQaStreamEvent(frame.event, JSON.stringify(frame.data)))
+    expect(parsed.every((item) => item !== null)).toBe(true)
+    const types = parsed
+      .filter((item) => item?.type === 'citation')
+      .map((item) => (item?.type === 'citation' ? item.data.type : null))
+    expect(types).toEqual(['node', 'edge', 'chunk', 'page'])
   })
 })

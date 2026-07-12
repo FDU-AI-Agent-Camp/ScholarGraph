@@ -1,5 +1,5 @@
 {
-  "version": "2026-07-06",
+  "version": "2026-07-12",
   "allowed_recall_floor": 0.80,
   "description": "V2 金标 QA 问题集。每题包含 human-verified expected nodes / edges / required_patterns / forbidden_patterns。",
   "items": [
@@ -157,6 +157,54 @@
         "paragraphs": [],
         "required_patterns": ["HSS", "人文社科"],
         "forbidden_patterns": ["STEM", "p-value"]
+      }
+    },
+    {
+      "id": "stem-001-q13",
+      "question": "What is the top-1 accuracy of the proposed ResNet-Light model on the ImageNet dataset, and what was the learning rate?",
+      "paradigm": "STEM",
+      "paper_id": "stem-001",
+      "scale": "detail",
+      "gold": {
+        "nodes": ["n_method", "n_dataset"],
+        "edges": ["e_eval"],
+        "paragraphs": ["stem-001:chunk:42", "stem-001:chunk:43"],
+        "required_patterns": ["78.5%", "ImageNet", "0.001"],
+        "forbidden_patterns": ["ResNet-50", "90%"],
+        "numeric_rel_tol": 0.001,
+        "numeric_abs_tol": 0.0005,
+        "reference_answer": "The ResNet-Light model achieves a top-1 accuracy of 78.5% on ImageNet with a learning rate configured at 0.001."
+      }
+    },
+    {
+      "id": "stem-001-q14",
+      "question": "ResNet-Light 在 ImageNet 上相比哪个 Baseline 提升了 top-1 accuracy？具体数值是多少？",
+      "paradigm": "STEM",
+      "paper_id": "stem-001",
+      "scale": "detail",
+      "gold": {
+        "nodes": ["n_method", "n_baseline", "n_metric"],
+        "edges": ["e_compare", "e_measure"],
+        "paragraphs": ["stem-001:chunk:42"],
+        "chunk_ids": ["stem-001:chunk:44"],
+        "required_patterns": ["78.5%", "ResNet-50", "ImageNet"],
+        "forbidden_patterns": ["PCR"],
+        "numeric_rel_tol": 0.001
+      }
+    },
+    {
+      "id": "stem-001-q15",
+      "question": "What batch size and optimizer were used to train ResNet-Light on ImageNet?",
+      "paradigm": "STEM",
+      "paper_id": "stem-001",
+      "scale": "detail",
+      "gold": {
+        "nodes": ["n_method", "n_dataset"],
+        "edges": ["e_eval"],
+        "paragraphs": ["stem-001:chunk:43"],
+        "chunk_ids": ["stem-001:chunk:43"],
+        "required_patterns": ["256", "Adam", "ImageNet"],
+        "forbidden_patterns": []
       }
     }
   ]

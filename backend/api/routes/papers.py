@@ -4,30 +4,21 @@ from collections.abc import AsyncIterator
 
 from fastapi import APIRouter, Depends, File, Query, UploadFile
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel, Field, field_validator
 
-from backend.api.deps import get_paper_service_dep, get_request_id
+from backend.api.deps import get_hybrid_retriever_dep, get_paper_service_dep, get_request_id
+from backend.api.qa_deps import verify_question_scale
 from backend.api.responses import paginated, success
 from backend.api.sse import QA_STREAM_HEADERS, format_sse_event
 from backend.graph.skeleton import build_skeleton_graph
+from backend.rag.hybrid_retriever import HybridRetriever
+from backend.rag.models import QuestionScale
 from backend.schemas.paper import PaperStatus
 from backend.schemas.paradigm import Paradigm
+from backend.schemas.qa_stream import QaStreamRequest
 from backend.services.paper_service import PaperService
+from backend.services.qa_retrieval import build_retrieval_context_with_fallback
 
 router = APIRouter(prefix="/papers")
-
-
-class QaStreamRequest(BaseModel):
-    question: str = Field(min_length=1, max_length=4000)
-
-    @field_validator("question")
-    @classmethod
-    def strip_and_require_non_empty(cls, value: str) -> str:
-        trimmed = value.strip()
-        if not trimmed:
-            msg = "question must not be empty"
-            raise ValueError(msg)
-        return trimmed
 
 
 @router.get("")
@@ -126,15 +117,33 @@ async def stream_paper_qa(
     paper_id: str,
     body: QaStreamRequest,
     service: PaperService = Depends(get_paper_service_dep),
+    retriever: HybridRetriever = Depends(get_hybrid_retriever_dep),
+    _scale: QuestionScale = Depends(verify_question_scale),
 ) -> StreamingResponse:
-    """SSE multi-scale QA — delegates to BE-3 ``qa_stream()``."""
+    """SSE multi-scale QA — HybridRetriever → RetrievalContext → ``qa_stream()``."""
 
     await service.get_paper(paper_id)
+
+    retrieval_result = await build_retrieval_context_with_fallback(
+        paper_id,
+        body.question,
+        retriever=retriever,
+        paper_service=service,
+        top_k=body.top_k,
+    )
 
     async def event_generator() -> AsyncIterator[str]:
         from backend.graph.qa import qa_stream
 
-        async for evt in qa_stream(paper_id, body.question):
+        if retrieval_result.warning_event is not None:
+            yield format_sse_event("warning", retrieval_result.warning_event)
+
+        async for evt in qa_stream(
+            paper_id,
+            body.question,
+            retrieval_context=retrieval_result.context,
+            retrieval_warning=retrieval_result.warning_event,
+        ):
             yield format_sse_event(evt.event, evt.data)
 
     return StreamingResponse(

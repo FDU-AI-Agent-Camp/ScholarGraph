@@ -42,6 +42,10 @@ pip-wheel-metadata/
 data/*
 !data/.gitkeep
 !data/patrol_golden_set.json
+!data/qa_golden_set.json
+!data/mock_vector_store.json
+!data/chunk_manifests/
+!data/chunk_manifests/*.json
 !data/corpus/
 !data/corpus/.gitkeep
 data/corpus/*.pdf

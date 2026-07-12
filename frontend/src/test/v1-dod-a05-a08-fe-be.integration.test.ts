@@ -18,6 +18,7 @@ import { routes } from '@/router/index'
 import { RouteName } from '@/router/meta'
 import { resolvePatrolApiError } from '@/utils/patrolForm'
 import { buildHighlightStateMap } from '@/utils/paperGraph'
+import { citationNodeId, isNodeCitation } from '@/utils/qaCitations'
 import { isFailedStatus } from '@/utils/paperStatus'
 import { routerViewShell } from '@/test/helpers/routerViewShell'
 import graphFixture from '../../../docs/api/fixtures/graph-hss.json'
@@ -88,7 +89,7 @@ describe('V1 DoD A-05～A-08 FE↔BE — SSE + patrol contracts', () => {
     it('parses backend mock SSE frames including disclaimer text', () => {
       const frames = [
         { event: 'message', data: { delta: '根据知识图谱' } },
-        { event: 'citation', data: { paper_id: 'hss-001', node_id: 'n1', label: '核心论点' } },
+        { event: 'citation', data: { type: 'node', paper_id: 'hss-001', node_id: 'n1', label: '核心论点' } },
         { event: 'message', data: { delta: '（Mock 答复：LLM 云服务尚未接入，仅供联调与演示。）' } },
         { event: 'done', data: { answer_id: 'ans-hss-001' } },
       ]
@@ -116,32 +117,32 @@ describe('V1 DoD A-05～A-08 FE↔BE — SSE + patrol contracts', () => {
     it('chains mock citation frame into graph highlight map (BE mock SSE parity)', () => {
       const citation = parseQaStreamEvent(
         'citation',
-        JSON.stringify({ paper_id: 'hss-001', node_id: 'n1', label: '核心论点' }),
+        JSON.stringify({ type: 'node', paper_id: 'hss-001', node_id: 'n1', label: '核心论点' }),
       )
       expect(citation?.type).toBe('citation')
       if (citation?.type !== 'citation') {
         return
       }
       const nodeIds = graphFixture.data.nodes.map((node) => node.id)
-      const states = buildHighlightStateMap(nodeIds, citation.data.node_id)
+      const states = buildHighlightStateMap(nodeIds, citationNodeId(citation.data))
       expect(states.n1).toBe('active')
     })
 
     it('maps citation node_id to graph deep-link query (A-05 ↔ A-04)', () => {
       const citation = parseQaStreamEvent(
         'citation',
-        JSON.stringify({ paper_id: 'hss-001', node_id: 'n_lens', label: '历史制度主义' }),
+        JSON.stringify({ type: 'node', paper_id: 'hss-001', node_id: 'n_lens', label: '历史制度主义' }),
       )
-      expect(citation?.type).toBe('citation')
-      if (citation?.type !== 'citation') {
+      if (citation?.type !== 'citation' || !isNodeCitation(citation.data)) {
         return
       }
-      expect(graphFixture.data.nodes.some((node) => node.id === citation.data.node_id)).toBe(true)
+      const cite = citation.data
+      expect(graphFixture.data.nodes.some((node) => node.id === cite.node_id)).toBe(true)
       const router = createRouter({ history: createMemoryHistory(), routes })
       const target = router.resolve({
         name: RouteName.PaperGraph,
-        params: { paperId: citation.data.paper_id },
-        query: { node: citation.data.node_id },
+        params: { paperId: cite.paper_id },
+        query: { node: cite.node_id },
       })
       expect(target.path).toBe('/papers/hss-001/graph')
       expect(target.query.node).toBe('n_lens')

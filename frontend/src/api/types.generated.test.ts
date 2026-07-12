@@ -11,6 +11,7 @@ import type {
   PaperStatusData,
   PaperSummary,
   PatrolReport,
+  QaStreamCitationData,
   QaStreamMessageData,
   UnifiedPaperGraph,
 } from '@/api/types'
@@ -120,10 +121,17 @@ describe('types.ts vs generated OpenAPI schema', () => {
     expect(_schema.code).toBe('INGEST_FAILED')
   })
 
-  it('keeps SSE payload types hand-written outside OpenAPI components', () => {
+  it('QaStream SSE payload types align with OpenAPI components', () => {
     const msg: QaStreamMessageData = { delta: 'hi' }
-    expect(msg.delta).toBe('hi')
-    const schemaKeys = Object.keys({} as Schema)
-    expect(schemaKeys).not.toContain('QaStreamMessageData')
+    const cite: QaStreamCitationData = {
+      type: 'node',
+      paper_id: 'hss-001',
+      node_id: 'n1',
+      label: '核心论点',
+    }
+    const _msgSchema: Schema['QaStreamMessageData'] = msg
+    const _citeSchema: Schema['QaStreamCitation'] = cite
+    expect(_msgSchema.delta).toBe('hi')
+    expect(_citeSchema.type).toBe('node')
   })
 })

@@ -18,6 +18,7 @@ from backend.rag.models import (
     RetrievedRelation,
     VectorEvidenceType,
 )
+from backend.rag.vector_store_chunk_text import ChunkTextLookupMixin
 from backend.rag.vector_store_utils import (
     ChromaMetadata,
     ChromaWhere,
@@ -51,7 +52,7 @@ __all__ = [
 ]
 
 
-class VectorStore:
+class VectorStore(ChunkTextLookupMixin):
     """Thin ChromaDB wrapper used by downstream RAG retrieval modules."""
 
     def __init__(
@@ -80,6 +81,7 @@ class VectorStore:
             self._chunk_collection = chunk_collection
             self._entity_collection = entity_collection
             self._relation_collection = relation_collection
+            self._bind_chunk_text_lru()
             return
 
         resolved_chroma_path = chroma_path or self._settings.chromadb_path
@@ -102,6 +104,7 @@ class VectorStore:
             CollectionProtocol,
             client.get_or_create_collection(name=self._settings.chromadb_relation_collection, embedding_function=None),
         )
+        self._bind_chunk_text_lru()
 
     async def replace_paper_index(
         self,
@@ -150,6 +153,7 @@ class VectorStore:
 
                 # Activation is the commit point. Failures before this leave the old run active.
                 self._paper_service.set_active_run_id(paper_id, run_id)
+                self.clear_chunk_text_lru()
             except Exception:
                 # Best-effort cleanup of the partially-written run so failed replaces
                 # do not leave orphan data in ChromaDB. The original exception is
@@ -337,6 +341,7 @@ class VectorStore:
             asyncio.to_thread(partial(self._entity_collection.delete, where=where)),
             asyncio.to_thread(partial(self._relation_collection.delete, where=where)),
         )
+        self.clear_chunk_text_lru()
         if self._paper_service is not None:
             self._paper_service.set_active_run_id(paper_id, "")
 

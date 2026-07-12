@@ -39,8 +39,10 @@ import {
 } from './paperGraph'
 
 describe('citationKey', () => {
-  it('joins paper_id and node_id for stable list keys', () => {
-    expect(citationKey({ paper_id: 'hss-001', node_id: 'n_lens', label: '历史制度主义' })).toBe('hss-001:n_lens')
+  it('joins paper_id, type, and ref id for stable list keys', () => {
+    expect(citationKey({ type: 'node', paper_id: 'hss-001', node_id: 'n_lens', label: '历史制度主义' })).toBe(
+      'hss-001:node:n_lens',
+    )
   })
 })
 

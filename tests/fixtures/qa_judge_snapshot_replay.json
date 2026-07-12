@@ -1,0 +1,13 @@
+{
+  "version": 2,
+  "prompt_sha256": "f99d118f1ba78fd015d365d7bfda0b9d0732618881869d476b6cf9a897b0c644",
+  "default_micro": {
+    "sentence_judgments": [
+      {
+        "sentence": "F1 达到 15% 在 ImageNet 上验证，引用节点与金标一致。",
+        "label": "supported"
+      }
+    ]
+  },
+  "entries": {}
+}

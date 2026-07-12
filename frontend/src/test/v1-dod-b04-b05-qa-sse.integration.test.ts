@@ -10,6 +10,7 @@ import { parseQaStreamEvent } from '@/api/qaStream'
 import type { PaperDetail, QaStreamCitationData, UnifiedPaperGraph } from '@/api/types'
 import { DETAIL_BASELINE_COPY } from '@/constants/detailCopy'
 import { appendUniqueCitation, buildHighlightStateMap } from '@/utils/paperGraph'
+import { citationNodeId } from '@/utils/qaCitations'
 import { readFrontendSource } from '@/test/helpers/designTokens'
 import graphFixture from '../../../docs/api/fixtures/graph-hss.json'
 
@@ -23,7 +24,7 @@ function buildBackendMockSseFrames() {
     { event: 'message', data: { delta: '根据知识图谱上下文，' } },
     {
       event: 'citation',
-      data: { paper_id: 'hss-001', node_id: 'n1', label: thesis?.label ?? '核心论点' },
+      data: { type: 'node', paper_id: 'hss-001', node_id: 'n1', label: thesis?.label ?? '核心论点' },
     },
     { event: 'message', data: { delta: MOCK_DISCLAIMER } },
     { event: 'done', data: { answer_id: 'ans-hss-001' } },
@@ -138,12 +139,16 @@ describe('V1 DoD B-04 — POST qa/stream SSE contract (static)', () => {
     expect(parsed[1]?.type).toBe('citation')
     if (parsed[1]?.type === 'citation') {
       expect(parsed[1].data.paper_id).toBe('hss-001')
-      expect(parsed[1].data.node_id).toBe('n1')
+      expect(citationNodeId(parsed[1].data)).toBe('n1')
     }
   })
 
   it('maps citation node_id to graph-hss fixture (B-05 verifiable)', () => {
     const cite = buildBackendMockSseFrames()[1].data
+    expect(cite.type).toBe('node')
+    if (cite.type !== 'node') {
+      return
+    }
     const node = graph.nodes.find((item) => item.id === cite.node_id)
     expect(node).toBeDefined()
     expect(node?.label).toBe(cite.label)
@@ -203,12 +208,12 @@ describe('V1 DoD B-04 / B-05 — FE↔BE functional QA stream', () => {
       return
     }
     const nodeIds = graph.nodes.map((node) => node.id)
-    const states = buildHighlightStateMap(nodeIds, parsed.data.node_id)
+    const states = buildHighlightStateMap(nodeIds, citationNodeId(parsed.data))
     expect(states.n1).toBe('active')
   })
 
   it('appendUniqueCitation deduplicates repeated citation events', () => {
-    const cite = { paper_id: 'hss-001', node_id: 'n1', label: '核心论点' }
+    const cite = { type: 'node' as const, paper_id: 'hss-001', node_id: 'n1', label: '核心论点' }
     const once = appendUniqueCitation([], cite)
     const twice = appendUniqueCitation(once, cite)
     expect(twice).toHaveLength(1)
@@ -274,7 +279,7 @@ describe('V1 DoD B-04 — boundary guards', () => {
   it('coerces partial citation payload to strings (parser resilience)', () => {
     const parsed = parseQaStreamEvent('citation', JSON.stringify({ paper_id: 'hss-001' }))
     expect(parsed?.type).toBe('citation')
-    if (parsed?.type === 'citation') {
+    if (parsed?.type === 'citation' && parsed.data.type === 'node') {
       expect(parsed.data.paper_id).toBe('hss-001')
       expect(parsed.data.node_id).toBe('')
       expect(parsed.data.label).toBe('')
@@ -362,14 +367,17 @@ describe('V1 DoD B-05 — citation payload fields', () => {
   it('requires paper_id, node_id, label on citation events', () => {
     const parsed = parseQaStreamEvent(
       'citation',
-      JSON.stringify({ paper_id: 'hss-001', node_id: 'n_lens', label: '历史制度主义' }),
+      JSON.stringify({ type: 'node', paper_id: 'hss-001', node_id: 'n_lens', label: '历史制度主义' }),
     )
     expect(parsed?.type).toBe('citation')
     if (parsed?.type !== 'citation') {
       return
     }
     expect(parsed.data.paper_id).toBeTruthy()
-    expect(parsed.data.node_id).toBeTruthy()
+    expect(parsed.data.type).toBe('node')
+    if (parsed.data.type === 'node') {
+      expect(parsed.data.node_id).toBeTruthy()
+    }
     expect(parsed.data.label).toBeTruthy()
   })
 })

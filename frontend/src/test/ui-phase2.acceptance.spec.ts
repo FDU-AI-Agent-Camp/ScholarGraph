@@ -111,7 +111,7 @@ describe('Phase 2 UI acceptance', () => {
       const wrapper = mount(TagCitation, {
         props: { label: '核心论点', nodeId: 'n1', active: true },
       })
-      expect(wrapper.classes()).toContain('tag-citation--active')
+      expect(wrapper.find('.tag-citation').classes()).toContain('tag-citation--active')
     })
   })
 

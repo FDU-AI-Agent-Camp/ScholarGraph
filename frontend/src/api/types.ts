@@ -3,7 +3,7 @@
  *
  * Domain types are thin aliases over `openapi-typescript` output
  * (`npm run generate:api-types` ← `docs/api/openapi.yaml`).
- * SSE stream event shapes remain hand-written (api-contract §8).
+ * SSE 载荷见 docs/api/sse-qa.md 与 OpenAPI `QaStream*` schemas。
  */
 
 import type { components } from './generated/schema'
@@ -77,29 +77,17 @@ export type PatrolReport = {
   generated_at: string
 }
 
-/** SSE `event: message` payload (api-contract §8). */
-export interface QaStreamMessageData {
-  delta: string
-}
+/** SSE `event: message` payload. */
+export type QaStreamMessageData = Schema['QaStreamMessageData']
 
-/** SSE `event: citation` payload. */
-export interface QaStreamCitationData {
-  paper_id: string
-  node_id: string
-  label: string
-}
+/** SSE `event: citation` payload (V2 discriminated union). */
+export type QaStreamCitationData = Schema['QaStreamCitation']
 
 /** SSE `event: done` payload. */
-export interface QaStreamDoneData {
-  answer_id: string
-  answer?: string
-}
+export type QaStreamDoneData = Schema['QaStreamDoneData']
 
 /** SSE `event: error` payload. */
-export interface QaStreamErrorData {
-  code?: string
-  message: string
-}
+export type QaStreamErrorData = Schema['QaStreamErrorData']
 
 export type QaStreamServerEvent =
   | { type: 'message'; data: QaStreamMessageData }

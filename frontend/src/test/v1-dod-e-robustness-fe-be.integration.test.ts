@@ -333,7 +333,7 @@ describe('V1 DoD E-07/E-08 — QA SSE red paths on detail view', () => {
             { event: 'message', data: { delta: '根据图谱，' } },
             {
               event: 'citation',
-              data: { paper_id: 'hss-001', node_id: 'n1', label: thesis?.label ?? '核心论点' },
+              data: { type: 'node', paper_id: 'hss-001', node_id: 'n1', label: thesis?.label ?? '核心论点' },
             },
             { event: 'done', data: { answer_id: 'ans-hss-001' } },
           ],
@@ -356,14 +356,14 @@ describe('V1 DoD E-07/E-08 — QA SSE red paths on detail view', () => {
 
 describe('V1 DoD E-09 — citation dedup and empty node_id tolerance', () => {
   it('appendUniqueCitation deduplicates repeated frames from chunked SSE', () => {
-    const cite: QaStreamCitationData = { paper_id: 'hss-001', node_id: 'n1', label: '核心论点' }
+    const cite: QaStreamCitationData = { type: 'node', paper_id: 'hss-001', node_id: 'n1', label: '核心论点' }
     const once = appendUniqueCitation([], cite)
     const twice = appendUniqueCitation(once, cite)
     expect(twice).toHaveLength(1)
   })
 
   it('empty node_id citation does not break dedup keying', () => {
-    const empty: QaStreamCitationData = { paper_id: 'hss-001', node_id: '', label: '' }
+    const empty: QaStreamCitationData = { type: 'node', paper_id: 'hss-001', node_id: '', label: '' }
     const list = appendUniqueCitation([], empty)
     expect(list).toHaveLength(1)
     expect(appendUniqueCitation(list, empty)).toHaveLength(1)

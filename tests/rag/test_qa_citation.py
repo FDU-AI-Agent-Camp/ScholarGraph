@@ -190,6 +190,18 @@ class TestDispatchCitation:
         assert evt.data["chunk_id"] == "c1"
         assert "text_preview" in evt.data
         assert evt.data["text_preview"] == "制度一旦形成便会产生路径依赖。"
+        assert evt.data["preview_state"] == "ready"
+
+    def test_chunk_citation_miss_emits_structured_placeholder(
+        self, node_cache: dict[str, str], edge_cache: dict[str, str], chunk_cache: dict[str, str]
+    ) -> None:
+        from backend.rag.chunk_preview import CHUNK_PREVIEW_HALLUCINATION
+        from backend.schemas.chunk_preview import ChunkPreviewState
+
+        evt = dispatch_citation("chunk:", "missing", "hss-001", node_cache, edge_cache, chunk_cache)
+        assert evt.data["text_preview"] == CHUNK_PREVIEW_HALLUCINATION
+        assert evt.data["preview_state"] == ChunkPreviewState.HALLUCINATED_ID
+        assert evt.data["text_preview"] != ""
 
     def test_page_citation_has_type_and_page(
         self, node_cache: dict[str, str], edge_cache: dict[str, str], chunk_cache: dict[str, str]
@@ -427,12 +439,12 @@ class TestFormatRetrievalContext:
         assert relations == ""
         assert chunks == ""
 
-    def test_empty_context_returns_empty_strings(self) -> None:
+    def test_empty_context_returns_placeholders(self) -> None:
         rc = RetrievalContext(scale=QuestionScale.DETAIL)
         entities, relations, chunks = format_retrieval_context(rc)
-        assert entities == ""
-        assert relations == ""
-        assert chunks == ""
+        assert "暂无向量召回实体" in entities
+        assert "暂无向量召回关系" in relations
+        assert "向量索引尚未就绪" in chunks
 
     def test_entities_formatted_with_label_and_type(self) -> None:
         rc = RetrievalContext(
@@ -482,3 +494,30 @@ class TestFormatRetrievalContext:
         assert "L1" in entities
         assert "rel desc" in relations
         assert "chunk text" in chunks
+
+    def test_context_char_budget_truncates_chunks_first(self) -> None:
+        rc = RetrievalContext(
+            scale=QuestionScale.DETAIL,
+            entities=[_make_entity("n1", label="核心论点")],
+            relations=[_make_relation("e1", description="关系描述")],
+            chunks=[
+                _make_chunk("c1", "A" * 400),
+                _make_chunk("c2", "B" * 400),
+                _make_chunk("c3", "C" * 400),
+            ],
+        )
+        entities, relations, chunks = format_retrieval_context(rc, max_total_chars=600)
+        total = len(entities) + len(relations) + len(chunks)
+        assert total <= 600
+        assert "检索上下文已截断" in chunks
+        assert "核心论点" in entities
+        assert "关系描述" in relations
+
+    def test_context_char_budget_preserves_small_context(self) -> None:
+        rc = RetrievalContext(
+            scale=QuestionScale.DETAIL,
+            chunks=[_make_chunk("c1", "short chunk")],
+        )
+        entities, relations, chunks = format_retrieval_context(rc, max_total_chars=12_000)
+        assert "short chunk" in chunks
+        assert "检索上下文已截断" not in chunks
