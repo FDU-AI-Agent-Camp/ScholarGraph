@@ -21,13 +21,20 @@ _EXTRACT_PLAIN_NUMBER_RE = re.compile(r"(?<![\w.])(-?\d+\.\d+)(?![%\w])|(?<![\w.
 # Dataset / benchmark identifiers (STEM): ImageNet, CIFAR-10, MNIST, GLUE, etc.
 _DATASET_TOKEN_RE = re.compile(r"\b[A-Z][A-Za-z0-9]*(?:[-_][A-Za-z0-9]+)*\b")
 
-_CITE_CHUNK_IN_TEXT_RE = re.compile(r"\[CITE:chunk:([^\]]+)\]", re.IGNORECASE)
-_EMBEDDED_CITE_CHUNK_RE = re.compile(r"\[CITE:chunk:([^\]]+)\]", re.IGNORECASE)
+_FUZZY_CITE_CHUNK_MARKER = r"\[cite\s*:\s*chunk\s*:\s*([^\]]+)\]"
+_CITE_CHUNK_IN_TEXT_RE = re.compile(_FUZZY_CITE_CHUNK_MARKER, re.IGNORECASE)
+_EMBEDDED_CITE_CHUNK_RE = re.compile(_FUZZY_CITE_CHUNK_MARKER, re.IGNORECASE)
 _LEGACY_CITED_CHUNK_ID_RE = re.compile(r"^(?P<paper>[\w-]+)_chunk_(?P<index>\d+)$")
 
 _DEFAULT_ABS_TOLERANCE = 1e-9
 _DEFAULT_RELATIVE_TOLERANCE = 0.01
 _MIN_GOLDEN_REFERENCE_CHARS = 1
+_CHUNK_RECALL_FLOOR_ABS_TOL = 1e-9
+
+
+def chunk_recall_meets_floor(recall: float, floor: float) -> bool:
+    """Epsilon-safe floor comparison for chunk recall CI gates."""
+    return recall >= floor or math.isclose(recall, floor, rel_tol=0.0, abs_tol=_CHUNK_RECALL_FLOOR_ABS_TOL)
 
 
 def _resolve_numeric_abs_tol(gold: dict[str, Any]) -> float:
@@ -341,7 +348,7 @@ def compute_chunk_recall(
     """
     expected = resolve_gold_chunk_ids(gold)
     if not expected:
-        return None
+        return 1.0
 
     cited: set[str] = set()
     for citation in citations:

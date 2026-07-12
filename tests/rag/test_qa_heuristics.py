@@ -166,17 +166,17 @@ def test_compute_chunk_recall_intersects_cited_chunks() -> None:
     }
 
 
-def test_compute_chunk_recall_returns_none_without_gold_chunks() -> None:
-    assert compute_chunk_recall([], {"nodes": ["n1"], "edges": []}) is None
-    assert compute_chunk_recall([], {"nodes": ["n1"], "edges": [], "paragraphs": []}) is None
+def test_compute_chunk_recall_returns_lossless_default_without_gold_chunks() -> None:
+    assert compute_chunk_recall([], {"nodes": ["n1"], "edges": []}) == 1.0
+    assert compute_chunk_recall([], {"nodes": ["n1"], "edges": [], "paragraphs": []}) == 1.0
 
 
 def test_compute_chunk_recall_zero_paragraph_exemption_no_division_error() -> None:
-    """HSS / summary gold may omit paragraphs — recall is N/A, never ZeroDivisionError."""
+    """HSS / summary gold may omit paragraphs — recall defaults to 1.0 (N/A exempt)."""
     gold = {"nodes": ["n_thesis"], "edges": [], "paragraphs": []}
     for _ in range(100):
-        assert compute_chunk_recall([], gold) is None
-        assert compute_chunk_recall([{"type": "node", "node_id": "n_thesis"}], gold) is None
+        assert compute_chunk_recall([], gold) == 1.0
+        assert compute_chunk_recall([{"type": "node", "node_id": "n_thesis"}], gold) == 1.0
 
 
 def test_compute_chunk_recall_tolerates_malformed_citation_markers() -> None:

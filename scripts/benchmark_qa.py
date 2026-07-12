@@ -62,7 +62,11 @@ from backend.llm.client import (  # noqa: E402
 from backend.llm.roles import clients_are_isolated  # noqa: E402
 from backend.rag.hybrid_retriever import HybridRetriever, bind_hybrid_retriever, reset_hybrid_retriever  # noqa: E402
 from backend.rag.models import QuestionScale  # noqa: E402
-from backend.rag.qa_heuristics import resolve_gold_chunk_ids, run_heuristic_guardrails  # noqa: E402
+from backend.rag.qa_heuristics import (  # noqa: E402
+    chunk_recall_meets_floor,
+    resolve_gold_chunk_ids,
+    run_heuristic_guardrails,
+)
 from backend.rag.qa_judge import (  # noqa: E402
     build_dual_track_evaluation,
     build_evaluation_fallback,
@@ -998,7 +1002,7 @@ def _compute_detail_recall_gate(
         chunk_value = _extract_chunk_recall(result)
         chunk_recalls.append(0.0 if chunk_value is None else chunk_value)
     chunk_recall_min = min(chunk_recalls) if chunk_recalls else None
-    chunk_gate_pass = chunk_recall_min is None or chunk_recall_min >= chunk_recall_floor
+    chunk_gate_pass = chunk_recall_min is None or chunk_recall_meets_floor(chunk_recall_min, chunk_recall_floor)
 
     return {
         "count": len(cohort),
