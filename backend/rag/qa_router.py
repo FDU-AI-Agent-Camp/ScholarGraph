@@ -101,6 +101,12 @@ _DETAIL_KEYWORDS: tuple[str, ...] = (
     "逻辑关系",
     "什么关系",
     "提到了哪些",
+    "第几页",
+    "多少",
+    "experiment",
+    "page",
+    "method",
+    "detail",
 )
 
 _SUMMARY_KEYWORDS: tuple[str, ...] = (
@@ -123,7 +129,44 @@ _SUMMARY_KEYWORDS: tuple[str, ...] = (
     "这篇论文",
     "宏观",
     "整体结论",
+    "整体",
+    "核心论点",
     "this paper",
+    "summary",
+    "overview",
+)
+
+_ENGLISH_WORD_KEYWORDS: frozenset[str] = frozenset(
+    {
+        "dataset",
+        "accuracy",
+        "f1-score",
+        " f1 ",
+        "table",
+        "figure",
+        "parameter",
+        "baseline",
+        "metric",
+        "hyperparameter",
+        "p-value",
+        "p value",
+        "section ",
+        "mnist",
+        "imagenet",
+        "resnet",
+        "experiment",
+        "page",
+        "method",
+        "detail",
+        "summarize",
+        "summary of the main",
+        "main contributions",
+        "methodology of this work",
+        "summarize the methodology",
+        "this paper",
+        "summary",
+        "overview",
+    }
 )
 
 
@@ -212,7 +255,7 @@ def _matches_verification(text: str, *, paradigm: Paradigm | None) -> bool:
 
 def _matches_detail(text: str, *, paradigm: Paradigm | None) -> bool:
     lowered = text.lower()
-    if any(keyword in lowered for keyword in _DETAIL_KEYWORDS):
+    if any(_keyword_matches(lowered, keyword) for keyword in _DETAIL_KEYWORDS):
         return True
     if contains_numeric_query(text):
         return True
@@ -226,7 +269,16 @@ def _matches_detail(text: str, *, paradigm: Paradigm | None) -> bool:
 
 def _matches_summary(text: str) -> bool:
     lowered = text.lower()
-    return any(keyword in lowered for keyword in _SUMMARY_KEYWORDS)
+    return any(_keyword_matches(lowered, keyword) for keyword in _SUMMARY_KEYWORDS)
+
+
+def _keyword_matches(text: str, keyword: str) -> bool:
+    normalized = keyword.strip().lower()
+    if not normalized:
+        return False
+    if normalized in _ENGLISH_WORD_KEYWORDS:
+        return re.search(rf"\b{re.escape(normalized)}\b", text) is not None
+    return normalized in text
 
 
 __all__ = [

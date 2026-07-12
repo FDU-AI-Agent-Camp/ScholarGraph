@@ -23,19 +23,7 @@ from backend.services.qa_retrieval import (
 
 from tests.graph.test_qa import _fake_llm
 from tests.helpers.b10_qa_boundary import chunk_citations, collect_qa_events
-
-
-class _SlowGetChunkStore(StaticMockVectorStore):
-    """Vector store whose L2 lookup exceeds the 200 ms B10 gate."""
-
-    def __init__(self, *, delay_seconds: float = 0.5) -> None:
-        base = StaticMockVectorStore.load_default()
-        super().__init__(base._chunks_by_paper)  # noqa: SLF001
-        self._delay_seconds = delay_seconds
-
-    async def get_chunk_text(self, paper_id: str, chunk_id: str) -> str | None:
-        await asyncio.sleep(self._delay_seconds)
-        return await super().get_chunk_text(paper_id, chunk_id)
+from tests.helpers.vector_store_doubles import SlowGetChunkStore
 
 
 @pytest.fixture
@@ -147,7 +135,7 @@ async def test_l2_lazy_lookup_times_out_after_retrieval_timeout(
     paper_id, graph_dir = stem_qa_env
     from backend.graph.store import GraphStore
 
-    slow_store = _SlowGetChunkStore(delay_seconds=0.5)
+    slow_store = SlowGetChunkStore(delay_seconds=0.5)
     retriever = HybridRetriever(vector_store=slow_store)
     retriever.retrieve = _slow_retrieve  # type: ignore[method-assign]
     bind_hybrid_retriever(retriever)

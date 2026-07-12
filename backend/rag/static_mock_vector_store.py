@@ -6,8 +6,10 @@ import json
 import re
 from functools import lru_cache
 from pathlib import Path
+from typing import cast
 
-from backend.rag.models import RetrievedChunk
+from backend.rag.models import RetrievedChunk, RetrievedEntity, RetrievedRelation
+from backend.rag.protocols import VectorStoreProtocol
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 _DEFAULT_FIXTURE_PATH = _REPO_ROOT / "data" / "mock_vector_store.json"
@@ -15,7 +17,7 @@ _TOKEN_RE = re.compile(r"[a-zA-Z0-9][\w.-]*")
 
 
 class StaticMockVectorStore:
-    """Return preloaded chunk text for selected papers during mock-mode QA benchmark."""
+    """用于测试与 Benchmark 的静态 Mock 向量数据库桩。"""
 
     def __init__(self, chunks_by_paper: dict[str, list[RetrievedChunk]]) -> None:
         self._chunks_by_paper = chunks_by_paper
@@ -87,13 +89,29 @@ class StaticMockVectorStore:
     async def exists(self, paper_id: str) -> bool:
         return paper_id in self._chunks_by_paper
 
-    async def query_entities(self, query_text: str, *, paper_id: str, top_k: int | None = None) -> list:
-        _ = (query_text, paper_id, top_k)
-        return []
+    async def query_entities(
+        self,
+        query_text: str,
+        *,
+        paper_id: str,
+        top_k: int | None = None,
+        query_embedding: list[float] | None = None,
+    ) -> list[RetrievedEntity]:
+        """兼容 ``VectorStoreProtocol``；mock 路径不召回 entity 向量。"""
+        _ = query_embedding
+        return self._get_mock_entities(paper_id, query_text, top_k)
 
-    async def query_relations(self, query_text: str, *, paper_id: str, top_k: int | None = None) -> list:
-        _ = (query_text, paper_id, top_k)
-        return []
+    async def query_relations(
+        self,
+        query_text: str,
+        *,
+        paper_id: str,
+        top_k: int | None = None,
+        query_embedding: list[float] | None = None,
+    ) -> list[RetrievedRelation]:
+        """兼容 ``VectorStoreProtocol``；mock 路径不召回 relation 向量。"""
+        _ = query_embedding
+        return self._get_mock_relations(paper_id, query_text, top_k)
 
     async def query_chunks(
         self,
@@ -101,6 +119,25 @@ class StaticMockVectorStore:
         *,
         paper_id: str,
         top_k: int | None = None,
+        query_embedding: list[float] | None = None,
+    ) -> list[RetrievedChunk]:
+        """兼容 ``VectorStoreProtocol``；按 fixture 关键词启发式召回 chunk。"""
+        _ = query_embedding
+        return self._get_mock_chunks(paper_id, query_text, top_k)
+
+    def _get_mock_entities(self, paper_id: str, query_text: str, top_k: int | None) -> list[RetrievedEntity]:
+        _ = (paper_id, query_text, top_k)
+        return []
+
+    def _get_mock_relations(self, paper_id: str, query_text: str, top_k: int | None) -> list[RetrievedRelation]:
+        _ = (paper_id, query_text, top_k)
+        return []
+
+    def _get_mock_chunks(
+        self,
+        paper_id: str,
+        query_text: str,
+        top_k: int | None,
     ) -> list[RetrievedChunk]:
         chunks = list(self._chunks_by_paper.get(paper_id, []))
         if not chunks:
@@ -118,6 +155,9 @@ class StaticMockVectorStore:
         """Return fixture chunk text by logical id (L2 citation preview lookup)."""
         cached = self._get_chunk_text_cached(paper_id, chunk_id)
         return cached if cached else None
+
+
+_inspect_mock_compliance: VectorStoreProtocol = cast(StaticMockVectorStore, None)
 
 
 def _score_chunk(query_text: str, chunk_text: str) -> int:

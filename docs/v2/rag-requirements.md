@@ -390,12 +390,26 @@ class RetrievalContext(BaseModel):
 ``QaEngine`` 为纯消费组件，不再在 Prompt 拼装阶段重复调用 ``GraphQuery``：
 
 ```text
-HTTP / Benchmark → HybridRetriever.retrieve() → RetrievalContext
+HTTP / Benchmark → qa_retrieval._load_graph_for_retrieval (scale 判定)
+                → HybridRetriever.compute_subgraph (一次 GraphQuery)
+                → HybridRetriever.retrieve(subgraph=…) → RetrievalContext
   ├─ nodes/edges     → Prompt {nodes}/{edges}   （RC 非空时唯一来源）
   └─ entities/relations/chunks → Prompt 向量段   （format_retrieval_context）
        ↓
 qa_stream(..., retrieval_context=RC) → QaEngine._build_prompt()
 ```
+
+**尺度与路由（与 develop 一致）**：
+
+- 枚举为 ``QuestionScale.SUMMARY | DETAIL | VERIFICATION``；字符串 ``skeleton`` 仅作兼容别名。
+- ``scale`` 由 ``qa_retrieval`` 在调用 retriever **之前**判定并必填传入；retriever **不**做自动推断。
+- ``QuestionScale.CROSS_PAPER`` 在 HTTP 层 ``verify_question_scale`` 拦截（400），不进入 retriever。
+
+**向量命中与图谱子图**：
+
+- 图谱子图 → ``RC.nodes`` / ``RC.edges``（A 尺度 / 全尺度 Prompt 图段）。
+- 向量 Top-K → ``RC.entities`` / ``RC.relations`` / ``RC.chunks``（B 尺度独立 Prompt 段）。
+- **禁止**将向量命中 merge 进 ``nodes/edges``；格式化职责在 ``qa_v2.format_retrieval_context``。
 
 **降级（Fallback）**：
 
@@ -408,6 +422,9 @@ qa_stream(..., retrieval_context=RC) → QaEngine._build_prompt()
 - **不可变快照**：``QaEngine.stream()`` 入口对 RC 执行 ``model_copy(deep=True)``
   （``freeze_retrieval_context``），防止 SSE 并发消费者 ``.clear()`` / 原地改 dict
   污染 Prompt 拼装。
+- **编排层子图复用**：``build_retrieval_context_with_fallback`` 在调用
+  ``retrieve()`` 前 ``compute_subgraph`` 一次；超时或 ``VectorStoreUnavailableError``
+  降级时将该 subgraph 传入 ``build_graph_only_context``，避免重复 GraphQuery。
 - **离线 Replay**：``RetrievalContextReplayBundle``（``backend/rag/retrieval_context_io.py``）
   将 RC + 问题 + golden Prompt 固化为 JSON；CI 在阻断 ``GraphQuery`` / ``HybridRetriever``
   后反序列化 RC 直喂 ``qa_stream``，验证 Prompt 字节级一致，支撑 Prompt Tuning 流水线。

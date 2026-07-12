@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING
 
 from backend.config import get_settings
 from backend.graph.store import GraphStore
+from backend.rag.exceptions import VectorStoreUnavailableError
 from backend.rag.models import QuestionScale, RetrievalContext
 from backend.rag.qa_router import detect_question_scale
 from backend.schemas.paper import PaperStatus
@@ -22,6 +23,18 @@ logger = logging.getLogger(__name__)
 
 VECTOR_RETRIEVAL_TIMEOUT_CODE = "vector_retrieval_timeout"
 VECTOR_RETRIEVAL_TIMEOUT_MESSAGE = "向量检索超时，正在使用纯图知识库答题"
+VECTOR_STORE_UNAVAILABLE_CODE = "vector_store_unavailable"
+VECTOR_STORE_UNAVAILABLE_MESSAGE = "向量库连接异常，已自动降级为纯图谱检索模式"
+VECTOR_RETRIEVAL_WARNING_SOURCE = "vector_store"
+
+
+def _vector_retrieval_warning(*, code: str, message: str) -> dict[str, str]:
+    """SSE warning payload shared by timeout and vector-store outage fallbacks."""
+    return {
+        "code": code,
+        "message": message,
+        "source": VECTOR_RETRIEVAL_WARNING_SOURCE,
+    }
 
 
 @dataclass(frozen=True, slots=True)
@@ -75,6 +88,7 @@ async def build_retrieval_context_with_fallback(
 
     graph, scale = loaded
     resolved_timeout = timeout_seconds if timeout_seconds is not None else get_settings().qa_retrieval_timeout_seconds
+    subgraph = retriever.compute_subgraph(graph, question)
 
     try:
         context = await asyncio.wait_for(
@@ -84,10 +98,32 @@ async def build_retrieval_context_with_fallback(
                 graph,
                 scale=scale,
                 top_k=top_k,
+                subgraph=subgraph,
             ),
             timeout=resolved_timeout,
         )
         return RetrievalBuildResult(context=context)
+    except VectorStoreUnavailableError as exc:
+        logger.warning(
+            "qa_retrieval_vector_store_unavailable paper_id=%s scale=%s — graph-only fallback",
+            paper_id,
+            scale.value,
+            exc_info=exc.cause or exc,
+        )
+        context = retriever.build_graph_only_context(
+            paper_id,
+            question,
+            graph,
+            scale=scale,
+            subgraph=subgraph,
+        )
+        return RetrievalBuildResult(
+            context=context,
+            warning_event=_vector_retrieval_warning(
+                code=VECTOR_STORE_UNAVAILABLE_CODE,
+                message=VECTOR_STORE_UNAVAILABLE_MESSAGE,
+            ),
+        )
     except TimeoutError:
         logger.warning(
             "qa_retrieval_timeout paper_id=%s scale=%s timeout=%.1fs — graph-only fallback",
@@ -100,13 +136,14 @@ async def build_retrieval_context_with_fallback(
             question,
             graph,
             scale=scale,
+            subgraph=subgraph,
         )
         return RetrievalBuildResult(
             context=context,
-            warning_event={
-                "code": VECTOR_RETRIEVAL_TIMEOUT_CODE,
-                "message": VECTOR_RETRIEVAL_TIMEOUT_MESSAGE,
-            },
+            warning_event=_vector_retrieval_warning(
+                code=VECTOR_RETRIEVAL_TIMEOUT_CODE,
+                message=VECTOR_RETRIEVAL_TIMEOUT_MESSAGE,
+            ),
         )
 
 

@@ -268,6 +268,7 @@ async def test_qa_stream_http_emits_warning_on_retrieval_timeout(
     from backend.services.qa_retrieval import (
         VECTOR_RETRIEVAL_TIMEOUT_CODE,
         VECTOR_RETRIEVAL_TIMEOUT_MESSAGE,
+        VECTOR_RETRIEVAL_WARNING_SOURCE,
     )
 
     async def slow_retrieve(*args, **kwargs):
@@ -300,6 +301,7 @@ async def test_qa_stream_http_emits_warning_on_retrieval_timeout(
     warning = events[0][1]
     assert warning["code"] == VECTOR_RETRIEVAL_TIMEOUT_CODE
     assert warning["message"] == VECTOR_RETRIEVAL_TIMEOUT_MESSAGE
+    assert warning["source"] == VECTOR_RETRIEVAL_WARNING_SOURCE
     assert "message" in event_names
     assert event_names[-1] == "done"
 
