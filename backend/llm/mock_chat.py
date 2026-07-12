@@ -19,6 +19,11 @@ MOCK_PATROL_PREFIX = "【Mock 巡检摘要】"
 _MOCK_CHUNK_SIZE = 8
 _NODE_LINE_RE = re.compile(r"- \[(?P<id>\S+)\] (?P<label>.+?) \(类型: (?P<type>\w+)\)")
 _CHUNK_LINE_RE = re.compile(r"- \[(?P<chunk_id>[^\]]+)\](?: \[[^\]]+\])? (?P<text>.+)")
+_LEGACY_CHUNK_ID_RE = re.compile(r"^(?P<paper>[\w-]+)_chunk_(?P<index>\d+)$")
+_BRACKETED_CHUNK_ID_RE = re.compile(
+    r"\[(?P<id>(?:[\w-]+:chunk:\d+|[\w-]+_chunk_\d+))\]"
+)
+_CITE_CHUNK_IN_PROMPT_RE = re.compile(r"\[CITE:chunk:(?P<id>[^\]]+)\]")
 _EDGE_TYPE_RE = re.compile(r"--\[(?P<type>[^\]]+)\]-->")
 _STEM_EVIDENCE_TOKEN_RE = re.compile(
     r"78\.5%|0\.001|\b256\b|\bAdam\b|ResNet-50|ImageNet|ResNet-Light",
@@ -84,12 +89,16 @@ def _mock_qa_response(prompt: str) -> str:
     nodes = _parse_nodes_from_prompt(prompt)
     cite_target = _pick_citation_node(nodes, scale, paradigm)
     scale_label = {"summary": "摘要", "detail": "细节", "verification": "验证"}[scale]
-    chunk_clause = _format_chunk_clause(prompt, scale, paradigm)
+    excerpt_clause = _format_chunk_excerpt_clause(prompt, scale, paradigm)
     evidence_clause = _format_evidence_clause(prompt, paradigm)
-    return (
+    body = (
         f"【{scale_label}尺度】{evidence_clause}关于「{question}」参见节点[CITE:{cite_target}]"
-        f"{chunk_clause}。{MOCK_DISCLAIMER}"
+        f"{excerpt_clause}。"
     )
+    if _should_inject_chunk_citations(scale, paradigm):
+        chunk_ids = _extract_authoritative_chunk_ids(prompt)
+        body = _append_chunk_citation_anchors(body, chunk_ids)
+    return f"{body}{MOCK_DISCLAIMER}"
 
 
 def _parse_paradigm(prompt: str) -> Paradigm | None:
@@ -180,14 +189,77 @@ def _format_evidence_clause(prompt: str, paradigm: Paradigm | None) -> str:
     return f"要点：{'、'.join(keywords[:10])}。"
 
 
+def _normalize_chunk_id(raw: str) -> str:
+    """Map legacy ``paper_chunk_N`` IDs to canonical ``paper:chunk:N`` form."""
+    text = raw.strip()
+    if not text:
+        return ""
+    legacy = _LEGACY_CHUNK_ID_RE.match(text)
+    if legacy:
+        return f"{legacy.group('paper')}:chunk:{legacy.group('index')}"
+    return text
+
+
 def _parse_chunks_from_prompt(prompt: str) -> list[tuple[str, str]]:
     chunks_section = _extract_prompt_section(prompt, "相关原文片段")
     if not chunks_section:
         return []
-    return [
-        (match.group("chunk_id").strip(), match.group("text").strip())
-        for match in _CHUNK_LINE_RE.finditer(chunks_section)
-    ]
+    parsed: list[tuple[str, str]] = []
+    for match in _CHUNK_LINE_RE.finditer(chunks_section):
+        chunk_id = _normalize_chunk_id(match.group("chunk_id"))
+        if not chunk_id:
+            continue
+        parsed.append((chunk_id, match.group("text").strip()))
+    return parsed
+
+
+def _extract_authoritative_chunk_ids(prompt: str) -> list[str]:
+    """Collect deduplicated chunk IDs from the retrieval-context section (and prompt fallbacks)."""
+    seen: set[str] = set()
+    ordered: list[str] = []
+
+    def _add(raw: str) -> None:
+        normalized = _normalize_chunk_id(raw)
+        if not normalized or normalized in seen:
+            return
+        seen.add(normalized)
+        ordered.append(normalized)
+
+    for chunk_id, _ in _parse_chunks_from_prompt(prompt):
+        _add(chunk_id)
+
+    chunks_section = _extract_prompt_section(prompt, "相关原文片段")
+    scan_targets = [chunks_section] if chunks_section else [prompt]
+    for target in scan_targets:
+        for match in _BRACKETED_CHUNK_ID_RE.finditer(target):
+            _add(match.group("id"))
+        for match in _CITE_CHUNK_IN_PROMPT_RE.finditer(target):
+            _add(match.group("id"))
+
+    return ordered
+
+
+def _should_inject_chunk_citations(scale: QuestionScale, paradigm: Paradigm | None) -> bool:
+    """STEM detail prompts carry vector chunks; mock answers must cite them for chunk_recall gates."""
+    return paradigm == Paradigm.STEM and scale == QuestionScale.DETAIL
+
+
+def _append_chunk_citation_anchors(text: str, chunk_ids: list[str]) -> str:
+    if not chunk_ids:
+        return text
+    markers = "".join(f" [CITE:chunk:{chunk_id}]" for chunk_id in chunk_ids)
+    return f"{text.rstrip()}{markers}"
+
+
+def _format_chunk_excerpt_clause(prompt: str, scale: QuestionScale, paradigm: Paradigm | None) -> str:
+    if not _should_inject_chunk_citations(scale, paradigm):
+        return ""
+    chunks = _parse_chunks_from_prompt(prompt)
+    if not chunks:
+        return ""
+    _primary_id, primary_text = chunks[0]
+    excerpt = primary_text[:220].strip()
+    return f" 依据原文「{excerpt}」"
 
 
 def _extract_prompt_section(prompt: str, heading: str) -> str:
@@ -203,27 +275,6 @@ def _extract_prompt_section(prompt: str, heading: str) -> str:
     if end < 0:
         end = rest.find("\n## ")
     return rest[:end] if end >= 0 else rest
-
-
-def _pick_chunk_citation(prompt: str, scale: QuestionScale, paradigm: Paradigm | None) -> tuple[str, str] | None:
-    if paradigm != Paradigm.STEM or scale == QuestionScale.SUMMARY:
-        return None
-    chunks = _parse_chunks_from_prompt(prompt)
-    if not chunks:
-        return None
-    return chunks[0]
-
-
-def _format_chunk_clause(prompt: str, scale: QuestionScale, paradigm: Paradigm | None) -> str:
-    if paradigm != Paradigm.STEM or scale == QuestionScale.SUMMARY:
-        return ""
-    chunks = _parse_chunks_from_prompt(prompt)
-    if not chunks:
-        return ""
-    primary_id, primary_text = chunks[0]
-    excerpt = primary_text[:220].strip()
-    cite_markers = "".join(f"[CITE:chunk:{chunk_id}]" for chunk_id, _ in chunks)
-    return f" 依据原文「{excerpt}」并引用{cite_markers}"
 
 
 def _pick_citation_node(
