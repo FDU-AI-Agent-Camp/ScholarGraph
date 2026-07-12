@@ -1,14 +1,20 @@
 """Paper CRUD and pipeline status backed by the persistence repositories."""
 
+from __future__ import annotations
+
 from datetime import UTC, datetime
 from functools import lru_cache
 from pathlib import Path
+from typing import TYPE_CHECKING
 from uuid import uuid4
+
+if TYPE_CHECKING:
+    from backend.services.paper_service_compat import CompatPaperDict, CompatPdfPathDict, CompatStatusDict
 
 from backend.api.exceptions import ApiError
 from backend.config import Settings, get_settings
-from backend.db.bootstrap import ensure_schema
 from backend.db.base import get_async_engine, reset_database_caches
+from backend.db.bootstrap import ensure_schema
 from backend.repositories import run_async
 from backend.repositories.paper_repository import PaperRepository, get_paper_repository
 from backend.repositories.pipeline_repository import PipelineRepository, get_pipeline_repository
@@ -66,6 +72,41 @@ class PaperService:
         self._refined_head: dict[str, IngestHead] = {}
         self._preview_graphs: dict[str, UnifiedPaperGraph] = {}
         self._active_run_id: dict[str, str] = {}
+        self._compat_papers = None
+        self._compat_status = None
+        self._compat_pdf_paths = None
+
+    @property
+    def _papers(self) -> CompatPaperDict:
+        """Test migration shim: dict-like access backed by the DB."""
+        if self._compat_papers is None:
+            from backend.services.paper_service_compat import CompatPaperDict
+
+            self._compat_papers = CompatPaperDict(self)
+        return self._compat_papers
+
+    @property
+    def _status(self) -> CompatStatusDict:
+        """Test migration shim: dict-like pipeline snapshots backed by the DB."""
+        if self._compat_status is None:
+            from backend.services.paper_service_compat import CompatStatusDict
+
+            self._compat_status = CompatStatusDict(self)
+        return self._compat_status
+
+    @property
+    def _pdf_paths(self) -> CompatPdfPathDict:
+        """Test migration shim: dict-like PDF path pointers backed by the DB."""
+        if self._compat_pdf_paths is None:
+            from backend.services.paper_service_compat import CompatPdfPathDict
+
+            self._compat_pdf_paths = CompatPdfPathDict(self)
+        return self._compat_pdf_paths
+
+    def _upsert_compat_paper_detail(self, paper_id: str, detail: PaperDetail) -> None:
+        from backend.services.paper_service_compat import upsert_compat_paper_detail
+
+        upsert_compat_paper_detail(self, paper_id, detail)
 
     async def bootstrap(self) -> None:
         """Ensure schema exists and optionally seed demo fixtures."""
@@ -171,9 +212,7 @@ class PaperService:
             preview_available=preview_available or bool(existing and existing.preview_available),
             error_code=error_code,
             failed_during=_to_failed_during(failed_during),
-            head_refine_warnings=(
-                existing.head_refine_warnings if existing is not None else []
-            ),
+            head_refine_warnings=(existing.head_refine_warnings if existing is not None else []),
             classify_warnings=existing.classify_warnings if existing is not None else [],
             extract_warnings=existing.extract_warnings if existing is not None else [],
         )
