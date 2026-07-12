@@ -218,8 +218,10 @@ def test_validate_unknown_paper_allow_skip_exits_success(
     validate_golden_qa_module,
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     mod = validate_golden_qa_module
+    monkeypatch.setattr(mod, "is_ci_environment", lambda: False)
     graph_dir = tmp_path / "graphs"
     graph_dir.mkdir()
     golden_path = tmp_path / "golden.json"
@@ -298,8 +300,12 @@ def test_build_validate_policy_defaults_strict(validate_golden_qa_module) -> Non
     assert policy.allow_skip is False
 
 
-def test_build_validate_policy_no_strict_allows_skip(validate_golden_qa_module) -> None:
+def test_build_validate_policy_no_strict_allows_skip(
+    validate_golden_qa_module,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     mod = validate_golden_qa_module
+    monkeypatch.setattr(mod, "is_ci_environment", lambda: False)
     policy = mod.build_validate_policy(mod.parse_args(["--no-strict"]))
     assert policy.strict is False
     assert policy.allow_skip is True
