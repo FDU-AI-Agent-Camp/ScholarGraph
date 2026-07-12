@@ -55,21 +55,6 @@ def b04_qa_env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     return tmp_path
 
 
-@pytest.fixture(autouse=True)
-def _hybrid_retriever_without_vector_store() -> AsyncIterator[None]:
-    """Avoid ChromaDB init on B-04 HTTP QA tests; vectors are opt-in per test."""
-    from backend.main import app
-    from backend.rag.hybrid_retriever import HybridRetriever, bind_hybrid_retriever, reset_hybrid_retriever
-
-    retriever = HybridRetriever(vector_store=None)
-    app.state.hybrid_retriever = retriever
-    bind_hybrid_retriever(retriever)
-    yield
-    reset_hybrid_retriever()
-    if hasattr(app.state, "hybrid_retriever"):
-        delattr(app.state, "hybrid_retriever")
-
-
 def test_format_sse_event_matches_api_contract_section_8() -> None:
     frame = format_sse_event("citation", {"paper_id": "hss-001", "node_id": "n1", "label": "核心论点"})
     match = _SSE_FRAME_RE.search(frame)

@@ -148,12 +148,9 @@ async def test_e07_e08_sse_error_event_always_ends_with_done(
     """E-08：SSE error 后仍发 done；HTTP 200 流（E-07 由 FE onerror 处理断连）."""
     store = GraphStore(base_dir=mock_llm_env)
     engine = _GraphQaEngine(store=store, llm=_bad_llm())
+    from tests.helpers.qa_stream_mock import qa_stream_from_engine
 
-    async def _fail_stream(paper_id: str, question: str) -> AsyncIterator[QaEvent]:
-        async for evt in engine.stream(paper_id, question):
-            yield evt
-
-    monkeypatch.setattr("backend.graph.qa.qa_stream", _fail_stream)
+    monkeypatch.setattr("backend.graph.qa.qa_stream", qa_stream_from_engine(engine))
 
     response = await api_client.post(
         "/api/v1/papers/hss-001/qa/stream",
@@ -223,8 +220,14 @@ async def test_e09_duplicate_citation_frames_emitted_from_stream(
     cite = {"paper_id": READY_ID, "node_id": "n1", "label": "核心论点"}
     engine = _GraphQaEngine(store=GraphStore(base_dir=mock_llm_env), llm=_fake_llm("见[CITE:n1]"))
 
-    async def _dup_stream(paper_id: str, question: str) -> AsyncIterator[QaEvent]:
-        async for evt in engine.stream(paper_id, question):
+    async def _dup_stream(
+        paper_id: str,
+        question: str,
+        *,
+        retrieval_context=None,
+        llm=None,
+    ) -> AsyncIterator[QaEvent]:
+        async for evt in engine.stream(paper_id, question, retrieval_context=retrieval_context):
             yield evt
         yield QaEvent("citation", cite)
         yield QaEvent("citation", cite)
@@ -249,8 +252,14 @@ async def test_e09_empty_node_id_citation_still_valid_payload(
     """E-09 红灯：空 node_id 仍输出 citation 字段（FE 不崩溃）."""
     engine = _GraphQaEngine(store=GraphStore(base_dir=mock_llm_env), llm=_fake_llm("x"))
 
-    async def _empty_cite_stream(paper_id: str, question: str) -> AsyncIterator[QaEvent]:
-        async for evt in engine.stream(paper_id, question):
+    async def _empty_cite_stream(
+        paper_id: str,
+        question: str,
+        *,
+        retrieval_context=None,
+        llm=None,
+    ) -> AsyncIterator[QaEvent]:
+        async for evt in engine.stream(paper_id, question, retrieval_context=retrieval_context):
             yield evt
         yield QaEvent("citation", {"paper_id": READY_ID, "node_id": "", "label": ""})
 

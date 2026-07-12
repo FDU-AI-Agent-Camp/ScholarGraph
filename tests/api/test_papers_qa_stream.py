@@ -63,21 +63,6 @@ def qa_graph_store(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> GraphStor
     return store
 
 
-@pytest.fixture(autouse=True)
-def _hybrid_retriever_without_vector_store() -> AsyncIterator[None]:
-    """Avoid ChromaDB init on every HTTP QA test; vectors are opt-in per test."""
-    from backend.main import app
-    from backend.rag.hybrid_retriever import HybridRetriever, bind_hybrid_retriever, reset_hybrid_retriever
-
-    retriever = HybridRetriever(vector_store=None)
-    app.state.hybrid_retriever = retriever
-    bind_hybrid_retriever(retriever)
-    yield
-    reset_hybrid_retriever()
-    if hasattr(app.state, "hybrid_retriever"):
-        delattr(app.state, "hybrid_retriever")
-
-
 @pytest.mark.asyncio
 async def test_qa_stream_http_emits_message_citation_done(
     api_client: AsyncClient,

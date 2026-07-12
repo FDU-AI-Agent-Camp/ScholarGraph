@@ -69,6 +69,24 @@ def benchmark_dual_route_module():
 
 
 @pytest.fixture(autouse=True)
+def _bind_graph_only_hybrid_retriever() -> Iterator[None]:
+    """Avoid ChromaDB init when HTTP QA routes resolve HybridRetriever without app lifespan."""
+    from backend.main import app
+    from backend.rag.hybrid_retriever import HybridRetriever, bind_hybrid_retriever, reset_hybrid_retriever
+
+    retriever = HybridRetriever(vector_store=None)
+    prior = getattr(app.state, "hybrid_retriever", None)
+    app.state.hybrid_retriever = retriever
+    bind_hybrid_retriever(retriever)
+    yield
+    reset_hybrid_retriever()
+    if prior is not None:
+        app.state.hybrid_retriever = prior
+    elif hasattr(app.state, "hybrid_retriever"):
+        delattr(app.state, "hybrid_retriever")
+
+
+@pytest.fixture(autouse=True)
 def _disable_two_phase_extraction_for_legacy_tests(monkeypatch: pytest.MonkeyPatch) -> None:
     """Default tests to the single-phase extraction path to preserve existing mocks.
 
