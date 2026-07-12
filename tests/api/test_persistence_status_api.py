@@ -1,0 +1,78 @@
+"""API status contract tests with DB backend (API-STATUS-01/02)."""
+
+from __future__ import annotations
+
+from unittest.mock import MagicMock
+
+import pytest
+from backend.schemas.graph import GraphEdge, GraphNode, UnifiedPaperGraph
+from backend.schemas.paper import PaperStatus, PipelineStage
+from backend.schemas.paradigm import Paradigm, ParadigmClassification
+from backend.services.graph_persistence_service import GraphPersistenceService
+from backend.services.pipeline_completion_service import PipelineCompletionService
+from httpx import AsyncClient
+from tests.api.conftest import assert_success_envelope
+from tests.helpers.status_contract import assert_snapshot_matches_contract
+
+VALID_PDF = b"%PDF-1.4\n% status api test"
+
+
+@pytest.mark.asyncio
+async def test_status_pending_after_upload_matches_contract(
+    api_client: AsyncClient,
+    persistence_env,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr("backend.services.paper_service.schedule_paper_pipeline", lambda *_a, **_k: None)
+    create = await api_client.post(
+        "/api/v1/papers",
+        files={"file": ("status.pdf", VALID_PDF, "application/pdf")},
+    )
+    paper_id = create.json()["data"]["paper_id"]
+
+    response = await api_client.get(f"/api/v1/papers/{paper_id}/status")
+    assert response.status_code == 200
+    body = response.json()
+    assert_success_envelope(body)
+    from backend.schemas.paper import PaperStatusData
+
+    snapshot = PaperStatusData.model_validate(body["data"])
+    assert snapshot.status == PaperStatus.PENDING
+    assert snapshot.percent == 0
+    assert snapshot.stage is None
+    assert_snapshot_matches_contract(snapshot)
+
+
+@pytest.mark.asyncio
+async def test_status_ready_after_finalize_matches_contract(
+    api_client: AsyncClient,
+    persistence_env,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr("backend.services.paper_service.schedule_paper_pipeline", lambda *_a, **_k: None)
+    create = await api_client.post(
+        "/api/v1/papers",
+        files={"file": ("ready.pdf", VALID_PDF, "application/pdf")},
+    )
+    paper_id = create.json()["data"]["paper_id"]
+
+    classification = ParadigmClassification(paradigm=Paradigm.HSS, confidence=0.9, reason="api")
+    graph = UnifiedPaperGraph(
+        paper_id=paper_id,
+        paradigm=Paradigm.HSS,
+        nodes=[GraphNode(id="n1", label="T", type="Thesis")],
+        edges=[GraphEdge(id="e1", source="n1", target="n1", label="REF", type="REF")],
+    )
+    persistence = MagicMock(spec=GraphPersistenceService)
+    PipelineCompletionService(graph_persistence=persistence).finalize(
+        paper_id,
+        graph_data=graph.model_dump(mode="json"),
+        classification_data=classification.model_dump(mode="json"),
+    )
+
+    response = await api_client.get(f"/api/v1/papers/{paper_id}/status")
+    assert response.status_code == 200
+    data = response.json()["data"]
+    assert data["status"] == PaperStatus.READY.value
+    assert data["stage"] == PipelineStage.READY.value
+    assert data["percent"] == 100
