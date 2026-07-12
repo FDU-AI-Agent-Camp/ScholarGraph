@@ -13,7 +13,10 @@ from backend.schemas.chunk_preview import (
     ResolvedChunkPreview,
     truncate_chunk_preview,
 )
-from backend.services.qa_retrieval import VECTOR_RETRIEVAL_TIMEOUT_CODE
+from backend.services.qa_retrieval import (
+    VECTOR_RETRIEVAL_TIMEOUT_CODE,
+    VECTOR_STORE_UNAVAILABLE_CODE,
+)
 
 if TYPE_CHECKING:
     pass
@@ -83,7 +86,10 @@ async def build_chunk_preview_context(
     vector_store: ChunkTextSource | None = None,
 ) -> ChunkPreviewContext:
     """Snapshot index / timeout state once per QA stream for citation resolution."""
-    timed_out = retrieval_warning is not None and retrieval_warning.get("code") == VECTOR_RETRIEVAL_TIMEOUT_CODE
+    timed_out = retrieval_warning is not None and retrieval_warning.get("code") in {
+        VECTOR_RETRIEVAL_TIMEOUT_CODE,
+        VECTOR_STORE_UNAVAILABLE_CODE,
+    }
     index_exists = False
     if vector_store is not None:
         try:

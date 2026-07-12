@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from backend.graph.qa import _split_incomplete_cite
 from backend.llm.qa_scale import detect_question_scale, preferred_node_types
+from backend.rag.models import QuestionScale
 from backend.schemas.paradigm import Paradigm
 
 
@@ -24,7 +25,7 @@ def test_detect_verification_scale_hss() -> None:
 
 
 def test_preferred_node_types_verification_stem() -> None:
-    types = preferred_node_types("verification", paradigm=Paradigm.STEM)
+    types = preferred_node_types(QuestionScale.VERIFICATION, paradigm=Paradigm.STEM)
     assert "Evidence" in types
 
 

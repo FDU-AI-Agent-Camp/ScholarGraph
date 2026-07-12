@@ -30,18 +30,8 @@ from tests.helpers.b10_qa_boundary import (
     audit_qa_stream_chunk_citations,
     register_processing_paper,
 )
+from tests.helpers.vector_store_doubles import SlowGetChunkStore
 from tests.rag.test_vector_store import _store_with_settings
-
-
-class _SlowGetChunkStore(StaticMockVectorStore):
-    def __init__(self, *, delay_seconds: float = 0.5) -> None:
-        base = StaticMockVectorStore.load_default()
-        super().__init__(base._chunks_by_paper)  # noqa: SLF001
-        self._delay_seconds = delay_seconds
-
-    async def get_chunk_text(self, paper_id: str, chunk_id: str) -> str | None:
-        await asyncio.sleep(self._delay_seconds)
-        return await super().get_chunk_text(paper_id, chunk_id)
 
 
 async def _slow_retrieve(*_args, **_kwargs) -> RetrievalContext:
@@ -67,7 +57,7 @@ async def _build_timeout_retrieval(
     paper_id: str,
     graph_store: GraphStore,
     *,
-    vector_store: StaticMockVectorStore | _SlowGetChunkStore,
+    vector_store: StaticMockVectorStore | SlowGetChunkStore,
 ) -> tuple[object, dict[str, str] | None]:
     retriever = HybridRetriever(vector_store=vector_store)
     retriever.retrieve = _slow_retrieve  # type: ignore[method-assign]
@@ -93,7 +83,7 @@ async def test_sse_chunk_event_never_leaks_empty_preview_on_l2_timeout(stem_grap
     context, warning = await _build_timeout_retrieval(
         paper_id,
         graph_store,
-        vector_store=_SlowGetChunkStore(delay_seconds=0.5),
+        vector_store=SlowGetChunkStore(delay_seconds=0.5),
     )
     chunk_id = "stem-001:chunk:42"
     llm_text = f"细节见原文[CITE:chunk:{chunk_id}]。"
@@ -234,7 +224,7 @@ async def timeout_http_client(
     monkeypatch: pytest.MonkeyPatch,
 ) -> AsyncIterator[AsyncClient]:
     paper_id, graph_store = stem_graph_env
-    slow_store = _SlowGetChunkStore(delay_seconds=0.5)
+    slow_store = SlowGetChunkStore(delay_seconds=0.5)
     retriever = HybridRetriever(vector_store=slow_store)
     retriever.retrieve = _slow_retrieve  # type: ignore[method-assign]
     bind_hybrid_retriever(retriever)

@@ -18,8 +18,10 @@ from backend.rag.models import (
     RetrievedRelation,
     VectorEvidenceType,
 )
+from backend.rag.protocols import VectorStoreProtocol
 from backend.rag.vector_store_chunk_text import ChunkTextLookupMixin
 from backend.rag.vector_store_utils import (
+    DEFAULT_EMBEDDING_DIMENSION,
     ChromaMetadata,
     ChromaWhere,
     CollectionProtocol,
@@ -29,12 +31,12 @@ from backend.rag.vector_store_utils import (
     _embed_in_batches,
     _entity_chroma_id,
     _generate_run_id,
-    _parse_query_results,
     _persistent_chroma_client,
     _relation_chroma_id,
     _result_has_ids,
     _validate_evidence_paper_ids,
     clean_metadata,
+    query_evidence_collection,
 )
 
 logger = logging.getLogger(__name__)
@@ -263,8 +265,6 @@ class VectorStore(ChunkTextLookupMixin):
         await self._upsert(self._relation_collection, ids=ids, documents=documents, metadatas=metadatas)
 
     def _default_top_k(self, evidence_type: VectorEvidenceType) -> int:
-        """Resolve the configured default top-k for an evidence type."""
-
         mapping = {
             VectorEvidenceType.CHUNK: "rag_top_k_chunks",
             VectorEvidenceType.ENTITY: "rag_top_k_entities",
@@ -278,9 +278,8 @@ class VectorStore(ChunkTextLookupMixin):
         *,
         paper_id: str,
         top_k: int | None = None,
+        query_embedding: list[float] | None = None,
     ) -> list[RetrievedChunk]:
-        """Search original text chunks scoped to a single paper."""
-
         return cast(
             list[RetrievedChunk],
             await self._query(
@@ -288,7 +287,8 @@ class VectorStore(ChunkTextLookupMixin):
                 query_text,
                 evidence_type=VectorEvidenceType.CHUNK,
                 paper_id=paper_id,
-                top_k=top_k if top_k is not None else self._default_top_k(VectorEvidenceType.CHUNK),
+                top_k=top_k,
+                query_embedding=query_embedding,
             ),
         )
 
@@ -298,9 +298,8 @@ class VectorStore(ChunkTextLookupMixin):
         *,
         paper_id: str,
         top_k: int | None = None,
+        query_embedding: list[float] | None = None,
     ) -> list[RetrievedEntity]:
-        """Search graph entities scoped to a single paper."""
-
         return cast(
             list[RetrievedEntity],
             await self._query(
@@ -308,7 +307,8 @@ class VectorStore(ChunkTextLookupMixin):
                 query_text,
                 evidence_type=VectorEvidenceType.ENTITY,
                 paper_id=paper_id,
-                top_k=top_k if top_k is not None else self._default_top_k(VectorEvidenceType.ENTITY),
+                top_k=top_k,
+                query_embedding=query_embedding,
             ),
         )
 
@@ -318,9 +318,8 @@ class VectorStore(ChunkTextLookupMixin):
         *,
         paper_id: str,
         top_k: int | None = None,
+        query_embedding: list[float] | None = None,
     ) -> list[RetrievedRelation]:
-        """Search graph relations scoped to a single paper."""
-
         return cast(
             list[RetrievedRelation],
             await self._query(
@@ -328,13 +327,13 @@ class VectorStore(ChunkTextLookupMixin):
                 query_text,
                 evidence_type=VectorEvidenceType.RELATION,
                 paper_id=paper_id,
-                top_k=top_k if top_k is not None else self._default_top_k(VectorEvidenceType.RELATION),
+                top_k=top_k,
+                query_embedding=query_embedding,
             ),
         )
 
     async def delete_by_paper(self, paper_id: str) -> None:
         """Delete all indexed evidence for one paper from all collections."""
-
         where = self._build_where(paper_id, run_id=None)
         await asyncio.gather(
             asyncio.to_thread(partial(self._chunk_collection.delete, where=where)),
@@ -476,23 +475,24 @@ class VectorStore(ChunkTextLookupMixin):
         *,
         evidence_type: VectorEvidenceType,
         paper_id: str,
-        top_k: int,
+        top_k: int | None,
+        query_embedding: list[float] | None = None,
     ) -> list[RetrievedChunk | RetrievedEntity | RetrievedRelation]:
-        if not isinstance(paper_id, str) or not paper_id.strip():
-            raise ValueError("单篇 QA 路径下严禁泄露全库检索权限：paper_id 必须是非空字符串")
-        if not query_text.strip() or top_k <= 0:
-            return []
-
-        query_embeddings = await self._embedding_client.embed_texts([query_text])
+        resolved_top_k = top_k if top_k is not None else self._default_top_k(evidence_type)
         active_run_id = self._paper_service.get_active_run_id(paper_id) if self._paper_service else None
         where: ChromaWhere = self._build_where(paper_id, run_id=active_run_id)
-        raw_result = await asyncio.to_thread(
-            partial(
-                collection.query,
-                query_embeddings=query_embeddings,
-                n_results=top_k,
-                where=where,
-                include=["documents", "metadatas", "distances"],
-            )
+        expected_dimension = int(getattr(self._settings, "embedding_dimension", DEFAULT_EMBEDDING_DIMENSION))
+        return await query_evidence_collection(
+            collection,
+            self._embedding_client,
+            query_text,
+            evidence_type=evidence_type,
+            paper_id=paper_id,
+            top_k=resolved_top_k,
+            query_embedding=query_embedding,
+            where=where,
+            expected_embedding_dimension=expected_dimension,
         )
-        return _parse_query_results(raw_result, evidence_type=evidence_type)
+
+
+_inspect_compliance: VectorStoreProtocol = cast(VectorStore, None)

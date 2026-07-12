@@ -2,9 +2,13 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
+import logging
+import math
 import uuid
 from datetime import UTC, datetime
+from functools import partial
 from typing import TYPE_CHECKING, Any, Protocol
 
 from backend.rag.models import (
@@ -20,6 +24,88 @@ from backend.rag.models import (
 if TYPE_CHECKING:
     from backend.config import Settings
     from backend.rag.models import EmbeddingClientProtocol
+
+logger = logging.getLogger(__name__)
+
+DEFAULT_EMBEDDING_DIMENSION = 1536
+
+
+def _query_embedding_validation_issue(
+    query_embedding: list[float],
+    *,
+    expected_dimension: int,
+) -> str | None:
+    """Return a machine-readable rejection reason, or None when the vector is usable."""
+    if not query_embedding:
+        return "empty"
+    if len(query_embedding) != expected_dimension:
+        return f"dimension_mismatch:{len(query_embedding)}!={expected_dimension}"
+    if any(not math.isfinite(value) for value in query_embedding):
+        return "non_finite"
+    return None
+
+
+async def resolve_query_embeddings(
+    query_text: str,
+    query_embedding: list[float] | None,
+    embedding_client: EmbeddingClientProtocol,
+    *,
+    expected_dimension: int = DEFAULT_EMBEDDING_DIMENSION,
+) -> list[list[float]]:
+    """Use a pre-computed HyDE vector or embed *query_text* on demand.
+
+    Invalid ``query_embedding`` values (empty, wrong dimension, NaN/Inf) fall back
+    to ``embed_texts`` so Chroma never receives malformed vectors.
+    """
+    if query_embedding is not None:
+        issue = _query_embedding_validation_issue(
+            query_embedding,
+            expected_dimension=expected_dimension,
+        )
+        if issue is not None:
+            logger.warning(
+                "query_embedding_invalid_fallback_to_embed_text",
+                extra={"reason": issue, "query_text_len": len(query_text)},
+            )
+            return await embedding_client.embed_texts([query_text])
+        return [query_embedding]
+    return await embedding_client.embed_texts([query_text])
+
+
+async def query_evidence_collection(
+    collection: CollectionProtocol,
+    embedding_client: EmbeddingClientProtocol,
+    query_text: str,
+    *,
+    evidence_type: VectorEvidenceType,
+    paper_id: str,
+    top_k: int,
+    query_embedding: list[float] | None,
+    where: ChromaWhere,
+    expected_embedding_dimension: int = DEFAULT_EMBEDDING_DIMENSION,
+) -> list[RetrievedChunk | RetrievedEntity | RetrievedRelation]:
+    """Run a scoped Chroma query and parse typed evidence rows."""
+    if not isinstance(paper_id, str) or not paper_id.strip():
+        raise ValueError("单篇 QA 路径下严禁泄露全库检索权限：paper_id 必须是非空字符串")
+    if not query_text.strip() or top_k <= 0:
+        return []
+
+    query_embeddings = await resolve_query_embeddings(
+        query_text,
+        query_embedding,
+        embedding_client,
+        expected_dimension=expected_embedding_dimension,
+    )
+    raw_result = await asyncio.to_thread(
+        partial(
+            collection.query,
+            query_embeddings=query_embeddings,
+            n_results=top_k,
+            where=where,
+            include=["documents", "metadatas", "distances"],
+        )
+    )
+    return _parse_query_results(raw_result, evidence_type=evidence_type)
 
 
 async def _embed_in_batches(
