@@ -14,6 +14,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from backend.config import get_settings
+from tests.helpers.persistence_testkit import init_isolated_database, reset_persistence_singletons
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 RUN_PIPELINE_SCRIPT = REPO_ROOT / "scripts" / "run_pipeline.py"
@@ -259,6 +260,31 @@ def mock_agent_services_only(
                 "completion": completion_svc,
                 "store_save": store_cls.return_value.save,
             }
+
+
+@pytest.fixture
+def persistence_env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    """Isolated SQLite DB + upload/graph dirs for persistence-core tests."""
+    import asyncio
+
+    db_path = tmp_path / "scholargraph.db"
+    upload_dir = tmp_path / "uploads"
+    graph_dir = tmp_path / "graphs"
+    upload_dir.mkdir(parents=True, exist_ok=True)
+    graph_dir.mkdir(parents=True, exist_ok=True)
+
+    monkeypatch.setenv("DATABASE_URL", f"sqlite:///{db_path.as_posix()}")
+    monkeypatch.setenv("UPLOAD_DIR", str(upload_dir))
+    monkeypatch.setenv("GRAPH_DATA_DIR", str(graph_dir))
+    monkeypatch.setenv("SEED_DEMO_PAPERS", "false")
+    reset_persistence_singletons()
+    asyncio.run(init_isolated_database(db_path))
+    yield {
+        "db_path": db_path,
+        "upload_dir": upload_dir,
+        "graph_dir": graph_dir,
+    }
+    reset_persistence_singletons()
 
 
 @pytest.fixture(autouse=True)
