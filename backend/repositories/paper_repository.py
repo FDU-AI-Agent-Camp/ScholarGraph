@@ -15,6 +15,13 @@ from backend.schemas.paper import PaperDetail, PaperStatus, PaperSummary
 from backend.schemas.paradigm import Paradigm, ParadigmClassification
 
 
+def _bump_graph_version(current: str) -> str:
+    try:
+        return str(int(current) + 1)
+    except ValueError:
+        return "2"
+
+
 class PaperRepository:
     """Persistence access for paper metadata rows."""
 
@@ -159,6 +166,33 @@ class PaperRepository:
             row.preview_available = True
             row.updated_at = datetime.now(UTC)
             await session.commit()
+
+    async def get_pdf_path(self, paper_id: str) -> str | None:
+        async with get_async_session_factory()() as session:
+            row = await session.get(PaperRow, paper_id)
+            if row is None:
+                return None
+            return row.pdf_path
+
+    async def reset_for_reextract(self, paper_id: str) -> str:
+        """Clear classification/paths/preview and atomically bump ``graph_version``."""
+        async with get_async_session_factory()() as session:
+            await self._begin_immediate(session)
+            row = await session.get(PaperRow, paper_id, with_for_update=True)
+            if row is None:
+                msg = f"paper not found: {paper_id}"
+                raise KeyError(msg)
+            new_version = _bump_graph_version(row.graph_version)
+            row.status = PaperStatus.PENDING.value
+            row.paradigm = None
+            row.classification = None
+            row.graph_path = None
+            row.head_path = None
+            row.preview_available = False
+            row.graph_version = new_version
+            row.updated_at = datetime.now(UTC)
+            await session.commit()
+            return new_version
 
     async def update_graph_version(
         self,

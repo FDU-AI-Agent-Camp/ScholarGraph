@@ -12,7 +12,11 @@ from sqlalchemy.orm import selectinload
 from backend.db.base import get_async_session_factory
 from backend.db.models import PaperRow, PipelineRunRow
 from backend.repositories.mappers import pipeline_row_to_status
-from backend.schemas.paper import PaperStatusData
+from backend.schemas.paper import PaperStatus, PaperStatusData
+
+
+def _merge_warning_codes(existing: list[str] | None, incoming: list[str]) -> list[str]:
+    return list(dict.fromkeys([*(existing or []), *incoming]))
 
 
 class PipelineRepository:
@@ -48,9 +52,7 @@ class PipelineRepository:
                 run.percent = data.percent
                 run.message = data.message
                 run.error_code = data.error_code
-                run.failed_during = (
-                    data.failed_during.value if data.failed_during is not None else None
-                )
+                run.failed_during = data.failed_during.value if data.failed_during is not None else None
                 run.head_refine_warnings = list(data.head_refine_warnings)
                 run.classify_warnings = list(data.classify_warnings)
                 run.extract_warnings = list(data.extract_warnings)
@@ -92,16 +94,33 @@ class PipelineRepository:
                 raise KeyError(msg)
 
             if head_refine:
-                merged = list(dict.fromkeys([*(run.head_refine_warnings or []), *head_refine]))
-                run.head_refine_warnings = merged
+                run.head_refine_warnings = _merge_warning_codes(run.head_refine_warnings, head_refine)
             if classify:
-                merged = list(dict.fromkeys([*(run.classify_warnings or []), *classify]))
-                run.classify_warnings = merged
+                run.classify_warnings = _merge_warning_codes(run.classify_warnings, classify)
             if extract:
-                merged = list(dict.fromkeys([*(run.extract_warnings or []), *extract]))
-                run.extract_warnings = merged
+                run.extract_warnings = _merge_warning_codes(run.extract_warnings, extract)
             run.updated_at = datetime.now(UTC)
             await session.commit()
+
+    async def reset_for_reextract(self, paper_id: str, *, message: str) -> PaperStatusData:
+        """Reset pipeline snapshot to pending and clear warnings/error fields."""
+        now = datetime.now(UTC)
+        snapshot = PaperStatusData(
+            paper_id=paper_id,
+            status=PaperStatus.PENDING,
+            percent=0,
+            stage=None,
+            message=message,
+            updated_at=now,
+            preview_available=False,
+            error_code=None,
+            failed_during=None,
+            head_refine_warnings=[],
+            classify_warnings=[],
+            extract_warnings=[],
+        )
+        await self.save_status(paper_id, snapshot)
+        return snapshot
 
     async def _begin_immediate(self, session: AsyncSession) -> None:
         from sqlalchemy import text
