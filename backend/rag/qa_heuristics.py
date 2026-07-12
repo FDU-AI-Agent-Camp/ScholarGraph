@@ -21,6 +21,10 @@ _EXTRACT_PLAIN_NUMBER_RE = re.compile(r"(?<![\w.])(-?\d+\.\d+)(?![%\w])|(?<![\w.
 # Dataset / benchmark identifiers (STEM): ImageNet, CIFAR-10, MNIST, GLUE, etc.
 _DATASET_TOKEN_RE = re.compile(r"\b[A-Z][A-Za-z0-9]*(?:[-_][A-Za-z0-9]+)*\b")
 
+_CITE_CHUNK_IN_TEXT_RE = re.compile(r"\[CITE:chunk:([^\]]+)\]", re.IGNORECASE)
+_EMBEDDED_CITE_CHUNK_RE = re.compile(r"\[CITE:chunk:([^\]]+)\]", re.IGNORECASE)
+_LEGACY_CITED_CHUNK_ID_RE = re.compile(r"^(?P<paper>[\w-]+)_chunk_(?P<index>\d+)$")
+
 _DEFAULT_ABS_TOLERANCE = 1e-9
 _DEFAULT_RELATIVE_TOLERANCE = 0.01
 _MIN_GOLDEN_REFERENCE_CHARS = 1
@@ -282,9 +286,54 @@ def resolve_gold_chunk_ids(gold: dict[str, Any]) -> set[str]:
     return chunk_ids
 
 
+def normalize_cited_chunk_id(raw: str) -> str:
+    """Normalize malformed chunk IDs from citations or free-text CITE markers."""
+    text = raw.strip().strip("[]")
+    if not text:
+        return ""
+    embedded = _EMBEDDED_CITE_CHUNK_RE.search(text)
+    if embedded:
+        text = embedded.group(1).strip()
+    text = re.sub(r"\s*:\s*", ":", text.strip())
+    legacy = _LEGACY_CITED_CHUNK_ID_RE.match(text)
+    if legacy:
+        return f"{legacy.group('paper')}:chunk:{legacy.group('index')}"
+    return text
+
+
+def extract_chunk_ids_from_text(answer_text: str) -> set[str]:
+    """Extract canonical chunk IDs embedded in model answer text."""
+    ids: set[str] = set()
+    for match in _CITE_CHUNK_IN_TEXT_RE.finditer(answer_text):
+        normalized = normalize_cited_chunk_id(match.group(1))
+        if normalized:
+            ids.add(normalized)
+    return ids
+
+
+def _resolve_cited_chunk_id(raw: str, expected: set[str]) -> str | None:
+    normalized = normalize_cited_chunk_id(raw)
+    if not normalized:
+        return None
+    if normalized in expected:
+        return normalized
+
+    suffix_matches = [chunk_id for chunk_id in expected if chunk_id.endswith(f":{normalized}")]
+    if len(suffix_matches) == 1:
+        return suffix_matches[0]
+
+    tail = normalized.rsplit(":", 1)[-1]
+    tail_matches = [chunk_id for chunk_id in expected if chunk_id.rsplit(":", 1)[-1] == tail]
+    if len(tail_matches) == 1:
+        return tail_matches[0]
+    return None
+
+
 def compute_chunk_recall(
     citations: list[dict[str, Any]],
     gold: dict[str, Any],
+    *,
+    answer_text: str | None = None,
 ) -> float | None:
     """Recall of cited chunk IDs against golden paragraph/chunk expectations.
 
@@ -294,11 +343,20 @@ def compute_chunk_recall(
     if not expected:
         return None
 
-    cited = {
-        str(citation.get("chunk_id", "")).strip()
-        for citation in citations
-        if citation.get("type") == "chunk" and str(citation.get("chunk_id", "")).strip()
-    }
+    cited: set[str] = set()
+    for citation in citations:
+        if citation.get("type") != "chunk":
+            continue
+        resolved = _resolve_cited_chunk_id(str(citation.get("chunk_id", "")), expected)
+        if resolved:
+            cited.add(resolved)
+
+    if answer_text:
+        for raw_id in extract_chunk_ids_from_text(answer_text):
+            resolved = _resolve_cited_chunk_id(raw_id, expected)
+            if resolved:
+                cited.add(resolved)
+
     return len(cited & expected) / len(expected)
 
 
@@ -385,7 +443,7 @@ def run_heuristic_guardrails(
     dataset_ok, missing_datasets = _datasets_satisfied(expected_datasets, answer_text, extracted_datasets)
 
     graph_recall = compute_graph_element_recall(citations, gold)
-    chunk_recall = compute_chunk_recall(citations, gold)
+    chunk_recall = compute_chunk_recall(citations, gold, answer_text=answer_text)
 
     golden_reference = derive_golden_reference_text(gold)
     answer_char_length = len(answer_text.strip())

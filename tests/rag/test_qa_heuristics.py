@@ -168,6 +168,33 @@ def test_compute_chunk_recall_intersects_cited_chunks() -> None:
 
 def test_compute_chunk_recall_returns_none_without_gold_chunks() -> None:
     assert compute_chunk_recall([], {"nodes": ["n1"], "edges": []}) is None
+    assert compute_chunk_recall([], {"nodes": ["n1"], "edges": [], "paragraphs": []}) is None
+
+
+def test_compute_chunk_recall_zero_paragraph_exemption_no_division_error() -> None:
+    """HSS / summary gold may omit paragraphs — recall is N/A, never ZeroDivisionError."""
+    gold = {"nodes": ["n_thesis"], "edges": [], "paragraphs": []}
+    for _ in range(100):
+        assert compute_chunk_recall([], gold) is None
+        assert compute_chunk_recall([{"type": "node", "node_id": "n_thesis"}], gold) is None
+
+
+def test_compute_chunk_recall_tolerates_malformed_citation_markers() -> None:
+    gold = {"paragraphs": ["stem-001:chunk:42"]}
+    citations = [{"type": "chunk", "chunk_id": " [CITE:chunk:stem-001:chunk:42] "}]
+    assert compute_chunk_recall(citations, gold) == 1.0
+
+
+def test_compute_chunk_recall_tolerates_partial_chunk_suffix() -> None:
+    gold = {"paragraphs": ["stem-001:chunk:42"]}
+    citations = [{"type": "chunk", "chunk_id": "chunk:42"}]
+    assert compute_chunk_recall(citations, gold) == 1.0
+
+
+def test_compute_chunk_recall_scans_answer_text_for_cite_markers() -> None:
+    gold = {"paragraphs": ["stem-001:chunk:42", "stem-001:chunk:43"]}
+    answer = "依据原文说明，见 [CITE:chunk:stem-001:chunk:42] 与 [CITE:chunk: chunk:43 ]。"
+    assert compute_chunk_recall([], gold, answer_text=answer) == 1.0
 
 
 def test_run_heuristic_guardrails_populates_chunk_recall_for_stem_gold() -> None:
