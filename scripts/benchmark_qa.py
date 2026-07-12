@@ -16,6 +16,18 @@ Usage (from repo root)::
 
 ``--dry-run`` skips Judge evaluation and only validates question → answer
 completeness (no LLM cost).
+
+Chunk recall gate tiers (``detail_recall_gate.chunk_recall_min``):
+
+- **mock_dry_run** (``LLM_MODE=mock`` or ``--dry-run``): floor **0.5**, enforced.
+- **release_strict** (``EVAL_GATE_STRICT_CHUNK=1``): floor **0.7**, enforced.
+- **informational** (live full eval without strict env): reported, not CI-blocking.
+
+Judge snapshot replay (optional live Judge CI without token cost):
+
+- ``JUDGE_SNAPSHOT_REPLAY=1`` — replay ``tests/fixtures/qa_judge_snapshot_replay.json`` by prompt SHA-256.
+- ``JUDGE_SNAPSHOT_RECORD=1`` — on live Judge calls, persist micro-output into the replay file.
+- ``JUDGE_SNAPSHOT_PATH`` — override replay JSON path (default: tests/fixtures/qa_judge_snapshot_replay.json).
 """
 
 from __future__ import annotations
@@ -77,10 +89,22 @@ _DEFAULT_BENCHMARK_CONCURRENCY = 3
 # Align with docs/v2/rag-requirements.md QA_VERBOSITY_CEILING — yellow warning only, not P0 CI block.
 _DEFAULT_QA_VERBOSITY_CEILING = 0.15
 _REDUNDANT_SUSPECT_TAG = "REDUNDANT_SUSPECT"
+_CHUNK_RECALL_FLOOR_MOCK = 0.5
+_CHUNK_RECALL_FLOOR_STRICT = 0.7
+_EVAL_GATE_STRICT_CHUNK_ENV = "EVAL_GATE_STRICT_CHUNK"
 _RECALL_GATE_DETAIL_SCALES = frozenset({QuestionScale.DETAIL.value, "detail"})
 _VECTOR_BRANCH_SCALES = frozenset(
     {QuestionScale.DETAIL.value, QuestionScale.VERIFICATION.value, "detail", "verification"},
 )
+
+
+@dataclass(frozen=True, slots=True)
+class ChunkRecallGatePolicy:
+    """Multi-tier chunk recall floor — mock/dry-run vs release strict."""
+
+    floor: float
+    tier: str
+    enforced: bool
 
 
 @dataclass(frozen=True, slots=True)
@@ -578,13 +602,19 @@ async def run_benchmark(args: argparse.Namespace) -> int:
             success_count += 1
 
     floor = golden.get("allowed_recall_floor", 0.80)
+    chunk_gate_policy = _resolve_chunk_recall_gate_policy(dry_run=args.dry_run)
     mean_recall = _compute_mean_recall(results)
     mean_semantic_alignment = _compute_mean_semantic_alignment(results)
     per_question_hallucination = _collect_per_question_hallucination_rates(results)
     mean_hallucination_rate = compute_mean_hallucination_rate(per_question_hallucination)
     verbosity_ceiling = _resolve_verbosity_ceiling()
     redundant_suspects = _collect_redundant_suspects(results)
-    routing_summary = _compute_routing_summary(results, items, allowed_recall_floor=floor)
+    routing_summary = _compute_routing_summary(
+        results,
+        items,
+        chunk_recall_floor=chunk_gate_policy.floor,
+        chunk_gate_policy=chunk_gate_policy,
+    )
     paradigm_summary = _compute_paradigm_report_summary(results, items)
     breakdown = _build_report_breakdown(results, items)
 
@@ -602,6 +632,11 @@ async def run_benchmark(args: argparse.Namespace) -> int:
             "mean_semantic_alignment": round(mean_semantic_alignment, 2),
             "recall_floor": floor,
             "recall_pass": mean_recall >= floor,
+            "chunk_recall_gate_policy": {
+                "tier": chunk_gate_policy.tier,
+                "floor": chunk_gate_policy.floor,
+                "enforced": chunk_gate_policy.enforced,
+            },
             "mean_hallucination_rate": round(mean_hallucination_rate, 4),
             "hallucination_pass": hallucination_ci_pass(mean_hallucination_rate) if not args.dry_run else None,
             "verbosity_ceiling": verbosity_ceiling if not args.dry_run else None,
@@ -640,8 +675,53 @@ async def run_benchmark(args: argparse.Namespace) -> int:
         )
         return EXIT_RED_LINE
 
+    chunk_gate = routing_summary.get("detail_recall_gate", {})
+    if _should_fail_chunk_recall_gate(chunk_gate_policy, chunk_gate):
+        print(
+            f"\n[FAIL] chunk_recall gate ({chunk_gate_policy.tier}): "
+            f"min_chunk_recall={chunk_gate.get('chunk_recall_min')} "
+            f"< floor={chunk_gate_policy.floor}",
+        )
+        return EXIT_FAILED
+
     print(f"\n[OK] Success: {success_count}/{len(items)}")
     return EXIT_SUCCESS
+
+
+def _env_truthy(name: str) -> bool:
+    return os.environ.get(name, "").strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _resolve_chunk_recall_gate_policy(*, dry_run: bool) -> ChunkRecallGatePolicy:
+    """Resolve chunk recall floor tier for mock/dry-run vs release strict gates."""
+    if _env_truthy(_EVAL_GATE_STRICT_CHUNK_ENV):
+        return ChunkRecallGatePolicy(
+            floor=_CHUNK_RECALL_FLOOR_STRICT,
+            tier="release_strict",
+            enforced=True,
+        )
+    if dry_run or get_settings().is_llm_mock:
+        return ChunkRecallGatePolicy(
+            floor=_CHUNK_RECALL_FLOOR_MOCK,
+            tier="mock_dry_run",
+            enforced=True,
+        )
+    return ChunkRecallGatePolicy(
+        floor=_CHUNK_RECALL_FLOOR_STRICT,
+        tier="informational",
+        enforced=False,
+    )
+
+
+def _should_fail_chunk_recall_gate(
+    policy: ChunkRecallGatePolicy,
+    detail_recall_gate: dict[str, Any],
+) -> bool:
+    if not policy.enforced:
+        return False
+    if detail_recall_gate.get("chunk_recall_cohort_count", 0) == 0:
+        return False
+    return detail_recall_gate.get("chunk_recall_gate_pass", True) is False
 
 
 def _resolve_verbosity_ceiling() -> float:
@@ -793,7 +873,8 @@ def _compute_routing_summary(
     results: list[dict[str, Any]],
     items: list[dict[str, Any]],
     *,
-    allowed_recall_floor: float = 0.80,
+    chunk_recall_floor: float = _CHUNK_RECALL_FLOOR_STRICT,
+    chunk_gate_policy: ChunkRecallGatePolicy | None = None,
 ) -> dict[str, Any]:
     """Aggregate scale routing accuracy, TTFT by scale, and detail recall gate."""
     scale_matches = [bool(r.get("scale_routing_match")) for r in results if r.get("scale_routing_match") is not None]
@@ -805,7 +886,13 @@ def _compute_routing_summary(
     if summary_ttft is not None and detail_ttft is not None and summary_ttft > 0 and detail_ttft > 0:
         ttft_improvement_ratio = round(detail_ttft / summary_ttft, 2)
 
-    recall_gate = _compute_detail_recall_gate(results, items, allowed_recall_floor=allowed_recall_floor)
+    recall_gate = _compute_detail_recall_gate(results, items, chunk_recall_floor=chunk_recall_floor)
+    if chunk_gate_policy is not None:
+        recall_gate = {
+            **recall_gate,
+            "chunk_gate_tier": chunk_gate_policy.tier,
+            "chunk_gate_enforced": chunk_gate_policy.enforced,
+        }
     vector_wiring = _compute_vector_branch_wiring(results)
 
     return {
@@ -879,7 +966,7 @@ def _compute_detail_recall_gate(
     results: list[dict[str, Any]],
     items: list[dict[str, Any]],
     *,
-    allowed_recall_floor: float = 0.80,
+    chunk_recall_floor: float = _CHUNK_RECALL_FLOOR_STRICT,
 ) -> dict[str, Any]:
     """Recall gate for detail cohort — prefer STEM detail items when present."""
     cohort: list[tuple[dict[str, Any], dict[str, Any]]] = [
@@ -911,7 +998,7 @@ def _compute_detail_recall_gate(
         chunk_value = _extract_chunk_recall(result)
         chunk_recalls.append(0.0 if chunk_value is None else chunk_value)
     chunk_recall_min = min(chunk_recalls) if chunk_recalls else None
-    chunk_gate_pass = chunk_recall_min is None or chunk_recall_min >= allowed_recall_floor
+    chunk_gate_pass = chunk_recall_min is None or chunk_recall_min >= chunk_recall_floor
 
     return {
         "count": len(cohort),
@@ -924,7 +1011,7 @@ def _compute_detail_recall_gate(
         "recall_gate_pass": recall_min >= 1.0 and chunk_gate_pass,
         "numeric_gate_pass": all(numeric_flags),
         "chunk_recall_gate_pass": chunk_gate_pass,
-        "allowed_recall_floor": allowed_recall_floor,
+        "chunk_recall_floor": chunk_recall_floor,
     }
 
 
@@ -948,6 +1035,9 @@ def _print_routing_summary(routing: dict[str, Any]) -> None:
         f"  detail_recall_gate: count={gate.get('count')}, "
         f"min_graph_recall={gate.get('graph_element_recall_min')}, "
         f"min_chunk_recall={gate.get('chunk_recall_min')}, "
+        f"chunk_floor={gate.get('chunk_recall_floor')}, "
+        f"chunk_tier={gate.get('chunk_gate_tier')}, "
+        f"chunk_enforced={gate.get('chunk_gate_enforced')}, "
         f"pass={gate.get('recall_gate_pass')}",
     )
 
