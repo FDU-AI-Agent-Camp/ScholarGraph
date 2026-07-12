@@ -7,12 +7,18 @@ from pathlib import Path
 
 from backend.rag.models import JudgeMicroOutput, QAJudgeResult
 from backend.rag.qa_judge_aggregate import aggregate_sentence_judgments
+from backend.rag.qa_judge_replay import JudgeSnapshotStore
 
 _SNAPSHOT_PATH = Path(__file__).resolve().parent / "qa_judge_snapshot.json"
+_REPLAY_PATH = Path(__file__).resolve().parent / "qa_judge_snapshot_replay.json"
 
 
 def load_qa_judge_micro_snapshot() -> JudgeMicroOutput:
     """Load persisted Step-1 Judge micro output (no live token cost)."""
+    replay_store = JudgeSnapshotStore.load(_REPLAY_PATH)
+    default = replay_store.lookup("__missing__", allow_default=True)
+    if default is not None:
+        return default
     data = json.loads(_SNAPSHOT_PATH.read_text(encoding="utf-8"))
     return JudgeMicroOutput.model_validate(data)
 

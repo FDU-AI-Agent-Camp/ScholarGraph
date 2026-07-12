@@ -1,0 +1,12 @@
+{
+  "version": 1,
+  "default_micro": {
+    "sentence_judgments": [
+      {
+        "sentence": "F1 达到 15% 在 ImageNet 上验证，引用节点与金标一致。",
+        "label": "supported"
+      }
+    ]
+  },
+  "entries": {}
+}

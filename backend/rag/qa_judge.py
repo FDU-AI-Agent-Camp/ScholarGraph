@@ -12,6 +12,7 @@ from backend.llm.client import LlmClient
 from backend.rag.models import JudgeMicroOutput, TrackBJudgeSchema
 from backend.rag.qa_heuristics import HeuristicGuardrailResult, is_heuristic_hard_fuse_tripped
 from backend.rag.qa_judge_retry import run_with_judge_retry
+from backend.rag.qa_judge_replay import maybe_record_judge, try_replay_judge
 from backend.rag.qa_judge_structured import invoke_judge_structured_output
 from backend.rag.qa_judge_validate import resolve_judge_output
 
@@ -201,6 +202,10 @@ async def invoke_qa_judge(
         HumanMessage(content=user_content),
     ]
 
+    replay = try_replay_judge(messages)
+    if replay is not None:
+        return resolve_judge_output(replay)
+
     if client.is_mock:
         structured = client.chat.with_structured_output(JudgeMicroOutput)
         micro = cast(JudgeMicroOutput, await structured.ainvoke(messages))
@@ -208,5 +213,7 @@ async def invoke_qa_judge(
         micro = await run_with_judge_retry(
             lambda: invoke_judge_structured_output(client, messages, schema=JudgeMicroOutput),
         )
+
+    maybe_record_judge(messages, micro)
 
     return resolve_judge_output(micro)
