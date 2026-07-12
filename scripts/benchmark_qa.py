@@ -39,7 +39,8 @@ if str(_REPO_ROOT) not in sys.path:
 
 from backend.config import get_settings  # noqa: E402
 from backend.graph.qa import qa_stream  # noqa: E402
-from backend.graph.qa_samples import M2_DEMO_PAPER_ID, seed_m2_qa_graph  # noqa: E402
+from backend.graph.qa_samples import M2_DEMO_PAPER_ID, seed_m2_qa_graph, seed_stem_qa_graph  # noqa: E402
+from backend.graph.store import GraphStore  # noqa: E402
 from backend.llm.client import (  # noqa: E402
     LlmClient,
     get_judge_llm_client,
@@ -49,7 +50,7 @@ from backend.llm.client import (  # noqa: E402
 from backend.llm.roles import clients_are_isolated  # noqa: E402
 from backend.rag.hybrid_retriever import HybridRetriever, bind_hybrid_retriever, reset_hybrid_retriever  # noqa: E402
 from backend.rag.models import QuestionScale  # noqa: E402
-from backend.rag.qa_heuristics import run_heuristic_guardrails  # noqa: E402
+from backend.rag.qa_heuristics import resolve_gold_chunk_ids, run_heuristic_guardrails  # noqa: E402
 from backend.rag.qa_judge import (  # noqa: E402
     build_dual_track_evaluation,
     build_evaluation_fallback,
@@ -59,6 +60,7 @@ from backend.rag.qa_judge import (  # noqa: E402
 )
 from backend.rag.qa_router import detect_question_scale  # noqa: E402
 from backend.schemas.paradigm import Paradigm  # noqa: E402
+from backend.services.paper_service import PaperService  # noqa: E402
 from backend.services.qa_service import QaService  # noqa: E402
 
 logger = logging.getLogger(__name__)
@@ -109,6 +111,7 @@ class EvaluationReport:
     failed_count: int
     results: list[dict[str, Any]] = field(default_factory=list)
     summary: dict[str, Any] = field(default_factory=dict)
+    breakdown: list[dict[str, Any]] = field(default_factory=list)
 
 
 # ---------------------------------------------------------------------------
@@ -169,12 +172,40 @@ def load_golden_set(path: Path) -> dict[str, Any]:
     return data
 
 
+def _build_benchmark_paper_service() -> PaperService:
+    """In-memory papers aligned with OpenAPI fixtures (includes stem-001 / hss-001)."""
+    from backend.services.paper_fixture_seed import seed_from_fixtures
+    from backend.services.paper_service import PaperService
+
+    service = PaperService()
+    seed_from_fixtures(service)
+    return service
+
+
 def _build_benchmark_qa_service(graph_dir: Path) -> QaService:
-    """Wire graph store + graph-only HybridRetriever for reproducible benchmark runs."""
-    store = seed_m2_qa_graph(graph_dir)
-    retriever = HybridRetriever(vector_store=None)
+    """Wire graph store + optional static mock vectors for reproducible benchmark runs."""
+    seed_m2_qa_graph(graph_dir)
+    seed_stem_qa_graph(graph_dir)
+    store = GraphStore(base_dir=graph_dir)
+
+    settings = get_settings()
+    vector_store = None
+    if settings.is_llm_mock:
+        from backend.rag.static_mock_vector_store import StaticMockVectorStore
+
+        vector_store = StaticMockVectorStore.load_default()
+        print(
+            f"[INFO] mock vector store: {vector_store.chunk_count()} static chunks "
+            "(data/mock_vector_store.json — no Chroma)",
+        )
+
+    retriever = HybridRetriever(vector_store=vector_store)
     bind_hybrid_retriever(retriever)
-    return QaService(store=store, hybrid_retriever=retriever)
+    return QaService(
+        store=store,
+        hybrid_retriever=retriever,
+        paper_service=_build_benchmark_paper_service(),
+    )
 
 
 def _resolve_detected_scale(
@@ -325,6 +356,7 @@ async def run_dry_eval(
         "ttft_ms": result.ttft_ms,
         **routing,
         "graph_element_recall": guardrails.graph_element_recall,
+        "chunk_recall": guardrails.chunk_recall,
         "numeric_match": guardrails.numeric_match,
         "passed": (result.error_code is None and len(result.answer_text) > 0),
     }
@@ -396,6 +428,7 @@ async def run_full_eval(
         "ttft_ms": result.ttft_ms,
         **routing,
         "graph_element_recall": guardrails.graph_element_recall,
+        "chunk_recall": guardrails.chunk_recall,
         "numeric_match": guardrails.numeric_match,
         "judge_elapsed_ms": judge_elapsed_ms,
         "judge_error": judge_error,
@@ -468,7 +501,11 @@ async def run_benchmark(args: argparse.Namespace) -> int:
 
     qa_service = _build_benchmark_qa_service(graph_dir)
     print(f"[INFO] graph_dir={graph_dir}")
-    print("[INFO] qa_router wired via QaService + HybridRetriever(vector_store=None)")
+    if get_settings().is_llm_mock:
+        wiring = "QaService + HybridRetriever(static mock vectors)"
+    else:
+        wiring = "QaService + HybridRetriever"
+    print(f"[INFO] qa_router wired via {wiring}")
 
     qa_client = get_qa_llm_client()
     judge_client: LlmClient | None = None
@@ -547,7 +584,9 @@ async def run_benchmark(args: argparse.Namespace) -> int:
     mean_hallucination_rate = compute_mean_hallucination_rate(per_question_hallucination)
     verbosity_ceiling = _resolve_verbosity_ceiling()
     redundant_suspects = _collect_redundant_suspects(results)
-    routing_summary = _compute_routing_summary(results, items)
+    routing_summary = _compute_routing_summary(results, items, allowed_recall_floor=floor)
+    paradigm_summary = _compute_paradigm_report_summary(results, items)
+    breakdown = _build_report_breakdown(results, items)
 
     report = EvaluationReport(
         generated_at=datetime.now(UTC).isoformat(),
@@ -556,6 +595,7 @@ async def run_benchmark(args: argparse.Namespace) -> int:
         success_count=success_count,
         failed_count=failed_count,
         results=list(results),
+        breakdown=breakdown,
         summary={
             "success_rate": success_count / max(len(items), 1),
             "mean_graph_element_recall": round(mean_recall, 2),
@@ -571,6 +611,7 @@ async def run_benchmark(args: argparse.Namespace) -> int:
             "judge_model": get_settings().judge_model_effective if not args.dry_run else None,
             "clients_isolated": clients_isolated if not args.dry_run else None,
             "routing": routing_summary,
+            **paradigm_summary,
         },
     )
 
@@ -676,6 +717,71 @@ def _collect_per_question_hallucination_rates(results: list[dict[str, Any]]) -> 
     return rates
 
 
+def _collect_matched_required_patterns(answer_text: str, gold: dict[str, Any]) -> list[str]:
+    """Return required_patterns whose substring appears in the model answer."""
+    answer_lower = answer_text.lower()
+    matched: list[str] = []
+    for pattern in gold.get("required_patterns", []):
+        token = str(pattern).strip()
+        if token and token.lower() in answer_lower:
+            matched.append(token)
+    return matched
+
+
+def _compute_paradigm_report_summary(
+    results: list[dict[str, Any]],
+    items: list[dict[str, Any]],
+) -> dict[str, Any]:
+    """Paradigm-split headline metrics for mixed HSS/STEM benchmark reports."""
+    hss_cases = sum(1 for item in items if str(item.get("paradigm", "")).upper() == "HSS")
+    stem_cases = sum(1 for item in items if str(item.get("paradigm", "")).upper() == "STEM")
+    per_question_hallucination = _collect_per_question_hallucination_rates(results)
+    global_hallucination_rate = compute_mean_hallucination_rate(per_question_hallucination)
+
+    chunk_recalls: list[float] = []
+    for result in results:
+        chunk_value = _extract_chunk_recall(result)
+        if chunk_value is not None:
+            chunk_recalls.append(chunk_value)
+
+    global_chunk_recall: float | None = None
+    if chunk_recalls:
+        global_chunk_recall = round(sum(chunk_recalls) / len(chunk_recalls), 4)
+
+    return {
+        "total_cases": len(items),
+        "hss_cases": hss_cases,
+        "stem_cases": stem_cases,
+        "global_hallucination_rate": round(global_hallucination_rate, 4),
+        "global_chunk_recall": global_chunk_recall,
+    }
+
+
+def _build_report_breakdown(
+    results: list[dict[str, Any]],
+    items: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Per-case paradigm/scale/chunk recall slice for report consumers."""
+    breakdown: list[dict[str, Any]] = []
+    for item, result in zip(items, results, strict=True):
+        gold = item.get("gold", {})
+        case_id = str(item.get("id") or item.get("question", ""))[:80]
+        entry: dict[str, Any] = {
+            "case_id": case_id,
+            "paradigm": item.get("paradigm"),
+            "scale": str(item.get("scale", "")).upper(),
+            "required_patterns_matched": _collect_matched_required_patterns(
+                result.get("answer_text", ""),
+                gold,
+            ),
+        }
+        chunk_recall = _extract_chunk_recall(result)
+        if chunk_recall is not None:
+            entry["chunk_recall"] = round(chunk_recall, 4)
+        breakdown.append(entry)
+    return breakdown
+
+
 def _mean_ttft_for_scale(results: list[dict[str, Any]], scale: str) -> float | None:
     ttfts = [float(r["ttft_ms"]) for r in results if r.get("detected_scale") == scale and r.get("ttft_ms") is not None]
     if not ttfts:
@@ -683,7 +789,12 @@ def _mean_ttft_for_scale(results: list[dict[str, Any]], scale: str) -> float | N
     return sum(ttfts) / len(ttfts)
 
 
-def _compute_routing_summary(results: list[dict[str, Any]], items: list[dict[str, Any]]) -> dict[str, Any]:
+def _compute_routing_summary(
+    results: list[dict[str, Any]],
+    items: list[dict[str, Any]],
+    *,
+    allowed_recall_floor: float = 0.80,
+) -> dict[str, Any]:
     """Aggregate scale routing accuracy, TTFT by scale, and detail recall gate."""
     scale_matches = [bool(r.get("scale_routing_match")) for r in results if r.get("scale_routing_match") is not None]
     summary_ttft = _mean_ttft_for_scale(results, QuestionScale.SUMMARY.value)
@@ -691,10 +802,10 @@ def _compute_routing_summary(results: list[dict[str, Any]], items: list[dict[str
     verification_ttft = _mean_ttft_for_scale(results, QuestionScale.VERIFICATION.value)
 
     ttft_improvement_ratio: float | None = None
-    if summary_ttft is not None and detail_ttft is not None and detail_ttft > 0:
+    if summary_ttft is not None and detail_ttft is not None and summary_ttft > 0 and detail_ttft > 0:
         ttft_improvement_ratio = round(detail_ttft / summary_ttft, 2)
 
-    recall_gate = _compute_detail_recall_gate(results, items)
+    recall_gate = _compute_detail_recall_gate(results, items, allowed_recall_floor=allowed_recall_floor)
     vector_wiring = _compute_vector_branch_wiring(results)
 
     return {
@@ -748,7 +859,28 @@ def _extract_numeric_match(result: dict[str, Any]) -> bool:
     return True
 
 
-def _compute_detail_recall_gate(results: list[dict[str, Any]], items: list[dict[str, Any]]) -> dict[str, Any]:
+def _extract_chunk_recall(result: dict[str, Any]) -> float | None:
+    eval_recall = result.get("evaluation", {}).get("completeness", {}).get("chunk_recall")
+    if eval_recall is not None:
+        return float(eval_recall)
+    guardrails_recall = result.get("evaluation", {}).get("guardrails", {}).get("chunk_recall")
+    if guardrails_recall is not None:
+        return float(guardrails_recall)
+    if result.get("chunk_recall") is not None:
+        return float(result["chunk_recall"])
+    return None
+
+
+def _item_has_chunk_gold(item: dict[str, Any]) -> bool:
+    return bool(resolve_gold_chunk_ids(item.get("gold", {})))
+
+
+def _compute_detail_recall_gate(
+    results: list[dict[str, Any]],
+    items: list[dict[str, Any]],
+    *,
+    allowed_recall_floor: float = 0.80,
+) -> dict[str, Any]:
     """Recall gate for detail cohort — prefer STEM detail items when present."""
     cohort: list[tuple[dict[str, Any], dict[str, Any]]] = [
         (item, result)
@@ -760,18 +892,39 @@ def _compute_detail_recall_gate(results: list[dict[str, Any]], items: list[dict[
         cohort = stem_detail
 
     if not cohort:
-        return {"count": 0, "graph_element_recall_min": None, "recall_gate_pass": True, "numeric_gate_pass": True}
+        return {
+            "count": 0,
+            "graph_element_recall_min": None,
+            "chunk_recall_min": None,
+            "recall_gate_pass": True,
+            "numeric_gate_pass": True,
+            "chunk_recall_gate_pass": True,
+        }
 
     recalls = [_extract_graph_element_recall(result) for _, result in cohort]
     numeric_flags = [_extract_numeric_match(result) for _, result in cohort]
     recall_min = min(recalls)
+
+    chunk_cohort = [(item, result) for item, result in cohort if _item_has_chunk_gold(item)]
+    chunk_recalls: list[float] = []
+    for _item, result in chunk_cohort:
+        chunk_value = _extract_chunk_recall(result)
+        chunk_recalls.append(0.0 if chunk_value is None else chunk_value)
+    chunk_recall_min = min(chunk_recalls) if chunk_recalls else None
+    chunk_gate_pass = chunk_recall_min is None or chunk_recall_min >= allowed_recall_floor
+
     return {
         "count": len(cohort),
         "cohort": "stem_detail" if stem_detail else "detail",
         "graph_element_recall_min": round(recall_min, 4),
         "graph_element_recall_values": [round(v, 4) for v in recalls],
-        "recall_gate_pass": recall_min >= 1.0,
+        "chunk_recall_min": round(chunk_recall_min, 4) if chunk_recall_min is not None else None,
+        "chunk_recall_values": [round(v, 4) for v in chunk_recalls] if chunk_recalls else [],
+        "chunk_recall_cohort_count": len(chunk_cohort),
+        "recall_gate_pass": recall_min >= 1.0 and chunk_gate_pass,
         "numeric_gate_pass": all(numeric_flags),
+        "chunk_recall_gate_pass": chunk_gate_pass,
+        "allowed_recall_floor": allowed_recall_floor,
     }
 
 
@@ -793,7 +946,8 @@ def _print_routing_summary(routing: dict[str, Any]) -> None:
     gate = routing.get("detail_recall_gate", {})
     print(
         f"  detail_recall_gate: count={gate.get('count')}, "
-        f"min_recall={gate.get('graph_element_recall_min')}, "
+        f"min_graph_recall={gate.get('graph_element_recall_min')}, "
+        f"min_chunk_recall={gate.get('chunk_recall_min')}, "
         f"pass={gate.get('recall_gate_pass')}",
     )
 
