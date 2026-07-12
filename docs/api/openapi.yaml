@@ -664,7 +664,7 @@ components:
 
     QaStreamCitationChunk:
       type: object
-      required: [type, paper_id, chunk_id, label, text_preview]
+      required: [type, paper_id, chunk_id, label, text_preview, preview_state]
       properties:
         type:
           type: string
@@ -679,7 +679,20 @@ components:
         text_preview:
           type: string
           maxLength: 120
-          description: 原文片段预览（最多 120 字符）
+          description: 原文片段预览（最多 120 字符）；降级时为 canonical 占位文案
+        preview_state:
+          $ref: "#/components/schemas/ChunkPreviewState"
+
+    ChunkPreviewState:
+      type: string
+      enum: [ready, indexing, retrieval_timeout, l2_timeout, hallucinated_id]
+      description: |
+        Chunk 引用预览解析状态（B10）。
+        - `ready` — 正常原文预览
+        - `indexing` — 向量索引尚未就绪
+        - `retrieval_timeout` — 混合检索阶段超时降级
+        - `l2_timeout` — 引用点 L2 惰性追溯超时（200ms）
+        - `hallucinated_id` — 无法验证的 chunk_id
 
     QaStreamCitationPage:
       type: object

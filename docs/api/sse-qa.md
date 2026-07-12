@@ -46,7 +46,7 @@ LLM 在回答中使用 `[CITE:...]` 标记；后端解析后发出 `event: citat
 |--------|----------|----------|-----------|
 | `node` | `[CITE:{node_id}]` | `paper_id`, `node_id`, `label` | V1 兼容：缺 `type` 时 FE 视为 `node` |
 | `edge` | `[CITE:edge:{edge_id}]` | `paper_id`, `edge_id`, `label` | `label` 通常为 `"{source} → {target}"` |
-| `chunk` | `[CITE:chunk:{chunk_id}]` | `paper_id`, `chunk_id`, `label`, `text_preview` | `text_preview` ≤ 120 字符 |
+| `chunk` | `[CITE:chunk:{chunk_id}]` | `paper_id`, `chunk_id`, `label`, `text_preview`, `preview_state` | `text_preview` ≤ 120 字符；`preview_state` 见 OpenAPI `ChunkPreviewState` |
 | `page` | `[CITE:page:{page}]` | `paper_id`, `page`, `label` | `page` 为 integer 或 string（如 `appendix`） |
 
 ### 示例帧
@@ -62,7 +62,7 @@ event: citation
 data: {"type":"edge","paper_id":"hss-001","edge_id":"e_supports_01","label":"分论点 → 核心论点"}
 
 event: citation
-data: {"type":"chunk","paper_id":"hss-001","chunk_id":"hss-001-00001","label":"片段 hss-001-00001","text_preview":"制度一旦形成便会产生路径依赖。"}
+data: {"type":"chunk","paper_id":"hss-001","chunk_id":"hss-001-00001","label":"片段 hss-001-00001","text_preview":"制度一旦形成便会产生路径依赖。","preview_state":"ready"}
 
 event: citation
 data: {"type":"page","paper_id":"hss-001","page":12,"label":"第12页"}
