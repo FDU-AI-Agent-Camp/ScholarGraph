@@ -225,9 +225,15 @@ async def test_e09_duplicate_citation_frames_emitted_from_stream(
         question: str,
         *,
         retrieval_context=None,
+        retrieval_warning=None,
         llm=None,
     ) -> AsyncIterator[QaEvent]:
-        async for evt in engine.stream(paper_id, question, retrieval_context=retrieval_context):
+        async for evt in engine.stream(
+            paper_id,
+            question,
+            retrieval_context=retrieval_context,
+            retrieval_warning=retrieval_warning,
+        ):
             yield evt
         yield QaEvent("citation", cite)
         yield QaEvent("citation", cite)
@@ -257,9 +263,15 @@ async def test_e09_empty_node_id_citation_still_valid_payload(
         question: str,
         *,
         retrieval_context=None,
+        retrieval_warning=None,
         llm=None,
     ) -> AsyncIterator[QaEvent]:
-        async for evt in engine.stream(paper_id, question, retrieval_context=retrieval_context):
+        async for evt in engine.stream(
+            paper_id,
+            question,
+            retrieval_context=retrieval_context,
+            retrieval_warning=retrieval_warning,
+        ):
             yield evt
         yield QaEvent("citation", {"paper_id": READY_ID, "node_id": "", "label": ""})
 

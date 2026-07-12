@@ -54,7 +54,14 @@ async def test_stream_passes_retrieval_context_to_qa_stream(
 
     captured: list[RetrievalContext | None] = []
 
-    async def fake_qa_stream(paper_id, question, *, retrieval_context=None, llm=None):
+    async def fake_qa_stream(
+        paper_id,
+        question,
+        *,
+        retrieval_context=None,
+        retrieval_warning=None,
+        llm=None,
+    ):
         captured.append(retrieval_context)
         if False:
             yield

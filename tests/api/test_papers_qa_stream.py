@@ -19,6 +19,7 @@ from backend.schemas.paradigm import Paradigm
 from httpx import AsyncClient
 from tests.api.conftest import assert_error_envelope
 from tests.graph.test_qa import _bad_llm, _fake_llm
+from tests.helpers.qa_stream_mock import qa_stream_from_engine
 
 
 def _parse_sse(body: str) -> list[tuple[str, dict]]:
@@ -71,18 +72,7 @@ async def test_qa_stream_http_emits_message_citation_done(
 ) -> None:
     llm_text = "核心论点[CITE:n1]涉及不平等。"
     engine = _GraphQaEngine(store=qa_graph_store, llm=_fake_llm(llm_text))
-
-    async def _fake_qa_stream(
-        paper_id: str,
-        question: str,
-        *,
-        retrieval_context=None,
-        llm=None,
-    ) -> AsyncIterator[QaEvent]:
-        async for evt in engine.stream(paper_id, question, retrieval_context=retrieval_context):
-            yield evt
-
-    monkeypatch.setattr("backend.graph.qa.qa_stream", _fake_qa_stream)
+    monkeypatch.setattr("backend.graph.qa.qa_stream", qa_stream_from_engine(engine))
 
     response = await api_client.post(
         "/api/v1/papers/hss-001/qa/stream",
@@ -192,18 +182,7 @@ async def test_qa_stream_http_llm_error_event_in_sse(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     engine = _GraphQaEngine(store=qa_graph_store, llm=_bad_llm())
-
-    async def _fail_stream(
-        paper_id: str,
-        question: str,
-        *,
-        retrieval_context=None,
-        llm=None,
-    ) -> AsyncIterator[QaEvent]:
-        async for evt in engine.stream(paper_id, question, retrieval_context=retrieval_context):
-            yield evt
-
-    monkeypatch.setattr("backend.graph.qa.qa_stream", _fail_stream)
+    monkeypatch.setattr("backend.graph.qa.qa_stream", qa_stream_from_engine(engine))
 
     response = await api_client.post(
         "/api/v1/papers/hss-001/qa/stream",
@@ -248,10 +227,16 @@ async def test_qa_stream_http_wires_hybrid_retrieval_context(
         question: str,
         *,
         retrieval_context=None,
+        retrieval_warning=None,
         llm=None,
     ) -> AsyncIterator[QaEvent]:
         captured.append(retrieval_context)
-        async for evt in engine.stream(paper_id, question, retrieval_context=retrieval_context):
+        async for evt in engine.stream(
+            paper_id,
+            question,
+            retrieval_context=retrieval_context,
+            retrieval_warning=retrieval_warning,
+        ):
             yield evt
 
     monkeypatch.setattr("backend.graph.qa.qa_stream", _recording_qa_stream)
