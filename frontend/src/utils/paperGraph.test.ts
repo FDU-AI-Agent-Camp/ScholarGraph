@@ -40,9 +40,9 @@ import {
 
 describe('citationKey', () => {
   it('joins paper_id, type, and ref id for stable list keys', () => {
-    expect(
-      citationKey({ type: 'node', paper_id: 'hss-001', node_id: 'n_lens', label: '历史制度主义' }),
-    ).toBe('hss-001:node:n_lens')
+    expect(citationKey({ type: 'node', paper_id: 'hss-001', node_id: 'n_lens', label: '历史制度主义' })).toBe(
+      'hss-001:node:n_lens',
+    )
   })
 })
 

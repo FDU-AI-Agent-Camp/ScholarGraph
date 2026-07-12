@@ -6,12 +6,7 @@ export type QaStreamChunkCitation = Extract<QaStreamCitationData, { type: 'chunk
 export { appendUniqueCitation, citationDisplayId, citationKey } from './paperGraph'
 
 /** OpenAPI `ChunkPreviewState` — keep aligned with backend/schemas/chunk_preview.py */
-export type ChunkPreviewState =
-  | 'ready'
-  | 'indexing'
-  | 'retrieval_timeout'
-  | 'l2_timeout'
-  | 'hallucinated_id'
+export type ChunkPreviewState = 'ready' | 'indexing' | 'retrieval_timeout' | 'l2_timeout' | 'hallucinated_id'
 
 export const CHUNK_PREVIEW_DEGRADED_STATES: ReadonlySet<ChunkPreviewState> = new Set([
   'indexing',
@@ -20,7 +15,9 @@ export const CHUNK_PREVIEW_DEGRADED_STATES: ReadonlySet<ChunkPreviewState> = new
   'hallucinated_id',
 ])
 
-export function isChunkPreviewDegraded(state: ChunkPreviewState): boolean {
+export type ChunkPreviewDegradedState = Exclude<ChunkPreviewState, 'ready'>
+
+export function isChunkPreviewDegraded(state: ChunkPreviewState): state is ChunkPreviewDegradedState {
   return CHUNK_PREVIEW_DEGRADED_STATES.has(state)
 }
 

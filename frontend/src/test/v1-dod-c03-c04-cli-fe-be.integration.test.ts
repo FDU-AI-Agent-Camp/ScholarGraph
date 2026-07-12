@@ -330,7 +330,11 @@ describe('V1 DoD C-03 — M2 QA CLI ↔ graph-hss ↔ FE', () => {
     let citations: QaStreamCitationData[] = []
     for (const sample of M2_SCALE_EXPECTATIONS) {
       const node = graph.nodes.find((item) => item.id === sample.nodeId)
-      citations = appendUniqueCitation(citations, { type: 'node', paper_id: 'hss-001', node_id: sample.nodeId, label: node?.label ?? '',
+      citations = appendUniqueCitation(citations, {
+        type: 'node',
+        paper_id: 'hss-001',
+        node_id: sample.nodeId,
+        label: node?.label ?? '',
       })
     }
     expect(citations).toHaveLength(3)

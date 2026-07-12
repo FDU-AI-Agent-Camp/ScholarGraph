@@ -14,7 +14,14 @@ import { RouteName } from '@/router/meta'
 import { usePaperStore } from '@/stores/paper'
 import { resolveClassifyWarningMessages } from '@/utils/classifyWarnings'
 import { resolveExtractWarningMessages } from '@/utils/extractWarnings'
-import { appendUniqueCitation, chunkCitationPreview, chunkPreviewPlaceholderTooltip, citationDisplayId, citationKey, isChunkPreviewDegraded } from '@/utils/qaCitations'
+import {
+  appendUniqueCitation,
+  chunkCitationPreview,
+  chunkPreviewPlaceholderTooltip,
+  citationDisplayId,
+  citationKey,
+  isChunkPreviewDegraded,
+} from '@/utils/qaCitations'
 
 const PaperGraph = defineAsyncComponent(() => import('@/components/graph/PaperGraph.vue'))
 

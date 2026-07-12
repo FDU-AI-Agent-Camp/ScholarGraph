@@ -51,7 +51,12 @@ function buildM2MockSseFrames(sample: (typeof M2_HSS_QUESTIONS)[number]) {
     { event: 'message', data: { delta: `【${sample.scaleTag}】根据知识图谱上下文，` } },
     {
       event: 'citation',
-      data: { type: 'node', paper_id: 'hss-001', node_id: sample.expectedNodeId, label: node?.label ?? sample.expectedNodeId },
+      data: {
+        type: 'node',
+        paper_id: 'hss-001',
+        node_id: sample.expectedNodeId,
+        label: node?.label ?? sample.expectedNodeId,
+      },
     },
     { event: 'message', data: { delta: MOCK_DISCLAIMER } },
     { event: 'done', data: { answer_id: 'ans-hss-001' } },

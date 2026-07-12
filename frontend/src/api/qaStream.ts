@@ -68,10 +68,7 @@ function parseCitationPayload(payload: Record<string, unknown>): QaStreamCitatio
       }
     case 'page': {
       const rawPage = payload.page
-      const page =
-        typeof rawPage === 'number' && Number.isFinite(rawPage)
-          ? rawPage
-          : String(rawPage ?? '')
+      const page = typeof rawPage === 'number' && Number.isFinite(rawPage) ? rawPage : String(rawPage ?? '')
       return {
         type: 'page',
         paper_id: paperId,

@@ -10,6 +10,7 @@ import {
   citationKey,
   citationNodeId,
   isChunkPreviewDegraded,
+  isChunkCitation,
   isNodeCitation,
   nodeCitation,
 } from '@/utils/qaCitations'
@@ -46,6 +47,8 @@ describe('qaCitations helpers', () => {
     })
     expect(isNodeCitation(node)).toBe(true)
     expect(isNodeCitation(edge)).toBe(false)
+    expect(isChunkCitation(chunk)).toBe(true)
+    expect(isChunkCitation(node)).toBe(false)
   })
 
   it('citationDisplayId returns ref id per type', () => {

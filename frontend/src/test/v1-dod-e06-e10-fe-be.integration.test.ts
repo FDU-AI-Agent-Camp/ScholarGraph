@@ -287,7 +287,11 @@ describe('V1 DoD E-07/E-08 — QA SSE disconnect and error events', () => {
 
 describe('V1 DoD E-09 — citation dedup and empty node_id', () => {
   it('appendUniqueCitation deduplicates repeated SSE citation frames', () => {
-    const cite: QaStreamCitationData = { type: 'node', paper_id: 'hss-001', node_id: BE_FE_E06_E10.E09.dedupKey, label: '核心论点',
+    const cite: QaStreamCitationData = {
+      type: 'node',
+      paper_id: 'hss-001',
+      node_id: BE_FE_E06_E10.E09.dedupKey,
+      label: '核心论点',
     }
     const once = appendUniqueCitation([], cite)
     const twice = appendUniqueCitation(once, cite)

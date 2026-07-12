@@ -9,12 +9,7 @@ import qaStreamV2Frames from '../../../docs/api/fixtures/qa-stream-v2-frames.jso
 import { parseQaStreamEvent } from '@/api/qaStream'
 import type { components } from '@/api/generated/schema'
 import type { QaStreamCitationData } from '@/api/types'
-import {
-  appendUniqueCitation,
-  citationDisplayId,
-  citationKey,
-  citationNodeId,
-} from '@/utils/qaCitations'
+import { appendUniqueCitation, citationDisplayId, citationKey, citationNodeId } from '@/utils/qaCitations'
 
 type Schema = components['schemas']
 
@@ -31,16 +26,12 @@ describe('QA SSE V2 cross-layer integration', () => {
   })
 
   it('parses fixture frames into typed server events', () => {
-    const parsed = qaStreamV2Frames.map((frame) =>
-      parseQaStreamEvent(frame.event, JSON.stringify(frame.data)),
-    )
+    const parsed = qaStreamV2Frames.map((frame) => parseQaStreamEvent(frame.event, JSON.stringify(frame.data)))
     expect(parsed.every((item) => item !== null)).toBe(true)
 
     const citations = parsed.filter((item) => item?.type === 'citation')
     expect(citations).toHaveLength(4)
-    const types = citations.map((item) =>
-      item?.type === 'citation' ? item.data.type : null,
-    )
+    const types = citations.map((item) => (item?.type === 'citation' ? item.data.type : null))
     expect(types).toEqual(['node', 'edge', 'chunk', 'page'])
   })
 
@@ -70,9 +61,7 @@ describe('QA SSE V2 cross-layer integration', () => {
   })
 
   it('fixture node citation satisfies generated OpenAPI schema alias', () => {
-    const nodeFrame = qaStreamV2Frames.find(
-      (frame) => frame.event === 'citation' && frame.data.type === 'node',
-    )
+    const nodeFrame = qaStreamV2Frames.find((frame) => frame.event === 'citation' && frame.data.type === 'node')
     expect(nodeFrame).toBeDefined()
     const parsed = parseQaStreamEvent('citation', JSON.stringify(nodeFrame!.data))
     expect(parsed?.type).toBe('citation')
