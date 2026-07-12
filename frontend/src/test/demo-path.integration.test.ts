@@ -241,7 +241,7 @@ describe('design-spec §16 Prototype 答辩路径', () => {
     })
 
     it('Detail QA panel binds TagCitation :active to highlightNodeId for bidirectional sync', () => {
-      expect(detailViewSrc).toContain(':active="item.node_id === highlightNodeId"')
+      expect(detailViewSrc).toContain("item.type === 'node' && item.node_id === highlightNodeId")
       expect(detailViewSrc).toContain('@click="focusCitation(item)"')
       expect(detailViewSrc).toContain(':highlight-node-id="highlightNodeId"')
       expect(detailViewSrc).toContain('@node-click="onGraphNodeClick"')
@@ -253,7 +253,7 @@ describe('design-spec §16 Prototype 答辩路径', () => {
       const tokens = loadDesignTokenMap()
       expect(tokens['--duration-fast']).toBe('150ms')
       expect(tagCitationSrc).toContain('var(--transition-fast)')
-      expect(detailViewSrc).toContain(':active="item.node_id === highlightNodeId"')
+      expect(detailViewSrc).toContain("item.type === 'node' && item.node_id === highlightNodeId")
       expect(detailViewSrc).toContain(':highlight-node-id="highlightNodeId"')
       expect(paperGraphUtilSrc).toContain('GRAPH_STATE_ANIMATION_MS')
     })

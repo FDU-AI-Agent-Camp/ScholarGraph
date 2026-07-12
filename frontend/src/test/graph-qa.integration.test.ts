@@ -100,7 +100,7 @@ describe('graph + QA SSE integration (fixtures)', () => {
     const detailSrc = readFrontendSource('views/PaperDetailView.vue')
 
     expect(detailSrc).toContain('const highlightNodeId = ref')
-    expect(detailSrc).toContain(':active="item.node_id === highlightNodeId"')
+    expect(detailSrc).toContain("item.type === 'node' && item.node_id === highlightNodeId")
     expect(detailSrc).toContain('@click="focusCitation(item)"')
     expect(detailSrc).toContain(':highlight-node-id="highlightNodeId"')
     expect(detailSrc).toContain('function onGraphNodeClick')
