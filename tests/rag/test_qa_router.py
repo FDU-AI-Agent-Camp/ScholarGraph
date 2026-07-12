@@ -13,6 +13,7 @@ import pytest
 from backend.rag.models import QuestionScale, coerce_question_scale
 from backend.rag.qa_router import (
     CROSS_PAPER_PATROL_GUIDE,
+    DEFAULT_SCALE_ROUTING_RULES,
     detect_cross_paper_intent,
     detect_question_scale,
 )
@@ -225,3 +226,65 @@ def test_cross_paper_patrol_guide_message() -> None:
 
 def test_detect_cross_paper_intent_allows_intra_paper_baseline_compare() -> None:
     assert detect_cross_paper_intent("方法与基线对比如何？", _PAPER_CTX) is False
+
+
+@pytest.mark.parametrize(
+    ("question", "expected"),
+    [
+        pytest.param(
+            "总体而言，分论点与核心论点之间是什么关系？",
+            QuestionScale.SUMMARY,
+            id="macro-preempts-entity-relation",
+        ),
+        pytest.param(
+            "请从演进脉络看这篇论文的核心论点。",
+            QuestionScale.SUMMARY,
+            id="macro-evolution-arc",
+        ),
+        pytest.param(
+            "整篇论文的论证框架是什么？",
+            QuestionScale.SUMMARY,
+            id="macro-full-paper-frame",
+        ),
+    ],
+)
+def test_matrix_macro_preemption_overrides_detail_relation(question: str, expected: QuestionScale) -> None:
+    """宏观限定词抢占 DETAIL，即使出现「关系」也锁定 SUMMARY。"""
+    assert detect_question_scale(question, paradigm=Paradigm.HSS, current_paper_context=_PAPER_CTX) == expected
+
+
+@pytest.mark.parametrize(
+    ("question", "expected"),
+    [
+        pytest.param(
+            "理论视角与分论点之间存在什么关系？",
+            QuestionScale.DETAIL,
+            id="micro-entity-pair-relation",
+        ),
+        pytest.param(
+            "论文中的制度路径依赖论述与核心论点之间是什么逻辑关系？",
+            QuestionScale.DETAIL,
+            id="micro-logical-relation-between-claims",
+        ),
+        pytest.param(
+            "这两篇论文的方法论有什么关系？",
+            QuestionScale.CROSS_PAPER,
+            id="macro-methodology-relation-routes-cross",
+        ),
+        pytest.param(
+            "总体而言，这篇论文的结论与引言是什么关系？",
+            QuestionScale.SUMMARY,
+            id="macro-conclusion-relation-preempted",
+        ),
+    ],
+)
+def test_matrix_contextual_detail_relation_regex(question: str, expected: QuestionScale) -> None:
+    """实体级「关系」命中 DETAIL；论文级宏观「关系」被排除或抢占。"""
+    assert detect_question_scale(question, paradigm=Paradigm.HSS, current_paper_context=_PAPER_CTX) == expected
+
+
+def test_default_scale_routing_rules_exposes_tunable_negative_relation_exclusions() -> None:
+    """Structured rules allow future golden conflicts to be fixed via config only."""
+    assert DEFAULT_SCALE_ROUTING_RULES.detail_relation_exclusions
+    assert "关系" not in DEFAULT_SCALE_ROUTING_RULES.detail_keywords
+    assert "逻辑关系" not in DEFAULT_SCALE_ROUTING_RULES.detail_keywords
