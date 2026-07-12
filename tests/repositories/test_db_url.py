@@ -6,10 +6,7 @@ from backend.db.url import to_async_database_url
 
 
 def test_sqlite_sync_url_converts_to_aiosqlite() -> None:
-    assert (
-        to_async_database_url("sqlite:///./data/test.db")
-        == "sqlite+aiosqlite:///./data/test.db"
-    )
+    assert to_async_database_url("sqlite:///./data/test.db") == "sqlite+aiosqlite:///./data/test.db"
 
 
 def test_sqlite_async_url_is_idempotent() -> None:

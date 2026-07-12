@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import pytest
+
 from tests.helpers.persistence_testkit import register_test_paper, restart_paper_service
 
 

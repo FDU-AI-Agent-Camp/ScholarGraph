@@ -26,11 +26,11 @@ def test_red_mysql_driver_optional_extra_not_ci_gated() -> None:
 async def test_red_concurrent_pipeline_writes_without_database_locked(persistence_env) -> None:
     """Stress: parallel status UPSERT should not raise database is locked (P1.5)."""
     import asyncio
+    from datetime import UTC, datetime
 
     from backend.repositories.paper_repository import PaperRepository
     from backend.repositories.pipeline_repository import PipelineRepository
     from backend.schemas.paper import PaperStatus, PaperStatusData, PipelineStage
-    from datetime import UTC, datetime
 
     paper_repo = PaperRepository()
     pipeline_repo = PipelineRepository()

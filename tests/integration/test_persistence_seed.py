@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import pytest
 from backend.services.paper_service import get_paper_service
+
 from tests.helpers.persistence_testkit import restart_paper_service
 
 

@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import pytest
 from backend.schemas.paper import PaperStatus
-from backend.services.paper_service import get_paper_service
 from tests.helpers.persistence_testkit import register_test_paper, restart_paper_service
 
 VALID_PDF = b"%PDF-1.4\n% service db test"

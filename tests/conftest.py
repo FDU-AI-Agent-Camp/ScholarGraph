@@ -14,6 +14,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from backend.config import get_settings
+
 from tests.helpers.persistence_testkit import init_isolated_database, reset_persistence_singletons
 
 REPO_ROOT = Path(__file__).resolve().parents[1]

@@ -11,6 +11,7 @@ from backend.schemas.graph import GraphEdge, GraphNode, UnifiedPaperGraph
 from backend.schemas.paradigm import Paradigm, ParadigmClassification
 from backend.services.graph_persistence_service import GraphPersistenceService
 from backend.services.pipeline_completion_service import PipelineCompletionService
+
 from tests.helpers.persistence_testkit import register_test_paper
 
 

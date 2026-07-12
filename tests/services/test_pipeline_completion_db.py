@@ -9,7 +9,7 @@ from backend.config import get_settings
 from backend.db.base import get_async_session_factory
 from backend.db.models import PaperRow
 from backend.schemas.graph import UnifiedPaperGraph
-from backend.schemas.paradigm import Paradigm, ParadigmClassification
+from backend.schemas.paradigm import ParadigmClassification
 from backend.services.extractor_config_fingerprint import compute_extractor_config_hash
 from backend.services.graph_persistence_service import GraphPersistenceService
 from backend.services.pipeline_completion_service import PipelineCompletionService

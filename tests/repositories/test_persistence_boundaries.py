@@ -7,7 +7,7 @@ from datetime import UTC, datetime
 import pytest
 from backend.repositories.paper_repository import PaperRepository
 from backend.repositories.pipeline_repository import PipelineRepository
-from backend.schemas.paper import PaperStatus, PaperStatusData, PipelineStage
+from backend.schemas.paper import PaperStatus, PaperStatusData
 
 
 @pytest.mark.asyncio

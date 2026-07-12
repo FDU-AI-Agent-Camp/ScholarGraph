@@ -3,13 +3,10 @@
 from __future__ import annotations
 
 import asyncio
-from datetime import UTC, datetime
 
 import pytest
 from backend.schemas.graph import GraphEdge, GraphNode, UnifiedPaperGraph
-from backend.schemas.paper import PaperStatus
 from backend.schemas.paradigm import Paradigm, ParadigmClassification
-from backend.services.paper_service import get_paper_service
 from tests.helpers.persistence_testkit import register_test_paper, reset_persistence_singletons
 
 

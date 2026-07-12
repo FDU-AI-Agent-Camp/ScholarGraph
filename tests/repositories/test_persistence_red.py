@@ -21,11 +21,7 @@ def test_red_postgresql_asyncpg_url_switch_not_validated_in_ci() -> None:
     """Production PostgreSQL driver path is documented but not CI-gated yet."""
     from backend.db.url import to_async_database_url
 
-    assert (
-        to_async_database_url("postgresql://user:pass@localhost/db")
-        == "postgresql+asyncpg://user:pass@localhost/db"
-    )
-
+    assert to_async_database_url("postgresql://user:pass@localhost/db") == "postgresql+asyncpg://user:pass@localhost/db"
 
 
 @pytest.mark.red

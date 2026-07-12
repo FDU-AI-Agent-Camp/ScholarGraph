@@ -9,6 +9,7 @@ from backend.graph.state import STAGE_PERCENT
 from backend.repositories.pipeline_repository import PipelineRepository
 from backend.schemas.paper import PaperStatus, PipelineStage
 from backend.services.pipeline_status_service import PROCESSING_STAGES, PipelineStatusService
+
 from tests.helpers.persistence_testkit import register_test_paper, restart_paper_service
 
 
@@ -72,9 +73,10 @@ async def test_mark_failed_persists_error_fields_across_restart(persistence_env)
 @pytest.mark.asyncio
 async def test_concurrent_stage_upserts_do_not_raise_database_locked(persistence_env) -> None:
     """Stress: parallel status UPSERT should not raise database is locked (P1.5)."""
+    from datetime import UTC, datetime
+
     from backend.repositories.paper_repository import PaperRepository
     from backend.schemas.paper import PaperStatusData
-    from datetime import UTC, datetime
 
     paper_repo = PaperRepository()
     pipeline_repo = PipelineRepository()

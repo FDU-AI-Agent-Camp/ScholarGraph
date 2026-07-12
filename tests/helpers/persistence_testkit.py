@@ -7,9 +7,8 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
-
-from backend.db.bootstrap import ensure_schema
 from backend.db.base import get_async_engine, reset_database_caches
+from backend.db.bootstrap import ensure_schema
 from backend.repositories.paper_repository import get_paper_repository
 from backend.repositories.pipeline_repository import get_pipeline_repository
 from backend.schemas.paper import PaperStatus, PaperStatusData
