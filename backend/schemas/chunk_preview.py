@@ -3,8 +3,14 @@
 from __future__ import annotations
 
 from enum import StrEnum
+from typing import Literal, Self
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
+
+from backend.rag.models import (
+    CHUNK_PREVIEW_DEGRADED_WHITELIST,
+    ChunkPreviewDegradedMessage,
+)
 
 
 class ChunkPreviewState(StrEnum):
@@ -18,10 +24,10 @@ class ChunkPreviewState(StrEnum):
 
 
 CHUNK_PREVIEW_STATE_MESSAGES: dict[ChunkPreviewState, str] = {
-    ChunkPreviewState.INDEXING: "[Context indexing in progress, please refresh later]",
-    ChunkPreviewState.RETRIEVAL_TIMEOUT: "[Vector retrieval timeout, preview unavailable]",
-    ChunkPreviewState.L2_TIMEOUT: "[Vector retrieval timeout, preview unavailable]",
-    ChunkPreviewState.HALLUCINATED_ID: "[Reference verification failed: Hallucinated ID]",
+    ChunkPreviewState.INDEXING: ChunkPreviewDegradedMessage.INDEXING.value,
+    ChunkPreviewState.RETRIEVAL_TIMEOUT: ChunkPreviewDegradedMessage.VECTOR_RETRIEVAL_TIMEOUT.value,
+    ChunkPreviewState.L2_TIMEOUT: ChunkPreviewDegradedMessage.VECTOR_RETRIEVAL_TIMEOUT.value,
+    ChunkPreviewState.HALLUCINATED_ID: ChunkPreviewDegradedMessage.HALLUCINATED_ID.value,
 }
 
 CHUNK_TEXT_PREVIEW_MAX_CHARS = 120
@@ -57,3 +63,37 @@ class ResolvedChunkPreview(BaseModel):
             msg = "degraded() requires a non-ready state"
             raise ValueError(msg)
         return cls(text_preview=chunk_preview_message(state), preview_state=state)
+
+
+class QaStreamCitationChunkContract(BaseModel):
+    """Strict SSE chunk citation contract — enforces ``preview_state`` ↔ ``text_preview`` lockstep."""
+
+    type: Literal["chunk"]
+    paper_id: str = Field(min_length=1)
+    chunk_id: str = Field(min_length=1)
+    label: str = Field(min_length=1)
+    text_preview: str = Field(min_length=1, max_length=CHUNK_TEXT_PREVIEW_MAX_CHARS)
+    preview_state: ChunkPreviewState
+
+    @model_validator(mode="after")
+    def verify_text_preview_whitelist(self) -> Self:
+        """Reject ad-hoc degraded copy; ready previews must not reuse placeholder strings."""
+        is_whitelisted = self.text_preview in CHUNK_PREVIEW_DEGRADED_WHITELIST
+
+        if self.preview_state == ChunkPreviewState.READY:
+            if is_whitelisted:
+                msg = "ready preview_state must not emit degraded placeholder text_preview"
+                raise ValueError(msg)
+            return self
+
+        expected = CHUNK_PREVIEW_STATE_MESSAGES.get(self.preview_state)
+        if expected is None:
+            msg = f"no canonical text_preview for preview_state={self.preview_state!r}"
+            raise ValueError(msg)
+        if self.text_preview != expected:
+            msg = (
+                f"degraded text_preview must match ChunkPreviewDegradedMessage whitelist: "
+                f"expected {expected!r}, got {self.text_preview!r}"
+            )
+            raise ValueError(msg)
+        return self

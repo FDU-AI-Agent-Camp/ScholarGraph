@@ -43,6 +43,22 @@ class VectorEvidenceType(StrEnum):
     RELATION = "relation"
 
 
+class ChunkPreviewDegradedMessage(StrEnum):
+    """Canonical degraded ``text_preview`` copy — SSOT for BE/FE contract (B10).
+
+    Only these exact strings may appear when ``preview_state`` is not ``ready``.
+    Frontend sidebar styling keys off ``preview_state``; arbitrary fallback strings
+    (e.g. ``"[Timeout]"``) must never be emitted.
+    """
+
+    INDEXING = "[Context indexing in progress, please refresh later]"
+    VECTOR_RETRIEVAL_TIMEOUT = "[Vector retrieval timeout, preview unavailable]"
+    HALLUCINATED_ID = "[Reference verification failed: Hallucinated ID]"
+
+
+CHUNK_PREVIEW_DEGRADED_WHITELIST: frozenset[str] = frozenset(member.value for member in ChunkPreviewDegradedMessage)
+
+
 class PaperChunk(BaseModel):
     """A searchable slice of original paper text."""
 

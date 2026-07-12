@@ -7,6 +7,7 @@ import logging
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Protocol, runtime_checkable
 
+from backend.rag.models import CHUNK_PREVIEW_DEGRADED_WHITELIST
 from backend.schemas.chunk_preview import (
     ChunkPreviewState,
     ResolvedChunkPreview,
@@ -26,13 +27,7 @@ CHUNK_PREVIEW_INDEXING = ResolvedChunkPreview.degraded(ChunkPreviewState.INDEXIN
 CHUNK_PREVIEW_TIMEOUT = ResolvedChunkPreview.degraded(ChunkPreviewState.RETRIEVAL_TIMEOUT).text_preview
 CHUNK_PREVIEW_HALLUCINATION = ResolvedChunkPreview.degraded(ChunkPreviewState.HALLUCINATED_ID).text_preview
 
-CHUNK_PREVIEW_PLACEHOLDERS: frozenset[str] = frozenset(
-    {
-        CHUNK_PREVIEW_INDEXING,
-        CHUNK_PREVIEW_TIMEOUT,
-        CHUNK_PREVIEW_HALLUCINATION,
-    },
-)
+CHUNK_PREVIEW_PLACEHOLDERS: frozenset[str] = CHUNK_PREVIEW_DEGRADED_WHITELIST
 
 
 @runtime_checkable
