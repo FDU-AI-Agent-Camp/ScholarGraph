@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
 from functools import lru_cache
 from typing import TYPE_CHECKING, Any
 
@@ -31,6 +30,7 @@ def complete_paper_pipeline(
     classification: ParadigmClassification,
     graph: UnifiedPaperGraph,
     extract_warnings: list[str] | None = None,
+    full_text: str = "",
 ) -> None:
     """Persist graph and mark paper ready or ready_with_warnings.
 
@@ -39,9 +39,14 @@ def complete_paper_pipeline(
     double-penalized.
     """
     paper_service.ensure_paper_exists(paper_id)
-    now = datetime.now(UTC)
-    paper = paper_service._papers[paper_id]
     settings = paper_service._settings
+    from backend.repositories import run_async
+    from backend.services.extractor_config_fingerprint import compute_extractor_config_hash
+
+    paper = run_async(paper_service._paper_repo.get(paper_id))
+    if paper is None:
+        msg = f"paper not found: {paper_id}"
+        raise ServiceError(PIPELINE_FAILED_CODE, msg)
 
     extract_warnings = list(extract_warnings or ())
     is_fallback = EXTRACT_HEURISTIC_FALLBACK_CODE in extract_warnings
@@ -61,19 +66,26 @@ def complete_paper_pipeline(
     if not passed:
         warnings.append(LOW_CONFIDENCE_GRAPH_CODE)
 
-    paper_service._papers[paper_id] = paper.model_copy(
-        update={
-            "status": final_status,
-            "paradigm": classification.paradigm,
-            "classification": classification,
-            "updated_at": now,
-        },
+    run_async(
+        paper_service._paper_repo.update_classification(paper_id, classification),
     )
-
     from backend.graph.store import GraphStore
     from backend.services.pipeline_status_service import get_pipeline_status_service
 
-    GraphStore().save(graph)
+    graph_store = GraphStore()
+    graph_store.save(graph)
+    graph_path = str(graph_store._path(paper_id))
+    config_hash = compute_extractor_config_hash(settings)
+    run_async(
+        paper_service._paper_repo.update_paths(paper_id, graph_path=graph_path),
+    )
+    run_async(
+        paper_service._paper_repo.update_graph_version(
+            paper_id,
+            graph_version="1",
+            extractor_config_hash=config_hash,
+        ),
+    )
     if warnings:
         paper_service.record_extract_warnings(paper_id, warnings)
 
@@ -82,6 +94,13 @@ def complete_paper_pipeline(
         status_service.mark_ready(paper_id)
     else:
         status_service.mark_ready_with_warnings(paper_id, message="; ".join(reasons))
+
+    from backend.events.bus import get_event_bus
+    from backend.events.types import PipelineFinalized
+
+    get_event_bus().publish_sync(
+        PipelineFinalized(paper_id=paper_id, full_text=full_text, graph=graph),
+    )
 
 
 class PipelineCompletionService:

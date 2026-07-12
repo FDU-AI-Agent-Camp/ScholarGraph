@@ -1,4 +1,4 @@
-"""Paper CRUD and pipeline status (skeleton with fixture seed data)."""
+"""Paper CRUD and pipeline status backed by the persistence repositories."""
 
 from datetime import UTC, datetime
 from functools import lru_cache
@@ -7,6 +7,11 @@ from uuid import uuid4
 
 from backend.api.exceptions import ApiError
 from backend.config import Settings, get_settings
+from backend.db.bootstrap import ensure_schema
+from backend.db.base import get_async_engine, reset_database_caches
+from backend.repositories import run_async
+from backend.repositories.paper_repository import PaperRepository, get_paper_repository
+from backend.repositories.pipeline_repository import PipelineRepository, get_pipeline_repository
 from backend.schemas.graph import UnifiedPaperGraph
 from backend.schemas.ingest_head import IngestHead
 from backend.schemas.paper import (
@@ -19,7 +24,6 @@ from backend.schemas.paper import (
     PipelineStage,
 )
 from backend.schemas.paradigm import Paradigm, ParadigmClassification
-from backend.services.paper_fixture_seed import seed_from_fixtures
 from backend.services.paper_pipeline_scheduler import schedule_paper_pipeline
 
 MAX_UPLOAD_BYTES = 32 * 1024 * 1024
@@ -32,25 +36,47 @@ def _to_failed_during(stage: PipelineStage | None) -> FailedDuringStage | None:
     return FailedDuringStage(stage.value)
 
 
-class PaperService:
-    """In-memory store seeded from docs/api/fixtures for local dev."""
+def reset_persistence_singletons() -> None:
+    """Clear cached settings, DB engines, repositories, and service singletons."""
+    get_settings.cache_clear()
+    reset_database_caches()
+    get_paper_repository.cache_clear()
+    get_pipeline_repository.cache_clear()
+    get_paper_service.cache_clear()
+    from backend.events.bus import reset_event_bus_cache
 
-    def __init__(self, settings: Settings | None = None) -> None:
+    reset_event_bus_cache()
+
+
+class PaperService:
+    """DB-backed paper store; ephemeral preview graphs stay in memory."""
+
+    def __init__(
+        self,
+        settings: Settings | None = None,
+        *,
+        paper_repo: PaperRepository | None = None,
+        pipeline_repo: PipelineRepository | None = None,
+    ) -> None:
         self._settings = settings or get_settings()
-        self._papers: dict[str, PaperDetail] = {}
-        self._status: dict[str, PaperStatusData] = {}
+        self._paper_repo = paper_repo or get_paper_repository()
+        self._pipeline_repo = pipeline_repo or get_pipeline_repository()
+        self._bootstrapped = False
         self._refined_classifier_input: dict[str, str] = {}
         self._refined_head: dict[str, IngestHead] = {}
-        self._head_refine_warnings: dict[str, list[str]] = {}
-        self._classify_warnings: dict[str, list[str]] = {}
-        self._extract_warnings: dict[str, list[str]] = {}
         self._preview_graphs: dict[str, UnifiedPaperGraph] = {}
-        self._preview_available: dict[str, bool] = {}
-        self._pdf_paths: dict[str, Path] = {}
-        # Tracks which RAG index run is currently active for each paper.
-        # VectorStore uses this to implement index_run_id snapshot switching.
         self._active_run_id: dict[str, str] = {}
-        seed_from_fixtures(self)
+
+    async def bootstrap(self) -> None:
+        """Ensure schema exists and optionally seed demo fixtures."""
+        if self._bootstrapped:
+            return
+        await ensure_schema(get_async_engine())
+        if self._settings.seed_demo_papers and await self._paper_repo.is_empty():
+            from backend.services.paper_fixture_seed import seed_from_fixtures
+
+            await seed_from_fixtures(self._paper_repo, self._pipeline_repo)
+        self._bootstrapped = True
 
     def set_active_run_id(self, paper_id: str, run_id: str) -> None:
         """Atomically activate a new RAG index run for the paper."""
@@ -69,17 +95,17 @@ class PaperService:
         offset: int = 0,
         limit: int = 20,
     ) -> tuple[list[PaperSummary], int]:
-        items = list(self._papers.values())
-        if paradigm is not None:
-            items = [p for p in items if p.paradigm == paradigm]
-        if status is not None:
-            items = [p for p in items if p.status == status]
-        total = len(items)
-        page = items[offset : offset + limit]
-        return [PaperSummary.model_validate(p) for p in page], total
+        await self.bootstrap()
+        return await self._paper_repo.list(
+            paradigm=paradigm,
+            status=status,
+            offset=offset,
+            limit=limit,
+        )
 
     async def get_paper(self, paper_id: str) -> PaperDetail:
-        paper = self._papers.get(paper_id)
+        await self.bootstrap()
+        paper = await self._paper_repo.get(paper_id)
         if paper is None:
             raise ApiError("PAPER_NOT_FOUND", f"论文不存在: {paper_id}", status_code=404)
         return self._enrich_paper_detail(paper, paper_id)
@@ -88,17 +114,24 @@ class PaperService:
         """Attach optional ingest head, preview flag, and degrade codes for detail API (X17)."""
         self._hydrate_head_refine_from_disk(paper_id)
         ingest_head = self._refined_head.get(paper_id)
+        snapshot = run_async(self._pipeline_repo.get_latest(paper_id))
+        extract_warnings: list[str] = []
+        classify_warnings: list[str] = []
+        if snapshot is not None:
+            extract_warnings = snapshot.extract_warnings
+            classify_warnings = snapshot.classify_warnings
         return paper.model_copy(
             update={
                 "ingest_head": ingest_head,
-                "preview_available": self.is_preview_available(paper_id),
-                "extract_warnings": self.get_extract_warnings(paper_id),
-                "classify_warnings": self.get_classify_warnings(paper_id),
+                "preview_available": paper.preview_available or self.is_preview_available(paper_id),
+                "extract_warnings": extract_warnings,
+                "classify_warnings": classify_warnings,
             },
         )
 
     def ensure_paper_exists(self, paper_id: str) -> None:
-        if paper_id not in self._papers:
+        paper = run_async(self._paper_repo.get(paper_id))
+        if paper is None:
             raise ApiError("PAPER_NOT_FOUND", f"论文不存在: {paper_id}", status_code=404)
 
     def set_status_snapshot(
@@ -127,6 +160,7 @@ class PaperService:
         self.ensure_paper_exists(paper_id)
         now = datetime.now(UTC)
         preview_available = self.is_preview_available(paper_id)
+        existing = run_async(self._pipeline_repo.get_latest(paper_id))
         snapshot = PaperStatusData(
             paper_id=paper_id,
             status=status,
@@ -134,18 +168,16 @@ class PaperService:
             stage=stage,
             message=message,
             updated_at=now,
-            preview_available=preview_available,
+            preview_available=preview_available or bool(existing and existing.preview_available),
             error_code=error_code,
             failed_during=_to_failed_during(failed_during),
-            head_refine_warnings=self.get_head_refine_warnings(paper_id),
-            extract_warnings=self.get_extract_warnings(paper_id),
-            classify_warnings=self.get_classify_warnings(paper_id),
+            head_refine_warnings=(
+                existing.head_refine_warnings if existing is not None else []
+            ),
+            classify_warnings=existing.classify_warnings if existing is not None else [],
+            extract_warnings=existing.extract_warnings if existing is not None else [],
         )
-        self._status[paper_id] = snapshot
-        paper = self._papers[paper_id]
-        self._papers[paper_id] = paper.model_copy(
-            update={"status": status, "updated_at": now, "preview_available": preview_available},
-        )
+        run_async(self._pipeline_repo.save_status(paper_id, snapshot))
         return snapshot
 
     def update_pipeline_status(
@@ -158,9 +190,6 @@ class PaperService:
         message: str,
     ) -> PaperStatusData:
         """Legacy alias — validates contract then writes snapshot."""
-        from backend.services.pipeline_status_service import validate_status_contract
-
-        validate_status_contract(status=status, stage=stage, percent=percent)
         return self.set_status_snapshot(
             paper_id,
             status=status,
@@ -202,7 +231,6 @@ class PaperService:
     ) -> None:
         from backend.services.pipeline_status_service import get_pipeline_status_service
 
-        _ = error_code
         get_pipeline_status_service().mark_failed(
             paper_id,
             message=message,
@@ -224,10 +252,9 @@ class PaperService:
             self._refined_classifier_input[paper_id] = classifier_input.strip()
         if warnings:
             self.record_head_refine_warnings(paper_id, warnings)
-        if merged.title.strip() and paper_id in self._papers:
-            paper = self._papers[paper_id]
-            if paper.status == PaperStatus.PENDING:
-                paper.title = merged.title.strip()
+        paper = run_async(self._paper_repo.get(paper_id))
+        if merged.title.strip() and paper is not None and paper.status == PaperStatus.PENDING:
+            run_async(self._paper_repo.update_title(paper_id, merged.title.strip()))
         self._persist_head_refine(
             paper_id,
             merged=merged,
@@ -251,6 +278,8 @@ class PaperService:
             classifier_input=classifier_input,
             warnings=warnings,
         )
+        head_path = str(HeadStore()._path(paper_id))
+        run_async(self._paper_repo.update_paths(paper_id, head_path=head_path))
 
     def _hydrate_head_refine_from_disk(self, paper_id: str) -> None:
         if paper_id in self._refined_head:
@@ -263,39 +292,15 @@ class PaperService:
         self._refined_head[paper_id] = record.merged
         if record.classifier_input.strip():
             self._refined_classifier_input[paper_id] = record.classifier_input.strip()
-        if record.warnings and paper_id not in self._head_refine_warnings:
-            self._head_refine_warnings[paper_id] = list(record.warnings)
-            self._sync_head_refine_warnings_to_status(paper_id)
+        if record.warnings:
+            self.record_head_refine_warnings(paper_id, list(record.warnings))
 
     def record_head_refine_warnings(self, paper_id: str, warnings: list[str]) -> None:
-        """Merge head-refine warning codes and reflect them on the status snapshot."""
         if not warnings:
             return
-        existing = self._head_refine_warnings.get(paper_id, [])
-        merged: list[str] = list(existing)
-        for code in warnings:
-            if code not in merged:
-                merged.append(code)
-        self._head_refine_warnings[paper_id] = merged
-        self._sync_head_refine_warnings_to_status(paper_id)
-
-    def _sync_head_refine_warnings_to_status(self, paper_id: str) -> None:
-        if paper_id not in self._status:
-            return
-        snapshot = self._status[paper_id]
-        warnings = self.get_head_refine_warnings(paper_id)
-        if snapshot.head_refine_warnings != warnings:
-            self._status[paper_id] = snapshot.model_copy(update={"head_refine_warnings": warnings})
-
-    def _enrich_status_with_head_refine_warnings(
-        self,
-        snapshot: PaperStatusData,
-        paper_id: str,
-    ) -> PaperStatusData:
-        warnings = self.get_head_refine_warnings(paper_id)
-        if snapshot.head_refine_warnings == warnings:
-            return snapshot
-        return snapshot.model_copy(update={"head_refine_warnings": warnings})
+        run_async(
+            self._pipeline_repo.record_warnings(paper_id, head_refine=warnings),
+        )
 
     def get_refined_classifier_input(self, paper_id: str) -> str | None:
         self._hydrate_head_refine_from_disk(paper_id)
@@ -306,122 +311,64 @@ class PaperService:
         return self._refined_head.get(paper_id)
 
     def get_head_refine_warnings(self, paper_id: str) -> list[str]:
-        return list(self._head_refine_warnings.get(paper_id, ()))
+        snapshot = run_async(self._pipeline_repo.get_latest(paper_id))
+        if snapshot is None:
+            return []
+        return list(snapshot.head_refine_warnings)
 
     def record_extract_warnings(self, paper_id: str, warnings: list[str]) -> None:
-        """Merge extract degrade codes and reflect them on the status snapshot."""
         if not warnings:
             return
-        existing = self._extract_warnings.get(paper_id, [])
-        merged: list[str] = list(existing)
-        for code in warnings:
-            if code not in merged:
-                merged.append(code)
-        self._extract_warnings[paper_id] = merged
-        self._sync_extract_warnings_to_status(paper_id)
+        run_async(self._pipeline_repo.record_warnings(paper_id, extract=warnings))
 
     def record_classify_warnings(self, paper_id: str, warnings: list[str]) -> None:
-        """Merge classifier degrade codes and reflect them on the status snapshot."""
         if not warnings:
             return
-        existing = self._classify_warnings.get(paper_id, [])
-        merged: list[str] = list(existing)
-        for code in warnings:
-            if code not in merged:
-                merged.append(code)
-        self._classify_warnings[paper_id] = merged
-        self._sync_classify_warnings_to_status(paper_id)
-
-    def _sync_classify_warnings_to_status(self, paper_id: str) -> None:
-        if paper_id not in self._status:
-            return
-        snapshot = self._status[paper_id]
-        warnings = self.get_classify_warnings(paper_id)
-        if snapshot.classify_warnings != warnings:
-            self._status[paper_id] = snapshot.model_copy(update={"classify_warnings": warnings})
+        run_async(self._pipeline_repo.record_warnings(paper_id, classify=warnings))
 
     def get_classify_warnings(self, paper_id: str) -> list[str]:
-        return list(self._classify_warnings.get(paper_id, ()))
-
-    def _sync_extract_warnings_to_status(self, paper_id: str) -> None:
-        if paper_id not in self._status:
-            return
-        snapshot = self._status[paper_id]
-        warnings = self.get_extract_warnings(paper_id)
-        if snapshot.extract_warnings != warnings:
-            self._status[paper_id] = snapshot.model_copy(update={"extract_warnings": warnings})
-
-    def _enrich_status_with_extract_warnings(
-        self,
-        snapshot: PaperStatusData,
-        paper_id: str,
-    ) -> PaperStatusData:
-        warnings = self.get_extract_warnings(paper_id)
-        if snapshot.extract_warnings == warnings:
-            return snapshot
-        return snapshot.model_copy(update={"extract_warnings": warnings})
-
-    def _enrich_status_with_classify_warnings(
-        self,
-        snapshot: PaperStatusData,
-        paper_id: str,
-    ) -> PaperStatusData:
-        warnings = self.get_classify_warnings(paper_id)
-        if snapshot.classify_warnings == warnings:
-            return snapshot
-        return snapshot.model_copy(update={"classify_warnings": warnings})
+        snapshot = run_async(self._pipeline_repo.get_latest(paper_id))
+        if snapshot is None:
+            return []
+        return list(snapshot.classify_warnings)
 
     def get_extract_warnings(self, paper_id: str) -> list[str]:
-        return list(self._extract_warnings.get(paper_id, ()))
+        snapshot = run_async(self._pipeline_repo.get_latest(paper_id))
+        if snapshot is None:
+            return []
+        return list(snapshot.extract_warnings)
 
     def save_preview_graph(self, paper_id: str, graph: UnifiedPaperGraph) -> None:
-        """Persist the latest preview graph in memory."""
         self.ensure_paper_exists(paper_id)
         self._preview_graphs[paper_id] = graph
 
     def mark_preview_available(self, paper_id: str) -> None:
-        """Surface preview availability on detail and status snapshots."""
         self.ensure_paper_exists(paper_id)
-        self._preview_available[paper_id] = True
-        if paper_id in self._papers:
-            paper = self._papers[paper_id]
-            if not paper.preview_available:
-                self._papers[paper_id] = paper.model_copy(update={"preview_available": True})
-        if paper_id in self._status:
-            snapshot = self._status[paper_id]
-            if not snapshot.preview_available:
-                self._status[paper_id] = snapshot.model_copy(update={"preview_available": True})
+        run_async(self._paper_repo.mark_preview_available(paper_id))
 
     def is_preview_available(self, paper_id: str) -> bool:
-        return bool(self._preview_available.get(paper_id, False))
+        paper = run_async(self._paper_repo.get(paper_id))
+        if paper is not None and paper.preview_available:
+            return True
+        return paper_id in self._preview_graphs
 
     def get_preview_graph(self, paper_id: str) -> UnifiedPaperGraph | None:
         return self._preview_graphs.get(paper_id)
 
-    def _enrich_status_snapshot(self, snapshot: PaperStatusData, paper_id: str) -> PaperStatusData:
-        return self._enrich_status_with_extract_warnings(
-            self._enrich_status_with_classify_warnings(
-                self._enrich_status_with_head_refine_warnings(snapshot, paper_id),
-                paper_id,
-            ),
-            paper_id,
-        )
-
     async def get_status(self, paper_id: str) -> PaperStatusData:
+        await self.bootstrap()
         paper = await self.get_paper(paper_id)
-        if paper_id in self._status:
-            return self._enrich_status_snapshot(self._status[paper_id], paper_id)
+        snapshot = await self._pipeline_repo.get_latest(paper_id)
+        if snapshot is not None:
+            return snapshot
         if paper.status == PaperStatus.PENDING:
-            return self._enrich_status_snapshot(
-                PaperStatusData(
-                    paper_id=paper_id,
-                    status=PaperStatus.PENDING,
-                    percent=0,
-                    stage=None,
-                    message="任务已创建，请轮询 status 接口",
-                    updated_at=paper.updated_at or paper.created_at,
-                ),
-                paper_id,
+            return PaperStatusData(
+                paper_id=paper_id,
+                status=PaperStatus.PENDING,
+                percent=0,
+                stage=None,
+                message="任务已创建，请轮询 status 接口",
+                updated_at=paper.updated_at or paper.created_at,
             )
         raise ApiError(
             "PIPELINE_STATUS_UNAVAILABLE",
@@ -451,6 +398,7 @@ class PaperService:
         )
 
     async def create_from_upload(self, *, filename: str, content: bytes) -> PaperCreateResult:
+        await self.bootstrap()
         if not filename.lower().endswith(".pdf"):
             raise ApiError("INGEST_FAILED", "仅支持 PDF 文件", status_code=400)
         if len(content) > MAX_UPLOAD_BYTES:
@@ -465,22 +413,22 @@ class PaperService:
         dest.write_bytes(content)
 
         now = datetime.now(UTC)
-        detail = PaperDetail(
-            paper_id=paper_id,
-            title=filename.removesuffix(".pdf"),
+        await self._paper_repo.create(
+            paper_id,
+            filename.removesuffix(".pdf"),
+            str(dest),
             status=PaperStatus.PENDING,
-            created_at=now,
-            updated_at=now,
         )
-        self._papers[paper_id] = detail
-        self._pdf_paths[paper_id] = dest
-        self._status[paper_id] = PaperStatusData(
-            paper_id=paper_id,
-            status=PaperStatus.PENDING,
-            percent=0,
-            stage=None,
-            message=UPLOAD_QUEUED_MESSAGE,
-            updated_at=now,
+        await self._pipeline_repo.save_status(
+            paper_id,
+            PaperStatusData(
+                paper_id=paper_id,
+                status=PaperStatus.PENDING,
+                percent=0,
+                stage=None,
+                message=UPLOAD_QUEUED_MESSAGE,
+                updated_at=now,
+            ),
         )
         schedule_paper_pipeline(paper_id, dest)
         return PaperCreateResult(
