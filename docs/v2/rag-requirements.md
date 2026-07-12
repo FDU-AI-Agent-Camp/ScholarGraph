@@ -669,9 +669,41 @@ Judge 输出 JSON：
 ### 6.5 金标维护
 
 新增 `scripts/validate_golden_qa.py`：
-- 遍历金标中的 `node_id` / `edge_id`
-- 校验是否仍存在于 `data/graphs/` 样本中
-- 发现过期引用时抛出 Error，提示重刷
+- 遍历金标中的 `node_id` / `edge_id` / chunk ID
+- 校验是否仍存在于 `data/graphs/` 样本、chunk manifest 与 mock 向量索引中
+- 发现过期引用时 **exit 1**
+
+**图谱 bootstrap（B8）** — 默认 **strict=True** + 内置样本静默 auto-seed：
+
+```text
+validate (strict) → paper 图谱存在? → 强校验 gold IDs
+                  → 缺失且 hss-001/stem-001 → 静默 seed → 重试
+                  → 缺失且未知 paper → exit 2
+                  → --no-strict / --allow-skip（仅本地，CI 强制 strict）
+```
+
+| 标志 | 默认 | 说明 |
+|------|------|------|
+| `--strict` / `--no-strict` | strict | 未知 paper 图谱缺失是否阻断 (exit 2) |
+| `--allow-skip` | off | `--no-strict` 别名；**CI 中无效** |
+| `--no-auto-seed` | off | 禁用 hss-001/stem-001 静默自举 |
+| `--verbose` | off | 打印 auto-seed 日志 |
+
+```bash
+# CI / 门禁（默认 strict + auto-seed）
+uv run python scripts/validate_golden_qa.py --graph-dir ./data/graphs
+
+# 本地：允许跳过尚未 ingest 的 paper
+uv run python scripts/validate_golden_qa.py --no-strict
+```
+
+**Exit codes（CI 分层捕获）**：
+
+| Code | 场景 | 含义 |
+|------|------|------|
+| 0 | 全部通过，或 `--no-strict` 下无损 SKIP | Success |
+| 1 | 图谱已加载，金标 node/edge/chunk ID 缺失/过期 | Data Drift（金标过期） |
+| 2 | 图谱/金标文件缺失且无法 auto-seed | Infrastructure（环境不健壮） |
 
 ---
 
