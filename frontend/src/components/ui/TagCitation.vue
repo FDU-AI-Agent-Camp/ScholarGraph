@@ -108,7 +108,7 @@ function onClick(): void {
 }
 
 .tag-citation__preview--placeholder {
-  color: var(--color-warning, #b8860b);
+  color: var(--color-citation-preview-placeholder);
   font-style: italic;
 }
 </style>
