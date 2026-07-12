@@ -27,17 +27,6 @@ def test_red_postgresql_asyncpg_url_switch_not_validated_in_ci() -> None:
     )
 
 
-@pytest.mark.red
-@pytest.mark.asyncio
-async def test_red_concurrent_warnings_use_row_level_lock(persistence_env) -> None:
-    """P1.5: concurrent warning writes should eventually use SELECT FOR UPDATE."""
-    from inspect import getsource
-
-    from backend.repositories import pipeline_repository
-
-    source = getsource(pipeline_repository.PipelineRepository.record_warnings)
-    assert "with_for_update" in source
-
 
 @pytest.mark.red
 @pytest.mark.asyncio

@@ -93,3 +93,14 @@ async def test_ready_snapshot_uses_percent_100_boundary(persistence_env) -> None
     assert latest is not None
     assert latest.percent == 100
     assert latest.stage == PipelineStage.READY
+
+
+@pytest.mark.asyncio
+async def test_record_warnings_uses_row_level_lock(persistence_env) -> None:
+    """P1.5: warning append path acquires SELECT FOR UPDATE."""
+    from inspect import getsource
+
+    from backend.repositories import pipeline_repository
+
+    source = getsource(pipeline_repository.PipelineRepository.record_warnings)
+    assert "with_for_update" in source
