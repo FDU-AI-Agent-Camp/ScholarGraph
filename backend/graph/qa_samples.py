@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -12,6 +13,7 @@ from backend.schemas.graph import UnifiedPaperGraph
 
 M2_DEMO_PAPER_ID = "hss-001"
 STEM_DEMO_PAPER_ID = "stem-001"
+BUILTIN_QA_PAPER_IDS: frozenset[str] = frozenset({M2_DEMO_PAPER_ID, STEM_DEMO_PAPER_ID})
 FIXTURES_DIR = Path(__file__).resolve().parents[2] / "docs" / "api" / "fixtures"
 
 
@@ -68,4 +70,21 @@ def seed_stem_qa_graph(store_dir: Path, *, paper_id: str = STEM_DEMO_PAPER_ID) -
     store = GraphStore(base_dir=store_dir)
     graph = load_stem_demo_graph().model_copy(update={"paper_id": paper_id})
     store.save(graph)
+    return store
+
+
+BUILTIN_QA_GRAPH_SEEDERS: dict[str, Callable[[Path], GraphStore]] = {
+    M2_DEMO_PAPER_ID: seed_m2_qa_graph,
+    STEM_DEMO_PAPER_ID: seed_stem_qa_graph,
+}
+
+
+def seed_builtin_qa_graph(store_dir: Path, paper_id: str, *, quiet: bool = True) -> GraphStore | None:
+    """Seed a built-in demo graph (aligned with ``benchmark_qa.py`` bootstrap)."""
+    seeder = BUILTIN_QA_GRAPH_SEEDERS.get(paper_id)
+    if seeder is None:
+        return None
+    store = seeder(store_dir)
+    if not quiet:
+        print(f"[INFO] auto-seeded builtin demo graph {paper_id}")
     return store
