@@ -9,7 +9,7 @@ from collections.abc import Awaitable, Callable
 from functools import lru_cache
 from typing import Any
 
-from backend.events.types import EventType, PipelineFinalized
+from backend.events.types import EventType
 from backend.repositories.async_bridge import run_async
 
 logger = logging.getLogger(__name__)
@@ -35,7 +35,20 @@ class EventBus:
 
     def publish_sync(self, event: Any) -> None:
         """Publish from synchronous callers (e.g. pipeline finalize)."""
-        run_async(self.publish(event))
+
+        async def _publish_and_drain() -> None:
+            await self.publish(event)
+            await self.drain()
+            self._stop_worker()
+
+        run_async(_publish_and_drain())
+
+    def _stop_worker(self) -> None:
+        """Tear down the background worker after a sync publish cycle."""
+        if self._worker_task is not None and not self._worker_task.done():
+            self._worker_task.cancel()
+        self._worker_task = None
+        self._queue = None
 
     async def _ensure_queue(self) -> None:
         if self._queue is None:
@@ -72,10 +85,7 @@ class EventBus:
     def reset(self) -> None:
         """Clear handlers and worker state (tests only)."""
         self._handlers.clear()
-        if self._worker_task is not None:
-            self._worker_task.cancel()
-        self._worker_task = None
-        self._queue = None
+        self._stop_worker()
 
 
 def on_event(event_type: EventType) -> Callable[[EventHandler], EventHandler]:
@@ -94,4 +104,6 @@ def get_event_bus() -> EventBus:
 
 
 def reset_event_bus_cache() -> None:
+    if get_event_bus.cache_info().currsize:
+        get_event_bus().reset()
     get_event_bus.cache_clear()
