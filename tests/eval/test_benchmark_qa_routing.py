@@ -78,3 +78,26 @@ def test_detail_recall_gate_fails_when_recall_drops(benchmark_qa_module: Any) ->
     gate = mod._compute_detail_recall_gate(results, items)
     assert gate["recall_gate_pass"] is False
     assert gate["numeric_gate_pass"] is False
+
+
+def test_detail_recall_gate_enforces_chunk_recall_floor(benchmark_qa_module: Any) -> None:
+    mod = benchmark_qa_module
+    items = [
+        {
+            "question": "stem chunk detail",
+            "scale": "detail",
+            "paradigm": "STEM",
+            "gold": {"paragraphs": ["stem-001:chunk:42", "stem-001:chunk:43"], "nodes": [], "edges": []},
+        }
+    ]
+    results = [
+        {
+            "graph_element_recall": 1.0,
+            "numeric_match": True,
+            "chunk_recall": 0.5,
+        }
+    ]
+    gate = mod._compute_detail_recall_gate(results, items, allowed_recall_floor=0.80)
+    assert gate["chunk_recall_min"] == 0.5
+    assert gate["chunk_recall_gate_pass"] is False
+    assert gate["recall_gate_pass"] is False

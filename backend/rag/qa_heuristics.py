@@ -13,8 +13,10 @@ _PATTERN_NUMBER_RE = re.compile(r"^-?\d+(?:\.\d+)?%?$")
 # Percent tokens in free text, e.g. "15%", "0.89 %"
 _EXTRACT_PERCENT_RE = re.compile(r"(?<![\w.])(-?\d+(?:\.\d+)?)\s*%")
 
-# Plain numeric tokens (decimals/integers without trailing %)
-_EXTRACT_PLAIN_NUMBER_RE = re.compile(r"(?<![\w.])(-?\d+\.\d+)(?![\w.])|(?<![\w.])(-?\d+)(?![\w.%])")
+# Plain numeric tokens (decimals/integers without trailing %).
+# Decimals allow sentence punctuation after the token (e.g. ``0.001.``); integers still
+# reject a trailing dot so ``0.001`` is not split from its fractional part.
+_EXTRACT_PLAIN_NUMBER_RE = re.compile(r"(?<![\w.])(-?\d+\.\d+)(?![%\w])|(?<![\w.])(-?\d+)(?![\w.%])")
 
 # Dataset / benchmark identifiers (STEM): ImageNet, CIFAR-10, MNIST, GLUE, etc.
 _DATASET_TOKEN_RE = re.compile(r"\b[A-Z][A-Za-z0-9]*(?:[-_][A-Za-z0-9]+)*\b")
@@ -57,6 +59,7 @@ class HeuristicGuardrailResult:
     numeric_match: bool
     dataset_match: bool
     graph_element_recall: float
+    chunk_recall: float | None = None
     extracted_numbers: list[float] = field(default_factory=list)
     expected_numbers: list[float] = field(default_factory=list)
     missing_numbers: list[float] = field(default_factory=list)
@@ -70,7 +73,7 @@ class HeuristicGuardrailResult:
     passed: bool = True
 
     def to_dict(self) -> dict[str, Any]:
-        return {
+        payload: dict[str, Any] = {
             "passed": self.passed,
             "passed_required_patterns": self.passed_required_patterns,
             "has_forbidden_patterns": self.has_forbidden_patterns,
@@ -89,6 +92,9 @@ class HeuristicGuardrailResult:
             "expected_datasets": self.expected_datasets,
             "missing_datasets": self.missing_datasets,
         }
+        if self.chunk_recall is not None:
+            payload["chunk_recall"] = round(self.chunk_recall, 4)
+        return payload
 
 
 def is_heuristic_hard_fuse_tripped(guardrails: HeuristicGuardrailResult) -> bool:
@@ -265,6 +271,37 @@ def compute_graph_element_recall(
     return (node_recall + edge_recall) / max(len(expected_nodes) + len(expected_edges), 1) * 2
 
 
+def resolve_gold_chunk_ids(gold: dict[str, Any]) -> set[str]:
+    """Union chunk/paragraph IDs from ``gold.paragraphs`` and ``gold.chunk_ids``."""
+    chunk_ids: set[str] = set()
+    for key in ("paragraphs", "chunk_ids"):
+        for raw in gold.get(key, []):
+            value = str(raw).strip()
+            if value:
+                chunk_ids.add(value)
+    return chunk_ids
+
+
+def compute_chunk_recall(
+    citations: list[dict[str, Any]],
+    gold: dict[str, Any],
+) -> float | None:
+    """Recall of cited chunk IDs against golden paragraph/chunk expectations.
+
+    Returns ``None`` when the gold set has no chunk/paragraph IDs (not applicable).
+    """
+    expected = resolve_gold_chunk_ids(gold)
+    if not expected:
+        return None
+
+    cited = {
+        str(citation.get("chunk_id", "")).strip()
+        for citation in citations
+        if citation.get("type") == "chunk" and str(citation.get("chunk_id", "")).strip()
+    }
+    return len(cited & expected) / len(expected)
+
+
 def derive_golden_reference_text(gold: dict[str, Any]) -> str:
     """Build a minimal golden answer footprint for verbosity comparison.
 
@@ -348,6 +385,7 @@ def run_heuristic_guardrails(
     dataset_ok, missing_datasets = _datasets_satisfied(expected_datasets, answer_text, extracted_datasets)
 
     graph_recall = compute_graph_element_recall(citations, gold)
+    chunk_recall = compute_chunk_recall(citations, gold)
 
     golden_reference = derive_golden_reference_text(gold)
     answer_char_length = len(answer_text.strip())
@@ -371,6 +409,7 @@ def run_heuristic_guardrails(
         numeric_match=numeric_ok,
         dataset_match=dataset_ok,
         graph_element_recall=graph_recall,
+        chunk_recall=chunk_recall,
         extracted_numbers=extracted_numbers,
         expected_numbers=[spec.value for spec in numeric_specs],
         missing_numbers=missing_numbers,

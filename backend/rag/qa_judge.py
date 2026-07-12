@@ -96,6 +96,15 @@ def format_judge_user_content(
     return f"请评估以下 QA 回答。\n\n```json\n{json.dumps(payload, ensure_ascii=False, indent=2)}\n```"
 
 
+def _evaluation_completeness(guardrails: HeuristicGuardrailResult) -> dict[str, Any]:
+    completeness: dict[str, Any] = {
+        "graph_element_recall": round(guardrails.graph_element_recall, 4),
+    }
+    if guardrails.chunk_recall is not None:
+        completeness["chunk_recall"] = round(guardrails.chunk_recall, 4)
+    return completeness
+
+
 def build_dual_track_evaluation(
     guardrails: HeuristicGuardrailResult,
     judge: TrackBJudgeSchema,
@@ -113,9 +122,7 @@ def build_dual_track_evaluation(
             "entailment_rate": round(judge.factual_consistency, 4),
             "semantic_alignment": round(judge.factual_consistency, 4),
         },
-        "completeness": {
-            "graph_element_recall": round(guardrails.graph_element_recall, 4),
-        },
+        "completeness": _evaluation_completeness(guardrails),
         "directness": {
             "verbosity_rate": round(guardrails.verbosity_rate, 4),
             "paradigm_aligned": guardrails.paradigm_aligned,
@@ -150,9 +157,7 @@ def build_evaluation_fallback(
             "entailment_rate": 0.0,
             "semantic_alignment": 0.0,
         },
-        "completeness": {
-            "graph_element_recall": round(guardrails.graph_element_recall, 4),
-        },
+        "completeness": _evaluation_completeness(guardrails),
         "directness": {
             "verbosity_rate": round(guardrails.verbosity_rate, 4),
             "paradigm_aligned": guardrails.paradigm_aligned,

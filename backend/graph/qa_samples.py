@@ -11,6 +11,7 @@ from backend.rag.models import QuestionScale
 from backend.schemas.graph import UnifiedPaperGraph
 
 M2_DEMO_PAPER_ID = "hss-001"
+STEM_DEMO_PAPER_ID = "stem-001"
 FIXTURES_DIR = Path(__file__).resolve().parents[2] / "docs" / "api" / "fixtures"
 
 
@@ -48,9 +49,23 @@ def load_m2_demo_graph() -> UnifiedPaperGraph:
     return UnifiedPaperGraph.model_validate(payload["data"])
 
 
+def load_stem_demo_graph() -> UnifiedPaperGraph:
+    """Load the canonical stem-001 graph used for STEM QA golden-set eval."""
+    payload = json.loads((FIXTURES_DIR / "graph-stem-001.json").read_text(encoding="utf-8"))
+    return UnifiedPaperGraph.model_validate(payload["data"])
+
+
 def seed_m2_qa_graph(store_dir: Path, *, paper_id: str = M2_DEMO_PAPER_ID) -> GraphStore:
     """Write the M2 demo graph to *store_dir* for CLI smoke tests."""
     store = GraphStore(base_dir=store_dir)
     graph = load_m2_demo_graph().model_copy(update={"paper_id": paper_id})
+    store.save(graph)
+    return store
+
+
+def seed_stem_qa_graph(store_dir: Path, *, paper_id: str = STEM_DEMO_PAPER_ID) -> GraphStore:
+    """Write the STEM demo graph to *store_dir* for benchmark / eval regression."""
+    store = GraphStore(base_dir=store_dir)
+    graph = load_stem_demo_graph().model_copy(update={"paper_id": paper_id})
     store.save(graph)
     return store

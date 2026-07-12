@@ -4,11 +4,13 @@ from __future__ import annotations
 
 import pytest
 from backend.rag.qa_heuristics import (
+    compute_chunk_recall,
     compute_verbosity_rate,
     derive_golden_reference_text,
     extract_datasets_from_text,
     extract_numbers_from_text,
     numeric_values_match,
+    resolve_gold_chunk_ids,
     run_heuristic_guardrails,
 )
 
@@ -75,6 +77,7 @@ def test_missing_numeric_fails_guardrail() -> None:
 def test_extract_numbers_and_datasets_helpers() -> None:
     assert 0.89 in extract_numbers_from_text("F1=0.89 on CIFAR-10")
     assert 0.15 in extract_numbers_from_text("accuracy 15% on test set")
+    assert 0.001 in extract_numbers_from_text("learning rate 0.001.")
     assert "CIFAR-10" in extract_datasets_from_text("Evaluated on CIFAR-10 and MNIST")
 
 
@@ -147,3 +150,39 @@ def test_hss_paradigm_aligned_requires_required_patterns() -> None:
         paradigm="HSS",
     )
     assert result.paradigm_aligned is False
+
+
+def test_compute_chunk_recall_intersects_cited_chunks() -> None:
+    gold = {"paragraphs": ["stem-001:chunk:42", "stem-001:chunk:43"]}
+    citations = [
+        {"type": "chunk", "chunk_id": "stem-001:chunk:42"},
+        {"type": "node", "node_id": "n_method"},
+    ]
+    assert compute_chunk_recall(citations, gold) == 0.5
+    assert resolve_gold_chunk_ids({**gold, "chunk_ids": ["stem-001:chunk:44"]}) == {
+        "stem-001:chunk:42",
+        "stem-001:chunk:43",
+        "stem-001:chunk:44",
+    }
+
+
+def test_compute_chunk_recall_returns_none_without_gold_chunks() -> None:
+    assert compute_chunk_recall([], {"nodes": ["n1"], "edges": []}) is None
+
+
+def test_run_heuristic_guardrails_populates_chunk_recall_for_stem_gold() -> None:
+    result = run_heuristic_guardrails(
+        "ResNet-Light achieves 78.5% top-1 accuracy on ImageNet with lr=0.001.",
+        [{"type": "chunk", "chunk_id": "stem-001:chunk:42"}],
+        {
+            "nodes": ["n_method", "n_dataset"],
+            "edges": ["e_eval"],
+            "paragraphs": ["stem-001:chunk:42", "stem-001:chunk:43"],
+            "required_patterns": ["78.5%", "ImageNet", "0.001"],
+            "forbidden_patterns": [],
+        },
+        paradigm="STEM",
+    )
+    assert result.numeric_match is True
+    assert result.chunk_recall == 0.5
+    assert "chunk_recall" in result.to_dict()
