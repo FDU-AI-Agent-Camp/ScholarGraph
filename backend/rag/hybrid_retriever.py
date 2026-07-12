@@ -19,7 +19,6 @@ from backend.rag.models import (
 from backend.rag.protocols import VectorStoreProtocol
 
 if TYPE_CHECKING:
-    from backend.rag.vector_store import VectorStore
     from backend.schemas.graph import UnifiedPaperGraph
 
 logger = logging.getLogger(__name__)
@@ -183,7 +182,7 @@ class HybridRetriever:
             ) from exc
 
 
-def create_hybrid_retriever(vector_store: VectorStore | None = None) -> HybridRetriever:
+def create_hybrid_retriever(vector_store: VectorStoreProtocol | None = None) -> HybridRetriever:
     """Construct a HybridRetriever; default wiring uses the shared VectorStore."""
     if vector_store is None:
         from backend.rag.vector_store import VectorStore
