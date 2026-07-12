@@ -80,7 +80,7 @@ def test_detect_question_scale_keyword_routing(
 
 
 def test_detect_question_scale_matches_golden_labels(golden_items: list[dict]) -> None:
-    """Heuristic router should agree with human ``scale`` on the golden set."""
+    """存量零退化：15 题金标 ``scale`` 必须与启发式路由 100% 对齐。"""
     mismatches: list[str] = []
     for idx, item in enumerate(golden_items):
         paradigm = Paradigm(item["paradigm"])
@@ -93,6 +93,7 @@ def test_detect_question_scale_matches_golden_labels(golden_items: list[dict]) -
         if detected != expected:
             mismatches.append(f"item {idx}: gold={expected.value} detected={detected.value} q={item['question']!r}")
     assert not mismatches, "Golden scale mismatches:\n" + "\n".join(mismatches)
+    assert len(golden_items) == 15, "golden set size drift — update zero-regression baseline explicitly"
 
 
 # ---------------------------------------------------------------------------
@@ -288,3 +289,71 @@ def test_default_scale_routing_rules_exposes_tunable_negative_relation_exclusion
     assert DEFAULT_SCALE_ROUTING_RULES.detail_relation_exclusions
     assert "关系" not in DEFAULT_SCALE_ROUTING_RULES.detail_keywords
     assert "逻辑关系" not in DEFAULT_SCALE_ROUTING_RULES.detail_keywords
+
+
+# ---------------------------------------------------------------------------
+# 影子对抗矩阵（Adversarial Shadow Matrix）— 文本相似、尺度对立
+# ---------------------------------------------------------------------------
+
+
+def test_adversarial_shadow_a_micro_entity_relation_routes_detail() -> None:
+    """场景 A：具体技术实体 + 「关系」→ DETAIL（微观向量召回）。"""
+    question = "论文中的 ConvNeXt-V2 实体与特征提取网络是什么关系？"
+    assert (
+        detect_question_scale(
+            question,
+            paradigm=Paradigm.STEM,
+            current_paper_context=_STEM_CTX,
+        )
+        == QuestionScale.DETAIL
+    )
+
+
+def test_adversarial_shadow_b_macro_methodology_relation_not_detail() -> None:
+    """场景 B：跨篇方法论 + 「关系」→ 不得 DETAIL；``两篇论文`` 优先 CROSS_PAPER。"""
+    question = "请问这两篇论文在解决时延问题的方法论上，存在什么关系？"
+    detected = detect_question_scale(
+        question,
+        paradigm=Paradigm.STEM,
+        current_paper_context=_STEM_CTX,
+    )
+    assert detected != QuestionScale.DETAIL
+    assert detected == QuestionScale.CROSS_PAPER
+
+
+@pytest.mark.parametrize(
+    ("question", "expected", "routing_note"),
+    [
+        pytest.param(
+            "从整篇论文的宏观视角来看，文中提到的 A 驱动与 B 接口之间是什么关系？",
+            QuestionScale.SUMMARY,
+            "macro-prefix-wins-over-micro-relation-suffix",
+            id="boundary-compound-macro-prefix",
+        ),
+        pytest.param(
+            "两者是什么关系？",
+            QuestionScale.DETAIL,
+            "minimal-context-falls-back-to-detail-vector-recall",
+            id="boundary-minimal-relation-fallback",
+        ),
+    ],
+)
+def test_adversarial_boundary_multimorpheme_routing(
+    question: str,
+    expected: QuestionScale,
+    routing_note: str,
+) -> None:
+    """多语素叠加边界：固化短路求值顺序与无语境兜底，防止 Week 6 集成理解漂移。
+
+    - 复合句：``整篇`` 宏观抢占先于尾部实体级「关系」正则 → SUMMARY。
+    - 极简句：无上下文时 ``是什么关系`` 兜底 → DETAIL（三类向量稳妥召回）。
+    """
+    _ = routing_note
+    assert (
+        detect_question_scale(
+            question,
+            paradigm=Paradigm.STEM,
+            current_paper_context=_STEM_CTX,
+        )
+        == expected
+    )
