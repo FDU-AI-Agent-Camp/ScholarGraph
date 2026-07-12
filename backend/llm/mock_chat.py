@@ -20,10 +20,11 @@ _MOCK_CHUNK_SIZE = 8
 _NODE_LINE_RE = re.compile(r"- \[(?P<id>\S+)\] (?P<label>.+?) \(类型: (?P<type>\w+)\)")
 _CHUNK_LINE_RE = re.compile(r"- \[(?P<chunk_id>[^\]]+)\](?: \[[^\]]+\])? (?P<text>.+)")
 _LEGACY_CHUNK_ID_RE = re.compile(r"^(?P<paper>[\w-]+)_chunk_(?P<index>\d+)$")
-_BRACKETED_CHUNK_ID_RE = re.compile(
-    r"\[(?P<id>(?:[\w-]+:chunk:\d+|[\w-]+_chunk_\d+))\]"
-)
+_BRACKETED_CHUNK_ID_RE = re.compile(r"\[(?P<id>(?:[\w-]+:chunk:\d+|[\w-]+_chunk_\d+))\]")
 _CITE_CHUNK_IN_PROMPT_RE = re.compile(r"\[CITE:chunk:(?P<id>[^\]]+)\]")
+_VECTOR_BLOCK_ID_RE = re.compile(
+    r"【向量块\s*\d+】\s*ID:\s*(?P<chunk_id>[\w-]+(?:_chunk_\d+|[\w-]+:chunk:\d+))",
+)
 _EDGE_TYPE_RE = re.compile(r"--\[(?P<type>[^\]]+)\]-->")
 _STEM_EVIDENCE_TOKEN_RE = re.compile(
     r"78\.5%|0\.001|\b256\b|\bAdam\b|ResNet-50|ImageNet|ResNet-Light",
@@ -91,10 +92,7 @@ def _mock_qa_response(prompt: str) -> str:
     scale_label = {"summary": "摘要", "detail": "细节", "verification": "验证"}[scale]
     excerpt_clause = _format_chunk_excerpt_clause(prompt, scale, paradigm)
     evidence_clause = _format_evidence_clause(prompt, paradigm)
-    body = (
-        f"【{scale_label}尺度】{evidence_clause}关于「{question}」参见节点[CITE:{cite_target}]"
-        f"{excerpt_clause}。"
-    )
+    body = f"【{scale_label}尺度】{evidence_clause}关于「{question}」参见节点[CITE:{cite_target}]{excerpt_clause}。"
     if _should_inject_chunk_citations(scale, paradigm):
         chunk_ids = _extract_authoritative_chunk_ids(prompt)
         body = _append_chunk_citation_anchors(body, chunk_ids)
@@ -235,6 +233,8 @@ def _extract_authoritative_chunk_ids(prompt: str) -> list[str]:
             _add(match.group("id"))
         for match in _CITE_CHUNK_IN_PROMPT_RE.finditer(target):
             _add(match.group("id"))
+        for match in _VECTOR_BLOCK_ID_RE.finditer(target):
+            _add(match.group("chunk_id"))
 
     return ordered
 

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+
 from backend.llm.mock_chat import (
     MOCK_DISCLAIMER,
     _append_chunk_citation_anchors,
@@ -132,8 +133,7 @@ def test_mock_chunk_citations_drive_chunk_recall_gate() -> None:
     )
     response = _mock_qa_response(prompt)
     citations = [
-        {"type": "chunk", "chunk_id": match.group(1)}
-        for match in re.finditer(r"\[CITE:chunk:([^\]]+)\]", response)
+        {"type": "chunk", "chunk_id": match.group(1)} for match in re.finditer(r"\[CITE:chunk:([^\]]+)\]", response)
     ]
     gold = {"paragraphs": ["stem-001:chunk:42", "stem-001:chunk:43"]}
     recall = compute_chunk_recall(citations, gold)
