@@ -1,5 +1,6 @@
 {
-  "version": 1,
+  "version": 2,
+  "prompt_sha256": "f99d118f1ba78fd015d365d7bfda0b9d0732618881869d476b6cf9a897b0c644",
   "default_micro": {
     "sentence_judgments": [
       {

@@ -7,25 +7,16 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 from backend.rag.models import JudgeMicroOutput, SentenceJudgment, SentenceLabel
-from backend.rag.qa_judge import format_judge_user_content, invoke_qa_judge
+from backend.rag.qa_judge import invoke_qa_judge
 from backend.rag.qa_judge_replay import JudgeSnapshotStore, hash_judge_messages, maybe_record_judge, try_replay_judge
 from langchain_core.messages import HumanMessage, SystemMessage
 
 from tests.fixtures.qa_judge_snapshot import load_qa_judge_micro_snapshot
+from tests.fixtures.qa_judge_snapshot_contract import build_judge_messages_for_contract
 
 
 def _sample_messages() -> list[SystemMessage | HumanMessage]:
-    user_content = format_judge_user_content(
-        question="STEM F1?",
-        paradigm="STEM",
-        answer_text="F1 达到 15%",
-        citations=[],
-        gold={"required_patterns": ["15%"], "forbidden_patterns": [], "nodes": [], "edges": []},
-    )
-    return [
-        SystemMessage(content="judge-system"),
-        HumanMessage(content=user_content),
-    ]
+    return build_judge_messages_for_contract()
 
 
 def test_hash_judge_messages_is_stable() -> None:
@@ -65,13 +56,18 @@ async def test_invoke_qa_judge_replays_without_live_api(monkeypatch: pytest.Monk
 
     with patch("backend.rag.qa_judge.try_replay_judge", return_value=expected):
         with patch("backend.rag.qa_judge.invoke_judge_structured_output", new_callable=AsyncMock) as live_call:
+            contract = build_judge_messages_for_contract()[1].content
+            import json as _json
+
+            payload_start = contract.find("{")
+            payload = _json.loads(contract[payload_start : contract.rfind("}") + 1])
             result = await invoke_qa_judge(
                 get_judge_llm_client(),
-                question="STEM F1?",
-                paradigm="STEM",
-                answer_text="F1 达到 15%",
-                citations=[],
-                gold={"required_patterns": ["15%"], "forbidden_patterns": [], "nodes": [], "edges": []},
+                question=str(payload["question"]),
+                paradigm=str(payload.get("paradigm")),
+                answer_text=str(payload["answer_text"]),
+                citations=list(payload.get("citations", [])),
+                gold=dict(payload.get("gold", {})),
             )
 
     live_call.assert_not_awaited()

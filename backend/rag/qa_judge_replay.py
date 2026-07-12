@@ -23,6 +23,18 @@ _RECORD_ENV = "JUDGE_SNAPSHOT_RECORD"
 _SNAPSHOT_PATH_ENV = "JUDGE_SNAPSHOT_PATH"
 
 
+class JudgeSnapshotContractDriftError(RuntimeError):
+    """Raised when replay fixture prompt_sha256 no longer matches live Judge input."""
+
+    def __init__(self, expected_sha256: str, current_sha256: str) -> None:
+        super().__init__(
+            "Judge snapshot contract drift detected — update fixtures after prompt/gold changes: "
+            f"expected={expected_sha256}, current={current_sha256}",
+        )
+        self.expected_sha256 = expected_sha256
+        self.current_sha256 = current_sha256
+
+
 def _env_truthy(name: str) -> bool:
     return os.environ.get(name, "").strip().lower() in {"1", "true", "yes", "on"}
 
@@ -48,17 +60,22 @@ class JudgeSnapshotStore:
     def load(cls, path: Path | None = None) -> JudgeSnapshotStore:
         resolved = path or _resolve_snapshot_path()
         if not resolved.is_file():
-            return cls(resolved, {"version": 1, "default_micro": None, "entries": {}})
+            return cls(resolved, {"version": 2, "prompt_sha256": None, "default_micro": None, "entries": {}})
         data = json.loads(resolved.read_text(encoding="utf-8"))
         if not isinstance(data, dict):
-            data = {"version": 1, "default_micro": None, "entries": {}}
-        data.setdefault("version", 1)
+            data = {"version": 2, "prompt_sha256": None, "default_micro": None, "entries": {}}
+        data.setdefault("version", 2)
         data.setdefault("entries", {})
         return cls(resolved, data)
 
     @property
     def path(self) -> Path:
         return self._path
+
+    @property
+    def contract_prompt_sha256(self) -> str | None:
+        value = self._payload.get("prompt_sha256")
+        return str(value).strip() if value else None
 
     @staticmethod
     def replay_enabled() -> bool:
@@ -68,17 +85,40 @@ class JudgeSnapshotStore:
     def record_enabled() -> bool:
         return _env_truthy(_RECORD_ENV)
 
+    def assert_contract_hash(self, prompt_hash: str) -> None:
+        expected = self.contract_prompt_sha256
+        if expected and expected != prompt_hash:
+            raise JudgeSnapshotContractDriftError(expected, prompt_hash)
+
+    @staticmethod
+    def _extract_micro(raw: dict[str, Any]) -> JudgeMicroOutput:
+        if "sentence_judgments" in raw:
+            return JudgeMicroOutput.model_validate(raw)
+        micro_raw = raw.get("micro")
+        if isinstance(micro_raw, dict):
+            return JudgeMicroOutput.model_validate(micro_raw)
+        raise ValueError("snapshot entry missing Judge micro payload")
+
     def lookup(self, prompt_hash: str, *, allow_default: bool = True) -> JudgeMicroOutput | None:
         entries = self._payload.get("entries", {})
         if isinstance(entries, dict):
             raw = entries.get(prompt_hash)
             if isinstance(raw, dict):
-                return JudgeMicroOutput.model_validate(raw)
+                entry_hash = str(raw.get("prompt_sha256", prompt_hash)).strip()
+                if entry_hash != prompt_hash:
+                    raise JudgeSnapshotContractDriftError(entry_hash, prompt_hash)
+                return self._extract_micro(raw)
 
-        if allow_default:
-            default_micro = self._payload.get("default_micro")
-            if isinstance(default_micro, dict):
-                return JudgeMicroOutput.model_validate(default_micro)
+        if not allow_default:
+            return None
+
+        root_hash = self.contract_prompt_sha256
+        if root_hash is not None and root_hash != prompt_hash:
+            return None
+
+        default_micro = self._payload.get("default_micro")
+        if isinstance(default_micro, dict):
+            return JudgeMicroOutput.model_validate(default_micro)
         return None
 
     def record(self, prompt_hash: str, micro: JudgeMicroOutput) -> None:
@@ -86,7 +126,11 @@ class JudgeSnapshotStore:
         if not isinstance(entries, dict):
             entries = {}
             self._payload["entries"] = entries
-        entries[prompt_hash] = micro.model_dump()
+        entries[prompt_hash] = {
+            "prompt_sha256": prompt_hash,
+            "micro": micro.model_dump(),
+        }
+        self._payload["prompt_sha256"] = prompt_hash
         self._path.parent.mkdir(parents=True, exist_ok=True)
         self._path.write_text(json.dumps(self._payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
         logger.info("Recorded Judge snapshot entry hash=%s path=%s", prompt_hash[:12], self._path)
@@ -105,6 +149,7 @@ def try_replay_judge(messages: Sequence[BaseMessage]) -> JudgeMicroOutput | None
         return None
     store = JudgeSnapshotStore.load()
     prompt_hash = hash_judge_messages(messages)
+    store.assert_contract_hash(prompt_hash)
     replay = store.lookup(prompt_hash, allow_default=True)
     if replay is not None:
         logger.info("Judge snapshot replay hit hash=%s", prompt_hash[:12])

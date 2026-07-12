@@ -11,8 +11,8 @@ from langchain_core.messages import HumanMessage, SystemMessage
 from backend.llm.client import LlmClient
 from backend.rag.models import JudgeMicroOutput, TrackBJudgeSchema
 from backend.rag.qa_heuristics import HeuristicGuardrailResult, is_heuristic_hard_fuse_tripped
-from backend.rag.qa_judge_retry import run_with_judge_retry
 from backend.rag.qa_judge_replay import maybe_record_judge, try_replay_judge
+from backend.rag.qa_judge_retry import run_with_judge_retry
 from backend.rag.qa_judge_structured import invoke_judge_structured_output
 from backend.rag.qa_judge_validate import resolve_judge_output
 
