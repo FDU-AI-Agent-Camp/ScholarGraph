@@ -384,6 +384,37 @@ class RetrievalContext(BaseModel):
     scale: QuestionScale
 ```
 
+**Single Source of Truth（B7 统一可信源）**
+
+``HybridRetriever.retrieve()`` 每轮只查询一次图谱与向量，组装完整 ``RetrievalContext``。
+``QaEngine`` 为纯消费组件，不再在 Prompt 拼装阶段重复调用 ``GraphQuery``：
+
+```text
+HTTP / Benchmark → HybridRetriever.retrieve() → RetrievalContext
+  ├─ nodes/edges     → Prompt {nodes}/{edges}   （RC 非空时唯一来源）
+  └─ entities/relations/chunks → Prompt 向量段   （format_retrieval_context）
+       ↓
+qa_stream(..., retrieval_context=RC) → QaEngine._build_prompt()
+```
+
+**降级（Fallback）**：
+
+- **全量降级**：当 ``retrieval_context is None``，或 ``nodes`` 与 ``edges`` 均为空
+  （V1 单测 / 未走 HybridRetriever 的路径）时，``QaEngine`` 惰性调用
+  ``GraphQuery.subgraph_for_question()``，保持 M2 / A-09 向后兼容。
+- **局部降级（半挂空挡）**：当 RC 仅含 ``nodes`` 或仅含 ``edges`` 时（例如分布式检索
+  抖动导致边丢失），复用已有切片，**仅对缺失的一半**触发一次 ``GraphQuery`` 回填，
+  避免 Prompt 关系链空白或重复全量查图。
+- **不可变快照**：``QaEngine.stream()`` 入口对 RC 执行 ``model_copy(deep=True)``
+  （``freeze_retrieval_context``），防止 SSE 并发消费者 ``.clear()`` / 原地改 dict
+  污染 Prompt 拼装。
+- **离线 Replay**：``RetrievalContextReplayBundle``（``backend/rag/retrieval_context_io.py``）
+  将 RC + 问题 + golden Prompt 固化为 JSON；CI 在阻断 ``GraphQuery`` / ``HybridRetriever``
+  后反序列化 RC 直喂 ``qa_stream``，验证 Prompt 字节级一致，支撑 Prompt Tuning 流水线。
+- **影子 Diff（M2 回归）**：同一问题分别走 V1（``retrieval_context=None`` → GraphQuery）
+  与 V2（RC SSOT），对 Prompt 的 ``### 节点`` / ``### 关系`` 切片做排序 + 去空白后
+  字符级比对（``subgraph_sections_shadow_fingerprint``），``Diff == 0``。
+
 混合策略：
 - `SUMMARY`：只用 A 尺度（图谱拓扑子图）。
 - `DETAIL`：统一向量召回 Entities + Relations + Chunks，再与 A 尺度子图合并去重。

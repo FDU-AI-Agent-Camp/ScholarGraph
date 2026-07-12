@@ -215,12 +215,28 @@ JudgeSchema = JudgeMicroOutput
 
 
 class RetrievalContext(BaseModel):
-    """Complete retrieval result passed to QA / Patrol prompt builders.
+    """Complete retrieval result — single source of truth for QA prompt context.
 
-    Members:
-        nodes / edges: graph topology subgraph (A 尺度).
-        entities / relations / chunks: vector recall results (B 尺度).
-        scale: the resolved question scale.
+    ``HybridRetriever.retrieve()`` assembles one ``RetrievalContext`` per turn.
+    ``QaEngine`` consumes it without re-querying the graph when subgraph fields
+    are populated.
+
+    Prompt contract (authoritative sources):
+        - ``nodes`` / ``edges``: A-scale topology → template ``{nodes}`` /
+          ``{edges}`` placeholders. When either list is non-empty, ``QaEngine``
+          MUST use these fields and MUST NOT call ``GraphQuery`` again.
+        - ``entities`` / ``relations`` / ``chunks``: B-scale vector recall →
+          ``{entities}`` / ``{relations}`` / ``{chunks}`` via
+          ``format_retrieval_context()``.
+        - ``scale``: resolved question scale for routing metrics.
+
+    Fallback: when ``nodes`` and ``edges`` are both empty (or RC is ``None``),
+    ``QaEngine`` lazily calls ``GraphQuery.subgraph_for_question()`` for V1 /
+    legacy tests that bypass ``HybridRetriever``.
+
+    Immutability: ``QaEngine.stream()`` deep-snapshots RC via
+    ``freeze_retrieval_context()`` before prompt assembly so async SSE consumers
+    cannot mutate shared references mid-flight.
     """
 
     nodes: list[dict] = Field(default_factory=list)

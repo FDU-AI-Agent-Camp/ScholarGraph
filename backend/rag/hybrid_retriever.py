@@ -44,7 +44,12 @@ class HybridRetriever:
         """Build a ``RetrievalContext`` for ``qa_stream()`` prompt injection.
 
         Pipeline:
-            GraphQuery subgraph (A 尺度) → optional vector Top-K (B 尺度) → ``RetrievalContext``.
+            GraphQuery subgraph (A 尺度, written to RC.nodes/edges) → optional vector
+            Top-K (B 尺度) → ``RetrievalContext``.
+
+        ``QaEngine`` treats the returned RC as the single source of truth: when
+        ``nodes`` or ``edges`` are populated it formats Prompt ``{nodes}/{edges}``
+        from RC directly without a second GraphQuery call.
 
         Args:
             query_transform: Optional HyDE hook to rewrite *question* before embedding.

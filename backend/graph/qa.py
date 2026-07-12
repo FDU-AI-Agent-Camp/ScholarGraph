@@ -30,6 +30,9 @@ from backend.graph.qa_v2 import (
     build_chunk_text_cache,
     dispatch_citation,
     format_retrieval_context,
+    format_subgraph_sections,
+    freeze_retrieval_context,
+    resolve_prompt_subgraph,
 )
 
 logger = logging.getLogger(__name__)
@@ -225,6 +228,9 @@ class _GraphQaEngine:
         When *retrieval_context* is provided, the prompt is enriched with
         vector-retrieved entities, relations, and chunks (V2 hybrid RAG).
         """
+        if retrieval_context is not None:
+            retrieval_context = freeze_retrieval_context(retrieval_context)
+
         try:
             paper = await self._paper_service.get_paper(paper_id)
         except Exception:
@@ -258,7 +264,12 @@ class _GraphQaEngine:
             yield QaEvent("done", {"answer_id": ""})
             return
 
-        subgraph = self._query.subgraph_for_question(graph, question)
+        subgraph = resolve_prompt_subgraph(
+            graph,
+            question,
+            retrieval_context,
+            graph_query=self._query,
+        )
         prompt = self._build_prompt(
             graph,
             subgraph,
@@ -378,19 +389,14 @@ class _GraphQaEngine:
     ) -> str:
         """Format the QA prompt with graph context.
 
-        When *retrieval_context* is provided, the template is enriched with
-        additional placeholder sections for entities, relations, and chunks
-        (V2 hybrid RAG).
+        A-scale ``{nodes}/{edges}`` come from the *subgraph* dict, which
+        ``stream()`` resolves from ``RetrievalContext`` (SSOT) or ``GraphQuery``
+        fallback.  B-scale sections are formatted from *retrieval_context* when
+        provided (V2 hybrid RAG).
         """
         template = self._load_prompt_template()
 
-        nodes_desc = "\n".join(f"- [{n['id']}] {n['label']} (类型: {n['type']})" for n in subgraph.get("nodes", []))
-        edges_desc = "\n".join(f"- {e['source']} --[{e['label']}]--> {e['target']}" for e in subgraph.get("edges", []))
-
-        if not nodes_desc:
-            nodes_desc = "（图谱中暂无匹配节点）"
-        if not edges_desc:
-            edges_desc = "（无匹配关系）"
+        nodes_desc, edges_desc = format_subgraph_sections(subgraph)
 
         # Build extra sections from RetrievalContext (V2 Phase 2).
         from backend.config import get_settings

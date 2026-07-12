@@ -5,6 +5,10 @@ god-file budget (D-12 governance gate).
 
 Uses lazy imports for ``QaEvent`` to avoid a circular import with ``qa.py``:
 ``qa.py`` imports from here → here lazily imports ``QaEvent`` → no conflict.
+
+``RetrievalContext`` is the single source of truth (SSOT) for hybrid QA prompts:
+``RC.nodes/edges`` → template ``{nodes}/{edges}``; ``RC.entities/relations/chunks``
+→ vector sections via ``format_retrieval_context()``.
 """
 
 from __future__ import annotations
@@ -13,7 +17,9 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from backend.graph.qa import QaEvent
+    from backend.graph.query import GraphQuery
     from backend.rag.models import RetrievalContext
+    from backend.schemas.graph import UnifiedPaperGraph
 
 
 def build_chunk_text_cache(chunks: list | None) -> dict[str, str]:
@@ -95,6 +101,117 @@ _CONTEXT_TRUNCATED_SUFFIX = "…（检索上下文已截断，请优先依据上
 _EMPTY_ENTITIES_PLACEHOLDER = "（暂无向量召回实体，请依据上方图谱节点作答）"
 _EMPTY_RELATIONS_PLACEHOLDER = "（暂无向量召回关系）"
 _EMPTY_CHUNKS_PLACEHOLDER = "（暂无原文片段 — 论文向量索引尚未就绪或无匹配结果，请依据图谱节点与关系作答）"
+_EMPTY_SUBGRAPH_NODES_PLACEHOLDER = "（图谱中暂无匹配节点）"
+_EMPTY_SUBGRAPH_EDGES_PLACEHOLDER = "（无匹配关系）"
+
+
+def retrieval_context_has_subgraph(rc: RetrievalContext | None) -> bool:
+    """True when *rc* carries any A-scale topology (nodes and/or edges)."""
+    if rc is None:
+        return False
+    return bool(rc.nodes or rc.edges)
+
+
+def retrieval_context_has_complete_subgraph(rc: RetrievalContext | None) -> bool:
+    """True when both ``nodes`` and ``edges`` are present — no partial fallback needed."""
+    if rc is None:
+        return False
+    return bool(rc.nodes and rc.edges)
+
+
+def subgraph_dict_from_retrieval_context(rc: RetrievalContext) -> dict[str, list]:
+    """Copy ``RC.nodes/edges`` into the legacy subgraph dict consumed by prompt rendering."""
+    return {"nodes": list(rc.nodes), "edges": list(rc.edges)}
+
+
+def freeze_retrieval_context(rc: RetrievalContext) -> RetrievalContext:
+    """Return a deep snapshot of *rc* for prompt assembly (async-stream safety).
+
+    ``QaEngine.stream()`` calls this at entry so concurrent consumers (logging,
+    metrics, SSE hooks) cannot mutate shared list/dict references mid-flight.
+    """
+    return rc.model_copy(deep=True)
+
+
+def resolve_prompt_subgraph(
+    graph: UnifiedPaperGraph,
+    question: str,
+    retrieval_context: RetrievalContext | None,
+    *,
+    graph_query: GraphQuery,
+) -> dict[str, list]:
+    """Resolve A-scale subgraph for QA prompt rendering (SSOT with V1 fallback).
+
+    V2 hybrid path: when ``retrieval_context`` already contains **both** nodes and edges
+    (typically from ``HybridRetriever.retrieve()``), reuse them and skip a second
+    ``GraphQuery`` round-trip.
+
+    Partial degradation: when only one side is present (e.g. nodes populated but
+    ``edges`` is ``[]`` after a flaky retrieval), reuse the available RC slice and
+    backfill the missing half via a single ``GraphQuery`` call.
+
+    V1 / legacy path: when RC is ``None`` or both subgraph lists are empty, fall
+    back to ``graph_query.subgraph_for_question()`` for backward compatibility.
+    """
+    if retrieval_context is None or not retrieval_context_has_subgraph(retrieval_context):
+        return graph_query.subgraph_for_question(graph, question)
+
+    if retrieval_context_has_complete_subgraph(retrieval_context):
+        return subgraph_dict_from_retrieval_context(retrieval_context)
+
+    fallback = graph_query.subgraph_for_question(graph, question)
+
+    if retrieval_context.nodes and not retrieval_context.edges:
+        return {
+            "nodes": list(retrieval_context.nodes),
+            "edges": list(fallback.get("edges", [])),
+        }
+
+    if retrieval_context.edges and not retrieval_context.nodes:
+        return {
+            "nodes": list(fallback.get("nodes", [])),
+            "edges": list(retrieval_context.edges),
+        }
+
+    return fallback
+
+
+def format_subgraph_sections(subgraph: dict) -> tuple[str, str]:
+    """Format subgraph dict into ``{nodes}`` / ``{edges}`` prompt placeholder strings."""
+    nodes_desc = "\n".join(f"- [{n['id']}] {n['label']} (类型: {n['type']})" for n in subgraph.get("nodes", []))
+    edges_desc = "\n".join(f"- {e['source']} --[{e['label']}]--> {e['target']}" for e in subgraph.get("edges", []))
+    if not nodes_desc:
+        nodes_desc = _EMPTY_SUBGRAPH_NODES_PLACEHOLDER
+    if not edges_desc:
+        edges_desc = _EMPTY_SUBGRAPH_EDGES_PLACEHOLDER
+    return nodes_desc, edges_desc
+
+
+def extract_prompt_section(prompt: str, heading: str) -> str:
+    """Slice one ``### {heading}`` block from a rendered QA prompt."""
+    marker = f"### {heading}"
+    start = prompt.find(marker)
+    if start < 0:
+        return ""
+    rest = prompt[start + len(marker) :]
+    end = rest.find("\n### ")
+    if end < 0:
+        end = rest.find("\n## ")
+    return rest[:end] if end >= 0 else rest
+
+
+def normalize_subgraph_prompt_section(section: str) -> str:
+    """Collapse whitespace and sort lines for order-independent shadow diffing."""
+    collapsed_lines = ["".join(line.split()) for line in section.splitlines() if line.strip()]
+    collapsed_lines.sort()
+    return "".join(collapsed_lines)
+
+
+def subgraph_sections_shadow_fingerprint(prompt: str) -> tuple[str, str]:
+    """Return normalized ``(nodes, edges)`` fingerprints for V1/V2 shadow comparison."""
+    nodes = normalize_subgraph_prompt_section(extract_prompt_section(prompt, "节点"))
+    edges = normalize_subgraph_prompt_section(extract_prompt_section(prompt, "关系"))
+    return nodes, edges
 
 
 def _context_sections_total_len(entities_desc: str, relations_desc: str, chunks_desc: str) -> int:
