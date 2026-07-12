@@ -8,9 +8,9 @@ from typing import Any
 
 from langchain_core.messages import BaseMessage
 
-from backend.llm.qa_scale import detect_question_scale, preferred_node_types
 from backend.rag.models import JudgeMicroOutput, QAJudgeResult, SentenceJudgment, SentenceLabel
 from backend.rag.qa_judge_aggregate import aggregate_sentence_judgments, split_answer_sentences
+from backend.rag.qa_router import detect_question_scale, preferred_node_types
 from backend.schemas.paradigm import Paradigm
 from backend.schemas.patrol_llm import PatrolSummaryOutput
 
