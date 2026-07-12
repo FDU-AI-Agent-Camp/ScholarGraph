@@ -63,8 +63,9 @@ describe('TagCitation', () => {
       props: { label: '核心论点', nodeId: 'n1', active: true },
     })
 
-    expect(wrapper.classes()).toContain('tag-citation--active')
-    await wrapper.trigger('click')
+    const button = wrapper.find('.tag-citation')
+    expect(button.classes()).toContain('tag-citation--active')
+    await button.trigger('click')
     expect(wrapper.emitted('click')).toHaveLength(1)
   })
 
@@ -73,8 +74,9 @@ describe('TagCitation', () => {
       props: { label: '核心论点', nodeId: 'n1' },
     })
 
-    expect(wrapper.classes()).toContain('citation-tag')
-    expect(wrapper.classes()).toContain('tag-citation')
+    const button = wrapper.find('.tag-citation')
+    expect(button.classes()).toContain('citation-tag')
+    expect(button.classes()).toContain('tag-citation')
   })
 
   it('uses 120ms instant transition on default hover states', () => {
