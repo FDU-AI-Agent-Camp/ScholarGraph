@@ -54,6 +54,7 @@ describe('parseQaStreamEvent', () => {
         chunk_id: 'c1',
         label: '片段 c1',
         text_preview: '预览',
+        preview_state: 'ready',
       }),
     )
     expect(chunk?.type).toBe('citation')
@@ -64,6 +65,7 @@ describe('parseQaStreamEvent', () => {
         chunk_id: 'c1',
         label: '片段 c1',
         text_preview: '预览',
+        preview_state: 'ready',
       })
     }
 

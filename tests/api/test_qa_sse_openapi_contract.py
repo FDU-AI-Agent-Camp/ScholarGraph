@@ -17,7 +17,7 @@ FIXTURE = REPO_ROOT / "docs" / "api" / "fixtures" / "qa-stream-v2-frames.json"
 _CITATION_REQUIRED: dict[str, set[str]] = {
     "node": {"type", "paper_id", "node_id", "label"},
     "edge": {"type", "paper_id", "edge_id", "label"},
-    "chunk": {"type", "paper_id", "chunk_id", "label", "text_preview"},
+    "chunk": {"type", "paper_id", "chunk_id", "label", "text_preview", "preview_state"},
     "page": {"type", "paper_id", "page", "label"},
 }
 
@@ -44,6 +44,8 @@ def test_b6_openapi_qa_stream_citation_schemas_match_dispatch() -> None:
     chunk = spec["components"]["schemas"]["QaStreamCitationChunk"]["properties"]
     assert "text_preview" in chunk
     assert chunk["text_preview"].get("maxLength") == 120
+    assert "preview_state" in chunk
+    assert chunk["preview_state"]["$ref"] == "#/components/schemas/ChunkPreviewState"
 
     page = spec["components"]["schemas"]["QaStreamCitationPage"]["properties"]
     assert "page" in page

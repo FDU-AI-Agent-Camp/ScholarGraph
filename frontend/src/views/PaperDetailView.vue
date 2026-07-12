@@ -14,7 +14,7 @@ import { RouteName } from '@/router/meta'
 import { usePaperStore } from '@/stores/paper'
 import { resolveClassifyWarningMessages } from '@/utils/classifyWarnings'
 import { resolveExtractWarningMessages } from '@/utils/extractWarnings'
-import { appendUniqueCitation, citationDisplayId, citationKey } from '@/utils/qaCitations'
+import { appendUniqueCitation, chunkCitationPreview, chunkPreviewPlaceholderTooltip, citationDisplayId, citationKey, isChunkPreviewDegraded } from '@/utils/qaCitations'
 
 const PaperGraph = defineAsyncComponent(() => import('@/components/graph/PaperGraph.vue'))
 
@@ -225,6 +225,11 @@ function onGraphNodeClick(nodeId: string): void {
                   :label="item.label"
                   :node-id="citationDisplayId(item)"
                   :active="item.type === 'node' && item.node_id === highlightNodeId"
+                  :preview="chunkCitationPreview(item) ?? undefined"
+                  :preview-placeholder="item.type === 'chunk' && isChunkPreviewDegraded(item.preview_state)"
+                  :preview-tooltip="
+                    item.type === 'chunk' ? chunkPreviewPlaceholderTooltip(item.preview_state) : undefined
+                  "
                   @click="focusCitation(item)"
                 />
               </div>

@@ -70,9 +70,18 @@ class FakeCollection:
         limit: int | None = None,
         include: list[str] | None = None,
     ) -> dict[str, Any]:
-        del include
-        ids = [record_id for record_id, record in self.records.items() if _matches_where(record["metadata"], where)]
-        return {"ids": ids[:limit]}
+        rows = [
+            (record_id, record)
+            for record_id, record in self.records.items()
+            if _matches_where(record["metadata"], where)
+        ]
+        if limit is not None:
+            rows = rows[:limit]
+        ids = [record_id for record_id, _record in rows]
+        result: dict[str, Any] = {"ids": ids}
+        if include and "documents" in include:
+            result["documents"] = [[record["document"] for _record_id, record in rows]]
+        return result
 
     def delete(self, *, where: ChromaWhere | None = None) -> None:
         for record_id, record in list(self.records.items()):
@@ -83,6 +92,11 @@ class FakeCollection:
 def _matches_where(metadata: ChromaMetadata, where: ChromaWhere | None) -> bool:
     if where is None:
         return True
+    if "$and" in where:
+        clauses = where["$and"]
+        if not isinstance(clauses, list):
+            return False
+        return all(_matches_where(metadata, clause) for clause in clauses)
     return all(metadata.get(key) == value for key, value in where.items())
 
 

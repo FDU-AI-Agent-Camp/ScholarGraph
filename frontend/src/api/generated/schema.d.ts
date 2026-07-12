@@ -385,6 +385,7 @@ export interface components {
             /** @description 通常为 `"{source_label} → {target_label}"` */
             label: string;
         };
+        ChunkPreviewState: "ready" | "indexing" | "retrieval_timeout" | "l2_timeout" | "hallucinated_id";
         QaStreamCitationChunk: {
             /**
              * @description discriminator enum property added by openapi-typescript
@@ -395,8 +396,9 @@ export interface components {
             chunk_id: string;
             /** @description 通常为 `"片段 {chunk_id}"` */
             label: string;
-            /** @description 原文片段预览（最多 120 字符） */
+            /** @description 原文片段预览（最多 120 字符）；降级时为 canonical 占位文案 */
             text_preview: string;
+            preview_state: components["schemas"]["ChunkPreviewState"];
         };
         QaStreamCitationPage: {
             /**

@@ -8,6 +8,7 @@ import type {
   QaStreamMessageData,
   QaStreamServerEvent,
 } from './types'
+import type { ChunkPreviewState } from '@/utils/qaCitations'
 
 export type { QaStreamCitationData, QaStreamDoneData, QaStreamErrorData, QaStreamMessageData, QaStreamServerEvent }
 
@@ -20,6 +21,20 @@ export interface QaStreamHandlers {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null
+}
+
+function parseChunkPreviewState(raw: unknown): ChunkPreviewState {
+  const value = String(raw ?? 'ready')
+  switch (value) {
+    case 'ready':
+    case 'indexing':
+    case 'retrieval_timeout':
+    case 'l2_timeout':
+    case 'hallucinated_id':
+      return value
+    default:
+      return 'ready'
+  }
 }
 
 function parseCitationPayload(payload: Record<string, unknown>): QaStreamCitationData | null {
@@ -49,6 +64,7 @@ function parseCitationPayload(payload: Record<string, unknown>): QaStreamCitatio
         chunk_id: String(payload.chunk_id ?? ''),
         label,
         text_preview: String(payload.text_preview ?? ''),
+        preview_state: parseChunkPreviewState(payload.preview_state),
       }
     case 'page': {
       const rawPage = payload.page

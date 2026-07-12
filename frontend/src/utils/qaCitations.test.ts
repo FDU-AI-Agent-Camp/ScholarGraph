@@ -3,9 +3,13 @@ import { describe, expect, it } from 'vitest'
 import type { QaStreamCitationData } from '@/api/types'
 import {
   appendUniqueCitation,
+  chunkCitationPreview,
+  chunkCitationPreviewState,
+  chunkPreviewPlaceholderTooltip,
   citationDisplayId,
   citationKey,
   citationNodeId,
+  isChunkPreviewDegraded,
   isNodeCitation,
   nodeCitation,
 } from '@/utils/qaCitations'
@@ -24,6 +28,7 @@ describe('qaCitations helpers', () => {
     chunk_id: 'c1',
     label: '片段 c1',
     text_preview: '预览文本',
+    preview_state: 'ready',
   }
   const page: QaStreamCitationData = {
     type: 'page',
@@ -70,5 +75,19 @@ describe('qaCitations helpers', () => {
     expect(citations).toHaveLength(4)
     expect(appendUniqueCitation(citations, node)).toHaveLength(4)
     expect(appendUniqueCitation(citations, edge)).toHaveLength(4)
+  })
+
+  it('detects degraded preview_state from OpenAPI enum', () => {
+    expect(isChunkPreviewDegraded('indexing')).toBe(true)
+    expect(isChunkPreviewDegraded('l2_timeout')).toBe(true)
+    expect(chunkPreviewPlaceholderTooltip('hallucinated_id')).toContain('无法验证')
+    expect(isChunkPreviewDegraded('ready')).toBe(false)
+  })
+
+  it('chunkCitationPreview helpers read chunk fields only', () => {
+    expect(chunkCitationPreview(chunk)).toBe('预览文本')
+    expect(chunkCitationPreviewState(chunk)).toBe('ready')
+    expect(chunkCitationPreview(node)).toBeNull()
+    expect(chunkCitationPreviewState(node)).toBeNull()
   })
 })

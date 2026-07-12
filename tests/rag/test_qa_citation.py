@@ -190,6 +190,18 @@ class TestDispatchCitation:
         assert evt.data["chunk_id"] == "c1"
         assert "text_preview" in evt.data
         assert evt.data["text_preview"] == "制度一旦形成便会产生路径依赖。"
+        assert evt.data["preview_state"] == "ready"
+
+    def test_chunk_citation_miss_emits_structured_placeholder(
+        self, node_cache: dict[str, str], edge_cache: dict[str, str], chunk_cache: dict[str, str]
+    ) -> None:
+        from backend.rag.chunk_preview import CHUNK_PREVIEW_HALLUCINATION
+        from backend.schemas.chunk_preview import ChunkPreviewState
+
+        evt = dispatch_citation("chunk:", "missing", "hss-001", node_cache, edge_cache, chunk_cache)
+        assert evt.data["text_preview"] == CHUNK_PREVIEW_HALLUCINATION
+        assert evt.data["preview_state"] == ChunkPreviewState.HALLUCINATED_ID
+        assert evt.data["text_preview"] != ""
 
     def test_page_citation_has_type_and_page(
         self, node_cache: dict[str, str], edge_cache: dict[str, str], chunk_cache: dict[str, str]
