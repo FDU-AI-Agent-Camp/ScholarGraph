@@ -15,16 +15,19 @@ from backend.graph.qa_samples import M2_DEMO_PAPER_ID, M2_HSS_QUESTIONS, seed_m2
 from backend.graph.store import GraphStore
 from backend.llm.client import reset_llm_client_cache
 from backend.llm.mock_chat import MOCK_DISCLAIMER
+from tests.helpers.persistence_testkit import register_ready_paper, run_async, setup_qa_persistence_env
 
 
 @pytest.fixture
 def m2_graph_dir(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    graph_dir = tmp_path / "graphs"
+    setup_qa_persistence_env(tmp_path, monkeypatch, graph_dir=graph_dir)
     monkeypatch.setenv("LLM_MODE", "mock")
-    monkeypatch.setenv("GRAPH_DATA_DIR", str(tmp_path))
     get_settings.cache_clear()
     reset_llm_client_cache()
-    seed_m2_qa_graph(tmp_path)
-    return tmp_path
+    seed_m2_qa_graph(graph_dir)
+    run_async(register_ready_paper(M2_DEMO_PAPER_ID))
+    return graph_dir
 
 
 async def _collect_qa(paper_id: str, question: str) -> tuple[str, list[dict], list[tuple[str, dict]]]:

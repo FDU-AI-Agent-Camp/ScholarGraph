@@ -18,6 +18,7 @@ from backend.services.paper_service import get_paper_service
 from httpx import ASGITransport, AsyncClient
 
 from tests.conftest import RUN_PIPELINE_SCRIPT
+from tests.helpers.persistence_testkit import register_ready_paper, run_async, setup_qa_persistence_env
 
 
 def _load_run_pipeline_module():
@@ -52,14 +53,12 @@ def integration_paper(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> tuple[
 
 @pytest.fixture
 def mock_llm_env(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Path:
-    """LLM_MODE=mock + isolated graph dir; hss-001 graph on disk for qa_stream."""
+    """LLM_MODE=mock + isolated graph dir; hss-001 graph on disk and READY in DB."""
     graph_dir = tmp_path / "graphs"
-    graph_dir.mkdir(parents=True, exist_ok=True)
+    setup_qa_persistence_env(tmp_path, monkeypatch, graph_dir=graph_dir)
     monkeypatch.setenv("LLM_MODE", "mock")
-    monkeypatch.setenv("GRAPH_DATA_DIR", str(graph_dir))
     get_settings.cache_clear()
     reset_llm_client_cache()
-    get_paper_service.cache_clear()
 
     GraphStore(base_dir=graph_dir).save(
         UnifiedPaperGraph(
@@ -81,6 +80,7 @@ def mock_llm_env(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Path:
             ],
         ),
     )
+    run_async(register_ready_paper("hss-001"))
     yield graph_dir
     get_settings.cache_clear()
     reset_llm_client_cache()
@@ -91,11 +91,9 @@ def mock_llm_env(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Path:
 def graph_hss_fixture_env(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Path:
     """Isolated GRAPH_DATA_DIR seeded with docs/api/fixtures/graph-hss.json (hss-001)."""
     graph_dir = tmp_path / "graphs"
-    graph_dir.mkdir(parents=True, exist_ok=True)
-    monkeypatch.setenv("GRAPH_DATA_DIR", str(graph_dir))
-    get_settings.cache_clear()
-    get_paper_service.cache_clear()
+    setup_qa_persistence_env(tmp_path, monkeypatch, graph_dir=graph_dir)
     seed_m2_qa_graph(graph_dir)
+    run_async(register_ready_paper("hss-001"))
     yield graph_dir
     get_settings.cache_clear()
     get_paper_service.cache_clear()

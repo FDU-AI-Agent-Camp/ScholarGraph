@@ -15,6 +15,7 @@ from backend.llm.mock_chat import MOCK_DISCLAIMER
 from httpx import ASGITransport, AsyncClient
 from tests.api.conftest import assert_error_envelope
 from tests.graph.test_qa import _bad_llm, _fake_llm
+from tests.helpers.persistence_testkit import register_ready_paper, run_async, setup_qa_persistence_env
 
 
 def _parse_sse(body: str) -> list[tuple[str, dict]]:
@@ -40,12 +41,14 @@ async def api_client() -> AsyncIterator[AsyncClient]:
 
 @pytest.fixture
 def m2_http_env(tmp_path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    graph_dir = tmp_path / "graphs"
+    setup_qa_persistence_env(tmp_path, monkeypatch, graph_dir=graph_dir)
     monkeypatch.setenv("LLM_MODE", "mock")
-    monkeypatch.setenv("GRAPH_DATA_DIR", str(tmp_path))
     get_settings.cache_clear()
     reset_llm_client_cache()
-    seed_m2_qa_graph(tmp_path)
-    return tmp_path
+    seed_m2_qa_graph(graph_dir)
+    run_async(register_ready_paper(M2_DEMO_PAPER_ID))
+    return graph_dir
 
 
 @pytest.mark.asyncio
@@ -91,10 +94,11 @@ async def test_m2_http_graph_not_found_sse_error_feedback(
 ) -> None:
     empty_dir = tmp_path / "no-graphs"
     empty_dir.mkdir()
+    setup_qa_persistence_env(tmp_path, monkeypatch, graph_dir=empty_dir)
     monkeypatch.setenv("LLM_MODE", "mock")
-    monkeypatch.setenv("GRAPH_DATA_DIR", str(empty_dir))
     get_settings.cache_clear()
     reset_llm_client_cache()
+    run_async(register_ready_paper(M2_DEMO_PAPER_ID))
 
     response = await api_client.post(
         f"/api/v1/papers/{M2_DEMO_PAPER_ID}/qa/stream",

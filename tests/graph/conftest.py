@@ -181,7 +181,10 @@ def mock_pipeline_dependencies() -> Iterator[dict[str, MagicMock]]:
             patch("backend.graph.nodes.get_ingest_service", return_value=ingest_svc),
             patch("backend.graph.nodes.get_agent_service", return_value=agent_svc),
             patch("backend.graph.nodes.get_pipeline_completion_service", return_value=completion_svc),
-            patch("backend.graph.nodes._index_paper_for_rag_async") as mock_rag_index,
+            patch(
+                "backend.services.rag_index_service.RagIndexService.index_paper_for_rag_async",
+                new_callable=AsyncMock,
+            ) as mock_rag_index,
             patch("backend.graph.nodes.ensure_head_refine_scheduled"),
             patch(
                 "backend.graph.nodes.wait_for_refined_classifier_input",

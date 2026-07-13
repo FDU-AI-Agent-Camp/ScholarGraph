@@ -16,6 +16,7 @@ from backend.rag.hybrid_retriever import HybridRetriever
 from backend.rag.models import QuestionScale, RetrievalContext
 
 from tests.graph.test_qa import _FakeChunk
+from tests.helpers.persistence_testkit import register_ready_paper, run_async, setup_qa_persistence_env
 
 
 class _CapturingFakeChat:
@@ -64,16 +65,17 @@ def _shadow_diff_lines(left: str, right: str) -> list[str]:
 
 @pytest.fixture
 def shadow_graph_env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> GraphStore:
+    from tests.rag.test_context_source_unification import _seed_graph_store
+
     graph_dir = tmp_path / "graphs"
-    graph_dir.mkdir()
-    monkeypatch.setenv("GRAPH_DATA_DIR", str(graph_dir))
+    setup_qa_persistence_env(tmp_path, monkeypatch, graph_dir=graph_dir)
     monkeypatch.setenv("LLM_MODE", "mock")
     get_settings.cache_clear()
     reset_llm_client_cache()
 
-    from tests.rag.test_context_source_unification import _seed_graph_store
-
-    return _seed_graph_store(graph_dir)
+    store = _seed_graph_store(graph_dir)
+    run_async(register_ready_paper("hss-001"))
+    return store
 
 
 @pytest.mark.asyncio
