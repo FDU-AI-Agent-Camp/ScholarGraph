@@ -297,9 +297,8 @@ async def record_warnings(self, paper_id, *, head_refine=None, classify=None, ex
 
 ### 4.4 `pipeline_completion_service.py`
 
-- `complete_paper_pipeline` 中更新 `papers.graph_path`、最终 `status`。
-- 同时写入 `graph_version` 与 `extractor_config_hash`（基于当前抽取配置/Prompt/模型计算哈希）。
-- 保留 `GraphStore().save(graph)` 写磁盘 JSON。
+- `PipelineCompletionService.finalize()` **唯一**调用 `GraphPersistenceService.save(graph)` 写磁盘 JSON，并接收返回的 `graph_path`。
+- `complete_paper_pipeline()` 仅更新 `papers.graph_path`、最终 `status`、`graph_version` 与 `extractor_config_hash`；**禁止**再次 `GraphStore().save()`（D7 消除双写）。
 - finalize 成功后 **仅** 通过事件总线发射 `PipelineFinalized(paper_id, full_text, graph)`；**禁止**在 LangGraph `store_node` 内直调 RAG 索引。
 
 ### 4.5 `PipelineFinalized` 事件契约（SSOT）

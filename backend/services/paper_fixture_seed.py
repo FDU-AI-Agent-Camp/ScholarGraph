@@ -74,10 +74,15 @@ def _seed_graph_fixture_if_needed(graph: UnifiedPaperGraph) -> None:
     from backend.graph.store import GraphStore
 
     store = GraphStore()
-    if store.load(graph.paper_id) is not None:
-        return
     if store._base_dir.resolve() != DEFAULT_GRAPH_DATA_DIR.resolve():
         return
+    path = store._path(graph.paper_id)
+    if path.is_file():
+        try:
+            if store.load(graph.paper_id) is not None:
+                return
+        except Exception:
+            pass
     store.save(graph)
 
 

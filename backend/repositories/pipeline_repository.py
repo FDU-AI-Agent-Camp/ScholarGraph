@@ -186,6 +186,17 @@ class PipelineRepository:
         await self.clear_ephemeral_pipeline_state(paper_id)
         return snapshot
 
+    async def delete_run(self, paper_id: str) -> bool:
+        """Delete the pipeline snapshot row for a paper (test teardown / compat shim)."""
+        async with get_async_session_factory()() as session:
+            await self._begin_immediate(session)
+            run = await session.get(PipelineRunRow, paper_id)
+            if run is None:
+                return False
+            await session.delete(run)
+            await session.commit()
+            return True
+
     async def _begin_immediate(self, session: AsyncSession) -> None:
         from sqlalchemy import text
 

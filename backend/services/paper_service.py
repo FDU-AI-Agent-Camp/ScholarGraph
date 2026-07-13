@@ -5,11 +5,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from functools import lru_cache
 from pathlib import Path
-from typing import TYPE_CHECKING
 from uuid import uuid4
-
-if TYPE_CHECKING:
-    from backend.services.paper_service_compat import CompatPaperDict, CompatPdfPathDict, CompatStatusDict
 
 from backend.api.exceptions import ApiError
 from backend.config import Settings, get_settings
@@ -49,6 +45,9 @@ def reset_persistence_singletons() -> None:
     get_paper_repository.cache_clear()
     get_pipeline_repository.cache_clear()
     get_paper_service.cache_clear()
+    from backend.services.graph_persistence_service import get_graph_persistence_service
+
+    get_graph_persistence_service.cache_clear()
     from backend.events.bus import reset_event_bus_cache
 
     reset_event_bus_cache()
@@ -67,41 +66,6 @@ class PaperService:
         self._settings = settings or get_settings()
         self._paper_repo = paper_repo or get_paper_repository()
         self._pipeline_repo = pipeline_repo or get_pipeline_repository()
-        self._compat_papers = None
-        self._compat_status = None
-        self._compat_pdf_paths = None
-
-    @property
-    def _papers(self) -> CompatPaperDict:
-        """Test migration shim: dict-like access backed by the DB."""
-        if self._compat_papers is None:
-            from backend.services.paper_service_compat import CompatPaperDict
-
-            self._compat_papers = CompatPaperDict(self)
-        return self._compat_papers
-
-    @property
-    def _status(self) -> CompatStatusDict:
-        """Test migration shim: dict-like pipeline snapshots backed by the DB."""
-        if self._compat_status is None:
-            from backend.services.paper_service_compat import CompatStatusDict
-
-            self._compat_status = CompatStatusDict(self)
-        return self._compat_status
-
-    @property
-    def _pdf_paths(self) -> CompatPdfPathDict:
-        """Test migration shim: dict-like PDF path pointers backed by the DB."""
-        if self._compat_pdf_paths is None:
-            from backend.services.paper_service_compat import CompatPdfPathDict
-
-            self._compat_pdf_paths = CompatPdfPathDict(self)
-        return self._compat_pdf_paths
-
-    def _upsert_compat_paper_detail(self, paper_id: str, detail: PaperDetail) -> None:
-        from backend.services.paper_service_compat import upsert_compat_paper_detail
-
-        upsert_compat_paper_detail(self, paper_id, detail)
 
     async def bootstrap(self) -> None:
         """Ensure schema exists and optionally seed demo fixtures."""
@@ -285,13 +249,16 @@ class PaperService:
         classification: ParadigmClassification,
         graph: UnifiedPaperGraph,
     ) -> None:
+        from backend.services.graph_persistence_service import get_graph_persistence_service
         from backend.services.pipeline_completion_service import complete_paper_pipeline
 
+        graph_path = get_graph_persistence_service().save(graph)
         complete_paper_pipeline(
             self,
             paper_id,
             classification=classification,
             graph=graph,
+            graph_path=graph_path,
         )
 
     async def force_reextract(self, paper_id: str) -> PaperStatusData:

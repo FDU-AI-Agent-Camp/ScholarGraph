@@ -232,6 +232,18 @@ class PaperRepository:
             await session.commit()
             return True
 
+    async def bump_list_rank(self, paper_ids: tuple[str, ...] | list[str]) -> None:
+        """Refresh ``created_at`` so demo fixtures stay visible in paginated list APIs."""
+        now = datetime.now(UTC)
+        async with get_async_session_factory()() as session:
+            await self._begin_immediate(session)
+            for paper_id in paper_ids:
+                row = await session.get(PaperRow, paper_id)
+                if row is not None:
+                    row.created_at = now
+                    row.updated_at = now
+            await session.commit()
+
     async def _begin_immediate(self, session: AsyncSession) -> None:
         from sqlalchemy import text
 

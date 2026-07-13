@@ -30,9 +30,11 @@ class GraphPersistenceService:
 
         self._store = store or GraphStore()
 
-    def save(self, graph: UnifiedPaperGraph) -> None:
+    def save(self, graph: UnifiedPaperGraph) -> str:
+        """Persist graph and return the resolved on-disk path."""
         try:
             self._store.save(graph)
+            return str(self._store._path(graph.paper_id))
         except Exception as exc:
             raise ServiceError(PIPELINE_FAILED_CODE, f"图谱存储失败: {exc}") from exc
 

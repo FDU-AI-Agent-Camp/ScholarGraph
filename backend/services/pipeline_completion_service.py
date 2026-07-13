@@ -33,15 +33,15 @@ def complete_paper_pipeline(
     *,
     classification: ParadigmClassification,
     graph: UnifiedPaperGraph,
+    graph_path: str,
     extract_warnings: list[str] | None = None,
     full_text: str = "",
     page_break_offsets: list[int] | None = None,
 ) -> None:
-    """Persist graph and mark paper ready or ready_with_warnings.
+    """Mark paper ready after graph has been persisted exactly once upstream.
 
-    The quality gate is skipped when the graph came from a heuristic fallback,
-    because fallback graphs are intentionally degraded and should not be
-    double-penalized.
+    ``graph_path`` must come from :class:`GraphPersistenceService` (or an injected
+    test double); this function does not write to ``GraphStore`` directly.
     """
     paper_service.require_paper_for_pipeline(paper_id)
 
@@ -65,12 +65,8 @@ def complete_paper_pipeline(
         warnings.append(LOW_CONFIDENCE_GRAPH_CODE)
 
     paper_service.update_pipeline_classification(paper_id, classification)
-    from backend.graph.store import GraphStore
     from backend.services.pipeline_status_service import get_pipeline_status_service
 
-    graph_store = GraphStore()
-    graph_store.save(graph)
-    graph_path = str(graph_store._path(paper_id))
     config_hash = paper_service.compute_extractor_config_hash()
     paper_service.update_pipeline_graph_path(paper_id, graph_path=graph_path)
     graph_version = paper_service.get_pipeline_graph_version(paper_id)
@@ -145,7 +141,7 @@ class PipelineCompletionService:
             graph = UnifiedPaperGraph.model_validate(graph_data)
             classification = ParadigmClassification.model_validate(classification_data)
             persistence = self._graph_persistence or get_graph_persistence_service()
-            persistence.save(graph)
+            graph_path = persistence.save(graph)
             from backend.services.paper_service import get_paper_service
 
             complete_paper_pipeline(
@@ -153,6 +149,7 @@ class PipelineCompletionService:
                 paper_id,
                 classification=classification,
                 graph=graph,
+                graph_path=graph_path,
                 extract_warnings=extract_warnings,
                 full_text=full_text,
                 page_break_offsets=page_break_offsets,
