@@ -194,6 +194,15 @@ class PaperRepository:
             await session.commit()
             return new_version
 
+    async def get_graph_version(self, paper_id: str) -> str:
+        """Return the persisted graph version, or the default for new papers."""
+        async with get_async_session_factory()() as session:
+            row = await session.get(PaperRow, paper_id)
+            if row is None:
+                msg = f"paper not found: {paper_id}"
+                raise KeyError(msg)
+            return row.graph_version or DEFAULT_GRAPH_VERSION
+
     async def update_graph_version(
         self,
         paper_id: str,
