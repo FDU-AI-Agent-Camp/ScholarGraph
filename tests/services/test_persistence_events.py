@@ -58,9 +58,7 @@ async def test_stop_event_bus_worker_tears_down_singleton_worker() -> None:
     )
 
     await asyncio.to_thread(
-        lambda: bus.publish_sync(
-            PipelineFinalized(paper_id="d17-singleton", full_text="body", graph=graph)
-        )
+        lambda: bus.publish_sync(PipelineFinalized(paper_id="d17-singleton", full_text="body", graph=graph))
     )
     assert bus._worker_task is not None
 
