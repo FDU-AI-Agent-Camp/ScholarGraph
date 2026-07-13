@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import threading
 from collections import defaultdict
 from collections.abc import Awaitable, Callable
 from functools import lru_cache
@@ -40,17 +41,32 @@ class EventBus:
         await self._queue.put(event)
 
     def publish_sync(self, event: Any) -> None:
-        """Publish from synchronous callers (e.g. pipeline finalize)."""
+        """Enqueue from synchronous callers; handlers run asynchronously (fire-and-forget)."""
 
-        async def _publish_and_drain() -> None:
+        async def _publish() -> None:
             await self.publish(event)
-            await self.drain()
-            self._stop_worker()
 
-        run_async(_publish_and_drain())
+        from backend.repositories import async_bridge
+
+        main_loop = async_bridge._MAIN_EVENT_LOOP
+        main_loop_thread_id = async_bridge._MAIN_LOOP_THREAD_ID
+        if (
+            main_loop is not None
+            and main_loop.is_running()
+            and main_loop_thread_id is not None
+            and threading.get_ident() != main_loop_thread_id
+        ):
+            asyncio.run_coroutine_threadsafe(_publish(), main_loop)
+            return
+
+        run_async(_publish())
+
+    def drain_sync(self) -> None:
+        """Block until queued events are processed (tests / scripts)."""
+        run_async(self.drain())
 
     def _stop_worker(self) -> None:
-        """Tear down the background worker after a sync publish cycle."""
+        """Tear down the background worker (tests / application shutdown)."""
         if self._worker_task is not None and not self._worker_task.done():
             self._worker_task.cancel()
         self._worker_task = None
@@ -103,7 +119,7 @@ class EventBus:
             )
 
     async def drain(self) -> None:
-        """Wait until queued events are processed (tests only)."""
+        """Wait until all queued events have been processed."""
         await self._ensure_queue()
         assert self._queue is not None
         await self._queue.join()
