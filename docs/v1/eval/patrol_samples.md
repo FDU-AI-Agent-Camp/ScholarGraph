@@ -38,6 +38,20 @@ uv run python scripts/run_patrol.py --paper-ids hss-001,hss-002 --mode lens_clas
 
 成功时 stdout 打印与 [`patrol-lens-clash.json`](../../api/fixtures/patrol-lens-clash.json) 同结构的 `PatrolReport` JSON（`mode` / `paper_ids` / `insights[]` / `generated_at`）。
 
+## V2 模式（method_overlap / claim_evolution）
+
+STEM 演示语料 `stem-001` / `stem-002`（PCA 同义词对 + 对齐 RQ）：
+
+```bash
+uv run python scripts/run_patrol.py --seed-stem-demo
+uv run python scripts/run_patrol.py --paper-ids stem-001,stem-002 --mode method_overlap
+uv run python scripts/run_patrol.py --paper-ids stem-001,stem-002 --mode claim_evolution
+```
+
+`claim_evolution` live 演示需 `RERANKER_ENABLED=true` 与 `RERANKER_MODEL`；见 `GET /api/v1/health` 的 `patrol_claim_rq_funnel_enabled`。完整契约见 [rag-requirements.md §5](../../../v2/rag-requirements.md)。
+
+API fixture：[`patrol-method-overlap.json`](../../api/fixtures/patrol-method-overlap.json)、[`patrol-claim-evolution.json`](../../api/fixtures/patrol-claim-evolution.json)。
+
 ## 自动化验收
 
 ```bash

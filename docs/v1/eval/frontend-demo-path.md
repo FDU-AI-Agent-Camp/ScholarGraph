@@ -100,8 +100,9 @@ npm run dev
 - URL：`http://localhost:5173/patrol`
 - 操作：
   1. `paper_ids` 输入：`hss-001,hss-002`（恰好 2 篇）
-  2. `mode` 选择 `lens_clash` 或 `contradiction`
-  3. 点击「运行巡检」
+  2. `mode` 选择四模式之一（`lens_clash` / `contradiction` / `method_overlap` / `claim_evolution`）
+  3. V2 模式使用 `stem-001,stem-002` 前先执行 `run_patrol.py --seed-stem-demo`
+  4. 点击「运行巡检」
 - 验收：
   - 展示 `mode`、`generated_at`、`paper_ids`；
   - 每条 insight 含 `title`、`summary`、`node_refs` 表格（paper_id / node_id / label）。
@@ -114,6 +115,8 @@ CLI 对照（可选）：
 
 ```bash
 uv run python scripts/run_patrol.py --paper-ids hss-001,hss-002 --mode lens_clash
+uv run python scripts/run_patrol.py --seed-stem-demo
+uv run python scripts/run_patrol.py --paper-ids stem-001,stem-002 --mode method_overlap
 ```
 
 ## 自动化门禁（开发侧）
