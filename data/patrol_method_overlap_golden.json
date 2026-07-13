@@ -1,88 +1,238 @@
 {
-  "schema_version": 1,
+  "schema_version": 3,
   "dataset_id": "patrol-method-overlap-golden",
-  "description": "Method-overlap golden pairs (STEM): positive synonym+topology and negative topology-veto cases for live embedding regression.",
+  "description": "Method-overlap self-contained golden set: in-memory subgraph specs with explicit topology neighbors for STEM baseline regression (literal / semantic / topology-veto).",
   "owner": "Patrol V2 QA",
+  "config_snapshot": {
+    "patrol_semantic_threshold": 0.88,
+    "embedding_model": "bge-m3",
+    "enable_patrol_semantic_path": true,
+    "snapshot_recorded_at": "2026-07-13",
+    "notes": "Live/Nightly gate baseline. Update when intentionally changing PATROL_SEMANTIC_THRESHOLD or EMBEDDING_MODEL, then re-run live_patrol + benchmark_patrol --live."
+  },
+  "baseline_matrix": [
+    "SYNONYM_TRUE_POSITIVE",
+    "CORRELATED_FALSE_POSITIVE",
+    "LITERAL_TRUE_POSITIVE"
+  ],
   "pairs": [
     {
-      "id": "stem-pos-01",
+      "id": "stem-pos-semantic-01",
+      "priority": "P0",
+      "issue_id": null,
+      "archetype": "SYNONYM_TRUE_POSITIVE",
       "paradigm": "STEM",
-      "expectation": "positive",
-      "paper_a_id": "stem-golden-a",
-      "paper_b_id": "stem-golden-b",
+      "paper_a_id": "golden-pca-a",
+      "paper_b_id": "golden-pca-b",
+      "rationale": "同义词真阳：PCA ↔ Principal Component Analysis；共享 MNIST 拓扑共振，语义路径应 READY。",
       "paper_a": {
-        "method_label": "PCA",
-        "dataset_label": "MNIST",
-        "method_data": {
-          "description": "Principal-component linear projection for digit images",
-          "usage": "Applied PCA to MNIST pixel vectors before k-NN classification"
-        }
-      },
-      "paper_b": {
-        "method_label": "Principal Component Analysis",
-        "dataset_label": "MNIST",
-        "method_data": {
-          "description": "Orthogonal basis projection retaining top eigen-directions",
-          "usage": "Principal Component Analysis compressed MNIST features to 50 dimensions"
-        }
-      },
-      "rationale": "同义词方法标签 + 共享 MNIST 拓扑共振，应产出 READY 与 semantic match。"
-    },
-    {
-      "id": "stem-pos-02",
-      "paradigm": "STEM",
-      "expectation": "positive",
-      "paper_a_id": "stem-literal-a",
-      "paper_b_id": "stem-literal-b",
-      "paper_a": {
-        "method_label": "Random Forest",
-        "dataset_label": "CIFAR-10"
-      },
-      "paper_b": {
-        "method_label": "Random Forest",
-        "dataset_label": "CIFAR-10"
-      },
-      "rationale": "字面方法+数据集完全匹配，应产出 READY（literal match）。"
-    },
-    {
-      "id": "stem-neg-01",
-      "paradigm": "STEM",
-      "expectation": "negative",
-      "paper_a_id": "stem-soft-a",
-      "paper_b_id": "stem-soft-b",
-      "paper_a": {
-        "method_label": "Naive Bayes",
-        "dataset_label": "Dataset_X",
-        "method_data": {
-          "description": "probabilistic generative classifier"
+        "method": {
+          "node_id": "n_method_pca",
+          "label": "PCA",
+          "data": {
+            "description": "Principal-component linear projection for digit images",
+            "usage": "Applied PCA to MNIST pixel vectors before k-NN classification"
+          }
         },
-        "question_label": "Can Naive Bayes classify images in dataset X?"
+        "dataset": {
+          "node_id": "n_dataset_mnist_a",
+          "label": "MNIST",
+          "data": { "description": "28x28 handwritten digit benchmark" }
+        },
+        "topology_neighbors": [
+          {
+            "node_id": "n_dataset_mnist_a",
+            "node_type": "Dataset",
+            "label": "MNIST",
+            "edge_type": "EVALUATED_ON",
+            "attach_to_method": true
+          }
+        ]
       },
       "paper_b": {
-        "method_label": "Logistic Regression",
-        "dataset_label": "Dataset_Y",
-        "method_data": {
-          "description": "discriminative linear classifier"
+        "method": {
+          "node_id": "n_method_pca_full",
+          "label": "Principal Component Analysis",
+          "data": {
+            "description": "Orthogonal basis projection retaining top eigen-directions",
+            "usage": "Principal Component Analysis compressed MNIST features to 50 dimensions"
+          }
         },
-        "question_label": "Does logistic regression improve accuracy on dataset Y?"
+        "dataset": {
+          "node_id": "n_dataset_mnist_b",
+          "label": "MNIST",
+          "data": { "description": "28x28 handwritten digit benchmark" }
+        },
+        "topology_neighbors": [
+          {
+            "node_id": "n_dataset_mnist_b",
+            "node_type": "Dataset",
+            "label": "MNIST",
+            "edge_type": "EVALUATED_ON",
+            "attach_to_method": true
+          }
+        ]
       },
-      "rationale": "高 embedding 相似但数据集拓扑不交，拓扑一票否决 → INSUFFICIENT_DATA。"
+      "shared_topology": {
+        "resonant_dataset_labels": ["MNIST"],
+        "notes": "Cross-paper dataset label equality enables Plan C topology rescue for synonym methods."
+      },
+      "expectation": {
+        "expected_status": "READY",
+        "expected_match_type": "SEMANTIC",
+        "expected_overlap_label": "PCA",
+        "theta_min": 0.88
+      }
     },
     {
-      "id": "stem-neg-02",
+      "id": "stem-neg-topology-01",
+      "priority": "P0",
+      "issue_id": "NB_LR_FALSE_POSITIVE",
+      "archetype": "CORRELATED_FALSE_POSITIVE",
       "paradigm": "STEM",
-      "expectation": "negative",
-      "paper_a_id": "stem-disjoint-a",
-      "paper_b_id": "stem-disjoint-b",
+      "paper_a_id": "golden-nb-a",
+      "paper_b_id": "golden-lr-b",
+      "rationale": "强相关假阳：Naive Bayes ↔ Logistic Regression 高 cosine 但 Dataset 拓扑不交，拓扑一票否决。",
       "paper_a": {
-        "method_label": "Support Vector Machine",
-        "dataset_label": "ImageNet"
+        "method": {
+          "node_id": "n_method_nb",
+          "label": "Naive Bayes",
+          "data": { "description": "probabilistic generative classifier" }
+        },
+        "dataset": {
+          "node_id": "n_dataset_x",
+          "label": "Dataset_X",
+          "data": { "description": "synthetic tabular benchmark X" }
+        },
+        "research_question": {
+          "node_id": "n_rq_nb",
+          "label": "Can Naive Bayes classify images in dataset X?"
+        },
+        "topology_neighbors": [
+          {
+            "node_id": "n_dataset_x",
+            "node_type": "Dataset",
+            "label": "Dataset_X",
+            "edge_type": "EVALUATED_ON",
+            "attach_to_method": true
+          },
+          {
+            "node_id": "n_rq_nb",
+            "node_type": "ResearchQuestion",
+            "label": "Can Naive Bayes classify images in dataset X?",
+            "edge_type": "ADDRESSES",
+            "attach_to_method": true
+          }
+        ]
       },
       "paper_b": {
-        "method_label": "Gradient Boosting",
-        "dataset_label": "COCO"
+        "method": {
+          "node_id": "n_method_lr",
+          "label": "Logistic Regression",
+          "data": { "description": "discriminative linear classifier" }
+        },
+        "dataset": {
+          "node_id": "n_dataset_y",
+          "label": "Dataset_Y",
+          "data": { "description": "synthetic tabular benchmark Y" }
+        },
+        "research_question": {
+          "node_id": "n_rq_lr",
+          "label": "Does logistic regression improve accuracy on dataset Y?"
+        },
+        "topology_neighbors": [
+          {
+            "node_id": "n_dataset_y",
+            "node_type": "Dataset",
+            "label": "Dataset_Y",
+            "edge_type": "EVALUATED_ON",
+            "attach_to_method": true
+          },
+          {
+            "node_id": "n_rq_lr",
+            "node_type": "ResearchQuestion",
+            "label": "Does logistic regression improve accuracy on dataset Y?",
+            "edge_type": "ADDRESSES",
+            "attach_to_method": true
+          }
+        ]
       },
-      "rationale": "方法与数据集均无重合，应 INSUFFICIENT_DATA。"
+      "shared_topology": {
+        "resonant_dataset_labels": [],
+        "notes": "Disjoint datasets — embedding pre-screen must not bypass topology veto."
+      },
+      "expectation": {
+        "expected_status": "INSUFFICIENT_DATA",
+        "expected_match_type": null,
+        "expected_overlap_label": null,
+        "theta_min": null,
+        "drift_guard": {
+          "enabled": true,
+          "require_below_semantic_threshold": true
+        }
+      }
+    },
+    {
+      "id": "stem-pos-literal-01",
+      "priority": "P0",
+      "issue_id": null,
+      "archetype": "LITERAL_TRUE_POSITIVE",
+      "paradigm": "STEM",
+      "paper_a_id": "golden-bert-a",
+      "paper_b_id": "golden-bert-b",
+      "rationale": "字面真阳：BERT ↔ BERT 全等标签，字面锚定快速通道应 READY（无需共享拓扑）。",
+      "paper_a": {
+        "method": {
+          "node_id": "n_method_bert_a",
+          "label": "BERT",
+          "data": { "description": "Transformer encoder baseline on GLUE" }
+        },
+        "dataset": {
+          "node_id": "n_dataset_glue_a",
+          "label": "GLUE",
+          "data": { "description": "General Language Understanding Evaluation" }
+        },
+        "topology_neighbors": [
+          {
+            "node_id": "n_dataset_glue_a",
+            "node_type": "Dataset",
+            "label": "GLUE",
+            "edge_type": "EVALUATED_ON",
+            "attach_to_method": true
+          }
+        ]
+      },
+      "paper_b": {
+        "method": {
+          "node_id": "n_method_bert_b",
+          "label": "BERT",
+          "data": { "description": "Bidirectional encoder for text classification" }
+        },
+        "dataset": {
+          "node_id": "n_dataset_sst_b",
+          "label": "SST-2",
+          "data": { "description": "Stanford Sentiment Treebank binary split" }
+        },
+        "topology_neighbors": [
+          {
+            "node_id": "n_dataset_sst_b",
+            "node_type": "Dataset",
+            "label": "SST-2",
+            "edge_type": "EVALUATED_ON",
+            "attach_to_method": true
+          }
+        ]
+      },
+      "shared_topology": {
+        "resonant_dataset_labels": [],
+        "notes": "Literal anchor path — method labels identical; datasets may differ."
+      },
+      "expectation": {
+        "expected_status": "READY",
+        "expected_match_type": "LITERAL",
+        "expected_overlap_label": "BERT",
+        "theta_min": 1.0
+      }
     }
   ]
 }
