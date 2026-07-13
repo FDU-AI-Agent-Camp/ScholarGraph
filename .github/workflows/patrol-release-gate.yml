@@ -24,7 +24,11 @@ jobs:
   patrol-live-gate:
     runs-on: ubuntu-latest
     env:
+      APP_PROFILE: demo
       LLM_MODE: live
+      RERANKER_ENABLED: "true"
+      RERANKER_MODEL: bge-reranker-large
+      STARTUP_RERANKER_PROBE: "false"
       EMBEDDING_MODEL: bge-m3
       PATROL_SEMANTIC_THRESHOLD: "0.88"
       ENABLE_PATROL_SEMANTIC_PATH: "true"
@@ -58,6 +62,9 @@ jobs:
 
       - name: Live patrol pytest gate
         run: uv run python -m pytest -q --tb=short -m live_patrol
+
+      - name: Demo profile admission gate
+        run: uv run python -m pytest -q --tb=short -m demo_profile_check
 
       - name: Live patrol benchmark gate
         run: uv run python scripts/benchmark_patrol.py --live --mode all

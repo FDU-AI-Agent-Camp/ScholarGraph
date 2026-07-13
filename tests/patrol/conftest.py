@@ -46,12 +46,19 @@ def patch_patrol_settings(monkeypatch: pytest.MonkeyPatch, **overrides: bool | i
     reset_patrol_runtime_caches()
 
 
+_LIVE_PATROL_MARKERS = frozenset({"live_patrol", "demo_profile_check"})
+
+
+def _uses_live_patrol_settings(request: pytest.FixtureRequest) -> bool:
+    return any(request.node.get_closest_marker(name) for name in _LIVE_PATROL_MARKERS)
+
+
 @pytest.fixture(autouse=True)
 def _enforce_golden_config_snapshot_for_live_patrol(
     request: pytest.FixtureRequest,
 ) -> Iterator[None]:
-    """Block live_patrol when runtime config diverges from golden config_snapshot."""
-    if not request.node.get_closest_marker("live_patrol"):
+    """Block live_patrol / demo_profile_check when config diverges from golden snapshot."""
+    if not _uses_live_patrol_settings(request):
         yield
         return
 
@@ -64,7 +71,7 @@ def _enforce_golden_config_snapshot_for_live_patrol(
 @pytest.fixture(autouse=True)
 def _isolate_patrol_settings(monkeypatch: pytest.MonkeyPatch, request: pytest.FixtureRequest) -> Iterator[None]:
     """Prevent cross-test Settings / embedding singleton pollution in patrol suite."""
-    if request.node.get_closest_marker("live_patrol"):
+    if _uses_live_patrol_settings(request):
         reset_patrol_runtime_caches()
         yield
         reset_patrol_runtime_caches()

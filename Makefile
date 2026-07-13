@@ -1,7 +1,7 @@
-.PHONY: check check-lint check-no-fix ci ci-patrol-release format type test
+.PHONY: check check-lint check-no-fix ci ci-patrol-release ci-demo-profile-check format type test
 
 # PR 门禁：排除所有 live / 外部依赖 marker，仅跑内存 Stub 回归
-PR_GATE_MARKERS := not red and not live and not live_patrol and not live_mineru and not live_grobid and not live_benchmark and not live_e10 and not live_judge and not live_head_merge
+PR_GATE_MARKERS := not red and not live and not live_patrol and not demo_profile_check and not live_mineru and not live_grobid and not live_benchmark and not live_e10 and not live_judge and not live_head_merge
 
 # 完整后端门禁：ruff --fix -> ruff format -> pyright -> pytest
 # 适合本地开发快速验证
@@ -26,11 +26,16 @@ ci:
 	uv run python -m pytest -q --tb=short --cov=backend --cov-report=xml --cov-report=term-missing --cov-fail-under=30 -m "$(PR_GATE_MARKERS)"
 	uv run pip-audit --desc --format=json --local --path=.venv > pip-audit-report.json || true
 
-# Nightly / Release 门禁：config_snapshot 对齐 + live_patrol + live benchmark
+# Nightly / Release 门禁：config_snapshot 对齐 + live_patrol + demo 准入 + live benchmark
 ci-patrol-release:
 	uv run python scripts/validate_patrol_golden.py --strict --json
 	uv run python -m pytest -q --tb=short -m live_patrol
+	uv run python -m pytest -q --tb=short -m demo_profile_check
 	uv run python scripts/benchmark_patrol.py --live
+
+# Demo / Staging 准入（本地或 staging 手动执行）
+ci-demo-profile-check:
+	uv run python -m pytest -q --tb=short -m demo_profile_check
 
 # 单独步骤
 type:
