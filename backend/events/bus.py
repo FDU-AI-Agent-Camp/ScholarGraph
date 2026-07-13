@@ -11,9 +11,15 @@ from functools import lru_cache
 from typing import Any
 
 from backend.events.types import EventType
-from backend.repositories.async_bridge import run_async
+from backend.repositories.async_bridge import (
+    get_registered_main_event_loop,
+    get_registered_main_loop_thread_id,
+    run_async,
+)
 
 logger = logging.getLogger(__name__)
+
+WORKER_CANCEL_TIMEOUT_SECONDS = 5.0
 
 EventHandler = Callable[[Any], Awaitable[None] | None]
 HandlerErrorCallback = Callable[[EventType, Exception, Any], Awaitable[None] | None]
@@ -46,10 +52,8 @@ class EventBus:
         async def _publish() -> None:
             await self.publish(event)
 
-        from backend.repositories import async_bridge
-
-        main_loop = async_bridge._MAIN_EVENT_LOOP
-        main_loop_thread_id = async_bridge._MAIN_LOOP_THREAD_ID
+        main_loop = get_registered_main_event_loop()
+        main_loop_thread_id = get_registered_main_loop_thread_id()
         if (
             main_loop is not None
             and main_loop.is_running()
@@ -67,10 +71,20 @@ class EventBus:
 
     def _stop_worker(self) -> None:
         """Tear down the background worker (tests / application shutdown)."""
-        if self._worker_task is not None and not self._worker_task.done():
-            self._worker_task.cancel()
+        worker_task = self._worker_task
         self._worker_task = None
         self._queue = None
+        if worker_task is None or worker_task.done():
+            return
+        worker_task.cancel()
+        try:
+            loop = worker_task.get_loop()
+            if loop.is_closed():
+                return
+            future = asyncio.run_coroutine_threadsafe(_await_cancelled_task(worker_task), loop)
+            future.result(timeout=WORKER_CANCEL_TIMEOUT_SECONDS)
+        except Exception:
+            logger.debug("event_bus_worker_stop_failed", exc_info=True)
 
     async def _ensure_queue(self) -> None:
         if self._queue is None:
@@ -130,6 +144,20 @@ class EventBus:
         self._stop_worker()
 
 
+async def _await_cancelled_task(task: asyncio.Task[None]) -> None:
+    try:
+        await task
+    except asyncio.CancelledError:
+        pass
+
+
+def stop_event_bus_worker() -> None:
+    """Stop the cached bus worker without clearing handlers or singleton state."""
+    if not get_event_bus.cache_info().currsize:
+        return
+    get_event_bus()._stop_worker()
+
+
 def on_event(event_type: EventType) -> Callable[[EventHandler], EventHandler]:
     """Decorator that registers a handler on the process-wide bus."""
 
@@ -155,6 +183,8 @@ def get_event_bus() -> EventBus:
 def reset_event_bus_cache() -> None:
     if get_event_bus.cache_info().currsize:
         get_event_bus().reset()
+    else:
+        stop_event_bus_worker()
     get_event_bus.cache_clear()
     from backend.events.pipeline_finalized_handlers import register_pipeline_finalized_handlers
 

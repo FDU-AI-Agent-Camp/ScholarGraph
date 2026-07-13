@@ -44,6 +44,9 @@ async def lifespan(app: FastAPI):
     try:
         yield
     finally:
+        from backend.events.bus import stop_event_bus_worker
+
+        stop_event_bus_worker()
         register_main_event_loop(None)
         reset_hybrid_retriever()
         if hasattr(app.state, "hybrid_retriever"):

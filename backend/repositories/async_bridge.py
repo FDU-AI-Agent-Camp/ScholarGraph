@@ -34,6 +34,16 @@ def register_main_event_loop(loop: asyncio.AbstractEventLoop | None) -> None:
     _MAIN_LOOP_THREAD_ID = threading.get_ident() if loop is not None else None
 
 
+def get_registered_main_event_loop() -> asyncio.AbstractEventLoop | None:
+    """Return the application loop registered by ``register_main_event_loop``."""
+    return _MAIN_EVENT_LOOP
+
+
+def get_registered_main_loop_thread_id() -> int | None:
+    """Return the thread id that registered the application loop, if any."""
+    return _MAIN_LOOP_THREAD_ID
+
+
 def _bridge_thread_main() -> None:
     global _BRIDGE_LOOP
 
