@@ -18,6 +18,8 @@ from backend.services.graph_persistence_service import GraphPersistenceService
 from backend.services.paper_service import get_paper_service
 from backend.services.pipeline_completion_service import PipelineCompletionService
 
+from tests.helpers.event_bus_testkit import drain_event_bus
+
 # ── ingest_node ─────────────────────────────────────────────────────────────
 
 
@@ -360,6 +362,7 @@ async def test_store_node_triggers_rag_indexing_after_finalize(
         ):
             await nodes.store_node(post_extract_state)
 
+    await drain_event_bus()
     mock_rag_index.assert_awaited_once()
     call_kwargs = mock_rag_index.await_args.kwargs
     assert call_kwargs["full_text"] == post_extract_state["full_text"]
@@ -427,12 +430,11 @@ async def test_store_node_rag_index_failure_records_extract_warning(
         completion_svc = PipelineCompletionService(graph_persistence=persistence)
 
         async def failing_rag_async(*_args: Any, **kwargs: Any) -> None:
-            from backend.services.paper_service import get_paper_service
+            from backend.repositories.pipeline_repository import PipelineRepository
 
-            get_paper_service().record_extract_warnings(
-                kwargs.get("paper_id") or _args[0],
-                [RAG_INDEX_WARNING_CODE],
-            )
+            paper_id = kwargs.get("paper_id") or _args[0]
+            await PipelineRepository().record_warnings(paper_id, extract=[RAG_INDEX_WARNING_CODE])
+            raise RuntimeError("RAG crashed")
 
         mock_rag_async.side_effect = failing_rag_async
         with patch(
@@ -441,6 +443,7 @@ async def test_store_node_rag_index_failure_records_extract_warning(
         ):
             await nodes.store_node(post_extract_state)
 
+    await drain_event_bus()
     paper = await get_paper_service().get_paper(paper_id)
     assert RAG_INDEX_WARNING_CODE in paper.extract_warnings
 

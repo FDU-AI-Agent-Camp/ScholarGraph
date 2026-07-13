@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from unittest.mock import AsyncMock, patch
 
@@ -15,6 +16,7 @@ from backend.events.types import PipelineFinalized
 from backend.schemas.graph import GraphEdge, GraphNode, UnifiedPaperGraph
 from backend.schemas.paradigm import Paradigm, ParadigmClassification
 from backend.services.pipeline_completion_service import PipelineCompletionService
+from tests.helpers.event_bus_testkit import drain_event_bus_sync
 from tests.helpers.persistence_testkit import mock_graph_persistence, register_test_paper
 
 
@@ -138,7 +140,7 @@ async def test_finalize_publish_and_consume_share_correlation_id(
                 classification_data=classification.model_dump(mode="json"),
                 full_text="observable full text",
             )
-            await bus.drain()
+            await asyncio.to_thread(bus.drain_sync)
     finally:
         bus_module.get_event_bus = original_get
 
@@ -199,5 +201,6 @@ def test_handler_immediate_db_read_never_dirty_reads(
                     classification_data=classification.model_dump(mode="json"),
                     full_text=f"isolation body {index}",
                 )
+        drain_event_bus_sync()
     finally:
         bus_module.get_event_bus = original_get

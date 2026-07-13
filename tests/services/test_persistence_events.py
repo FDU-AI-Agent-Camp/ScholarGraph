@@ -2,11 +2,40 @@
 
 from __future__ import annotations
 
+import asyncio
+
 import pytest
 from backend.events.bus import EventBus
 from backend.events.types import EventType, PipelineFinalized
 from backend.schemas.graph import GraphNode, UnifiedPaperGraph
 from backend.schemas.paradigm import Paradigm
+
+
+@pytest.mark.asyncio
+async def test_publish_sync_is_fire_and_forget_until_explicit_drain() -> None:
+    bus = EventBus()
+    seen: list[str] = []
+
+    async def handler(event: PipelineFinalized) -> None:
+        await asyncio.sleep(0.05)
+        seen.append(event.paper_id)
+
+    bus.subscribe(EventType.PIPELINE_FINALIZED, handler)
+    graph = UnifiedPaperGraph(
+        paper_id="ff-1",
+        paradigm=Paradigm.STEM,
+        nodes=[GraphNode(id="n1", label="M", type="Method")],
+        edges=[],
+    )
+
+    async def trigger_publish_sync() -> None:
+        bus.publish_sync(PipelineFinalized(paper_id="ff-1", full_text="body", graph=graph))
+
+    await asyncio.to_thread(lambda: bus.publish_sync(PipelineFinalized(paper_id="ff-1", full_text="body", graph=graph)))
+    assert seen == []
+
+    await asyncio.to_thread(bus.drain_sync)
+    assert seen == ["ff-1"]
 
 
 @pytest.mark.asyncio

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import asyncio
+
 import pytest
 from backend.events.bus import EventBus
 from backend.events.types import EventType, PipelineFinalized
@@ -49,7 +51,7 @@ async def test_finalize_publishes_pipeline_finalized_event(persistence_env) -> N
             classification_data=classification.model_dump(mode="json"),
             full_text="pipeline full text body",
         )
-        await bus.drain()
+        await asyncio.to_thread(bus.drain_sync)
     finally:
         bus_module.get_event_bus = original_get
 

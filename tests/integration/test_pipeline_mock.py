@@ -22,6 +22,7 @@ from backend.services.errors import ServiceError
 from backend.services.paper_service import get_paper_service
 
 from tests.conftest import mock_pipeline_node_services
+from tests.helpers.event_bus_testkit import drain_event_bus
 from tests.helpers.status_contract import assert_snapshot_matches_contract
 
 pytestmark = pytest.mark.integration
@@ -197,6 +198,7 @@ async def test_run_paper_pipeline_rag_index_records_warning_on_failure(
         mocks["rag_index"].side_effect = failing_rag_index
         await run_paper_pipeline(paper_id, pdf_path)
 
+    await drain_event_bus()
     paper = await get_paper_service().get_paper(paper_id)
     assert RAG_INDEX_WARNING_CODE in paper.extract_warnings
 
@@ -244,6 +246,7 @@ async def test_run_paper_pipeline_builds_queryable_rag_index(
         mocks["rag_index"].side_effect = real_rag_index
         final = await run_paper_pipeline(paper_id, pdf_path)
 
+    await drain_event_bus()
     assert final.get("failed") is not True
     status = await get_paper_service().get_status(paper_id)
     assert status.status == PaperStatus.READY
