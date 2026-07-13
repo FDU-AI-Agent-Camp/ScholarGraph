@@ -13,6 +13,14 @@
         "node_refs": [
           { "paper_id": "hss-001", "node_id": "n_lens_a", "label": "消费社会" },
           { "paper_id": "hss-002", "node_id": "n_lens_b", "label": "公共领域" }
+        ],
+        "structured_points": [
+          {
+            "mode": "lens_clash",
+            "lens_a": "消费社会",
+            "lens_b": "公共领域",
+            "clash_aspect": "ontology"
+          }
         ]
       }
     ],

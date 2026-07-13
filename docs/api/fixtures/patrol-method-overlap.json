@@ -1,0 +1,41 @@
+{
+  "data": {
+    "mode": "method_overlap",
+    "paper_ids": ["stem-001", "stem-002"],
+    "insights": [
+      {
+        "insight_id": "ins-method-overlap-001",
+        "title": "方法重叠（Method Overlap）",
+        "summary": "两篇论文在 MNIST 上均通过主成分分析压缩图像特征。",
+        "status": "ready",
+        "has_contradiction": null,
+        "paper_ids": ["stem-001", "stem-002"],
+        "node_refs": [
+          { "paper_id": "stem-001", "node_id": "n_method_pca", "label": "PCA" },
+          { "paper_id": "stem-002", "node_id": "n_method_pca_full", "label": "Principal Component Analysis" }
+        ],
+        "structured_points": [
+          {
+            "mode": "method_overlap",
+            "overlap_type": "method",
+            "overlap_label": "PCA",
+            "paper_a_usage": "Applied PCA to MNIST pixel vectors before k-NN classification",
+            "paper_b_usage": "Principal Component Analysis compressed MNIST features to 50 dimensions",
+            "dataset_a": "MNIST",
+            "dataset_b": "MNIST",
+            "overlap_score": 0.99,
+            "match_type": "semantic",
+            "evidence_summary": "同义词方法标签在共享 MNIST 数据集上共振。",
+            "node_refs": [
+              { "paper_id": "stem-001", "node_id": "n_method_pca", "label": "PCA" },
+              { "paper_id": "stem-002", "node_id": "n_method_pca_full", "label": "Principal Component Analysis" }
+            ]
+          }
+        ],
+        "meta": {}
+      }
+    ],
+    "generated_at": "2026-07-14T00:00:00Z"
+  },
+  "meta": { "request_id": "mock-patrol-method-overlap-001" }
+}
