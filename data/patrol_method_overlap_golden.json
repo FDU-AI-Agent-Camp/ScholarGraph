@@ -1,0 +1,88 @@
+{
+  "schema_version": 1,
+  "dataset_id": "patrol-method-overlap-golden",
+  "description": "Method-overlap golden pairs (STEM): positive synonym+topology and negative topology-veto cases for live embedding regression.",
+  "owner": "Patrol V2 QA",
+  "pairs": [
+    {
+      "id": "stem-pos-01",
+      "paradigm": "STEM",
+      "expectation": "positive",
+      "paper_a_id": "stem-golden-a",
+      "paper_b_id": "stem-golden-b",
+      "paper_a": {
+        "method_label": "PCA",
+        "dataset_label": "MNIST",
+        "method_data": {
+          "description": "Principal-component linear projection for digit images",
+          "usage": "Applied PCA to MNIST pixel vectors before k-NN classification"
+        }
+      },
+      "paper_b": {
+        "method_label": "Principal Component Analysis",
+        "dataset_label": "MNIST",
+        "method_data": {
+          "description": "Orthogonal basis projection retaining top eigen-directions",
+          "usage": "Principal Component Analysis compressed MNIST features to 50 dimensions"
+        }
+      },
+      "rationale": "同义词方法标签 + 共享 MNIST 拓扑共振，应产出 READY 与 semantic match。"
+    },
+    {
+      "id": "stem-pos-02",
+      "paradigm": "STEM",
+      "expectation": "positive",
+      "paper_a_id": "stem-literal-a",
+      "paper_b_id": "stem-literal-b",
+      "paper_a": {
+        "method_label": "Random Forest",
+        "dataset_label": "CIFAR-10"
+      },
+      "paper_b": {
+        "method_label": "Random Forest",
+        "dataset_label": "CIFAR-10"
+      },
+      "rationale": "字面方法+数据集完全匹配，应产出 READY（literal match）。"
+    },
+    {
+      "id": "stem-neg-01",
+      "paradigm": "STEM",
+      "expectation": "negative",
+      "paper_a_id": "stem-soft-a",
+      "paper_b_id": "stem-soft-b",
+      "paper_a": {
+        "method_label": "Naive Bayes",
+        "dataset_label": "Dataset_X",
+        "method_data": {
+          "description": "probabilistic generative classifier"
+        },
+        "question_label": "Can Naive Bayes classify images in dataset X?"
+      },
+      "paper_b": {
+        "method_label": "Logistic Regression",
+        "dataset_label": "Dataset_Y",
+        "method_data": {
+          "description": "discriminative linear classifier"
+        },
+        "question_label": "Does logistic regression improve accuracy on dataset Y?"
+      },
+      "rationale": "高 embedding 相似但数据集拓扑不交，拓扑一票否决 → INSUFFICIENT_DATA。"
+    },
+    {
+      "id": "stem-neg-02",
+      "paradigm": "STEM",
+      "expectation": "negative",
+      "paper_a_id": "stem-disjoint-a",
+      "paper_b_id": "stem-disjoint-b",
+      "paper_a": {
+        "method_label": "Support Vector Machine",
+        "dataset_label": "ImageNet"
+      },
+      "paper_b": {
+        "method_label": "Gradient Boosting",
+        "dataset_label": "COCO"
+      },
+      "rationale": "方法与数据集均无重合，应 INSUFFICIENT_DATA。"
+    }
+  ]
+}
