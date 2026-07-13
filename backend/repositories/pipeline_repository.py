@@ -12,6 +12,7 @@ from sqlalchemy.orm import selectinload
 from backend.db.base import get_async_session_factory
 from backend.db.models import PaperRow, PipelineRunRow
 from backend.repositories.mappers import pipeline_row_to_status
+from backend.schemas.graph import UnifiedPaperGraph
 from backend.schemas.paper import PaperStatus, PaperStatusData
 
 
@@ -43,6 +44,8 @@ class PipelineRepository:
                     head_refine_warnings=list(data.head_refine_warnings),
                     classify_warnings=list(data.classify_warnings),
                     extract_warnings=list(data.extract_warnings),
+                    active_rag_run_id=None,
+                    preview_graph=None,
                     created_at=now,
                     updated_at=now,
                 )
@@ -102,6 +105,66 @@ class PipelineRepository:
             run.updated_at = datetime.now(UTC)
             await session.commit()
 
+    async def get_active_rag_run_id(self, paper_id: str) -> str | None:
+        async with get_async_session_factory()() as session:
+            run = await session.get(PipelineRunRow, paper_id)
+            if run is None or run.active_rag_run_id is None:
+                return None
+            return run.active_rag_run_id
+
+    async def set_active_rag_run_id(self, paper_id: str, run_id: str) -> None:
+        async with get_async_session_factory()() as session:
+            await self._begin_immediate(session)
+            run = await session.get(PipelineRunRow, paper_id)
+            if run is None:
+                msg = f"pipeline run not found: {paper_id}"
+                raise KeyError(msg)
+            run.active_rag_run_id = run_id if run_id else ""
+            run.updated_at = datetime.now(UTC)
+            await session.commit()
+
+    async def save_preview_graph(self, paper_id: str, graph: UnifiedPaperGraph) -> None:
+        """Persist preview graph via full JSON replacement (never in-place JSON mutation)."""
+        payload = graph.model_dump(mode="json")
+        async with get_async_session_factory()() as session:
+            await self._begin_immediate(session)
+            run = await session.get(PipelineRunRow, paper_id)
+            if run is None:
+                msg = f"pipeline run not found: {paper_id}"
+                raise KeyError(msg)
+            run.preview_graph = payload
+            run.updated_at = datetime.now(UTC)
+            await session.commit()
+
+    async def get_preview_graph(self, paper_id: str) -> UnifiedPaperGraph | None:
+        async with get_async_session_factory()() as session:
+            run = await session.get(PipelineRunRow, paper_id)
+            if run is None or run.preview_graph is None:
+                return None
+            return UnifiedPaperGraph.model_validate(run.preview_graph)
+
+    async def clear_preview_graph(self, paper_id: str) -> None:
+        async with get_async_session_factory()() as session:
+            await self._begin_immediate(session)
+            run = await session.get(PipelineRunRow, paper_id)
+            if run is None:
+                return
+            run.preview_graph = None
+            run.updated_at = datetime.now(UTC)
+            await session.commit()
+
+    async def clear_ephemeral_pipeline_state(self, paper_id: str) -> None:
+        """Clear preview graph and RAG run tracking for re-extract or finalize."""
+        async with get_async_session_factory()() as session:
+            await self._begin_immediate(session)
+            run = await session.get(PipelineRunRow, paper_id)
+            if run is None:
+                return
+            run.preview_graph = None
+            run.active_rag_run_id = None
+            run.updated_at = datetime.now(UTC)
+            await session.commit()
+
     async def reset_for_reextract(self, paper_id: str, *, message: str) -> PaperStatusData:
         """Reset pipeline snapshot to pending and clear warnings/error fields."""
         now = datetime.now(UTC)
@@ -120,6 +183,7 @@ class PipelineRepository:
             extract_warnings=[],
         )
         await self.save_status(paper_id, snapshot)
+        await self.clear_ephemeral_pipeline_state(paper_id)
         return snapshot
 
     async def _begin_immediate(self, session: AsyncSession) -> None:
