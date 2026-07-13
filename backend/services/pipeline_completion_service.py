@@ -11,7 +11,6 @@ from backend.agents.extract_constants import (
     LOW_CONFIDENCE_GRAPH_CODE,
 )
 from backend.graph.quality_gate import evaluate_graph_quality
-from backend.repositories.async_bridge import run_async
 from backend.schemas.graph import UnifiedPaperGraph
 from backend.schemas.paper import PaperStatus
 from backend.schemas.paradigm import ParadigmClassification
@@ -125,7 +124,7 @@ def complete_paper_pipeline(
         },
     )
     get_event_bus().publish_sync(finalized_event)
-    run_async(paper_service._pipeline_repo.clear_preview_graph(paper_id))
+    paper_service.clear_preview_graph(paper_id)
 
 
 class PipelineCompletionService:

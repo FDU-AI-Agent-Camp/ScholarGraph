@@ -360,6 +360,10 @@ class PaperService:
             return
         run_async(self._pipeline_repo.record_warnings(paper_id, extract=warnings))
 
+    def clear_preview_graph(self, paper_id: str) -> None:
+        """Clear the temporary preview graph for a specific paper pipeline."""
+        run_async(self._pipeline_repo.clear_preview_graph(paper_id))
+
     def record_classify_warnings(self, paper_id: str, warnings: list[str]) -> None:
         if not warnings:
             return

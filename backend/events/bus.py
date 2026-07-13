@@ -15,15 +15,21 @@ from backend.repositories.async_bridge import run_async
 logger = logging.getLogger(__name__)
 
 EventHandler = Callable[[Any], Awaitable[None] | None]
+HandlerErrorCallback = Callable[[EventType, Exception, Any], Awaitable[None] | None]
 
 
 class EventBus:
     """Minimal pub/sub bus backed by an asyncio queue."""
 
-    def __init__(self) -> None:
+    def __init__(self, *, on_handler_error: HandlerErrorCallback | None = None) -> None:
         self._handlers: dict[EventType, list[EventHandler]] = defaultdict(list)
         self._queue: asyncio.Queue[Any] | None = None
         self._worker_task: asyncio.Task[None] | None = None
+        self._on_handler_error = on_handler_error
+
+    def set_handler_error_callback(self, callback: HandlerErrorCallback | None) -> None:
+        """Install optional hook invoked when a subscriber raises (D12 observability)."""
+        self._on_handler_error = callback
 
     def subscribe(self, event_type: EventType, handler: EventHandler) -> None:
         self._handlers[event_type].append(handler)
@@ -69,12 +75,32 @@ class EventBus:
                     result = handler(event)
                     if asyncio.iscoroutine(result):
                         await result
-                except Exception:
+                except Exception as exc:
                     logger.exception(
                         "event_handler_failed",
                         extra={"event_type": event_type.value},
                     )
+                    await self._invoke_handler_error_callback(event_type, exc, event)
             self._queue.task_done()
+
+    async def _invoke_handler_error_callback(
+        self,
+        event_type: EventType,
+        exc: Exception,
+        event: Any,
+    ) -> None:
+        callback = self._on_handler_error
+        if callback is None:
+            return
+        try:
+            result = callback(event_type, exc, event)
+            if asyncio.iscoroutine(result):
+                await result
+        except Exception:
+            logger.exception(
+                "event_handler_error_callback_failed",
+                extra={"event_type": event_type.value},
+            )
 
     async def drain(self) -> None:
         """Wait until queued events are processed (tests only)."""
@@ -98,6 +124,13 @@ def on_event(event_type: EventType) -> Callable[[EventHandler], EventHandler]:
     return decorator
 
 
+def install_default_event_bus_hooks() -> None:
+    """Wire process-wide bus safety nets (handler failure → extract_warnings)."""
+    from backend.events.handler_errors import persist_event_handler_failure
+
+    get_event_bus().set_handler_error_callback(persist_event_handler_failure)
+
+
 @lru_cache
 def get_event_bus() -> EventBus:
     return EventBus()
@@ -110,3 +143,4 @@ def reset_event_bus_cache() -> None:
     from backend.events.pipeline_finalized_handlers import register_pipeline_finalized_handlers
 
     register_pipeline_finalized_handlers()
+    install_default_event_bus_hooks()

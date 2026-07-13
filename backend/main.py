@@ -23,6 +23,9 @@ async def lifespan(app: FastAPI):
     from backend.services.paper_service import get_paper_service
 
     register_pipeline_finalized_handlers()
+    from backend.events.bus import install_default_event_bus_hooks
+
+    install_default_event_bus_hooks()
     from backend.repositories import register_main_event_loop
 
     register_main_event_loop(asyncio.get_running_loop())
