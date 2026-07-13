@@ -11,8 +11,16 @@ async def test_health_returns_ok_envelope() -> None:
 
     assert response.status_code == 200
     body = response.json()
-    assert body["data"]["status"] == "ok"
+    assert body["data"]["status"] in {"healthy", "degraded"}
     assert body["data"]["version"] == "1.0.0"
+    assert body["data"]["app_profile"] == "ci"
+    assert "components" in body["data"]
+    assert body["data"]["components"]["patrol_service"]["reranker_status"] in {
+        "READY",
+        "DISABLED_FALLBACK_ACTIVE",
+        "MISCONFIGURED",
+        "MOCK_LOCAL",
+    }
     assert body["data"]["llm_mode"] in {"mock", "live"}
     assert body["data"]["llm_connected"] == (body["data"]["llm_mode"] == "live")
     assert "llm_note" in body["data"]

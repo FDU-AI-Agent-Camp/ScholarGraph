@@ -359,14 +359,26 @@ components:
       properties:
         data:
           type: object
-          required: [status, version, llm_mode, llm_connected, llm_note]
+          required: [status, version, llm_mode, llm_connected, llm_note, components]
           properties:
             status:
               type: string
-              example: ok
+              enum: [healthy, degraded]
+              description: Aggregate health — degraded when Patrol claim_evolution funnel is incomplete in live mode.
+              example: healthy
             version:
               type: string
               example: 1.0.0
+            app_profile:
+              type: string
+              nullable: true
+              enum: [ci, demo, prod]
+            components:
+              type: object
+              required: [patrol_service]
+              properties:
+                patrol_service:
+                  $ref: "#/components/schemas/PatrolServiceHealth"
             llm_mode:
               type: string
               enum: [mock, live]
@@ -377,8 +389,43 @@ components:
             llm_note:
               type: string
               example: Mock 模式：LLM 云服务尚未接入，问答/巡检返回本地模板。
+            grobid_url:
+              type: string
+            grobid_connected:
+              type: boolean
+            grobid_note:
+              type: string
+            patrol_claim_rq_funnel_enabled:
+              type: boolean
+            patrol_config_warnings:
+              type: array
+              items:
+                type: string
+            patrol_note:
+              type: string
         meta:
           $ref: "#/components/schemas/Meta"
+
+    PatrolServiceHealth:
+      type: object
+      required: [status, claim_rq_funnel_enabled, reranker_status, active_profile]
+      properties:
+        status:
+          type: string
+          enum: [fully_functional, degraded]
+        claim_rq_funnel_enabled:
+          type: boolean
+        reranker_status:
+          type: string
+          enum: [READY, DISABLED_FALLBACK_ACTIVE, MISCONFIGURED, MOCK_LOCAL]
+        active_profile:
+          type: string
+          nullable: true
+          enum: [ci, demo, prod]
+        warnings:
+          type: array
+          items:
+            type: string
 
     PaperSummary:
       type: object
