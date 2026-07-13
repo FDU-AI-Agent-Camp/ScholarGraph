@@ -20,6 +20,31 @@ logger = logging.getLogger(__name__)
 
 RAG_DEGRADED_META_KEY = "patrol_rag_context_degraded"
 
+_DEGRADATION_REASON_LABELS: dict[str, str] = {
+    "index_not_ready": "向量索引尚未就绪，检索上下文可能不完整",
+    "vector_store_unavailable": "向量库不可用，结果仅基于图谱结构",
+    "query_failed": "向量检索部分失败，结果可能不完整",
+}
+
+
+def append_rag_degradation_notice(summary: str, meta: dict[str, Any]) -> str:
+    """Append a human-readable RAG degradation hint to an insight summary."""
+    payload = meta.get(RAG_DEGRADED_META_KEY)
+    if not payload:
+        return summary
+
+    reason = str(payload.get("reason", "unknown"))
+    paper_ids = payload.get("paper_ids") or []
+    label = _DEGRADATION_REASON_LABELS.get(reason, f"RAG 上下文降级（{reason}）")
+    if paper_ids:
+        suffix = f"（提示：{label}；受影响论文：{', '.join(paper_ids)}）"
+    else:
+        suffix = f"（提示：{label}）"
+
+    if suffix in summary:
+        return summary
+    return f"{summary.rstrip()} {suffix}"
+
 
 class PatrolRAGService:
     """High-level facade for cross-paper RAG context enrichment.

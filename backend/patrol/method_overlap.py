@@ -17,7 +17,7 @@ from backend.patrol.method_overlap_points import (
 )
 from backend.patrol.method_overlap_semantic import find_semantic_method_overlap
 from backend.patrol.overlap_anchor import _OverlapAnchor
-from backend.patrol.rag_service import PatrolRAGService
+from backend.patrol.rag_service import PatrolRAGService, append_rag_degradation_notice
 from backend.patrol.similarity import normalize_label
 from backend.schemas.graph import GraphNode, NodeType, UnifiedPaperGraph
 from backend.schemas.paradigm import Paradigm
@@ -226,7 +226,7 @@ async def build_method_overlap_insight(
     return PatrolInsight(
         insight_id=METHOD_OVERLAP_INSIGHT_ID,
         title=METHOD_OVERLAP_TITLE,
-        summary=summary,
+        summary=append_rag_degradation_notice(summary, meta),
         status=PatrolInsightStatus.READY,
         paper_ids=[left_id, right_id],
         node_refs=node_refs,

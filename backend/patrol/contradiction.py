@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING, Any
 from backend.llm.client import LlmClient
 from backend.patrol.llm_summary import generate_patrol_summary
 from backend.patrol.node_selection import select_primary_node
-from backend.patrol.rag_service import PatrolRAGService
+from backend.patrol.rag_service import PatrolRAGService, append_rag_degradation_notice
 from backend.patrol.similarity import derive_conflict_type
 from backend.schemas.graph import GraphNode, UnifiedPaperGraph
 from backend.schemas.patrol import (
@@ -136,7 +136,7 @@ async def build_contradiction_insight(
     return PatrolInsight(
         insight_id=CONTRADICTION_INSIGHT_ID,
         title=CONTRADICTION_TITLE,
-        summary=summary,
+        summary=append_rag_degradation_notice(summary, meta),
         status=PatrolInsightStatus.READY,
         paper_ids=[left_id, right_id],
         node_refs=[

@@ -12,7 +12,7 @@ from backend.llm.embeddings import EmbeddingClient, get_embedding_client
 from backend.patrol.claim_evolution_rq_gate import align_research_question_pair
 from backend.patrol.llm_summary import generate_claim_evolution_summary
 from backend.patrol.node_selection import select_primary_node
-from backend.patrol.rag_service import PatrolRAGService
+from backend.patrol.rag_service import PatrolRAGService, append_rag_degradation_notice
 from backend.schemas.graph import GraphNode, NodeType, UnifiedPaperGraph
 from backend.schemas.patrol import (
     ClaimEvolutionPoint,
@@ -245,7 +245,7 @@ async def build_claim_evolution_insight(
     return PatrolInsight(
         insight_id=CLAIM_EVOLUTION_INSIGHT_ID,
         title=CLAIM_EVOLUTION_TITLE,
-        summary=summary,
+        summary=append_rag_degradation_notice(summary, meta),
         status=PatrolInsightStatus.READY,
         paper_ids=[left_id, right_id],
         node_refs=[
