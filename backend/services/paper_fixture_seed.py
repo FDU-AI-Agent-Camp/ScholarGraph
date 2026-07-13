@@ -140,3 +140,17 @@ async def _seed_status_for_detail(
             preview_available=detail.preview_available,
         )
     await pipeline_repo.save_status(detail.paper_id, snapshot)
+
+
+async def refresh_demo_status_snapshots(paper_ids: tuple[str, ...] | list[str]) -> None:
+    """Reload per-paper status fixtures so demo rows match docs/api snapshots."""
+    from backend.repositories.pipeline_repository import get_pipeline_repository
+
+    pipeline_repo = get_pipeline_repository()
+    for paper_id in paper_ids:
+        status_path = FIXTURES_DIR / f"paper-status-{paper_id}.json"
+        if not status_path.is_file():
+            continue
+        status_payload = json.loads(status_path.read_text(encoding="utf-8"))
+        snapshot = PaperStatusData.model_validate(status_payload["data"])
+        await pipeline_repo.save_status(paper_id, snapshot)

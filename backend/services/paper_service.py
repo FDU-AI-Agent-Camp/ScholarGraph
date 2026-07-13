@@ -46,8 +46,12 @@ def reset_persistence_singletons() -> None:
     get_pipeline_repository.cache_clear()
     get_paper_service.cache_clear()
     from backend.services.graph_persistence_service import get_graph_persistence_service
+    from backend.services.pipeline_completion_service import get_pipeline_completion_service
+    from backend.services.pipeline_status_service import get_pipeline_status_service
 
     get_graph_persistence_service.cache_clear()
+    get_pipeline_status_service.cache_clear()
+    get_pipeline_completion_service.cache_clear()
     from backend.events.bus import reset_event_bus_cache
 
     reset_event_bus_cache()
@@ -190,39 +194,22 @@ class PaperService:
         message: str,
         error_code: str | None = None,
         failed_during: PipelineStage | None = None,
+        append_extract_warnings: list[str] | None = None,
     ) -> PaperStatusData:
         """Persist validated pipeline status (called by PipelineStatusService)."""
-        from backend.services.pipeline_status_service import (
-            validate_failed_error_fields,
-            validate_status_contract,
-        )
+        from backend.services.status_snapshot_guard import persist_status_snapshot
 
-        validate_status_contract(status=status, stage=stage, percent=percent)
-        validate_failed_error_fields(
+        return persist_status_snapshot(
+            self,
+            paper_id,
             status=status,
+            stage=stage,
+            percent=percent,
+            message=message,
             error_code=error_code,
             failed_during=failed_during,
+            append_extract_warnings=append_extract_warnings,
         )
-        self.ensure_paper_exists(paper_id)
-        now = datetime.now(UTC)
-        preview_available = self.is_preview_available(paper_id)
-        existing = run_async(self._pipeline_repo.get_latest(paper_id))
-        snapshot = PaperStatusData(
-            paper_id=paper_id,
-            status=status,
-            percent=percent,
-            stage=stage,
-            message=message,
-            updated_at=now,
-            preview_available=preview_available or bool(existing and existing.preview_available),
-            error_code=error_code,
-            failed_during=_to_failed_during(failed_during),
-            head_refine_warnings=(existing.head_refine_warnings if existing is not None else []),
-            classify_warnings=existing.classify_warnings if existing is not None else [],
-            extract_warnings=existing.extract_warnings if existing is not None else [],
-        )
-        run_async(self._pipeline_repo.save_status(paper_id, snapshot))
-        return snapshot
 
     def update_pipeline_status(
         self,
@@ -417,7 +404,9 @@ class PaperService:
         paper = await self.get_paper(paper_id)
         snapshot = await self._pipeline_repo.get_latest(paper_id)
         if snapshot is not None:
-            return snapshot
+            from backend.services.status_snapshot_guard import ensure_status_contract
+
+            return ensure_status_contract(self, paper_id, snapshot)
         if paper.status == PaperStatus.PENDING:
             return PaperStatusData(
                 paper_id=paper_id,

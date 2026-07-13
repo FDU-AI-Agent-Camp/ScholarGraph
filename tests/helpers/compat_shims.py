@@ -175,7 +175,8 @@ def upsert_compat_paper_detail(service: PaperService, paper_id: str, detail: Pap
             ),
         )
     else:
-        run_async(service._paper_repo.update_status(paper_id, status=detail.status))
+        if detail.title and detail.title != (existing.title or ""):
+            run_async(service._paper_repo.update_title(paper_id, detail.title))
     if detail.classification is not None:
         run_async(service._paper_repo.update_classification(paper_id, detail.classification))
     if detail.preview_available:

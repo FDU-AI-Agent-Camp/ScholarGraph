@@ -16,7 +16,7 @@ import logging
 from backend.agents.extract_heuristic import extract_title
 from backend.agents.extractor import _extract_chunked_two_phase
 from backend.config import Settings, get_settings
-from backend.schemas.paper import PipelineStage
+from backend.schemas.paper import PaperStatus, PipelineStage
 from backend.schemas.paradigm import Paradigm, ParadigmClassification
 from backend.services.errors import PIPELINE_FAILED_CODE, ServiceError
 from backend.services.paper_service import get_paper_service
@@ -40,13 +40,18 @@ async def _run_full_extraction(
     """Run full extraction and finalize the pipeline."""
     status_service = get_pipeline_status_service()
     completion_service = get_pipeline_completion_service()
+    paper_service = get_paper_service()
 
     try:
-        status_service.advance_stage(
-            paper_id,
-            stage=PipelineStage.EXTRACTING,
-            message="后台全量抽取进行中",
-        )
+        current = await paper_service.get_status(paper_id)
+        if current.status in {PaperStatus.READY, PaperStatus.READY_WITH_WARNINGS, PaperStatus.FAILED}:
+            return
+        if not (current.status == PaperStatus.PROCESSING and current.stage == PipelineStage.EXTRACTING):
+            status_service.advance_stage(
+                paper_id,
+                stage=PipelineStage.EXTRACTING,
+                message="后台全量抽取进行中",
+            )
 
         result = await _extract_chunked_two_phase(
             full_text,
@@ -64,14 +69,13 @@ async def _run_full_extraction(
             classification_data=classification.model_dump(mode="json"),
             full_text=full_text,
         )
-        status_service.mark_ready(paper_id)
         logger.info(
             "background_full_extraction_complete",
             extra={"paper_id": paper_id, "nodes": len(graph.nodes), "edges": len(graph.edges)},
         )
     except ServiceError as exc:
         logger.exception("background_full_extraction_failed", extra={"paper_id": paper_id})
-        get_paper_service().fail_pipeline(
+        paper_service.fail_pipeline(
             paper_id,
             message=exc.message,
             error_code=exc.code,
@@ -79,7 +83,7 @@ async def _run_full_extraction(
         )
     except Exception as exc:
         logger.exception("background_full_extraction_failed", extra={"paper_id": paper_id})
-        get_paper_service().fail_pipeline(
+        paper_service.fail_pipeline(
             paper_id,
             message=f"后台全量抽取失败: {exc}",
             error_code=PIPELINE_FAILED_CODE,
@@ -134,5 +138,8 @@ def get_full_extraction_task(paper_id: str) -> asyncio.Task[None] | None:
 
 
 def reset_extract_worker() -> None:
-    """Clear cached task references (used in tests)."""
+    """Clear cached task references and cancel in-flight work (used in tests)."""
+    for task in list(_full_extract_tasks.values()):
+        if not task.done():
+            task.cancel()
     _full_extract_tasks.clear()

@@ -75,14 +75,21 @@ def complete_paper_pipeline(
         graph_version=graph_version,
         extractor_config_hash=config_hash,
     )
-    if warnings:
-        paper_service.record_extract_warnings(paper_id, warnings)
-
     status_service = get_pipeline_status_service()
+    merged_extract_warnings = list(extract_warnings or ())
+    if warnings:
+        merged_extract_warnings = list(dict.fromkeys([*merged_extract_warnings, *warnings]))
     if final_status == PaperStatus.READY:
-        status_service.mark_ready(paper_id)
+        status_service.mark_ready(
+            paper_id,
+            append_extract_warnings=merged_extract_warnings or None,
+        )
     else:
-        status_service.mark_ready_with_warnings(paper_id, message="; ".join(reasons))
+        status_service.mark_ready_with_warnings(
+            paper_id,
+            message="; ".join(reasons),
+            append_extract_warnings=merged_extract_warnings or None,
+        )
 
     from backend.events.bus import get_event_bus
     from backend.events.pipeline_finalized_contract import pipeline_finalized_correlation_id

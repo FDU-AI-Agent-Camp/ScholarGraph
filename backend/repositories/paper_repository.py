@@ -96,15 +96,55 @@ class PaperRepository:
         *,
         status: PaperStatus,
     ) -> None:
-        async with get_async_session_factory()() as session:
-            await self._begin_immediate(session)
-            row = await session.get(PaperRow, paper_id)
-            if row is None:
-                msg = f"paper not found: {paper_id}"
-                raise KeyError(msg)
-            row.status = status.value
-            row.updated_at = datetime.now(UTC)
-            await session.commit()
+        """Update paper + pipeline snapshot atomically (never papers-only)."""
+        from backend.graph.state import STAGE_PERCENT
+        from backend.repositories.pipeline_repository import get_pipeline_repository
+        from backend.schemas.paper import PaperStatusData, PipelineStage
+        from backend.services.pipeline_status_service import PROCESSING_STAGES
+
+        pipeline_repo = get_pipeline_repository()
+        latest = await pipeline_repo.get_latest(paper_id)
+        if latest is None:
+            msg = f"pipeline run not found: {paper_id}"
+            raise KeyError(msg)
+
+        stage: PipelineStage | None
+        percent: int
+        if status == PaperStatus.READY:
+            stage = PipelineStage.READY
+            percent = STAGE_PERCENT[PipelineStage.READY]
+        elif status == PaperStatus.READY_WITH_WARNINGS:
+            stage = PipelineStage.READY
+            percent = STAGE_PERCENT[PipelineStage.READY]
+        elif status == PaperStatus.FAILED:
+            stage = PipelineStage.FAILED
+            percent = STAGE_PERCENT[PipelineStage.FAILED]
+        elif status == PaperStatus.PENDING:
+            stage = None
+            percent = 0
+        else:
+            stage = (
+                latest.stage
+                if latest.stage is not None and latest.stage in PROCESSING_STAGES
+                else PipelineStage.INGESTING
+            )
+            percent = STAGE_PERCENT[stage]
+
+        snapshot = PaperStatusData(
+            paper_id=paper_id,
+            status=status,
+            percent=percent,
+            stage=stage,
+            message=latest.message,
+            updated_at=datetime.now(UTC),
+            preview_available=latest.preview_available,
+            error_code=latest.error_code if status == PaperStatus.FAILED else None,
+            failed_during=latest.failed_during if status == PaperStatus.FAILED else None,
+            head_refine_warnings=latest.head_refine_warnings,
+            classify_warnings=latest.classify_warnings,
+            extract_warnings=latest.extract_warnings,
+        )
+        await pipeline_repo.save_status(paper_id, snapshot)
 
     async def update_classification(
         self,

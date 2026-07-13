@@ -76,7 +76,11 @@ class PipelineRepository:
             run = (await session.scalars(stmt)).first()
             if run is None:
                 return None
-            return pipeline_row_to_status(run)
+            snapshot = pipeline_row_to_status(run)
+            from backend.services.status_snapshot_guard import audit_dual_table_invariant
+
+            audit_dual_table_invariant(snapshot)
+            return snapshot
 
     async def record_warnings(
         self,
