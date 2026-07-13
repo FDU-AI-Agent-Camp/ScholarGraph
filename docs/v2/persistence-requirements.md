@@ -83,6 +83,8 @@ self._pdf_paths: dict[str, Path] = {}
 | `head_refine_warnings` | `JSON` | list[str]，累加产生 |
 | `classify_warnings` | `JSON` | list[str]，累加产生 |
 | `extract_warnings` | `JSON` | list[str]，累加产生 |
+| `active_rag_run_id` | `String(64), NULL` | 当前生效的 RAG 索引 run id；`NULL` 表示从未索引，`""` 表示已清空 |
+| `preview_graph` | `JSON, NULL` | 抽取预览图谱（`UnifiedPaperGraph` JSON）；finalize 后清空 |
 | `created_at` | `DateTime, TZ` | 首次写入时间 |
 | `updated_at` | `DateTime, TZ` | 最新更新时间 |
 
@@ -97,6 +99,23 @@ self._pdf_paths: dict[str, Path] = {}
 - `papers.paradigm` 允许 `NULL`（分类前）。
 - `papers.pdf_path` 非空。
 - `papers.graph_version` 默认 `"1"`，`extractor_config_hash` 默认空字符串。
+
+### 2.3 进程内临时态下沉（D6）
+
+以下字段**不得**再驻留 `PaperService` 内存；重启后须从 DB / 磁盘恢复：
+
+| 原内存字段 | 新真相源 | 读写约定 |
+|---|---|---|
+| `_active_run_id` | `pipeline_runs.active_rag_run_id` | `VectorStore` 经 `PaperService.get/set_active_run_id` 读写；`reextract` / `clear_ephemeral_pipeline_state` 置 `NULL` |
+| `_preview_graphs` | `pipeline_runs.preview_graph` | LangGraph 预览节点 `save_preview_graph`；`pipeline_completion_service.finalize` 成功后 `clear_preview_graph` |
+| `_refined_head` / `_refined_classifier_input` | `HeadStore` 磁盘 JSON | `PaperService` 每次穿透 `HeadStore.load()`，禁止本地 cache |
+| `_bootstrapped` | `papers` 表计数 | `bootstrap()` 仅当 `SEED_DEMO_PAPERS=true` 且 `PaperRepository.is_empty()` 时 seed |
+
+**生命周期**：
+
+1. 上传 / 重抽：`reset_for_reextract` 末尾调用 `clear_ephemeral_pipeline_state`（清空 preview + active run id）。
+2. RAG 全量索引：`VectorStore.replace_paper_index` 写入新 `run_id` 到 `active_rag_run_id`。
+3. Pipeline finalize：正式图谱落盘后清空 `preview_graph`；`active_rag_run_id` 保留供检索过滤。
 
 ---
 
@@ -389,7 +408,25 @@ SEED_DEMO_PAPERS=false
 # 新增/更新测试
 uv run pytest tests/repositories/ -q
 uv run pytest tests/integration/test_persistence_restart.py -q
+uv run pytest tests/services/test_paper_service_bootstrap.py -q
+uv run pytest tests/services/test_paper_ephemeral_db_state.py -q
+uv run pytest tests/repositories/test_ephemeral_pipeline_invariants.py -q
+uv run pytest tests/services/test_ephemeral_state_chaos.py -q
 uv run pytest tests/services/test_paper_service_db.py -q
+
+# D6 断电重启 + bootstrap 零污染（§2.3）
+# - test_mid_pipeline_ephemeral_state_survives_crash_recovery
+# - test_bootstrap_seed_without_singleton_reset_has_zero_pollution
+
+# D6 深度边界（JSON 变更追踪 / 并发读 / 混沌生命周期）
+# - test_preview_graph_inplace_mutation_not_persisted_without_flag_modified
+# - test_preview_graph_extreme_topology_survives_restart
+# - test_active_run_id_reads_nonblocking_under_concurrent_pipeline_writes
+# - test_ephemeral_state_chaos_lifecycle_invariants
+
+# D6 → RAG 下游契约（index_run_id SSOT 跨重启）
+# - test_rag_index_run_id_contract_survives_hard_restart_mock_consumer
+# - test_vector_store_index_run_id_filter_survives_hard_restart
 
 # 回归
 uv run pytest -q -m "not red"
