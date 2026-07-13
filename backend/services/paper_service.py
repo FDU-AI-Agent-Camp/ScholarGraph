@@ -9,8 +9,7 @@ from uuid import uuid4
 
 from backend.api.exceptions import ApiError
 from backend.config import Settings, get_settings
-from backend.db.base import get_async_engine, reset_database_caches
-from backend.db.bootstrap import ensure_schema
+from backend.db.base import reset_database_caches
 from backend.repositories import run_async
 from backend.repositories.paper_repository import PaperRepository, get_paper_repository
 from backend.repositories.pipeline_repository import PipelineRepository, get_pipeline_repository
@@ -72,8 +71,7 @@ class PaperService:
         self._pipeline_repo = pipeline_repo or get_pipeline_repository()
 
     async def bootstrap(self) -> None:
-        """Ensure schema exists and optionally seed demo fixtures."""
-        await ensure_schema(get_async_engine())
+        """Optionally seed demo fixtures when ``SEED_DEMO_PAPERS=true`` and the DB is empty."""
         if self._settings.seed_demo_papers and await self._paper_repo.is_empty():
             from backend.services.paper_fixture_seed import seed_from_fixtures
 

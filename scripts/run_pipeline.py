@@ -21,8 +21,7 @@ from pathlib import Path
 from uuid import uuid4
 
 from backend.config import get_settings
-from backend.db.base import get_async_engine
-from backend.db.bootstrap import ensure_schema
+from backend.db.migrations import ensure_migrated
 from backend.graph.workflow import run_paper_pipeline
 from backend.repositories.async_bridge import run_async
 from backend.repositories.paper_repository import get_paper_repository
@@ -69,7 +68,7 @@ async def _ensure_paper_pending(
     title: str,
     pdf_path: str,
 ) -> None:
-    await ensure_schema(get_async_engine())
+    ensure_migrated()
     paper_repo = get_paper_repository()
     if await paper_repo.get(paper_id) is not None:
         return

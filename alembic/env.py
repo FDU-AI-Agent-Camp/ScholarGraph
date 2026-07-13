@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from logging.config import fileConfig
 
 from alembic import context
@@ -13,7 +14,7 @@ from backend.db import models as _models  # noqa: F401 — register ORM tables
 
 config = context.config
 
-if config.config_file_name is not None:
+if config.config_file_name is not None and os.environ.get("PYTEST_CURRENT_TEST") is None:
     fileConfig(config.config_file_name)
 
 target_metadata = Base.metadata

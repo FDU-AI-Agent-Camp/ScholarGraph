@@ -70,7 +70,7 @@ class Settings(PatrolSettingsMixin, QaSettingsMixin, BaseSettings):
         populate_by_name=True,
     )
 
-    app_env: Literal["development", "staging", "production"] = "development"
+    app_env: Literal["development", "staging", "production", "test"] = "development"
     debug: bool = True
     log_level: str = "INFO"
 
