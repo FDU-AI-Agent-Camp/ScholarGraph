@@ -33,6 +33,67 @@ async def test_publish_pipeline_finalized_invokes_subscriber() -> None:
 
 
 @pytest.mark.asyncio
+async def test_handler_failure_records_extract_warning_via_error_hook(persistence_env) -> None:
+    from backend.events.handler_errors import EVENT_HANDLER_FAILED_CODE, persist_event_handler_failure
+    from backend.services.paper_service import get_paper_service
+    from tests.helpers.persistence_testkit import register_test_paper
+
+    paper_id = "evt-hook-1"
+    await register_test_paper(paper_id)
+    bus = EventBus(on_handler_error=persist_event_handler_failure)
+
+    async def boom(_event: PipelineFinalized) -> None:
+        raise RuntimeError("handler failed")
+
+    bus.subscribe(EventType.PIPELINE_FINALIZED, boom)
+    graph = UnifiedPaperGraph(
+        paper_id=paper_id,
+        paradigm=Paradigm.STEM,
+        nodes=[GraphNode(id="n1", label="M", type="Method")],
+        edges=[],
+    )
+    await bus.publish(PipelineFinalized(paper_id=paper_id, full_text="body", graph=graph))
+    await bus.drain()
+
+    snapshot = await get_paper_service().get_status(paper_id)
+    assert any(EVENT_HANDLER_FAILED_CODE in w for w in snapshot.extract_warnings)
+    assert any("handler failed" in w for w in snapshot.extract_warnings)
+
+
+@pytest.mark.asyncio
+async def test_malicious_handler_crash_persists_summary_to_pipeline_runs(persistence_env) -> None:
+    """D12 smoke: bus error hook must append handler exception summary to pipeline_runs."""
+    from backend.db.base import get_async_session_factory
+    from backend.db.models import PipelineRunRow
+    from backend.events.handler_errors import persist_event_handler_failure
+    from tests.helpers.persistence_testkit import register_test_paper
+
+    paper_id = "evt-rag-disk-full"
+    await register_test_paper(paper_id)
+    bus = EventBus(on_handler_error=persist_event_handler_failure)
+
+    async def malicious_rag_handler(_event: PipelineFinalized) -> None:
+        raise RuntimeError("RAG disk full")
+
+    bus.subscribe(EventType.PIPELINE_FINALIZED, malicious_rag_handler)
+    graph = UnifiedPaperGraph(
+        paper_id=paper_id,
+        paradigm=Paradigm.STEM,
+        nodes=[GraphNode(id="n1", label="M", type="Method")],
+        edges=[],
+    )
+    await bus.publish(PipelineFinalized(paper_id=paper_id, full_text="body", graph=graph))
+    await bus.drain()
+
+    async with get_async_session_factory()() as session:
+        run = await session.get(PipelineRunRow, paper_id)
+        assert run is not None
+        extract_warnings = list(run.extract_warnings or [])
+
+    assert any("RAG disk full" in warning for warning in extract_warnings)
+
+
+@pytest.mark.asyncio
 async def test_handler_failure_does_not_break_bus(persistence_env) -> None:
     bus = EventBus()
 
