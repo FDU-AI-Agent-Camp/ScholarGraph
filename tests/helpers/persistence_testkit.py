@@ -3,15 +3,21 @@
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Coroutine
+from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any, TypeVar
 
 import pytest
+from backend.config import get_settings
 from backend.db.base import get_async_engine, reset_database_caches
 from backend.db.bootstrap import ensure_schema
+from backend.graph.store import GraphStore
 from backend.repositories.paper_repository import get_paper_repository
 from backend.repositories.pipeline_repository import get_pipeline_repository
-from backend.schemas.paper import PaperStatus, PaperStatusData
+from backend.schemas.graph import UnifiedPaperGraph
+from backend.schemas.paper import PaperStatus, PaperStatusData, PipelineStage
 from backend.services.paper_service import PaperService, get_paper_service, reset_persistence_singletons
 
 
@@ -21,8 +27,38 @@ async def init_isolated_database(db_path: Path) -> None:
     await ensure_schema(get_async_engine())
 
 
-def run_async(coro: object) -> object:
-    return asyncio.run(coro)  # type: ignore[arg-type]
+_T = TypeVar("_T")
+
+
+def run_async(coro: Coroutine[Any, Any, _T]) -> _T:
+    """Run a coroutine from sync or pytest-asyncio contexts."""
+    try:
+        asyncio.get_running_loop()
+    except RuntimeError:
+        return asyncio.run(coro)
+    with ThreadPoolExecutor(max_workers=1) as executor:
+        return executor.submit(asyncio.run, coro).result()
+
+
+def _ready_pipeline_snapshot(paper_id: str, status: PaperStatus) -> PaperStatusData:
+    now = datetime.now(UTC)
+    if status in {PaperStatus.READY, PaperStatus.READY_WITH_WARNINGS}:
+        return PaperStatusData(
+            paper_id=paper_id,
+            status=status,
+            percent=100,
+            stage=PipelineStage.READY,
+            message="ready for QA tests",
+            updated_at=now,
+        )
+    return PaperStatusData(
+        paper_id=paper_id,
+        status=status,
+        percent=0 if status == PaperStatus.PENDING else 20,
+        stage=None if status == PaperStatus.PENDING else None,
+        message="test fixture",
+        updated_at=now,
+    )
 
 
 async def register_test_paper(
@@ -33,25 +69,124 @@ async def register_test_paper(
     status: PaperStatus = PaperStatus.PENDING,
     with_status_row: bool = True,
 ) -> None:
-    """Insert a paper row (+ optional pending pipeline snapshot) for service tests."""
+    """Insert a paper row (+ optional pipeline snapshot) for service tests."""
     repo = get_paper_repository()
     resolved_pdf = pdf_path or f"./uploads/{paper_id}.pdf"
     existing = await repo.get(paper_id)
     if existing is None:
         await repo.create(paper_id, title, resolved_pdf, status=status)
     if with_status_row:
-        now = datetime.now(UTC)
         await get_pipeline_repository().save_status(
             paper_id,
-            PaperStatusData(
-                paper_id=paper_id,
-                status=status,
-                percent=0 if status == PaperStatus.PENDING else 20,
-                stage=None if status == PaperStatus.PENDING else None,
-                message="test fixture",
-                updated_at=now,
-            ),
+            _ready_pipeline_snapshot(paper_id, status),
         )
+
+
+async def register_ready_paper(
+    paper_id: str,
+    *,
+    title: str = "demo paper",
+    pdf_path: str | None = None,
+    status: PaperStatus = PaperStatus.READY,
+) -> None:
+    """Register a paper row with READY pipeline snapshot for QA / SSE tests."""
+    await register_test_paper(
+        paper_id,
+        title=title,
+        pdf_path=pdf_path,
+        status=status,
+        with_status_row=True,
+    )
+
+
+def setup_qa_persistence_env(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    *,
+    graph_dir: Path | None = None,
+    db_name: str = "scholargraph.db",
+) -> dict[str, Path]:
+    """Isolated SQLite + graph/upload dirs for QA tests that read PaperService from DB."""
+    db_path = tmp_path / db_name
+    resolved_graph = graph_dir or (tmp_path / "graphs")
+    upload_dir = tmp_path / "uploads"
+    resolved_graph.mkdir(parents=True, exist_ok=True)
+    upload_dir.mkdir(parents=True, exist_ok=True)
+
+    monkeypatch.setenv("DATABASE_URL", f"sqlite:///{db_path.as_posix()}")
+    monkeypatch.setenv("UPLOAD_DIR", str(upload_dir))
+    monkeypatch.setenv("GRAPH_DATA_DIR", str(resolved_graph))
+    monkeypatch.setenv("SEED_DEMO_PAPERS", "false")
+    reset_persistence_singletons()
+    run_async(init_isolated_database(db_path))
+    get_settings.cache_clear()
+    get_paper_service.cache_clear()
+    return {
+        "db_path": db_path,
+        "graph_dir": resolved_graph,
+        "upload_dir": upload_dir,
+    }
+
+
+async def setup_qa_persistence_env_async(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    *,
+    graph_dir: Path | None = None,
+    db_name: str = "scholargraph.db",
+) -> dict[str, Path]:
+    """Async variant for pytest-asyncio fixtures (avoids nested event-loop bridges)."""
+    db_path = tmp_path / db_name
+    resolved_graph = graph_dir or (tmp_path / "graphs")
+    upload_dir = tmp_path / "uploads"
+    resolved_graph.mkdir(parents=True, exist_ok=True)
+    upload_dir.mkdir(parents=True, exist_ok=True)
+
+    monkeypatch.setenv("DATABASE_URL", f"sqlite:///{db_path.as_posix()}")
+    monkeypatch.setenv("UPLOAD_DIR", str(upload_dir))
+    monkeypatch.setenv("GRAPH_DATA_DIR", str(resolved_graph))
+    monkeypatch.setenv("SEED_DEMO_PAPERS", "false")
+    reset_persistence_singletons()
+    await init_isolated_database(db_path)
+    get_settings.cache_clear()
+    get_paper_service.cache_clear()
+    return {
+        "db_path": db_path,
+        "graph_dir": resolved_graph,
+        "upload_dir": upload_dir,
+    }
+
+
+async def seed_qa_graph_with_db_async(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    graph: UnifiedPaperGraph,
+    *,
+    graph_dir: Path | None = None,
+    status: PaperStatus = PaperStatus.READY,
+) -> GraphStore:
+    """Async variant of :func:`seed_qa_graph_with_db` for pytest-asyncio fixtures."""
+    env = await setup_qa_persistence_env_async(tmp_path, monkeypatch, graph_dir=graph_dir)
+    store = GraphStore(base_dir=env["graph_dir"])
+    store.save(graph)
+    await register_ready_paper(graph.paper_id, status=status)
+    return store
+
+
+def seed_qa_graph_with_db(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    graph: UnifiedPaperGraph,
+    *,
+    graph_dir: Path | None = None,
+    status: PaperStatus = PaperStatus.READY,
+) -> GraphStore:
+    """Persist graph JSON and register the paper row for QA engine / HTTP routes."""
+    env = setup_qa_persistence_env(tmp_path, monkeypatch, graph_dir=graph_dir)
+    store = GraphStore(base_dir=env["graph_dir"])
+    store.save(graph)
+    run_async(register_ready_paper(graph.paper_id, status=status))
+    return store
 
 
 @pytest.fixture
