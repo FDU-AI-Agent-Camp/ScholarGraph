@@ -8,12 +8,10 @@ from datetime import UTC, datetime
 from enum import Enum, auto
 
 import pytest
-
 from backend.schemas.graph import GraphEdge, GraphNode, UnifiedPaperGraph
 from backend.schemas.paper import PaperStatus
 from backend.schemas.paradigm import Paradigm
 from backend.services.paper_service import PaperService, get_paper_service
-
 from tests.helpers.persistence_testkit import (
     register_test_paper,
     restart_paper_service,
@@ -192,7 +190,7 @@ async def test_ephemeral_state_chaos_lifecycle_invariants(persistence_env) -> No
         _Action.VERIFY,
     ]
 
-    for step in range(CHAOS_ACTION_COUNT):
+    for _step in range(CHAOS_ACTION_COUNT):
         action = rng.choice(weighted_actions)
         service = await _apply_action(action, service=service, model=model, rng=rng)
         _assert_matches_model(service, model)

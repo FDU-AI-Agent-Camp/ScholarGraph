@@ -99,6 +99,38 @@ def _disable_two_phase_extraction_for_legacy_tests(monkeypatch: pytest.MonkeyPat
     get_settings.cache_clear()
 
 
+@pytest.fixture(autouse=True)
+def _attach_paper_service_compat_shims(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
+    """D8: mount legacy ``_papers`` / ``_status`` shims on test ``PaperService`` instances only."""
+    from backend.services.paper_service import PaperService
+
+    from tests.helpers.compat_shims import attach_paper_service_compat_shims
+
+    original_init = PaperService.__init__
+
+    def _init_with_compat_shims(self, *args, **kwargs) -> None:
+        original_init(self, *args, **kwargs)
+        attach_paper_service_compat_shims(self)
+
+    monkeypatch.setattr(PaperService, "__init__", _init_with_compat_shims)
+    yield
+
+
+@pytest.fixture(autouse=True)
+def _ensure_demo_fixture_corpus(request: pytest.FixtureRequest) -> Iterator[None]:
+    """Replace legacy in-memory ``_papers`` corpus with idempotent DB fixture seeding."""
+    if "persistence_env" in request.fixturenames:
+        yield
+        return
+
+    from backend.repositories.async_bridge import run_async
+
+    from tests.helpers.persistence_testkit import ensure_demo_fixture_corpus
+
+    run_async(ensure_demo_fixture_corpus())
+    yield
+
+
 @pytest.fixture
 def minimal_pdf(tmp_path: Path) -> Path:
     path = tmp_path / "minimal.pdf"
@@ -154,37 +186,37 @@ def mock_pipeline_node_services(
     agent_svc.extract_graph_background = AsyncMock(return_value=extract_result)
     agent_svc.should_extract_in_background = MagicMock(return_value=False)
 
-    with patch("backend.services.graph_persistence_service.GraphStore") as store_cls:
-        store_cls.return_value.save = MagicMock()
-        persistence = GraphPersistenceService(store=store_cls.return_value)
-        completion_svc = PipelineCompletionService(graph_persistence=persistence)
+    persistence = GraphPersistenceService()
+    completion_svc = PipelineCompletionService(graph_persistence=persistence)
+    store_save = MagicMock(wraps=persistence._store.save)
+    persistence._store.save = store_save  # type: ignore[method-assign]
 
-        with (
-            patch("backend.graph.nodes.get_ingest_service", return_value=ingest_svc),
-            patch("backend.graph.nodes.get_agent_service", return_value=agent_svc),
-            patch("backend.services.agent_service.get_agent_service", return_value=agent_svc),
-            patch(
-                "backend.graph.nodes.get_pipeline_completion_service",
-                return_value=completion_svc,
-            ),
-            patch(
-                "backend.services.rag_index_service.RagIndexService.index_paper_for_rag_async",
-                new_callable=AsyncMock,
-            ) as mock_rag_index,
-            patch("backend.graph.nodes.ensure_head_refine_scheduled"),
-            patch(
-                "backend.graph.nodes.wait_for_refined_classifier_input",
-                new=AsyncMock(side_effect=lambda _pid, _path, fallback, **_: (fallback, [])),
-            ),
-        ):
-            mock_rag_index.return_value = None
-            yield {
-                "ingest": ingest_svc,
-                "agent": agent_svc,
-                "completion": completion_svc,
-                "rag_index": mock_rag_index,
-                "store_save": store_cls.return_value.save,
-            }
+    with (
+        patch("backend.graph.nodes.get_ingest_service", return_value=ingest_svc),
+        patch("backend.graph.nodes.get_agent_service", return_value=agent_svc),
+        patch("backend.services.agent_service.get_agent_service", return_value=agent_svc),
+        patch(
+            "backend.graph.nodes.get_pipeline_completion_service",
+            return_value=completion_svc,
+        ),
+        patch(
+            "backend.services.rag_index_service.RagIndexService.index_paper_for_rag_async",
+            new_callable=AsyncMock,
+        ) as mock_rag_index,
+        patch("backend.graph.nodes.ensure_head_refine_scheduled"),
+        patch(
+            "backend.graph.nodes.wait_for_refined_classifier_input",
+            new=AsyncMock(side_effect=lambda _pid, _path, fallback, **_: (fallback, [])),
+        ),
+    ):
+        mock_rag_index.return_value = None
+        yield {
+            "ingest": ingest_svc,
+            "agent": agent_svc,
+            "completion": completion_svc,
+            "rag_index": mock_rag_index,
+            "store_save": store_save,
+        }
 
 
 @pytest.fixture

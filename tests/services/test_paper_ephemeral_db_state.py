@@ -3,13 +3,11 @@
 from __future__ import annotations
 
 import pytest
-
 from backend.repositories.pipeline_repository import PipelineRepository
 from backend.schemas.graph import GraphEdge, GraphNode, UnifiedPaperGraph
 from backend.schemas.paper import PaperStatus
 from backend.schemas.paradigm import Paradigm
 from backend.services.paper_service import PaperService
-
 from tests.helpers.persistence_testkit import register_test_paper, restart_paper_service
 
 

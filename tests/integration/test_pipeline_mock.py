@@ -133,7 +133,13 @@ async def test_run_paper_pipeline_startup_then_stage_order(
         mocks["ingest"].ingest = AsyncMock(side_effect=track_ingest)
         mocks["agent"].classify_paradigm = AsyncMock(side_effect=track_classify)
         mocks["agent"].extract_graph = AsyncMock(side_effect=track_extract)
-        mocks["store_save"].side_effect = lambda _g: call_order.append(NODE_STORE)
+        original_finalize = mocks["completion"].finalize
+
+        def _track_finalize(*args, **kwargs):
+            call_order.append(NODE_STORE)
+            return original_finalize(*args, **kwargs)
+
+        mocks["completion"].finalize = _track_finalize
 
         await run_paper_pipeline(paper_id, pdf_path)
 

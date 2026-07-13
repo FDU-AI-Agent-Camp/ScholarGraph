@@ -2,16 +2,14 @@
 
 from __future__ import annotations
 
-from unittest.mock import MagicMock
-
 import pytest
 from backend.schemas.graph import GraphEdge, GraphNode, UnifiedPaperGraph
 from backend.schemas.paper import PaperStatus, PipelineStage
 from backend.schemas.paradigm import Paradigm, ParadigmClassification
-from backend.services.graph_persistence_service import GraphPersistenceService
 from backend.services.pipeline_completion_service import PipelineCompletionService
 from httpx import AsyncClient
 from tests.api.conftest import assert_success_envelope
+from tests.helpers.persistence_testkit import mock_graph_persistence
 from tests.helpers.status_contract import assert_snapshot_matches_contract
 
 VALID_PDF = b"%PDF-1.4\n% status api test"
@@ -63,7 +61,7 @@ async def test_status_ready_after_finalize_matches_contract(
         nodes=[GraphNode(id="n1", label="T", type="Thesis")],
         edges=[GraphEdge(id="e1", source="n1", target="n1", label="REF", type="REF")],
     )
-    persistence = MagicMock(spec=GraphPersistenceService)
+    persistence = mock_graph_persistence(paper_id, graph_dir=persistence_env["graph_dir"])
     PipelineCompletionService(graph_persistence=persistence).finalize(
         paper_id,
         graph_data=graph.model_dump(mode="json"),

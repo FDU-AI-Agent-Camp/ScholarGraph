@@ -30,9 +30,7 @@ class IndexRunMetadataStore:
         payload: str,
     ) -> None:
         self._records = [
-            record
-            for record in self._records
-            if not (record.paper_id == paper_id and record.record_id == record_id)
+            record for record in self._records if not (record.paper_id == paper_id and record.record_id == record_id)
         ]
         self._records.append(
             IndexRunRecord(
@@ -46,7 +44,5 @@ class IndexRunMetadataStore:
     def filter_by_index_run_id(self, *, paper_id: str, index_run_id: str) -> list[IndexRunRecord]:
         """Simulate ``where={\"index_run_id\": run_id}`` hard filtering."""
         return [
-            record
-            for record in self._records
-            if record.paper_id == paper_id and record.index_run_id == index_run_id
+            record for record in self._records if record.paper_id == paper_id and record.index_run_id == index_run_id
         ]

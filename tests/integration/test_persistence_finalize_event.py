@@ -2,17 +2,14 @@
 
 from __future__ import annotations
 
-from unittest.mock import MagicMock
-
 import pytest
 from backend.events.bus import EventBus
 from backend.events.types import EventType, PipelineFinalized
 from backend.schemas.graph import GraphEdge, GraphNode, UnifiedPaperGraph
 from backend.schemas.paradigm import Paradigm, ParadigmClassification
-from backend.services.graph_persistence_service import GraphPersistenceService
 from backend.services.pipeline_completion_service import PipelineCompletionService
 
-from tests.helpers.persistence_testkit import register_test_paper
+from tests.helpers.persistence_testkit import mock_graph_persistence, register_test_paper
 
 
 @pytest.mark.integration
@@ -36,7 +33,7 @@ async def test_finalize_publishes_pipeline_finalized_event(persistence_env) -> N
         nodes=[GraphNode(id="n1", label="T", type="Thesis")],
         edges=[GraphEdge(id="e1", source="n1", target="n1", label="REF", type="REF")],
     )
-    persistence = MagicMock(spec=GraphPersistenceService)
+    persistence = mock_graph_persistence(paper_id, graph_dir=persistence_env["graph_dir"])
     completion = PipelineCompletionService(graph_persistence=persistence)
 
     from backend.events import bus as bus_module

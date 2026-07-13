@@ -238,10 +238,12 @@ async def test_merge_graph_failed_paper_returns_409(api_client: AsyncClient) -> 
 
 def test_merge_classifier_labels_corpus_ids_seeded_in_api() -> None:
     """FE 列表与 BE 种子数据应覆盖金标语料 paper_id（ingest 分支合入后）。"""
+    from backend.repositories.async_bridge import run_async
+
     from tests.helpers.classifier_labels import load_classifier_labels
 
     labels = load_classifier_labels()
-    listed_ids = set(get_paper_service()._papers.keys())
+    listed_ids = {item.paper_id for item in run_async(get_paper_service().list_papers(limit=100))[0]}
 
     for row in labels:
         assert row["paper_id"] in listed_ids

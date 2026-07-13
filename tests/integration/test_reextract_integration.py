@@ -64,8 +64,11 @@ async def test_reextract_runs_pipeline_and_reaches_ready(
     scheduled_tasks: list[asyncio.Task[None]] = []
 
     def _schedule_and_capture(pid: str, pdf_path: Path) -> asyncio.Task[None]:
+        from tests.conftest import mock_pipeline_node_services
+
         async def _run() -> None:
-            await run_paper_pipeline(pid, pdf_path)
+            with mock_pipeline_node_services(pid):
+                await run_paper_pipeline(pid, pdf_path)
 
         task = asyncio.create_task(_run())
         scheduled_tasks.append(task)

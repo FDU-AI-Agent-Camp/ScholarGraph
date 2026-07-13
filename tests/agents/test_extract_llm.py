@@ -11,8 +11,10 @@ from backend.agents.extract_types import ExtractResult
 from backend.agents.extractor import extract
 from backend.config import get_settings
 from backend.llm.client import reset_llm_client_cache
+from backend.schemas.paper import PaperStatus
 from backend.schemas.paradigm import Paradigm
 from tests.agents.conftest import minimal_valid_llm_graph
+from tests.helpers.persistence_testkit import register_test_paper
 
 
 @pytest.fixture
@@ -45,8 +47,12 @@ def test_build_user_payload_includes_document_head() -> None:
 
 
 @pytest.mark.asyncio
-async def test_live_llm_success_returns_graph_without_warnings(live_extract_env) -> None:
+async def test_live_llm_success_returns_graph_without_warnings(
+    live_extract_env,
+    persistence_env,
+) -> None:
     _ = live_extract_env
+    await register_test_paper("paper-1", status=PaperStatus.PROCESSING)
     llm_graph = minimal_valid_llm_graph(summary="llm")
 
     with patch("backend.agents.extractor.extract_with_llm", new=AsyncMock(return_value=llm_graph)):

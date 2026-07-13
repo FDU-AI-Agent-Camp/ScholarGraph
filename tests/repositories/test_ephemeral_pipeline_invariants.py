@@ -2,15 +2,12 @@
 
 from __future__ import annotations
 
-import random
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import UTC, datetime
 
 import pytest
-from sqlalchemy.orm.attributes import flag_modified
-
 from backend.db.base import get_async_session_factory
 from backend.db.models import PipelineRunRow
 from backend.repositories.async_bridge import run_async
@@ -19,7 +16,7 @@ from backend.schemas.graph import GraphEdge, GraphNode, UnifiedPaperGraph
 from backend.schemas.paper import PaperStatus, PaperStatusData, PipelineStage
 from backend.schemas.paradigm import Paradigm
 from backend.services.paper_service import PaperService, get_paper_service
-
+from sqlalchemy.orm.attributes import flag_modified
 from tests.helpers.persistence_testkit import (
     register_test_paper,
     restart_paper_service,
@@ -32,7 +29,7 @@ CONCURRENT_READ_ITERATIONS = 120
 CONCURRENT_READER_THREADS = 6
 CONCURRENT_WRITER_THREADS = 4
 
-_SPECIAL_LABEL_FRAGMENT = '引号"测试\'\n🧪\\slash\t制表符'
+_SPECIAL_LABEL_FRAGMENT = "引号\"测试'\n🧪\\slash\t制表符"
 _LONG_DATA_CHARS = 48_000
 
 

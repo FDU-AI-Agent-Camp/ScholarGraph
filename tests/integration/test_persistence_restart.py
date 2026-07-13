@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 from datetime import UTC, datetime
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
 from backend.graph.qa import _GraphQaEngine
@@ -13,12 +13,12 @@ from backend.repositories.pipeline_repository import PipelineRepository
 from backend.schemas.graph import GraphEdge, GraphNode, UnifiedPaperGraph
 from backend.schemas.paper import PaperStatus, PaperStatusData, PipelineStage
 from backend.schemas.paradigm import Paradigm, ParadigmClassification
-from backend.services.graph_persistence_service import GraphPersistenceService
 from backend.services.pipeline_completion_service import PipelineCompletionService
 from httpx import AsyncClient
 
 from tests.graph.test_qa import _fake_llm
 from tests.helpers.persistence_testkit import (
+    mock_graph_persistence,
     restart_paper_service,
     simulate_service_crash,
 )
@@ -65,7 +65,7 @@ async def test_upload_ready_survives_service_restart(
             GraphEdge(id="e1", source="n1", target="n1", label="REF", type="REF"),
         ],
     )
-    persistence = MagicMock(spec=GraphPersistenceService)
+    persistence = mock_graph_persistence(paper_id, graph_dir=persistence_env["graph_dir"])
     completion = PipelineCompletionService(graph_persistence=persistence)
     with patch(
         "backend.services.rag_index_service.RagIndexService.index_paper_for_rag_async",

@@ -2,9 +2,8 @@
 
 from __future__ import annotations
 
-from unittest.mock import MagicMock
-
 import pytest
+from backend.graph.store import GraphStore
 from backend.schemas.graph import GraphEdge, GraphNode, UnifiedPaperGraph
 from backend.schemas.paradigm import Paradigm, ParadigmClassification
 from backend.services.graph_persistence_service import GraphPersistenceService
@@ -53,7 +52,7 @@ async def test_graph_ready_paper_returns_unified_graph(
         nodes=[GraphNode(id="n1", label="T", type="Thesis")],
         edges=[GraphEdge(id="e1", source="n1", target="n1", label="REF", type="REF")],
     )
-    persistence = MagicMock(spec=GraphPersistenceService)
+    persistence = GraphPersistenceService(store=GraphStore(base_dir=persistence_env["graph_dir"]))
     PipelineCompletionService(graph_persistence=persistence).finalize(
         paper_id,
         graph_data=graph.model_dump(mode="json"),

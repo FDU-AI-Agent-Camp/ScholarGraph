@@ -18,10 +18,11 @@ from backend.rag.models import QuestionScale, RetrievalContext
 from backend.schemas.graph import GraphEdge, GraphNode, UnifiedPaperGraph
 from backend.schemas.paradigm import Paradigm
 from backend.services.paper_fixture_seed import seed_from_fixtures
-from backend.services.paper_service import PaperService
+from backend.services.paper_service import PaperService, get_paper_service
 from backend.services.qa_service import QaService
 
 from tests.graph.test_qa import _FakeChunk
+from tests.helpers.persistence_testkit import run_async
 
 MOCK_NODE_B7_LABEL = "MockNode_B7_Verify"
 MOCK_NODE_B7_ID = "mock-node-b7"
@@ -130,8 +131,8 @@ def graph_env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> GraphStore:
 
 @pytest.fixture
 def paper_service() -> PaperService:
-    service = PaperService()
-    seed_from_fixtures(service)
+    service = get_paper_service()
+    run_async(seed_from_fixtures(service._paper_repo, service._pipeline_repo))
     return service
 
 

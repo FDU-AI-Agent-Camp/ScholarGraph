@@ -2,14 +2,14 @@
 
 from __future__ import annotations
 
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, patch
 
 from backend.events.bus import EventBus
 from backend.events.types import EventType, PipelineFinalized
 from backend.schemas.graph import UnifiedPaperGraph
 from backend.schemas.paradigm import ParadigmClassification
-from backend.services.graph_persistence_service import GraphPersistenceService
 from backend.services.pipeline_completion_service import PipelineCompletionService
+from tests.helpers.persistence_testkit import mock_graph_persistence
 
 
 def test_finalize_publishes_pipeline_finalized_once_with_contract_payload(
@@ -33,7 +33,7 @@ def test_finalize_publishes_pipeline_finalized_once_with_contract_payload(
     bus_module.get_event_bus = lambda: bus  # type: ignore[assignment]
     pcs_module.get_event_bus = lambda: bus  # type: ignore[attr-defined]
 
-    persistence = MagicMock(spec=GraphPersistenceService)
+    persistence = mock_graph_persistence(paper_id)
     service = PipelineCompletionService(graph_persistence=persistence)
 
     try:

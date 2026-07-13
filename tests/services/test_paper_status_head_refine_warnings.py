@@ -69,7 +69,6 @@ async def test_status_api_returns_head_refine_warnings(api_client: AsyncClient) 
 @pytest.mark.asyncio
 async def test_status_snapshot_carries_warnings_on_stage_advance(registered_paper: str) -> None:
     service = get_paper_service()
-    service._head_refine_warnings[registered_paper] = []
     service.record_head_refine_warnings(registered_paper, ["mineru_disabled"])
     service.set_status_snapshot(
         registered_paper,

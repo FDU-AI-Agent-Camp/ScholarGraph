@@ -7,7 +7,6 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-from backend.rag.models import PaperChunk
 from backend.rag.vector_store import VectorStore
 from backend.schemas.paper import PaperStatus
 from backend.services.paper_service import get_paper_service

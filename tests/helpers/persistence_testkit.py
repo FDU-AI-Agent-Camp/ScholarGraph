@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 from pathlib import Path
+from unittest.mock import MagicMock
 
 import pytest
 from backend.config import get_settings
@@ -22,6 +23,25 @@ async def init_isolated_database(db_path: Path) -> None:
     """Create schema in a dedicated SQLite file."""
     reset_database_caches()
     await ensure_schema(get_async_engine())
+
+
+async def ensure_demo_fixture_corpus() -> None:
+    """Upsert OpenAPI demo papers/status/graph paths when core fixture rows are absent."""
+    from backend.services.paper_fixture_seed import seed_from_fixtures
+
+    await ensure_schema(get_async_engine())
+    paper_repo = get_paper_repository()
+    core_demo_ids = ("stem-001", "hss-001", "hss-002", "hss-failed-001")
+    corpus_complete = True
+    for paper_id in core_demo_ids:
+        if await paper_repo.get(paper_id) is None:
+            corpus_complete = False
+            break
+    if corpus_complete:
+        await paper_repo.bump_list_rank(core_demo_ids)
+        return
+    await seed_from_fixtures(paper_repo, get_pipeline_repository())
+    await paper_repo.bump_list_rank(core_demo_ids)
 
 
 def _ready_pipeline_snapshot(paper_id: str, status: PaperStatus) -> PaperStatusData:
@@ -211,10 +231,9 @@ def simulate_service_crash() -> None:
 
 async def wipe_all_paper_rows() -> None:
     """Delete all paper and pipeline rows while keeping schema and singletons."""
-    from sqlalchemy import delete
-
     from backend.db.base import get_async_session_factory
     from backend.db.models import PaperRow, PipelineRunRow
+    from sqlalchemy import delete
 
     async with get_async_session_factory()() as session:
         await session.execute(delete(PipelineRunRow))
@@ -231,3 +250,22 @@ def expected_demo_fixture_count() -> int:
     list_path = FIXTURES_DIR / "papers-list.json"
     payload = json.loads(list_path.read_text(encoding="utf-8"))
     return len(payload["data"]["items"])
+
+
+def mock_graph_persistence(
+    paper_id: str,
+    *,
+    graph_dir: Path | str | None = None,
+) -> MagicMock:
+    """GraphPersistenceService mock whose ``save`` returns a concrete graph path (D7)."""
+    from unittest.mock import MagicMock
+
+    from backend.services.graph_persistence_service import GraphPersistenceService
+
+    persistence = MagicMock(spec=GraphPersistenceService)
+    if graph_dir is not None:
+        graph_path = str(Path(graph_dir) / f"{paper_id}.json")
+    else:
+        graph_path = f"/mock/graphs/{paper_id}.json"
+    persistence.save.return_value = graph_path
+    return persistence

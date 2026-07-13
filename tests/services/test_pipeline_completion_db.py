@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from unittest.mock import MagicMock
-
 import pytest
 from backend.config import get_settings
 from backend.db.base import get_async_session_factory
@@ -12,9 +10,8 @@ from backend.repositories.paper_repository import PaperRepository
 from backend.schemas.graph import UnifiedPaperGraph
 from backend.schemas.paradigm import ParadigmClassification
 from backend.services.extractor_config_fingerprint import compute_extractor_config_hash
-from backend.services.graph_persistence_service import GraphPersistenceService
 from backend.services.pipeline_completion_service import PipelineCompletionService
-from tests.helpers.persistence_testkit import register_test_paper, restart_paper_service
+from tests.helpers.persistence_testkit import mock_graph_persistence, register_test_paper, restart_paper_service
 
 
 @pytest.mark.asyncio
@@ -28,7 +25,7 @@ async def test_finalize_writes_graph_path_and_extractor_config_hash(
     await restart_paper_service()
 
     graph = sample_graph.model_copy(update={"paper_id": paper_id})
-    persistence = MagicMock(spec=GraphPersistenceService)
+    persistence = mock_graph_persistence(paper_id, graph_dir=persistence_env["graph_dir"])
     PipelineCompletionService(graph_persistence=persistence).finalize(
         paper_id,
         graph_data=graph.model_dump(mode="json"),
@@ -62,7 +59,7 @@ async def test_finalize_preserves_bumped_graph_version_after_reextract(
     assert bumped == "2"
 
     graph = sample_graph.model_copy(update={"paper_id": paper_id})
-    persistence = MagicMock(spec=GraphPersistenceService)
+    persistence = mock_graph_persistence(paper_id, graph_dir=persistence_env["graph_dir"])
     PipelineCompletionService(graph_persistence=persistence).finalize(
         paper_id,
         graph_data=graph.model_dump(mode="json"),

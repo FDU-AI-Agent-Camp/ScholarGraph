@@ -39,9 +39,6 @@ def registered_paper() -> str:
         updated_at=now,
     )
     service._status.pop(paper_id, None)
-    service._head_refine_warnings.pop(paper_id, None)
-    service._classify_warnings.pop(paper_id, None)
-    service._extract_warnings.pop(paper_id, None)
     return paper_id
 
 
@@ -82,7 +79,6 @@ async def test_red_get_paper_without_recorded_classify_warnings_returns_empty_li
     registered_paper: str,
 ) -> None:
     service = get_paper_service()
-    service._classify_warnings.pop(registered_paper, None)
 
     paper = await service.get_paper(registered_paper)
 

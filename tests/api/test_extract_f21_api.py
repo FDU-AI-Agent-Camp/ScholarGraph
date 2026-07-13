@@ -61,7 +61,6 @@ async def test_api_status_after_llm_success_has_empty_extract_warnings(api_clien
     paper_id = "api-f21-llm-ok-001"
     _register_processing_paper(paper_id)
     get_pipeline_status_service().mark_ready(paper_id)
-    get_paper_service()._extract_warnings.pop(paper_id, None)
 
     response = await api_client.get(f"/api/v1/papers/{paper_id}/status")
 

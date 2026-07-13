@@ -58,7 +58,6 @@ async def test_status_api_extracting_stage_exposes_extract_warnings_field(api_cl
 async def test_ready_fixture_status_includes_extract_warnings_field(api_client: AsyncClient) -> None:
     paper_id = "api-extract-warn-clean-001"
     _register_paper(paper_id)
-    get_paper_service()._extract_warnings.pop(paper_id, None)
     get_pipeline_status_service().mark_ready(paper_id)
 
     response = await api_client.get(f"/api/v1/papers/{paper_id}/status")

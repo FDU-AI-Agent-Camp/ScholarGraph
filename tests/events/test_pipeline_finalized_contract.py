@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
 from backend.events.pipeline_finalized_contract import (
@@ -14,9 +14,8 @@ from backend.events.pipeline_finalized_contract import (
 from backend.events.types import PipelineFinalized
 from backend.schemas.graph import GraphEdge, GraphNode, UnifiedPaperGraph
 from backend.schemas.paradigm import Paradigm, ParadigmClassification
-from backend.services.graph_persistence_service import GraphPersistenceService
 from backend.services.pipeline_completion_service import PipelineCompletionService
-from tests.helpers.persistence_testkit import register_test_paper
+from tests.helpers.persistence_testkit import mock_graph_persistence, register_test_paper
 
 
 def _valid_graph(paper_id: str = "contract-paper") -> UnifiedPaperGraph:
@@ -132,7 +131,7 @@ async def test_finalize_publish_and_consume_share_correlation_id(
             "backend.services.rag_index_service.RagIndexService.index_paper_for_rag_async",
             new_callable=AsyncMock,
         ):
-            persistence = MagicMock(spec=GraphPersistenceService)
+            persistence = mock_graph_persistence(paper_id)
             PipelineCompletionService(graph_persistence=persistence).finalize(
                 paper_id,
                 graph_data=graph.model_dump(mode="json"),
@@ -182,8 +181,6 @@ def test_handler_immediate_db_read_never_dirty_reads(
     bus_module.get_event_bus = lambda: bus  # type: ignore[assignment]
     pcs_module.get_event_bus = lambda: bus  # type: ignore[attr-defined]
 
-    persistence = MagicMock(spec=GraphPersistenceService)
-    completion = PipelineCompletionService(graph_persistence=persistence)
     classification = ParadigmClassification(paradigm=Paradigm.HSS, confidence=0.9, reason="isolation")
 
     try:
@@ -191,11 +188,12 @@ def test_handler_immediate_db_read_never_dirty_reads(
             paper_id = f"contract-isolation-{index}"
             asyncio.run(register_test_paper(paper_id, title=f"isolation {index}"))
             graph = _valid_graph(paper_id)
+            persistence = mock_graph_persistence(paper_id)
             with patch(
                 "backend.services.rag_index_service.RagIndexService.index_paper_for_rag_async",
                 new_callable=AsyncMock,
             ):
-                completion.finalize(
+                PipelineCompletionService(graph_persistence=persistence).finalize(
                     paper_id,
                     graph_data=graph.model_dump(mode="json"),
                     classification_data=classification.model_dump(mode="json"),

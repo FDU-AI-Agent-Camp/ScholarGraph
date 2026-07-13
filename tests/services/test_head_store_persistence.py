@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
@@ -11,7 +10,6 @@ from backend.repositories.pipeline_repository import PipelineRepository
 from backend.schemas.ingest_head import IngestHead
 from backend.schemas.paper import PaperStatus
 from backend.services.paper_service import PaperService, get_paper_service
-
 from tests.helpers.persistence_testkit import register_test_paper
 
 

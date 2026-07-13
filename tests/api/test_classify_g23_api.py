@@ -56,7 +56,6 @@ async def test_api_g17_get_paper_includes_classify_warnings(api_client: AsyncCli
 async def test_api_g19_get_paper_without_fallback_has_empty_classify_warnings(api_client: AsyncClient) -> None:
     paper_id = "api-g23-detail-clean-001"
     _register_ready_paper(paper_id)
-    get_paper_service()._classify_warnings.pop(paper_id, None)
 
     response = await api_client.get(f"/api/v1/papers/{paper_id}")
 

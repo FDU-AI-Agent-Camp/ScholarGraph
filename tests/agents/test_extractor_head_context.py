@@ -46,7 +46,6 @@ async def test_resolve_head_context_uses_head_store_after_apply_refine(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     from backend.schemas.paper import PaperStatus
-
     from tests.helpers.persistence_testkit import register_test_paper
 
     paper_id = "head-store-priority"

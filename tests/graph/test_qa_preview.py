@@ -14,6 +14,8 @@ from backend.schemas.paper import PaperDetail, PaperStatus
 from backend.schemas.paradigm import Paradigm
 from backend.services.paper_service import get_paper_service
 
+from tests.helpers.persistence_testkit import register_test_paper
+
 
 class _FakeChunk:
     def __init__(self, content: str) -> None:
@@ -77,10 +79,15 @@ def _fresh_service() -> None:
 
 
 class TestQaStreamPreview:
-    async def test_preview_paper_with_flag_allows_qa(self, preview_graph: UnifiedPaperGraph) -> None:
+    async def test_preview_paper_with_flag_allows_qa(
+        self,
+        preview_graph: UnifiedPaperGraph,
+        persistence_env,
+    ) -> None:
         paper_id = "preview-qa-001"
+        await register_test_paper(paper_id, status=PaperStatus.PROCESSING)
         service = get_paper_service()
-        service._papers[paper_id] = _make_paper(paper_id, preview_available=True)
+        service.mark_preview_available(paper_id)
         service.save_preview_graph(paper_id, preview_graph)
 
         llm = _fake_llm("答案")
@@ -94,10 +101,15 @@ class TestQaStreamPreview:
         assert len(messages) >= 1
         assert "".join(m.data["delta"] for m in messages) == "答案"
 
-    async def test_prompt_includes_mvp_prefix_for_preview(self, preview_graph: UnifiedPaperGraph) -> None:
+    async def test_prompt_includes_mvp_prefix_for_preview(
+        self,
+        preview_graph: UnifiedPaperGraph,
+        persistence_env,
+    ) -> None:
         paper_id = "preview-qa-002"
+        await register_test_paper(paper_id, status=PaperStatus.PROCESSING)
         service = get_paper_service()
-        service._papers[paper_id] = _make_paper(paper_id, preview_available=True)
+        service.mark_preview_available(paper_id)
         service.save_preview_graph(paper_id, preview_graph)
 
         captured: list[str] = []

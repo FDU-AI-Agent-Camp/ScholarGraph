@@ -9,7 +9,6 @@ from backend.schemas.graph import GraphEdge, GraphNode, UnifiedPaperGraph
 from backend.schemas.paper import PaperStatus, PaperStatusData, PipelineStage
 from backend.schemas.paradigm import Paradigm
 from backend.services.paper_service import get_paper_service
-
 from tests.helpers.persistence_testkit import register_test_paper
 
 

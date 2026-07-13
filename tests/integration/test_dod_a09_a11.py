@@ -12,7 +12,7 @@ import pytest
 from backend.config import get_settings
 from backend.llm.client import reset_llm_client_cache
 from backend.schemas.paper import PaperStatus
-from backend.services.paper_service import get_paper_service
+from backend.services.paper_service import get_paper_service, reset_persistence_singletons
 
 from tests.conftest import REPO_ROOT, RUN_PIPELINE_SCRIPT
 from tests.ingest.conftest import write_text_pdf
@@ -38,9 +38,8 @@ def pipeline_mock_env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     monkeypatch.setenv("LLM_MODE", "mock")
     monkeypatch.setenv("UPLOAD_DIR", str(upload_dir))
     monkeypatch.setenv("GRAPH_DATA_DIR", str(graph_dir))
-    get_settings.cache_clear()
+    reset_persistence_singletons()
     reset_llm_client_cache()
-    get_paper_service.cache_clear()
     return tmp_path
 
 

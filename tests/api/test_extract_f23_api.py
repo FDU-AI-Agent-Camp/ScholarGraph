@@ -56,7 +56,6 @@ async def test_api_x17_get_paper_includes_extract_warnings(api_client: AsyncClie
 async def test_api_x19_get_paper_without_fallback_has_empty_warnings(api_client: AsyncClient) -> None:
     paper_id = "api-f23-detail-clean-001"
     _register_ready_paper(paper_id)
-    get_paper_service()._extract_warnings.pop(paper_id, None)
 
     response = await api_client.get(f"/api/v1/papers/{paper_id}")
 
