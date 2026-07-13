@@ -67,11 +67,10 @@ def test_red_pipeline_finalized_carries_page_break_offsets() -> None:
 
 
 @pytest.mark.red
-def test_red_alembic_downgrade_to_base_supported() -> None:
-    from pathlib import Path
+def test_red_alembic_downgrade_to_base_supported(tmp_path, monkeypatch: pytest.MonkeyPatch) -> None:
+    from tests.integration.test_alembic_migrations import run_alembic_cycle_assertions
 
-    versions = list((Path("alembic/versions")).glob("*.py"))
-    assert any("downgrade" in v.read_text(encoding="utf-8") for v in versions)
+    run_alembic_cycle_assertions(tmp_path, monkeypatch)
 
 
 @pytest.mark.red

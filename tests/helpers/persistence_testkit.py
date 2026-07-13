@@ -9,7 +9,7 @@ from unittest.mock import MagicMock
 import pytest
 from backend.config import get_settings
 from backend.db.base import get_async_engine, reset_database_caches
-from backend.db.bootstrap import ensure_schema
+from backend.db.migrations import stamp_head_if_unversioned
 from backend.graph.store import GraphStore
 from backend.repositories.async_bridge import run_async
 from backend.repositories.paper_repository import get_paper_repository
@@ -18,18 +18,22 @@ from backend.schemas.graph import UnifiedPaperGraph
 from backend.schemas.paper import PaperStatus, PaperStatusData, PipelineStage
 from backend.services.paper_service import PaperService, get_paper_service, reset_persistence_singletons
 
+from tests.helpers.db_schema_testkit import create_all_tables
+
 
 async def init_isolated_database(db_path: Path) -> None:
     """Create schema in a dedicated SQLite file."""
     reset_database_caches()
-    await ensure_schema(get_async_engine())
+    await create_all_tables(get_async_engine())
+    stamp_head_if_unversioned()
 
 
 async def ensure_demo_fixture_corpus() -> None:
     """Upsert OpenAPI demo papers/status/graph paths when core fixture rows are absent."""
     from backend.services.paper_fixture_seed import refresh_demo_status_snapshots, seed_from_fixtures
 
-    await ensure_schema(get_async_engine())
+    await create_all_tables(get_async_engine())
+    stamp_head_if_unversioned()
     paper_repo = get_paper_repository()
     core_demo_ids = ("stem-001", "hss-001", "hss-002", "hss-failed-001")
     corpus_complete = True

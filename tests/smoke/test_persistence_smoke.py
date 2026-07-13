@@ -43,6 +43,29 @@ def test_smoke_settings_default_seed_demo_papers_false() -> None:
 
 
 @pytest.mark.smoke
-def test_smoke_alembic_baseline_revision_exists() -> None:
-    versions = list((REPO_ROOT / "alembic" / "versions").glob("*.py"))
-    assert versions, "expected at least one Alembic revision"
+def test_smoke_alembic_head_revision_matches_code_constant() -> None:
+    from backend.db.migrations import ALEMBIC_HEAD_REVISION, get_head_revision
+
+    assert get_head_revision() == ALEMBIC_HEAD_REVISION
+
+
+@pytest.mark.smoke
+def test_smoke_init_db_script_is_runnable(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    import importlib.util
+
+    db_path = tmp_path / "init-db-smoke.db"
+    monkeypatch.setenv("DATABASE_URL", f"sqlite:///{db_path.as_posix()}")
+    from backend.config import get_settings
+    from backend.db.migrations import get_current_revision
+    from tests.helpers.persistence_testkit import reset_persistence_singletons
+
+    reset_persistence_singletons()
+    get_settings.cache_clear()
+
+    script = REPO_ROOT / "scripts" / "init_db.py"
+    spec = importlib.util.spec_from_file_location("init_db", script)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    assert module.main(["--show-revision"]) == 0
+    assert get_current_revision() == "a8f3c2d91e04"
