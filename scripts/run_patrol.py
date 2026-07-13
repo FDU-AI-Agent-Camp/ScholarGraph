@@ -5,8 +5,9 @@
 在仓库根目录执行::
 
     uv run python scripts/run_patrol.py --seed-demo-graphs
+    uv run python scripts/run_patrol.py --seed-stem-demo
     uv run python scripts/run_patrol.py --seed-demo-graphs --smoke-patrol
-    uv run python scripts/run_patrol.py --paper-ids hss-001,hss-002 --mode lens_clash
+    uv run python scripts/run_patrol.py --paper-ids stem-001,stem-002 --mode method_overlap
 
 ``--seed-demo-graphs`` 向 ``GRAPH_DATA_DIR`` 写入 ``docs/v1/eval/patrol_samples.md`` 中的评测图谱。
 
@@ -24,7 +25,7 @@ from pathlib import Path
 from backend.config import get_settings
 from backend.graph.store import GraphStore
 from backend.patrol.errors import PatrolError
-from backend.patrol.samples import CORPUS_HSS_PAPER_IDS, seed_corpus_patrol_graphs
+from backend.patrol.samples import CORPUS_HSS_PAPER_IDS, seed_corpus_patrol_graphs, seed_stem_patrol_graphs
 from backend.patrol.service import run_patrol
 from backend.schemas.patrol import PatrolMode, PatrolReport
 
@@ -34,7 +35,9 @@ EXIT_USAGE_ERROR = 2
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="运行 ScholarGraph 双文巡检（Lens Clash 等）")
+    parser = argparse.ArgumentParser(
+        description="运行 ScholarGraph 双文巡检（lens_clash / contradiction / method_overlap / claim_evolution）",
+    )
     parser.add_argument(
         "--paper-ids",
         default=",".join(CORPUS_HSS_PAPER_IDS),
@@ -44,7 +47,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         "--mode",
         choices=[mode.value for mode in PatrolMode],
         default=PatrolMode.LENS_CLASH.value,
-        help="巡检模式（V1 默认 lens_clash）",
+        help="巡检模式（四模式：lens_clash / contradiction / method_overlap / claim_evolution）",
     )
     parser.add_argument(
         "--graph-dir",
@@ -61,6 +64,11 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         "--smoke-patrol",
         action="store_true",
         help="同 --seed-demo-graphs（C-04 巡检 CLI 冒烟别名）",
+    )
+    parser.add_argument(
+        "--seed-stem-demo",
+        action="store_true",
+        help="运行前写入 STEM 评测图谱（stem-001/stem-002，供 method_overlap / claim_evolution 演示）",
     )
     parser.add_argument(
         "--compact",
@@ -91,10 +99,13 @@ async def execute_patrol(
     *,
     graph_dir: Path,
     seed_demo_graphs: bool,
+    seed_stem_demo: bool,
 ) -> PatrolReport:
     graph_dir.mkdir(parents=True, exist_ok=True)
     if seed_demo_graphs:
         seed_corpus_patrol_graphs(graph_dir)
+    if seed_stem_demo:
+        seed_stem_patrol_graphs(graph_dir)
     store = GraphStore(base_dir=graph_dir)
     return await run_patrol(paper_ids, mode, store=store)
 
@@ -123,6 +134,7 @@ async def async_main(argv: list[str] | None = None) -> int:
             mode,
             graph_dir=graph_dir,
             seed_demo_graphs=args.seed_demo_graphs or args.smoke_patrol,
+            seed_stem_demo=args.seed_stem_demo,
         )
     except PatrolError as exc:
         print(f"[{exc.code}] {exc.message}", file=sys.stderr)
