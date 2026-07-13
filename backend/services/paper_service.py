@@ -19,7 +19,7 @@ from backend.repositories import run_async
 from backend.repositories.paper_repository import PaperRepository, get_paper_repository
 from backend.repositories.pipeline_repository import PipelineRepository, get_pipeline_repository
 from backend.schemas.graph import UnifiedPaperGraph
-from backend.schemas.ingest_head import IngestHead
+from backend.schemas.ingest_head import IngestHead, PersistedHeadRefine
 from backend.schemas.paper import (
     FailedDuringStage,
     PaperCreateResult,
@@ -55,7 +55,7 @@ def reset_persistence_singletons() -> None:
 
 
 class PaperService:
-    """DB-backed paper store; ephemeral preview graphs stay in memory."""
+    """DB-backed paper store; pipeline ephemeral state lives in ``pipeline_runs``."""
 
     def __init__(
         self,
@@ -67,11 +67,6 @@ class PaperService:
         self._settings = settings or get_settings()
         self._paper_repo = paper_repo or get_paper_repository()
         self._pipeline_repo = pipeline_repo or get_pipeline_repository()
-        self._bootstrapped = False
-        self._refined_classifier_input: dict[str, str] = {}
-        self._refined_head: dict[str, IngestHead] = {}
-        self._preview_graphs: dict[str, UnifiedPaperGraph] = {}
-        self._active_run_id: dict[str, str] = {}
         self._compat_papers = None
         self._compat_status = None
         self._compat_pdf_paths = None
@@ -110,23 +105,20 @@ class PaperService:
 
     async def bootstrap(self) -> None:
         """Ensure schema exists and optionally seed demo fixtures."""
-        if self._bootstrapped:
-            return
         await ensure_schema(get_async_engine())
         if self._settings.seed_demo_papers and await self._paper_repo.is_empty():
             from backend.services.paper_fixture_seed import seed_from_fixtures
 
             await seed_from_fixtures(self._paper_repo, self._pipeline_repo)
-        self._bootstrapped = True
 
     def set_active_run_id(self, paper_id: str, run_id: str) -> None:
         """Atomically activate a new RAG index run for the paper."""
         self.ensure_paper_exists(paper_id)
-        self._active_run_id[paper_id] = run_id
+        run_async(self._pipeline_repo.set_active_rag_run_id(paper_id, run_id))
 
     def get_active_run_id(self, paper_id: str) -> str | None:
         """Return the currently active RAG index run id, or None if never indexed."""
-        return self._active_run_id.get(paper_id)
+        return run_async(self._pipeline_repo.get_active_rag_run_id(paper_id))
 
     async def list_papers(
         self,
@@ -153,8 +145,8 @@ class PaperService:
 
     def _enrich_paper_detail(self, paper: PaperDetail, paper_id: str) -> PaperDetail:
         """Attach optional ingest head, preview flag, and degrade codes for detail API (X17)."""
-        self._hydrate_head_refine_from_disk(paper_id)
-        ingest_head = self._refined_head.get(paper_id)
+        self._sync_head_refine_warnings_from_disk(paper_id)
+        ingest_head = self._load_ingest_head(paper_id)
         snapshot = run_async(self._pipeline_repo.get_latest(paper_id))
         extract_warnings: list[str] = []
         classify_warnings: list[str] = []
@@ -335,9 +327,6 @@ class PaperService:
         warnings: list[str] | None = None,
     ) -> None:
         """Persist async head merge result; never changes pipeline failure state."""
-        self._refined_head[paper_id] = merged
-        if classifier_input.strip():
-            self._refined_classifier_input[paper_id] = classifier_input.strip()
         if warnings:
             self.record_head_refine_warnings(paper_id, warnings)
         paper = run_async(self._paper_repo.get(paper_id))
@@ -349,6 +338,28 @@ class PaperService:
             classifier_input=classifier_input,
             warnings=warnings,
         )
+
+    def _load_ingest_head(self, paper_id: str) -> IngestHead | None:
+        from backend.graph.head_store import HeadStore
+
+        record = HeadStore().load(paper_id)
+        return record.merged if record is not None else None
+
+    def _load_head_refine_record(self, paper_id: str) -> PersistedHeadRefine | None:
+        from backend.graph.head_store import HeadStore
+
+        return HeadStore().load(paper_id)
+
+    def _sync_head_refine_warnings_from_disk(self, paper_id: str) -> None:
+        from backend.graph.head_store import HeadStore
+
+        record = HeadStore().load(paper_id)
+        if record is None or not record.warnings:
+            return
+        snapshot = run_async(self._pipeline_repo.get_latest(paper_id))
+        if snapshot is not None and snapshot.head_refine_warnings:
+            return
+        self.record_head_refine_warnings(paper_id, list(record.warnings))
 
     def _persist_head_refine(
         self,
@@ -369,19 +380,15 @@ class PaperService:
         head_path = str(HeadStore()._path(paper_id))
         run_async(self._paper_repo.update_paths(paper_id, head_path=head_path))
 
-    def _hydrate_head_refine_from_disk(self, paper_id: str) -> None:
-        if paper_id in self._refined_head:
-            return
-        from backend.graph.head_store import HeadStore
-
-        record = HeadStore().load(paper_id)
+    def get_refined_classifier_input(self, paper_id: str) -> str | None:
+        record = self._load_head_refine_record(paper_id)
         if record is None:
-            return
-        self._refined_head[paper_id] = record.merged
-        if record.classifier_input.strip():
-            self._refined_classifier_input[paper_id] = record.classifier_input.strip()
-        if record.warnings:
-            self.record_head_refine_warnings(paper_id, list(record.warnings))
+            return None
+        stripped = record.classifier_input.strip()
+        return stripped or None
+
+    def get_refined_head(self, paper_id: str) -> IngestHead | None:
+        return self._load_ingest_head(paper_id)
 
     def record_head_refine_warnings(self, paper_id: str, warnings: list[str]) -> None:
         if not warnings:
@@ -389,14 +396,6 @@ class PaperService:
         run_async(
             self._pipeline_repo.record_warnings(paper_id, head_refine=warnings),
         )
-
-    def get_refined_classifier_input(self, paper_id: str) -> str | None:
-        self._hydrate_head_refine_from_disk(paper_id)
-        return self._refined_classifier_input.get(paper_id)
-
-    def get_refined_head(self, paper_id: str) -> IngestHead | None:
-        self._hydrate_head_refine_from_disk(paper_id)
-        return self._refined_head.get(paper_id)
 
     def get_head_refine_warnings(self, paper_id: str) -> list[str]:
         snapshot = run_async(self._pipeline_repo.get_latest(paper_id))
@@ -428,7 +427,7 @@ class PaperService:
 
     def save_preview_graph(self, paper_id: str, graph: UnifiedPaperGraph) -> None:
         self.ensure_paper_exists(paper_id)
-        self._preview_graphs[paper_id] = graph
+        run_async(self._pipeline_repo.save_preview_graph(paper_id, graph))
 
     def mark_preview_available(self, paper_id: str) -> None:
         self.ensure_paper_exists(paper_id)
@@ -438,10 +437,13 @@ class PaperService:
         paper = run_async(self._paper_repo.get(paper_id))
         if paper is not None and paper.preview_available:
             return True
-        return paper_id in self._preview_graphs
+        return run_async(self._pipeline_repo.get_preview_graph(paper_id)) is not None
 
     def get_preview_graph(self, paper_id: str) -> UnifiedPaperGraph | None:
-        return self._preview_graphs.get(paper_id)
+        return run_async(self._pipeline_repo.get_preview_graph(paper_id))
+
+    def clear_ephemeral_pipeline_state(self, paper_id: str) -> None:
+        run_async(self._pipeline_repo.clear_ephemeral_pipeline_state(paper_id))
 
     async def get_status(self, paper_id: str) -> PaperStatusData:
         await self.bootstrap()

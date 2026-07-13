@@ -43,10 +43,8 @@ def _clear_persisted_artefacts(paper_id: str) -> None:
 
 
 def _clear_in_memory_state(paper_service: PaperService, paper_id: str) -> None:
-    """Reset preview and refined head caches for a paper."""
-    paper_service._preview_graphs.pop(paper_id, None)
-    paper_service._refined_head.pop(paper_id, None)
-    paper_service._refined_classifier_input.pop(paper_id, None)
+    """Reset preview and RAG run tracking for a paper."""
+    paper_service.clear_ephemeral_pipeline_state(paper_id)
 
 
 def force_reextract(paper_service: PaperService, paper_id: str) -> PaperStatusData:
