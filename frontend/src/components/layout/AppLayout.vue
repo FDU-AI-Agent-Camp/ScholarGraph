@@ -1,13 +1,15 @@
 <script setup lang="ts">
 import { Close, Document, HomeFilled, Menu, Search } from '@element-plus/icons-vue'
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
+import { useRoute } from 'vue-router'
 
+import PatrolRerankerOnboardingGuard from '@/components/health/PatrolRerankerOnboardingGuard.vue'
 import { MOBILE_NAV_MAX_WIDTH_PX, SHELL_BASELINE_COPY } from '@/constants/shellCopy'
 import { RouteName } from '@/router/meta'
+import { useHealthStore } from '@/stores/health'
 
 const route = useRoute()
-const router = useRouter()
+const healthStore = useHealthStore()
 
 const mobileNavOpen = ref(false)
 const isMobileViewport = ref(false)
@@ -62,6 +64,7 @@ onMounted(() => {
   mobileMediaQuery = window.matchMedia(`(max-width: ${MOBILE_NAV_MAX_WIDTH_PX}px)`)
   syncMobileViewport(mobileMediaQuery.matches)
   mobileMediaQuery.addEventListener('change', onMobileViewportChange)
+  void healthStore.ensureLoaded()
 })
 
 onUnmounted(() => {
@@ -70,8 +73,11 @@ onUnmounted(() => {
 
 watch(
   () => route.path,
-  () => {
+  (path) => {
     mobileNavOpen.value = false
+    if (path.startsWith('/patrol')) {
+      void healthStore.ensureLoaded(true)
+    }
   },
 )
 
@@ -143,6 +149,7 @@ function handleNavSelect(index: string): void {
       </el-header>
       <el-main :class="['main', { 'main--full-bleed': isFullBleed }]">
         <div :class="contentShellClass">
+          <PatrolRerankerOnboardingGuard />
           <router-view v-slot="{ Component, route: viewRoute }">
             <transition name="route-fade" mode="out-in">
               <component :is="Component" :key="viewRoute.fullPath" />

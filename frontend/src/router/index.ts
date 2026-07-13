@@ -48,4 +48,12 @@ const router = createRouter({
   routes,
 })
 
+router.beforeEach(async (to) => {
+  if (to.path.startsWith('/patrol')) {
+    const { useHealthStore } = await import('@/stores/health')
+    const healthStore = useHealthStore()
+    await healthStore.ensureLoaded()
+  }
+})
+
 export default router
