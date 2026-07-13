@@ -27,7 +27,7 @@ async def init_isolated_database(db_path: Path) -> None:
 
 async def ensure_demo_fixture_corpus() -> None:
     """Upsert OpenAPI demo papers/status/graph paths when core fixture rows are absent."""
-    from backend.services.paper_fixture_seed import seed_from_fixtures
+    from backend.services.paper_fixture_seed import refresh_demo_status_snapshots, seed_from_fixtures
 
     await ensure_schema(get_async_engine())
     paper_repo = get_paper_repository()
@@ -39,9 +39,11 @@ async def ensure_demo_fixture_corpus() -> None:
             break
     if corpus_complete:
         await paper_repo.bump_list_rank(core_demo_ids)
+        await refresh_demo_status_snapshots(core_demo_ids)
         return
     await seed_from_fixtures(paper_repo, get_pipeline_repository())
     await paper_repo.bump_list_rank(core_demo_ids)
+    await refresh_demo_status_snapshots(core_demo_ids)
 
 
 def _ready_pipeline_snapshot(paper_id: str, status: PaperStatus) -> PaperStatusData:

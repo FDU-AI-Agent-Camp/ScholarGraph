@@ -10,6 +10,8 @@ These tests hit the real FastAPI endpoints and verify the observable contract:
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Iterator
+from contextlib import contextmanager
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -20,8 +22,27 @@ from backend.schemas.paradigm import Paradigm
 from httpx import AsyncClient
 from tests.api.conftest import assert_error_envelope, assert_success_envelope
 from tests.api.test_papers_upload import VALID_PDF
+from tests.helpers.status_contract import assert_terminal_failed_envelope, assert_terminal_ready_envelope
 
 pytestmark = pytest.mark.asyncio
+
+
+@pytest.fixture(autouse=True)
+def _reset_background_extract_worker() -> None:
+    from backend.services import paper_pipeline_scheduler
+    from backend.services.extract_worker import reset_extract_worker
+
+    for task in list(paper_pipeline_scheduler._head_refine_tasks.values()):
+        if not task.done():
+            task.cancel()
+    reset_extract_worker()
+    paper_pipeline_scheduler._head_refine_tasks.clear()
+    yield
+    for task in list(paper_pipeline_scheduler._head_refine_tasks.values()):
+        if not task.done():
+            task.cancel()
+    reset_extract_worker()
+    paper_pipeline_scheduler._head_refine_tasks.clear()
 
 
 def _fake_graph(paper_id: str, paradigm: Paradigm) -> UnifiedPaperGraph:
@@ -48,7 +69,16 @@ def _full_fake_graph(paper_id: str, paradigm: Paradigm) -> UnifiedPaperGraph:
             GraphNode(id="n1", label="Fake node", type=node_type),
             GraphNode(id="n2", label="Another fake node", type=node_type),
         ],
-        edges=[GraphEdge(id="e1", source="n1", target="n2", label="supports", type="SUPPORTS")],
+        edges=[
+            GraphEdge(
+                id="e1",
+                source="n1",
+                target="n2",
+                label="supports",
+                type="SUPPORTS",
+                rationale="Contract-test support edge with explicit rationale.",
+            ),
+        ],
         summary="full fake",
     )
 
@@ -93,6 +123,37 @@ def _slow_full_extraction(sleep_s: float):
     return _extract
 
 
+@contextmanager
+def _background_extract_contract_patches(
+    *,
+    extract_chunked_two_phase: object,
+    preview_scheduler: object | None = None,
+) -> Iterator[None]:
+    """Patch consumer namespaces and keep HTTP tests off the PipelineFinalized chain."""
+    ingest_svc = MagicMock()
+    ingest_svc.ingest = AsyncMock(
+        return_value={
+            "paper_id": "will-be-replaced",
+            "full_text": "x" * 50_000,
+            "classifier_input": "classification input",
+        },
+    )
+    scheduler = preview_scheduler or _fake_extract_preview_and_schedule
+    with (
+        patch("backend.graph.nodes.get_ingest_service", return_value=ingest_svc),
+        patch("backend.graph.nodes.ensure_head_refine_scheduled"),
+        patch("backend.services.paper_pipeline_scheduler.ensure_head_refine_scheduled"),
+        patch(
+            "backend.graph.nodes.wait_for_refined_classifier_input",
+            new=AsyncMock(side_effect=lambda _pid, _path, fallback, **_: (fallback, [])),
+        ),
+        patch("backend.services.agent_service.should_run_background_extraction", return_value=True),
+        patch("backend.services.agent_service.extract_preview_and_schedule_full", new=scheduler),
+        patch("backend.services.extract_worker._extract_chunked_two_phase", new=extract_chunked_two_phase),
+    ):
+        yield
+
+
 async def _poll_status_until_terminal(
     api_client: AsyncClient,
     paper_id: str,
@@ -107,6 +168,10 @@ async def _poll_status_until_terminal(
         assert response.status_code == 200
         last = response.json()["data"]
         if last["status"] in ("ready", "failed"):
+            if last["status"] == "ready":
+                assert_terminal_ready_envelope(last)
+            else:
+                assert_terminal_failed_envelope(last)
             return last
     return last
 
@@ -116,34 +181,9 @@ async def test_long_paper_upload_reaches_ready_via_background_extraction(
     mock_upload_pipeline_env: tuple[Path, Path],
 ) -> None:
     """Long papers take the background extract path and eventually become ready."""
-    upload_dir, graph_dir = mock_upload_pipeline_env
+    _upload_dir, graph_dir = mock_upload_pipeline_env
 
-    ingest_svc = MagicMock()
-    ingest_svc.ingest = AsyncMock(
-        return_value={
-            "paper_id": "will-be-replaced",
-            "full_text": "x" * 50_000,
-            "classifier_input": "classification input",
-        },
-    )
-
-    with (
-        patch("backend.graph.nodes.get_ingest_service", return_value=ingest_svc),
-        patch("backend.graph.nodes.ensure_head_refine_scheduled"),
-        patch(
-            "backend.graph.nodes.wait_for_refined_classifier_input",
-            new=AsyncMock(side_effect=lambda _pid, _path, fallback, **_: (fallback, [])),
-        ),
-        patch("backend.services.agent_service.should_run_background_extraction", return_value=True),
-        patch(
-            "backend.agents.extractor_background.extract_preview_and_schedule_full",
-            new=_fake_extract_preview_and_schedule,
-        ),
-        patch(
-            "backend.services.extract_worker._extract_chunked_two_phase",
-            new=_slow_full_extraction(0.1),
-        ),
-    ):
+    with _background_extract_contract_patches(extract_chunked_two_phase=_slow_full_extraction(0.1)):
         create = await api_client.post(
             "/api/v1/papers",
             files={"file": ("long-paper.pdf", VALID_PDF, "application/pdf")},
@@ -165,9 +205,7 @@ async def test_long_paper_upload_reaches_ready_via_background_extraction(
                 break
 
         assert saw_extracting, "background extraction should surface the extracting stage"
-        assert final["status"] == "ready"
-        assert final["stage"] == "ready"
-        assert final["percent"] == 100
+        assert_terminal_ready_envelope(final)
 
     detail = await api_client.get(f"/api/v1/papers/{paper_id}")
     assert detail.status_code == 200
@@ -188,32 +226,7 @@ async def test_graph_returns_409_while_background_extraction_runs(
     """GET /graph before background extraction finishes must return 409."""
     _upload_dir, _graph_dir = mock_upload_pipeline_env
 
-    ingest_svc = MagicMock()
-    ingest_svc.ingest = AsyncMock(
-        return_value={
-            "paper_id": "will-be-replaced",
-            "full_text": "x" * 50_000,
-            "classifier_input": "classification input",
-        },
-    )
-
-    with (
-        patch("backend.graph.nodes.get_ingest_service", return_value=ingest_svc),
-        patch("backend.graph.nodes.ensure_head_refine_scheduled"),
-        patch(
-            "backend.graph.nodes.wait_for_refined_classifier_input",
-            new=AsyncMock(side_effect=lambda _pid, _path, fallback, **_: (fallback, [])),
-        ),
-        patch("backend.services.agent_service.should_run_background_extraction", return_value=True),
-        patch(
-            "backend.agents.extractor_background.extract_preview_and_schedule_full",
-            new=_fake_extract_preview_and_schedule,
-        ),
-        patch(
-            "backend.services.extract_worker._extract_chunked_two_phase",
-            new=_slow_full_extraction(0.3),
-        ),
-    ):
+    with _background_extract_contract_patches(extract_chunked_two_phase=_slow_full_extraction(0.3)):
         create = await api_client.post(
             "/api/v1/papers",
             files={"file": ("slow-bg.pdf", VALID_PDF, "application/pdf")},
@@ -235,7 +248,7 @@ async def test_graph_returns_409_while_background_extraction_runs(
         assert saw_409, "graph endpoint should return 409 while background extraction runs"
 
         final = await _poll_status_until_terminal(api_client, paper_id)
-        assert final["status"] == "ready"
+        assert_terminal_ready_envelope(final)
 
 
 async def test_background_extraction_failed_marks_paper_failed(
@@ -245,31 +258,10 @@ async def test_background_extraction_failed_marks_paper_failed(
     """If the background worker fails, status polling must eventually report failed."""
     _upload_dir, _graph_dir = mock_upload_pipeline_env
 
-    ingest_svc = MagicMock()
-    ingest_svc.ingest = AsyncMock(
-        return_value={
-            "paper_id": "will-be-replaced",
-            "full_text": "x" * 50_000,
-            "classifier_input": "classification input",
-        },
-    )
-
     async def failing_full_extraction(*_args, **_kwargs):
         raise RuntimeError("background extraction failed")
 
-    with (
-        patch("backend.graph.nodes.get_ingest_service", return_value=ingest_svc),
-        patch("backend.graph.nodes.ensure_head_refine_scheduled"),
-        patch(
-            "backend.graph.nodes.wait_for_refined_classifier_input",
-            new=AsyncMock(side_effect=lambda _pid, _path, fallback, **_: (fallback, [])),
-        ),
-        patch("backend.services.agent_service.should_run_background_extraction", return_value=True),
-        patch(
-            "backend.services.extract_worker._extract_chunked_two_phase",
-            new=failing_full_extraction,
-        ),
-    ):
+    with _background_extract_contract_patches(extract_chunked_two_phase=failing_full_extraction):
         create = await api_client.post(
             "/api/v1/papers",
             files={"file": ("failing-bg.pdf", VALID_PDF, "application/pdf")},
@@ -277,6 +269,4 @@ async def test_background_extraction_failed_marks_paper_failed(
         paper_id = create.json()["data"]["paper_id"]
 
         final = await _poll_status_until_terminal(api_client, paper_id)
-        assert final["status"] == "failed"
-        assert final["stage"] == "failed"
-        assert final.get("error_code")
+        assert_terminal_failed_envelope(final)

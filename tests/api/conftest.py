@@ -40,9 +40,19 @@ def upload_dir(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
 
 
 @pytest.fixture
+def noop_event_bus_publish_sync(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Cut PipelineFinalized publish_sync chain for HTTP contract tests."""
+    monkeypatch.setattr(
+        "backend.events.bus.EventBus.publish_sync",
+        lambda self, event: None,
+    )
+
+
+@pytest.fixture
 def mock_upload_pipeline_env(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
+    noop_event_bus_publish_sync: None,
 ) -> tuple[Path, Path]:
     """Isolated upload + graph dirs, SQLite DB, and LLM_MODE=mock for upload→pipeline HTTP tests."""
     upload_path = tmp_path / "uploads"
@@ -57,14 +67,8 @@ def mock_upload_pipeline_env(
     monkeypatch.setenv("LLM_MODE", "mock")
     reset_persistence_singletons()
     asyncio.run(init_isolated_database(db_path))
-    get_settings.cache_clear()
-    from backend.services.paper_service import get_paper_service
-
-    get_paper_service.cache_clear()
     yield upload_path, graph_path
     reset_persistence_singletons()
-    get_settings.cache_clear()
-    get_paper_service.cache_clear()
 
 
 def assert_success_envelope(body: dict) -> None:
