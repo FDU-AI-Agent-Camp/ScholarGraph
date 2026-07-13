@@ -202,3 +202,32 @@ async def restart_paper_service() -> PaperService:
     service = get_paper_service()
     await service.bootstrap()
     return service
+
+
+def simulate_service_crash() -> None:
+    """Drop the in-process ``PaperService`` singleton without DB cleanup (D6 crash-recovery)."""
+    get_paper_service.cache_clear()
+
+
+async def wipe_all_paper_rows() -> None:
+    """Delete all paper and pipeline rows while keeping schema and singletons."""
+    from sqlalchemy import delete
+
+    from backend.db.base import get_async_session_factory
+    from backend.db.models import PaperRow, PipelineRunRow
+
+    async with get_async_session_factory()() as session:
+        await session.execute(delete(PipelineRunRow))
+        await session.execute(delete(PaperRow))
+        await session.commit()
+
+
+def expected_demo_fixture_count() -> int:
+    """Number of demo papers declared in ``docs/api/fixtures/papers-list.json``."""
+    import json
+
+    from backend.services.paper_fixture_seed import FIXTURES_DIR
+
+    list_path = FIXTURES_DIR / "papers-list.json"
+    payload = json.loads(list_path.read_text(encoding="utf-8"))
+    return len(payload["data"]["items"])

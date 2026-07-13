@@ -1,4 +1,4 @@
-"""Tests for PaperService preview-graph lifecycle (Slice 1)."""
+"""Tests for PaperService preview-graph lifecycle (Slice 1 / D6 DB-backed)."""
 
 from __future__ import annotations
 
@@ -6,22 +6,11 @@ import pytest
 from backend.api.exceptions import ApiError
 from backend.graph.store import GraphStore
 from backend.schemas.graph import GraphEdge, GraphNode, UnifiedPaperGraph
-from backend.schemas.paper import PaperDetail, PaperStatus, PaperStatusData, PipelineStage
+from backend.schemas.paper import PaperStatus, PaperStatusData, PipelineStage
 from backend.schemas.paradigm import Paradigm
 from backend.services.paper_service import get_paper_service
 
-
-def _make_paper(paper_id: str, status: PaperStatus = PaperStatus.PROCESSING) -> PaperDetail:
-    from datetime import UTC, datetime
-
-    now = datetime.now(UTC)
-    return PaperDetail(
-        paper_id=paper_id,
-        title="preview service test",
-        status=status,
-        created_at=now,
-        updated_at=now,
-    )
+from tests.helpers.persistence_testkit import register_test_paper
 
 
 def _make_status(paper_id: str, status: PaperStatus = PaperStatus.PROCESSING) -> PaperStatusData:
@@ -38,17 +27,18 @@ def _make_status(paper_id: str, status: PaperStatus = PaperStatus.PROCESSING) ->
 
 
 @pytest.fixture(autouse=True)
-def _fresh_service() -> None:
+def _fresh_service(persistence_env) -> None:
     get_paper_service.cache_clear()
     yield
     get_paper_service.cache_clear()
 
 
 class TestPreviewStorage:
-    def test_save_preview_graph_for_existing_paper(self) -> None:
+    @pytest.mark.asyncio
+    async def test_save_preview_graph_for_existing_paper(self) -> None:
         service = get_paper_service()
         paper_id = "ps-preview-001"
-        service._papers[paper_id] = _make_paper(paper_id)
+        await register_test_paper(paper_id, status=PaperStatus.PROCESSING)
         graph = UnifiedPaperGraph(
             paper_id=paper_id,
             paradigm=Paradigm.HSS,
@@ -73,24 +63,28 @@ class TestPreviewStorage:
             service.save_preview_graph("missing", graph)
         assert exc_info.value.code == "PAPER_NOT_FOUND"
 
-    def test_mark_preview_available_updates_status_snapshot(self) -> None:
+    @pytest.mark.asyncio
+    async def test_mark_preview_available_updates_status_snapshot(self) -> None:
+        from backend.repositories.pipeline_repository import PipelineRepository
+
         service = get_paper_service()
         paper_id = "ps-mark-001"
-        service._papers[paper_id] = _make_paper(paper_id)
-        service._status[paper_id] = _make_status(paper_id)
+        await register_test_paper(paper_id, status=PaperStatus.PROCESSING)
+        await PipelineRepository().save_status(paper_id, _make_status(paper_id))
 
         service.mark_preview_available(paper_id)
 
         assert service.is_preview_available(paper_id)
-        assert service._status[paper_id].preview_available is True
+        status = await service.get_status(paper_id)
+        assert status.preview_available is True
 
 
 class TestGetGraphPreview:
+    @pytest.mark.asyncio
     async def test_get_graph_returns_preview_when_not_ready(self) -> None:
         service = get_paper_service()
         paper_id = "ps-graph-preview-001"
-        service._papers[paper_id] = _make_paper(paper_id, status=PaperStatus.PROCESSING)
-        service._status[paper_id] = _make_status(paper_id)
+        await register_test_paper(paper_id, status=PaperStatus.PROCESSING)
         service.mark_preview_available(paper_id)
         graph = UnifiedPaperGraph(
             paper_id=paper_id,
@@ -104,10 +98,11 @@ class TestGetGraphPreview:
 
         assert result == graph
 
-    async def test_get_graph_returns_full_graph_when_ready(self) -> None:
+    @pytest.mark.asyncio
+    async def test_get_graph_returns_full_graph_when_ready(self, persistence_env) -> None:
         service = get_paper_service()
         paper_id = "ps-graph-ready-001"
-        service._papers[paper_id] = _make_paper(paper_id, status=PaperStatus.READY)
+        await register_test_paper(paper_id, status=PaperStatus.READY)
         preview = UnifiedPaperGraph(
             paper_id=paper_id,
             paradigm=Paradigm.STEM,
@@ -124,17 +119,17 @@ class TestGetGraphPreview:
             edges=[GraphEdge(id="e1", source="n1", target="n2", label="produces", type="PRODUCES")],
         )
         service.save_preview_graph(paper_id, preview)
-        GraphStore().save(full)
+        GraphStore(base_dir=persistence_env["graph_dir"]).save(full)
 
         result = await service.get_graph(paper_id)
 
         assert result == full
 
+    @pytest.mark.asyncio
     async def test_get_graph_raises_when_processing_without_preview(self) -> None:
         service = get_paper_service()
         paper_id = "ps-graph-none-001"
-        service._papers[paper_id] = _make_paper(paper_id, status=PaperStatus.PROCESSING)
-        service._status[paper_id] = _make_status(paper_id)
+        await register_test_paper(paper_id, status=PaperStatus.PROCESSING)
 
         with pytest.raises(ApiError) as exc_info:
             await service.get_graph(paper_id)
@@ -142,21 +137,25 @@ class TestGetGraphPreview:
 
 
 class TestPreviewDetailEnrichment:
+    @pytest.mark.asyncio
     async def test_get_paper_includes_preview_available(self) -> None:
         service = get_paper_service()
         paper_id = "ps-detail-001"
-        service._papers[paper_id] = _make_paper(paper_id, status=PaperStatus.PROCESSING)
+        await register_test_paper(paper_id, status=PaperStatus.PROCESSING)
         service.mark_preview_available(paper_id)
 
         paper = await service.get_paper(paper_id)
 
         assert paper.preview_available is True
 
+    @pytest.mark.asyncio
     async def test_get_status_includes_preview_available(self) -> None:
+        from backend.repositories.pipeline_repository import PipelineRepository
+
         service = get_paper_service()
         paper_id = "ps-status-001"
-        service._papers[paper_id] = _make_paper(paper_id, status=PaperStatus.PROCESSING)
-        service._status[paper_id] = _make_status(paper_id)
+        await register_test_paper(paper_id, status=PaperStatus.PROCESSING)
+        await PipelineRepository().save_status(paper_id, _make_status(paper_id))
         service.mark_preview_available(paper_id)
 
         status = await service.get_status(paper_id)
@@ -165,10 +164,11 @@ class TestPreviewDetailEnrichment:
 
 
 class TestPreviewWarnings:
-    def test_record_and_retrieve_warnings(self) -> None:
+    @pytest.mark.asyncio
+    async def test_record_and_retrieve_warnings(self) -> None:
         service = get_paper_service()
         paper_id = "ps-warning-001"
-        service._papers[paper_id] = _make_paper(paper_id)
+        await register_test_paper(paper_id, status=PaperStatus.PROCESSING)
 
         service.record_extract_warnings(paper_id, ["low_quality_text"])
 

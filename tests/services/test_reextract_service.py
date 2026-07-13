@@ -93,8 +93,6 @@ async def _seed_previous_run(service: PaperService, paper_id: str) -> None:
     service.record_extract_warnings(paper_id, [EXTRACT_LLM_TIMEOUT_CODE, EXTRACT_HEURISTIC_FALLBACK_CODE])
     service.record_classify_warnings(paper_id, ["classifier_some_warning"])
     service.record_head_refine_warnings(paper_id, ["mineru_unavailable"])
-    service._refined_head[paper_id] = IngestHead(title="T", abstract="A", intro="I")
-    service._refined_classifier_input[paper_id] = "previous input"
 
     graph = UnifiedPaperGraph(
         paper_id=paper_id,

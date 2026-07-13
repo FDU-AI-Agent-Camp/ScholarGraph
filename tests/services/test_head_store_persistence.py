@@ -6,11 +6,13 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
-from backend.config import get_settings
 from backend.graph.head_store import HeadStore
+from backend.repositories.pipeline_repository import PipelineRepository
 from backend.schemas.ingest_head import IngestHead
-from backend.schemas.paper import PaperDetail, PaperStatus
+from backend.schemas.paper import PaperStatus
 from backend.services.paper_service import PaperService, get_paper_service
+
+from tests.helpers.persistence_testkit import register_test_paper
 
 
 def test_head_store_round_trip(tmp_path: Path) -> None:
@@ -48,6 +50,8 @@ async def test_apply_head_refine_persists_to_disk(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setenv("GRAPH_DATA_DIR", str(tmp_path))
+    from backend.config import get_settings
+
     get_settings.cache_clear()
     get_paper_service.cache_clear()  # type: ignore[attr-defined]
 
@@ -72,11 +76,15 @@ async def test_apply_head_refine_persists_to_disk(
 
 @pytest.mark.asyncio
 async def test_paper_service_hydrates_refined_head_after_restart(
+    persistence_env,
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     paper_id = "persist-head-001"
-    monkeypatch.setenv("GRAPH_DATA_DIR", str(tmp_path))
+    graph_dir = persistence_env["graph_dir"]
+    monkeypatch.setenv("GRAPH_DATA_DIR", str(graph_dir))
+    from backend.config import get_settings
+
     get_settings.cache_clear()
 
     merged = IngestHead(
@@ -84,23 +92,18 @@ async def test_paper_service_hydrates_refined_head_after_restart(
         abstract="Persisted abstract",
         sources={"title": "grobid", "abstract": "pymupdf"},
     )
-    HeadStore(base_dir=tmp_path).save(
+    HeadStore(base_dir=graph_dir).save(
         paper_id,
         merged=merged,
         classifier_input="Title: Persisted Title",
         warnings=["grobid_unavailable"],
     )
 
-    now = datetime.now(UTC)
-    fresh_service = PaperService()
-    fresh_service._papers[paper_id] = PaperDetail(
-        paper_id=paper_id,
-        title="persist test",
-        status=PaperStatus.PENDING,
-        created_at=now,
-        updated_at=now,
-    )
+    await register_test_paper(paper_id, title="persist test", status=PaperStatus.PENDING)
+    await PipelineRepository().record_warnings(paper_id, head_refine=["grobid_unavailable"])
 
+    get_paper_service.cache_clear()
+    fresh_service = PaperService()
     detail = await fresh_service.get_paper(paper_id)
 
     assert detail.ingest_head is not None
