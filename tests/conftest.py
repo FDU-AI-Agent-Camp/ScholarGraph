@@ -325,6 +325,15 @@ def persistence_env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
 
 
 @pytest.fixture(autouse=True)
+def _cleanup_event_bus_worker_after_test() -> Iterator[None]:
+    """D17: stop the persistent EventBus worker so pytest does not leak pending tasks."""
+    yield
+    from backend.events.bus import stop_event_bus_worker
+
+    stop_event_bus_worker()
+
+
+@pytest.fixture(autouse=True)
 def _patrol_service_global_mock_vector_store(monkeypatch) -> None:
     """Avoid real ChromaDB in any test that calls get_patrol_service()."""
     from unittest.mock import AsyncMock
@@ -342,3 +351,10 @@ def _patrol_service_global_mock_vector_store(monkeypatch) -> None:
     monkeypatch.setattr(ps_module, "get_patrol_service", _mock_get_patrol_service)
     if hasattr(ps_module.get_patrol_service, "cache_clear"):
         ps_module.get_patrol_service.cache_clear()
+
+
+def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> None:
+    """D17: final guard against leaking EventBus worker tasks at process exit."""
+    from backend.events.bus import stop_event_bus_worker
+
+    stop_event_bus_worker()

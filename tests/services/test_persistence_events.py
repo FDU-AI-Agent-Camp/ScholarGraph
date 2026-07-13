@@ -5,10 +5,69 @@ from __future__ import annotations
 import asyncio
 
 import pytest
-from backend.events.bus import EventBus
+from backend.events.bus import EventBus, get_event_bus, stop_event_bus_worker
 from backend.events.types import EventType, PipelineFinalized
 from backend.schemas.graph import GraphNode, UnifiedPaperGraph
 from backend.schemas.paradigm import Paradigm
+
+
+@pytest.mark.asyncio
+async def test_stop_event_bus_worker_cancels_pending_worker_without_drain() -> None:
+    """D17: teardown must stop a fire-and-forget worker even when tests skip drain."""
+    bus = EventBus()
+
+    async def idle_handler(_event: PipelineFinalized) -> None:
+        await asyncio.sleep(60)
+
+    bus.subscribe(EventType.PIPELINE_FINALIZED, idle_handler)
+    graph = UnifiedPaperGraph(
+        paper_id="d17-stop",
+        paradigm=Paradigm.STEM,
+        nodes=[GraphNode(id="n1", label="M", type="Method")],
+        edges=[],
+    )
+
+    await asyncio.to_thread(
+        lambda: bus.publish_sync(PipelineFinalized(paper_id="d17-stop", full_text="body", graph=graph))
+    )
+    assert bus._worker_task is not None
+    assert not bus._worker_task.done()
+
+    bus._stop_worker()
+    assert bus._worker_task is None
+    assert bus._queue is None
+
+
+@pytest.mark.asyncio
+async def test_stop_event_bus_worker_tears_down_singleton_worker() -> None:
+    from backend.events import pipeline_finalized_handlers as handler_module
+
+    handler_module.unregister_pipeline_finalized_handlers()
+    bus = get_event_bus()
+    bus.reset()
+
+    async def idle_handler(_event: PipelineFinalized) -> None:
+        await asyncio.sleep(60)
+
+    bus.subscribe(EventType.PIPELINE_FINALIZED, idle_handler)
+    graph = UnifiedPaperGraph(
+        paper_id="d17-singleton",
+        paradigm=Paradigm.STEM,
+        nodes=[GraphNode(id="n1", label="M", type="Method")],
+        edges=[],
+    )
+
+    await asyncio.to_thread(
+        lambda: bus.publish_sync(
+            PipelineFinalized(paper_id="d17-singleton", full_text="body", graph=graph)
+        )
+    )
+    assert bus._worker_task is not None
+
+    stop_event_bus_worker()
+    assert bus._worker_task is None
+
+    handler_module.register_pipeline_finalized_handlers(force=True)
 
 
 @pytest.mark.asyncio
