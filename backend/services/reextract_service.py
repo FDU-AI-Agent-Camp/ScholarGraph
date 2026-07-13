@@ -2,34 +2,38 @@
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING
 
 from backend.api.exceptions import ApiError
 from backend.graph.head_store import HeadStore
 from backend.graph.store import GraphStore
+from backend.repositories import run_async
 from backend.schemas.paper import PaperStatus, PaperStatusData
 from backend.services.paper_pipeline_scheduler import schedule_paper_pipeline
 
 if TYPE_CHECKING:
     from backend.services.paper_service import PaperService
 
-
 _REEXTRACT_QUEUED_MESSAGE = "已强制重新抽取，等待流水线启动…"
 
 
-def _resolve_pdf_path(paper_service: PaperService, paper_id: str) -> Path:
+def _resolve_pdf_path(pdf_path_str: str | None, paper_id: str) -> Path:
     """Return the stored PDF path or raise a 422 error if it is missing."""
-    pdf_path = paper_service._pdf_paths.get(paper_id)
-    if pdf_path is not None and pdf_path.is_file():
-        return pdf_path
-
-    raise ApiError(
-        "PDF_NOT_FOUND",
-        f"无法找到论文 {paper_id} 的原始 PDF，无法重新抽取",
-        status_code=422,
-    )
+    if pdf_path_str is None:
+        raise ApiError(
+            "PDF_NOT_FOUND",
+            f"无法找到论文 {paper_id} 的原始 PDF，无法重新抽取",
+            status_code=422,
+        )
+    pdf_path = Path(pdf_path_str)
+    if not pdf_path.is_file():
+        raise ApiError(
+            "PDF_NOT_FOUND",
+            f"无法找到论文 {paper_id} 的原始 PDF，无法重新抽取",
+            status_code=422,
+        )
+    return pdf_path
 
 
 def _clear_persisted_artefacts(paper_id: str) -> None:
@@ -39,30 +43,25 @@ def _clear_persisted_artefacts(paper_id: str) -> None:
 
 
 def _clear_in_memory_state(paper_service: PaperService, paper_id: str) -> None:
-    """Reset preview, warnings and refined head caches for a paper."""
-    paper_service._preview_graphs.pop(paper_id, None)
-    paper_service._preview_available.pop(paper_id, None)
-    paper_service._extract_warnings.pop(paper_id, None)
-    paper_service._classify_warnings.pop(paper_id, None)
-    paper_service._head_refine_warnings.pop(paper_id, None)
-    paper_service._refined_head.pop(paper_id, None)
-    paper_service._refined_classifier_input.pop(paper_id, None)
+    """Reset preview and RAG run tracking for a paper."""
+    paper_service.clear_ephemeral_pipeline_state(paper_id)
 
 
 def force_reextract(paper_service: PaperService, paper_id: str) -> PaperStatusData:
     """Forcefully re-run the extraction pipeline for an existing paper.
 
-    This is the escape hatch for users who see an LLM-timeout fallback.
-    The existing graph, preview, warnings and refined head are cleared,
-    the paper status is reset to PENDING/PROCESSING, and the pipeline is
-    re-scheduled from the stored PDF path.
+    Clears graph/head artefacts, resets DB status to pending, bumps
+    ``graph_version``, clears pipeline warnings, and re-schedules the pipeline
+    from the stored PDF path.
 
     Raises:
         ApiError: 404 if paper does not exist (from caller).
         ApiError: 409 if it is already running.
         ApiError: 422 if the original PDF path is no longer available.
     """
-    paper = paper_service._papers[paper_id]
+    paper = run_async(paper_service._paper_repo.get(paper_id))
+    if paper is None:
+        raise ApiError("PAPER_NOT_FOUND", f"论文不存在: {paper_id}", status_code=404)
 
     if paper.status == PaperStatus.PROCESSING:
         raise ApiError(
@@ -71,28 +70,18 @@ def force_reextract(paper_service: PaperService, paper_id: str) -> PaperStatusDa
             status_code=409,
         )
 
-    pdf_path = _resolve_pdf_path(paper_service, paper_id)
+    pdf_path_str = run_async(paper_service._paper_repo.get_pdf_path(paper_id))
+    pdf_path = _resolve_pdf_path(pdf_path_str, paper_id)
     _clear_persisted_artefacts(paper_id)
     _clear_in_memory_state(paper_service, paper_id)
 
-    now = datetime.now(UTC)
-    paper_service._papers[paper_id] = paper.model_copy(
-        update={
-            "status": PaperStatus.PENDING,
-            "paradigm": None,
-            "classification": None,
-            "preview_available": False,
-            "updated_at": now,
-        },
-    )
-    paper_service._status[paper_id] = PaperStatusData(
-        paper_id=paper_id,
-        status=PaperStatus.PENDING,
-        percent=0,
-        stage=None,
-        message=_REEXTRACT_QUEUED_MESSAGE,
-        updated_at=now,
+    run_async(paper_service._paper_repo.reset_for_reextract(paper_id))
+    snapshot = run_async(
+        paper_service._pipeline_repo.reset_for_reextract(
+            paper_id,
+            message=_REEXTRACT_QUEUED_MESSAGE,
+        ),
     )
 
     schedule_paper_pipeline(paper_id, pdf_path)
-    return paper_service._status[paper_id]
+    return snapshot

@@ -22,9 +22,23 @@ from backend.services.errors import ServiceError
 from backend.services.paper_service import get_paper_service
 
 from tests.conftest import mock_pipeline_node_services
+from tests.helpers.event_bus_testkit import drain_event_bus
 from tests.helpers.status_contract import assert_snapshot_matches_contract
 
 pytestmark = pytest.mark.integration
+
+
+class _InMemoryRagRunTracker:
+    """Avoid sync DB bridge calls from async EventBus handlers during integration tests."""
+
+    def __init__(self) -> None:
+        self._active_run_ids: dict[str, str] = {}
+
+    def get_active_run_id(self, paper_id: str) -> str | None:
+        return self._active_run_ids.get(paper_id)
+
+    def set_active_run_id(self, paper_id: str, run_id: str) -> None:
+        self._active_run_ids[paper_id] = run_id
 
 
 async def test_run_paper_pipeline_success_mock_e2e(integration_paper: tuple[str, Path]) -> None:
@@ -133,7 +147,13 @@ async def test_run_paper_pipeline_startup_then_stage_order(
         mocks["ingest"].ingest = AsyncMock(side_effect=track_ingest)
         mocks["agent"].classify_paradigm = AsyncMock(side_effect=track_classify)
         mocks["agent"].extract_graph = AsyncMock(side_effect=track_extract)
-        mocks["store_save"].side_effect = lambda _g: call_order.append(NODE_STORE)
+        original_finalize = mocks["completion"].finalize
+
+        def _track_finalize(*args, **kwargs):
+            call_order.append(NODE_STORE)
+            return original_finalize(*args, **kwargs)
+
+        mocks["completion"].finalize = _track_finalize
 
         await run_paper_pipeline(paper_id, pdf_path)
 
@@ -185,11 +205,14 @@ async def test_run_paper_pipeline_rag_index_records_warning_on_failure(
     with mock_pipeline_node_services(paper_id) as mocks:
 
         async def failing_rag_index(*_args: object, **_kwargs: object) -> None:
-            get_paper_service().record_extract_warnings(paper_id, [RAG_INDEX_WARNING_CODE])
+            from backend.repositories.pipeline_repository import PipelineRepository
+
+            await PipelineRepository().record_warnings(paper_id, extract=[RAG_INDEX_WARNING_CODE])
             raise RuntimeError("embedding service unavailable")
 
         mocks["rag_index"].side_effect = failing_rag_index
         await run_paper_pipeline(paper_id, pdf_path)
+        await drain_event_bus()
 
     paper = await get_paper_service().get_paper(paper_id)
     assert RAG_INDEX_WARNING_CODE in paper.extract_warnings
@@ -208,6 +231,7 @@ async def test_run_paper_pipeline_builds_queryable_rag_index(
 
     paper_id, pdf_path = integration_paper
     chroma_path = tmp_path / "chroma"
+    rag_run_tracker = _InMemoryRagRunTracker()
 
     async def real_rag_index(*_args: object, **kwargs: object) -> None:
         from backend.rag.handlers import index_paper_for_rag
@@ -215,7 +239,7 @@ async def test_run_paper_pipeline_builds_queryable_rag_index(
         store = VectorStore(
             embedding_client=FakeEmbeddingClient(),
             chroma_path=str(chroma_path),
-            paper_service=get_paper_service(),
+            paper_service=rag_run_tracker,
         )
         full_text = kwargs["full_text"]
         await index_paper_for_rag(
@@ -237,6 +261,7 @@ async def test_run_paper_pipeline_builds_queryable_rag_index(
         )
         mocks["rag_index"].side_effect = real_rag_index
         final = await run_paper_pipeline(paper_id, pdf_path)
+        await drain_event_bus()
 
     assert final.get("failed") is not True
     status = await get_paper_service().get_status(paper_id)
@@ -246,7 +271,7 @@ async def test_run_paper_pipeline_builds_queryable_rag_index(
     store = VectorStore(
         embedding_client=FakeEmbeddingClient(),
         chroma_path=str(chroma_path),
-        paper_service=get_paper_service(),
+        paper_service=rag_run_tracker,
     )
     results = await store.query_chunks("hybrid chunker", paper_id=paper_id, top_k=3)
     assert len(results) >= 1

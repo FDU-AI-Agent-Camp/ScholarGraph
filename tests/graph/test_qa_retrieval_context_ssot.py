@@ -15,6 +15,7 @@ from backend.schemas.graph import GraphEdge, GraphNode, UnifiedPaperGraph
 from backend.schemas.paradigm import Paradigm
 
 from tests.graph.test_qa import _FakeChunk
+from tests.helpers.persistence_testkit import seed_qa_graph_with_db
 
 
 class _CapturingFakeChat:
@@ -58,10 +59,8 @@ def hss_graph() -> UnifiedPaperGraph:
 
 
 @pytest.fixture
-def store_with_graph(tmp_path: Path, hss_graph: UnifiedPaperGraph) -> GraphStore:
-    store = GraphStore(base_dir=tmp_path / "graphs")
-    store.save(hss_graph)
-    return store
+def store_with_graph(tmp_path: Path, hss_graph: UnifiedPaperGraph, monkeypatch: pytest.MonkeyPatch) -> GraphStore:
+    return seed_qa_graph_with_db(tmp_path, monkeypatch, hss_graph, graph_dir=tmp_path / "graphs")
 
 
 def test_resolve_prompt_subgraph_prefers_retrieval_context() -> None:

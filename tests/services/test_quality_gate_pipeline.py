@@ -2,26 +2,21 @@
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
-from pathlib import Path
-
 import pytest
 from backend.agents.extract_constants import LOW_CONFIDENCE_GRAPH_CODE
+from backend.graph.store import GraphStore
 from backend.schemas.graph import GraphEdge, GraphNode, UnifiedPaperGraph
-from backend.schemas.paper import PaperDetail, PaperStatus
+from backend.schemas.paper import PaperStatus
 from backend.schemas.paradigm import Paradigm, ParadigmClassification
-from backend.services.paper_service import PaperService
+from backend.services.paper_service import get_paper_service
+from tests.helpers.persistence_testkit import register_test_paper
 
 
 @pytest.fixture
-def service(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> PaperService:
-    monkeypatch.setenv("GRAPH_DATA_DIR", str(tmp_path / "graphs"))
-    monkeypatch.setenv("UPLOAD_DIR", str(tmp_path / "uploads"))
-    from backend.config import get_settings
-    from backend.services.paper_service import get_paper_service
+def service(persistence_env):
+    from backend.services.paper_service import reset_persistence_singletons
 
-    get_settings.cache_clear()
-    get_paper_service.cache_clear()
+    reset_persistence_singletons()
     return get_paper_service()
 
 
@@ -34,15 +29,8 @@ def classification() -> ParadigmClassification:
     )
 
 
-def _register_paper(service: PaperService, paper_id: str) -> None:
-    now = datetime.now(UTC)
-    service._papers[paper_id] = PaperDetail(
-        paper_id=paper_id,
-        title="quality gate test",
-        status=PaperStatus.PROCESSING,
-        created_at=now,
-        updated_at=now,
-    )
+async def _register_paper(paper_id: str) -> None:
+    await register_test_paper(paper_id, status=PaperStatus.PROCESSING)
 
 
 def _make_graph(
@@ -119,55 +107,62 @@ def _make_graph(
     )
 
 
-def test_complete_pipeline_marks_ready_when_quality_gate_passes(
-    service: PaperService,
+@pytest.mark.asyncio
+async def test_complete_pipeline_marks_ready_when_quality_gate_passes(
+    service,
     classification: ParadigmClassification,
 ) -> None:
     paper_id = "quality-ready"
-    _register_paper(service, paper_id)
+    await _register_paper(paper_id)
     graph = _make_graph(paper_id, supports_with_rationale=2, supports_without_rationale=0, isolated_nodes=0)
 
     service.complete_pipeline(paper_id, classification=classification, graph=graph)
 
-    assert service._papers[paper_id].status == PaperStatus.READY
+    paper = await service.get_paper(paper_id)
+    assert paper.status == PaperStatus.READY
     assert LOW_CONFIDENCE_GRAPH_CODE not in service.get_extract_warnings(paper_id)
 
 
-def test_complete_pipeline_marks_ready_with_warnings_on_low_rationale(
-    service: PaperService,
+@pytest.mark.asyncio
+async def test_complete_pipeline_marks_ready_with_warnings_on_low_rationale(
+    service,
     classification: ParadigmClassification,
 ) -> None:
     paper_id = "quality-low-rationale"
-    _register_paper(service, paper_id)
+    await _register_paper(paper_id)
     graph = _make_graph(paper_id, supports_with_rationale=1, supports_without_rationale=3, isolated_nodes=0)
 
     service.complete_pipeline(paper_id, classification=classification, graph=graph)
 
-    assert service._papers[paper_id].status == PaperStatus.READY_WITH_WARNINGS
+    paper = await service.get_paper(paper_id)
+    assert paper.status == PaperStatus.READY_WITH_WARNINGS
     assert LOW_CONFIDENCE_GRAPH_CODE in service.get_extract_warnings(paper_id)
 
 
-def test_complete_pipeline_marks_ready_with_warnings_on_high_isolation(
-    service: PaperService,
+@pytest.mark.asyncio
+async def test_complete_pipeline_marks_ready_with_warnings_on_high_isolation(
+    service,
     classification: ParadigmClassification,
 ) -> None:
     paper_id = "quality-isolated"
-    _register_paper(service, paper_id)
+    await _register_paper(paper_id)
     graph = _make_graph(paper_id, supports_with_rationale=2, supports_without_rationale=0, isolated_nodes=6)
 
     service.complete_pipeline(paper_id, classification=classification, graph=graph)
 
-    assert service._papers[paper_id].status == PaperStatus.READY_WITH_WARNINGS
+    paper = await service.get_paper(paper_id)
+    assert paper.status == PaperStatus.READY_WITH_WARNINGS
     assert LOW_CONFIDENCE_GRAPH_CODE in service.get_extract_warnings(paper_id)
 
 
-def test_complete_pipeline_marks_ready_with_warnings_on_high_generic_edge_ratio(
-    service: PaperService,
+@pytest.mark.asyncio
+async def test_complete_pipeline_marks_ready_with_warnings_on_high_generic_edge_ratio(
+    service,
     classification: ParadigmClassification,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     paper_id = "quality-generic"
-    _register_paper(service, paper_id)
+    await _register_paper(paper_id)
     graph = _make_graph(
         paper_id,
         supports_with_rationale=2,
@@ -183,20 +178,21 @@ def test_complete_pipeline_marks_ready_with_warnings_on_high_generic_edge_ratio(
 
     service.complete_pipeline(paper_id, classification=classification, graph=graph)
 
-    assert service._papers[paper_id].status == PaperStatus.READY_WITH_WARNINGS
+    paper = await service.get_paper(paper_id)
+    assert paper.status == PaperStatus.READY_WITH_WARNINGS
     assert LOW_CONFIDENCE_GRAPH_CODE in service.get_extract_warnings(paper_id)
 
 
-def test_complete_pipeline_saves_graph_regardless_of_gate(
-    service: PaperService,
+@pytest.mark.asyncio
+async def test_complete_pipeline_saves_graph_regardless_of_gate(
+    service,
     classification: ParadigmClassification,
+    persistence_env,
 ) -> None:
     paper_id = "quality-saved"
-    _register_paper(service, paper_id)
+    await _register_paper(paper_id)
     graph = _make_graph(paper_id, supports_with_rationale=0, supports_without_rationale=1, isolated_nodes=0)
 
     service.complete_pipeline(paper_id, classification=classification, graph=graph)
 
-    from backend.graph.store import GraphStore
-
-    assert GraphStore().load(paper_id) is not None
+    assert GraphStore(base_dir=persistence_env["graph_dir"]).load(paper_id) is not None

@@ -9,30 +9,25 @@ from unittest.mock import patch
 import fitz
 import pytest
 from backend.api.exceptions import ApiError
+from backend.db.base import get_async_session_factory
+from backend.db.models import PaperRow
 from backend.graph.head_store import HeadStore
+from backend.graph.state import STAGE_PERCENT
 from backend.graph.store import GraphStore
+from backend.repositories.paper_repository import PaperRepository
+from backend.repositories.pipeline_repository import PipelineRepository
 from backend.schemas.graph import GraphEdge, GraphNode, UnifiedPaperGraph
 from backend.schemas.ingest_head import IngestHead
-from backend.schemas.paper import PaperDetail, PaperStatus
+from backend.schemas.paper import PaperStatus, PaperStatusData, PipelineStage
 from backend.schemas.paradigm import Paradigm
 from backend.services.paper_service import PaperService
+from tests.helpers.persistence_testkit import restart_paper_service
 
 
 @pytest.fixture
-def service(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> PaperService:
-    """Fresh PaperService with isolated graph/upload dirs."""
-    monkeypatch.setenv("GRAPH_DATA_DIR", str(tmp_path / "graphs"))
-    monkeypatch.setenv("UPLOAD_DIR", str(tmp_path / "uploads"))
-    from backend.config import get_settings
-
-    get_settings.cache_clear()
-    return PaperService()
-
-
-@pytest.fixture
-def sample_pdf(tmp_path: Path) -> Path:
+def sample_pdf(persistence_env, tmp_path: Path) -> Path:
     """Create a minimal valid 1-page PDF."""
-    pdf_path = tmp_path / "sample.pdf"
+    pdf_path = persistence_env["upload_dir"] / "sample.pdf"
     doc = fitz.open()
     page = doc.new_page()
     page.insert_text((72, 72), "Sample text for re-extract unit tests.")
@@ -41,26 +36,63 @@ def sample_pdf(tmp_path: Path) -> Path:
     return pdf_path
 
 
-def _register_paper(service: PaperService, paper_id: str, *, status: PaperStatus) -> None:
+async def _register_paper(
+    paper_id: str,
+    pdf_path: Path,
+    *,
+    status: PaperStatus,
+) -> None:
+    paper_repo = PaperRepository()
+    pipeline_repo = PipelineRepository()
+    await paper_repo.create(paper_id, "unit test paper", str(pdf_path), status=status)
     now = datetime.now(UTC)
-    service._papers[paper_id] = PaperDetail(
-        paper_id=paper_id,
-        title="unit test paper",
-        status=status,
-        created_at=now,
-        updated_at=now,
-    )
+    if status == PaperStatus.PENDING:
+        snapshot = PaperStatusData(
+            paper_id=paper_id,
+            status=status,
+            percent=0,
+            stage=None,
+            message="pending",
+            updated_at=now,
+        )
+    elif status == PaperStatus.PROCESSING:
+        snapshot = PaperStatusData(
+            paper_id=paper_id,
+            status=status,
+            percent=STAGE_PERCENT[PipelineStage.INGESTING],
+            stage=PipelineStage.INGESTING,
+            message="ingesting",
+            updated_at=now,
+        )
+    elif status == PaperStatus.READY:
+        snapshot = PaperStatusData(
+            paper_id=paper_id,
+            status=status,
+            percent=STAGE_PERCENT[PipelineStage.READY],
+            stage=PipelineStage.READY,
+            message="ready",
+            updated_at=now,
+        )
+    else:
+        snapshot = PaperStatusData(
+            paper_id=paper_id,
+            status=status,
+            percent=STAGE_PERCENT[PipelineStage.FAILED],
+            stage=PipelineStage.FAILED,
+            message="failed",
+            updated_at=now,
+            error_code="PIPELINE_FAILED",
+        )
+    await pipeline_repo.save_status(paper_id, snapshot)
 
 
-def _seed_previous_run(service: PaperService, paper_id: str) -> None:
+async def _seed_previous_run(service: PaperService, paper_id: str) -> None:
     """Simulate a paper that has completed a fallback run."""
     from backend.agents.extract_constants import EXTRACT_HEURISTIC_FALLBACK_CODE, EXTRACT_LLM_TIMEOUT_CODE
 
     service.record_extract_warnings(paper_id, [EXTRACT_LLM_TIMEOUT_CODE, EXTRACT_HEURISTIC_FALLBACK_CODE])
     service.record_classify_warnings(paper_id, ["classifier_some_warning"])
     service.record_head_refine_warnings(paper_id, ["mineru_unavailable"])
-    service._refined_head[paper_id] = IngestHead(title="T", abstract="A", intro="I")
-    service._refined_classifier_input[paper_id] = "previous input"
 
     graph = UnifiedPaperGraph(
         paper_id=paper_id,
@@ -76,13 +108,13 @@ def _seed_previous_run(service: PaperService, paper_id: str) -> None:
 
 @pytest.mark.asyncio
 async def test_force_reextract_clears_state_and_requeues_pipeline(
-    service: PaperService,
+    persistence_env,
     sample_pdf: Path,
 ) -> None:
     paper_id = "reextract-unit-001"
-    _register_paper(service, paper_id, status=PaperStatus.READY)
-    service._pdf_paths[paper_id] = sample_pdf
-    _seed_previous_run(service, paper_id)
+    await _register_paper(paper_id, sample_pdf, status=PaperStatus.READY)
+    service = await restart_paper_service()
+    await _seed_previous_run(service, paper_id)
 
     with patch("backend.services.reextract_service.schedule_paper_pipeline") as scheduler:
         status = await service.force_reextract(paper_id)
@@ -92,7 +124,7 @@ async def test_force_reextract_clears_state_and_requeues_pipeline(
     assert status.extract_warnings == []
     scheduler.assert_called_once_with(paper_id, sample_pdf)
 
-    paper = service._papers[paper_id]
+    paper = await service.get_paper(paper_id)
     assert paper.status == PaperStatus.PENDING
     assert paper.paradigm is None
     assert paper.classification is None
@@ -104,17 +136,22 @@ async def test_force_reextract_clears_state_and_requeues_pipeline(
     assert service.is_preview_available(paper_id) is False
     assert GraphStore().load(paper_id) is None
     assert HeadStore().load(paper_id) is None
-    assert sample_pdf.is_file()  # PDF itself must survive
+    assert sample_pdf.is_file()
+
+    async with get_async_session_factory()() as session:
+        row = await session.get(PaperRow, paper_id)
+    assert row is not None
+    assert row.graph_version == "2"
 
 
 @pytest.mark.asyncio
 async def test_force_reextract_rejects_processing_paper(
-    service: PaperService,
+    persistence_env,
     sample_pdf: Path,
 ) -> None:
     paper_id = "reextract-unit-processing"
-    _register_paper(service, paper_id, status=PaperStatus.PROCESSING)
-    service._pdf_paths[paper_id] = sample_pdf
+    await _register_paper(paper_id, sample_pdf, status=PaperStatus.PROCESSING)
+    service = await restart_paper_service()
 
     with pytest.raises(ApiError) as exc_info:
         await service.force_reextract(paper_id)
@@ -124,9 +161,11 @@ async def test_force_reextract_rejects_processing_paper(
 
 
 @pytest.mark.asyncio
-async def test_force_reextract_rejects_missing_pdf(service: PaperService) -> None:
+async def test_force_reextract_rejects_missing_pdf(persistence_env) -> None:
     paper_id = "reextract-unit-no-pdf"
-    _register_paper(service, paper_id, status=PaperStatus.READY)
+    missing_pdf = persistence_env["upload_dir"] / "missing.pdf"
+    await _register_paper(paper_id, missing_pdf, status=PaperStatus.READY)
+    service = await restart_paper_service()
 
     with pytest.raises(ApiError) as exc_info:
         await service.force_reextract(paper_id)
@@ -137,12 +176,12 @@ async def test_force_reextract_rejects_missing_pdf(service: PaperService) -> Non
 
 @pytest.mark.asyncio
 async def test_force_reextract_allows_failed_paper(
-    service: PaperService,
+    persistence_env,
     sample_pdf: Path,
 ) -> None:
     paper_id = "reextract-unit-failed"
-    _register_paper(service, paper_id, status=PaperStatus.FAILED)
-    service._pdf_paths[paper_id] = sample_pdf
+    await _register_paper(paper_id, sample_pdf, status=PaperStatus.FAILED)
+    service = await restart_paper_service()
 
     with patch("backend.services.reextract_service.schedule_paper_pipeline") as scheduler:
         status = await service.force_reextract(paper_id)
@@ -153,13 +192,13 @@ async def test_force_reextract_allows_failed_paper(
 
 @pytest.mark.asyncio
 async def test_force_reextract_is_idempotent_from_ready(
-    service: PaperService,
+    persistence_env,
     sample_pdf: Path,
 ) -> None:
     """Calling re-extract twice from READY should reset twice; PDF must remain."""
     paper_id = "reextract-unit-idempotent"
-    _register_paper(service, paper_id, status=PaperStatus.READY)
-    service._pdf_paths[paper_id] = sample_pdf
+    await _register_paper(paper_id, sample_pdf, status=PaperStatus.READY)
+    service = await restart_paper_service()
 
     with patch("backend.services.reextract_service.schedule_paper_pipeline") as scheduler:
         await service.force_reextract(paper_id)
@@ -167,3 +206,8 @@ async def test_force_reextract_is_idempotent_from_ready(
 
     assert scheduler.call_count == 2
     assert sample_pdf.is_file()
+
+    async with get_async_session_factory()() as session:
+        row = await session.get(PaperRow, paper_id)
+    assert row is not None
+    assert row.graph_version == "3"

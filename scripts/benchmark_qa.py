@@ -201,12 +201,13 @@ def load_golden_set(path: Path) -> dict[str, Any]:
 
 
 def _build_benchmark_paper_service() -> PaperService:
-    """In-memory papers aligned with OpenAPI fixtures (includes stem-001 / hss-001)."""
+    """DB-backed papers aligned with OpenAPI fixtures (includes stem-001 / hss-001)."""
+    from backend.repositories.async_bridge import run_async
     from backend.services.paper_fixture_seed import seed_from_fixtures
     from backend.services.paper_service import PaperService
 
     service = PaperService()
-    seed_from_fixtures(service)
+    run_async(seed_from_fixtures(service._paper_repo, service._pipeline_repo))
     return service
 
 

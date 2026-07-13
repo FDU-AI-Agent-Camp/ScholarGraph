@@ -10,7 +10,6 @@ import pytest
 import yaml
 from backend.config import get_settings
 from backend.graph.qa_v2 import dispatch_citation
-from backend.graph.store import GraphStore
 from backend.llm.client import reset_llm_client_cache
 from backend.main import create_app
 from backend.rag.hybrid_retriever import HybridRetriever, bind_hybrid_retriever, reset_hybrid_retriever
@@ -19,6 +18,7 @@ from backend.schemas.paradigm import Paradigm
 from httpx import ASGITransport, AsyncClient
 
 from tests.graph.test_qa import _fake_llm
+from tests.helpers.persistence_testkit import seed_qa_graph_with_db_async
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 OPENAPI = REPO_ROOT / "docs" / "api" / "openapi.yaml"
@@ -59,20 +59,17 @@ async def graph_only_qa_client(
     monkeypatch: pytest.MonkeyPatch,
 ) -> AsyncIterator[AsyncClient]:
     graph_dir = tmp_path / "graphs"
-    graph_dir.mkdir()
-    monkeypatch.setenv("GRAPH_DATA_DIR", str(graph_dir))
-    monkeypatch.setenv("LLM_MODE", "live")
-    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
-    get_settings.cache_clear()
-    reset_llm_client_cache()
-
     graph = UnifiedPaperGraph(
         paper_id="hss-001",
         paradigm=Paradigm.HSS,
         nodes=[GraphNode(id="n1", label="核心论点", type="Thesis", data={})],
         edges=[],
     )
-    GraphStore(base_dir=graph_dir).save(graph)
+    await seed_qa_graph_with_db_async(tmp_path, monkeypatch, graph, graph_dir=graph_dir)
+    monkeypatch.setenv("LLM_MODE", "live")
+    monkeypatch.setenv("OPENAI_API_KEY", "test-key")
+    get_settings.cache_clear()
+    reset_llm_client_cache()
 
     app = create_app()
     retriever = HybridRetriever(vector_store=None)

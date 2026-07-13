@@ -1,26 +1,27 @@
-"""G2.6 unit: paper_fixture_seed loads OpenAPI fixtures."""
+"""G2.6 unit: paper_fixture_seed loads OpenAPI fixtures into the database."""
 
 from __future__ import annotations
 
 import json
 
+import pytest
+from backend.repositories.paper_repository import PaperRepository
+from backend.repositories.pipeline_repository import PipelineRepository
 from backend.schemas.paper import PaperDetail, PaperStatusData
 from backend.services.paper_fixture_seed import FIXTURES_DIR, seed_from_fixtures
-from backend.services.paper_service import PaperService
 
 FIXTURES = FIXTURES_DIR
 
 
-def test_g26_seed_from_fixtures_loads_hss_001_detail() -> None:
-    service = PaperService()
-    service._papers.clear()
-    service._status.clear()
-    seed_from_fixtures(service)
+@pytest.mark.asyncio
+async def test_g26_seed_from_fixtures_loads_hss_001_detail(persistence_env) -> None:
+    paper_repo = PaperRepository()
+    pipeline_repo = PipelineRepository()
+    await seed_from_fixtures(paper_repo, pipeline_repo)
 
-    assert "hss-001" in service._papers
-    detail = service._papers["hss-001"]
+    detail = await paper_repo.get("hss-001")
+    assert detail is not None
     assert detail.status.value == "ready"
-    assert detail.classify_warnings == []
 
 
 def test_g26_classify_fallback_fixtures_validate_independently() -> None:

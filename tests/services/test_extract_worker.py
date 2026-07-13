@@ -32,7 +32,7 @@ def _register_paper(paper_id: str) -> None:
     service._status[paper_id] = PaperStatusData(
         paper_id=paper_id,
         status=PaperStatus.PROCESSING,
-        percent=50,
+        percent=80,
         stage=PipelineStage.EXTRACTING,
         message="extracting",
         updated_at=now,

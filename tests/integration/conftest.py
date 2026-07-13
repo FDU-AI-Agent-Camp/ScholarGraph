@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import importlib.util
 from collections.abc import AsyncIterator
 from pathlib import Path
@@ -12,12 +13,22 @@ from backend.graph.qa_samples import seed_m2_qa_graph
 from backend.graph.store import GraphStore
 from backend.llm.client import reset_llm_client_cache
 from backend.main import app
+from backend.repositories.paper_repository import get_paper_repository
+from backend.repositories.pipeline_repository import get_pipeline_repository
 from backend.schemas.graph import GraphEdge, GraphNode, UnifiedPaperGraph
 from backend.schemas.paradigm import Paradigm
+from backend.services.paper_fixture_seed import seed_from_fixtures
 from backend.services.paper_service import get_paper_service
 from httpx import ASGITransport, AsyncClient
 
 from tests.conftest import RUN_PIPELINE_SCRIPT
+from tests.helpers.persistence_testkit import (
+    init_isolated_database,
+    register_ready_paper,
+    reset_persistence_singletons,
+    run_async,
+    setup_qa_persistence_env,
+)
 
 
 def _load_run_pipeline_module():
@@ -31,9 +42,17 @@ def _load_run_pipeline_module():
 @pytest.fixture
 def integration_paper(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> tuple[str, Path]:
     """Pending paper + minimal PDF registered for ``run_paper_pipeline`` tests."""
+    db_path = tmp_path / "scholargraph.db"
     upload_dir = tmp_path / "uploads"
+    graph_dir = tmp_path / "graphs"
     upload_dir.mkdir(parents=True, exist_ok=True)
+    graph_dir.mkdir(parents=True, exist_ok=True)
     monkeypatch.setenv("UPLOAD_DIR", str(upload_dir))
+    monkeypatch.setenv("GRAPH_DATA_DIR", str(graph_dir))
+    monkeypatch.setenv("DATABASE_URL", f"sqlite:///{db_path.as_posix()}")
+    monkeypatch.setenv("SEED_DEMO_PAPERS", "false")
+    reset_persistence_singletons()
+    asyncio.run(init_isolated_database(db_path))
     get_settings.cache_clear()
     get_paper_service.cache_clear()
 
@@ -50,16 +69,21 @@ def integration_paper(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> tuple[
     return paper_id, run_pdf
 
 
+def _seed_openapi_demo_corpus() -> None:
+    run_async(
+        seed_from_fixtures(get_paper_repository(), get_pipeline_repository()),
+    )
+
+
 @pytest.fixture
 def mock_llm_env(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Path:
-    """LLM_MODE=mock + isolated graph dir; hss-001 graph on disk for qa_stream."""
+    """LLM_MODE=mock + isolated graph dir; hss-001 graph on disk and READY in DB."""
     graph_dir = tmp_path / "graphs"
-    graph_dir.mkdir(parents=True, exist_ok=True)
+    setup_qa_persistence_env(tmp_path, monkeypatch, graph_dir=graph_dir)
+    _seed_openapi_demo_corpus()
     monkeypatch.setenv("LLM_MODE", "mock")
-    monkeypatch.setenv("GRAPH_DATA_DIR", str(graph_dir))
     get_settings.cache_clear()
     reset_llm_client_cache()
-    get_paper_service.cache_clear()
 
     GraphStore(base_dir=graph_dir).save(
         UnifiedPaperGraph(
@@ -81,6 +105,7 @@ def mock_llm_env(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Path:
             ],
         ),
     )
+    run_async(register_ready_paper("hss-001"))
     yield graph_dir
     get_settings.cache_clear()
     reset_llm_client_cache()
@@ -91,11 +116,10 @@ def mock_llm_env(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Path:
 def graph_hss_fixture_env(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Path:
     """Isolated GRAPH_DATA_DIR seeded with docs/api/fixtures/graph-hss.json (hss-001)."""
     graph_dir = tmp_path / "graphs"
-    graph_dir.mkdir(parents=True, exist_ok=True)
-    monkeypatch.setenv("GRAPH_DATA_DIR", str(graph_dir))
-    get_settings.cache_clear()
-    get_paper_service.cache_clear()
+    setup_qa_persistence_env(tmp_path, monkeypatch, graph_dir=graph_dir)
+    _seed_openapi_demo_corpus()
     seed_m2_qa_graph(graph_dir)
+    run_async(register_ready_paper("hss-001"))
     yield graph_dir
     get_settings.cache_clear()
     get_paper_service.cache_clear()

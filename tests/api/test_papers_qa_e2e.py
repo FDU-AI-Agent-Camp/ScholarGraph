@@ -8,7 +8,6 @@ from pathlib import Path
 
 import pytest
 from backend.config import get_settings
-from backend.graph.store import GraphStore
 from backend.llm.client import reset_llm_client_cache
 from backend.main import create_app
 from backend.rag.hybrid_retriever import HybridRetriever, bind_hybrid_retriever, reset_hybrid_retriever
@@ -18,6 +17,7 @@ from backend.schemas.paradigm import Paradigm
 from backend.services.paper_service import get_paper_service
 from httpx import ASGITransport, AsyncClient
 from tests.graph.test_qa import _fake_llm
+from tests.helpers.persistence_testkit import seed_qa_graph_with_db_async
 from tests.rag.test_vector_store import _store
 
 
@@ -53,12 +53,7 @@ async def qa_e2e_client(
 ) -> AsyncIterator[AsyncClient]:
     """App with graph + in-memory mock vector index wired through app.state."""
     graph_dir = tmp_path / "graphs"
-    graph_dir.mkdir()
-    monkeypatch.setenv("GRAPH_DATA_DIR", str(graph_dir))
     monkeypatch.setenv("QA_RETRIEVAL_TIMEOUT_SECONDS", "3")
-    get_settings.cache_clear()
-    get_paper_service.cache_clear()
-    reset_llm_client_cache()
 
     paper_id = "hss-001"
     graph = UnifiedPaperGraph(
@@ -78,7 +73,7 @@ async def qa_e2e_client(
             ),
         ],
     )
-    GraphStore(base_dir=graph_dir).save(graph)
+    await seed_qa_graph_with_db_async(tmp_path, monkeypatch, graph, graph_dir=graph_dir)
 
     store, _chunk_col, _entity_col, _relation_col, _embedder = _store()
     paper_service = get_paper_service()

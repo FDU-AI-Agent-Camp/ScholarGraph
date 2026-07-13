@@ -19,6 +19,12 @@ from backend.schemas.paradigm import Paradigm
 from httpx import AsyncClient
 from tests.api.conftest import assert_error_envelope
 from tests.graph.test_qa import _bad_llm, _fake_llm
+from tests.helpers.persistence_testkit import (
+    register_ready_paper,
+    run_async,
+    seed_qa_graph_with_db,
+    setup_qa_persistence_env,
+)
 from tests.helpers.qa_stream_mock import qa_stream_from_engine
 
 
@@ -36,13 +42,9 @@ def _parse_sse(body: str) -> list[tuple[str, dict]]:
 
 @pytest.fixture
 def qa_graph_store(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> GraphStore:
-    monkeypatch.setenv("GRAPH_DATA_DIR", str(tmp_path))
-    from backend.config import get_settings
-
-    get_settings.cache_clear()
-
-    store = GraphStore(base_dir=tmp_path)
-    store.save(
+    return seed_qa_graph_with_db(
+        tmp_path,
+        monkeypatch,
         UnifiedPaperGraph(
             paper_id="hss-001",
             paradigm=Paradigm.HSS,
@@ -60,8 +62,8 @@ def qa_graph_store(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> GraphStor
                 ),
             ],
         ),
+        graph_dir=tmp_path,
     )
-    return store
 
 
 @pytest.mark.asyncio
@@ -99,10 +101,10 @@ async def test_qa_stream_http_missing_graph_emits_error_then_done(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setenv("GRAPH_DATA_DIR", str(tmp_path / "empty-graphs"))
-    from backend.config import get_settings
-
-    get_settings.cache_clear()
+    empty_graphs = tmp_path / "empty-graphs"
+    empty_graphs.mkdir()
+    setup_qa_persistence_env(tmp_path, monkeypatch, graph_dir=empty_graphs)
+    run_async(register_ready_paper("hss-001"))
 
     response = await api_client.post(
         "/api/v1/papers/hss-001/qa/stream",

@@ -172,26 +172,28 @@ def mock_pipeline_dependencies() -> Iterator[dict[str, MagicMock]]:
     agent_svc.extract_graph_background = AsyncMock(return_value=ExtractResult(graph=graph, warnings=[]))
     agent_svc.should_extract_in_background = MagicMock(return_value=False)
 
-    with patch("backend.services.graph_persistence_service.GraphStore") as store_cls:
-        store_cls.return_value.save = MagicMock()
-        persistence = GraphPersistenceService(store=store_cls.return_value)
-        completion_svc = PipelineCompletionService(graph_persistence=persistence)
+    persistence = GraphPersistenceService()
+    completion_svc = PipelineCompletionService(graph_persistence=persistence)
+    store_save = MagicMock(wraps=persistence._store.save)
 
-        with (
-            patch("backend.graph.nodes.get_ingest_service", return_value=ingest_svc),
-            patch("backend.graph.nodes.get_agent_service", return_value=agent_svc),
-            patch("backend.graph.nodes.get_pipeline_completion_service", return_value=completion_svc),
-            patch("backend.graph.nodes._index_paper_for_rag_async") as mock_rag_index,
-            patch("backend.graph.nodes.ensure_head_refine_scheduled"),
-            patch(
-                "backend.graph.nodes.wait_for_refined_classifier_input",
-                new=AsyncMock(side_effect=lambda _pid, _path, fallback, **_: (fallback, [])),
-            ),
-        ):
-            mock_rag_index.return_value = None
-            yield {
-                "ingest": ingest_svc,
-                "agent": agent_svc,
-                "completion": completion_svc,
-                "store_save": store_cls.return_value.save,
-            }
+    with (
+        patch("backend.graph.nodes.get_ingest_service", return_value=ingest_svc),
+        patch("backend.graph.nodes.get_agent_service", return_value=agent_svc),
+        patch("backend.graph.nodes.get_pipeline_completion_service", return_value=completion_svc),
+        patch(
+            "backend.services.rag_index_service.RagIndexService.index_paper_for_rag_async",
+            new_callable=AsyncMock,
+        ) as mock_rag_index,
+        patch("backend.graph.nodes.ensure_head_refine_scheduled"),
+        patch(
+            "backend.graph.nodes.wait_for_refined_classifier_input",
+            new=AsyncMock(side_effect=lambda _pid, _path, fallback, **_: (fallback, [])),
+        ),
+    ):
+        mock_rag_index.return_value = None
+        yield {
+            "ingest": ingest_svc,
+            "agent": agent_svc,
+            "completion": completion_svc,
+            "store_save": store_save,
+        }

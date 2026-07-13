@@ -70,7 +70,7 @@ class Settings(PatrolSettingsMixin, QaSettingsMixin, BaseSettings):
         populate_by_name=True,
     )
 
-    app_env: Literal["development", "staging", "production"] = "development"
+    app_env: Literal["development", "staging", "production", "test"] = "development"
     debug: bool = True
     log_level: str = "INFO"
 
@@ -98,6 +98,7 @@ class Settings(PatrolSettingsMixin, QaSettingsMixin, BaseSettings):
         default="sqlite:///./data/scholargraph.db",
         validation_alias="DATABASE_URL",
     )
+    seed_demo_papers: bool = Field(default=False, validation_alias="SEED_DEMO_PAPERS")
     graph_data_dir: str = Field(default="./data/graphs", validation_alias="GRAPH_DATA_DIR")
     upload_dir: str = Field(default="./uploads", validation_alias="UPLOAD_DIR")
 

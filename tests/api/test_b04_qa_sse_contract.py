@@ -15,6 +15,7 @@ from backend.llm.client import reset_llm_client_cache
 from backend.llm.mock_chat import MOCK_DISCLAIMER
 from httpx import ASGITransport, AsyncClient
 from tests.api.conftest import assert_error_envelope
+from tests.helpers.persistence_testkit import register_ready_paper, run_async, setup_qa_persistence_env
 
 _SSE_FRAME_RE = re.compile(
     r"^event: (?P<event>\w+)\ndata: (?P<data>\{.*\})\n\n$",
@@ -47,12 +48,14 @@ async def api_client() -> AsyncIterator[AsyncClient]:
 def b04_qa_env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     from backend.graph.qa_samples import seed_m2_qa_graph
 
+    graph_dir = tmp_path / "graphs"
+    setup_qa_persistence_env(tmp_path, monkeypatch, graph_dir=graph_dir)
     monkeypatch.setenv("LLM_MODE", "mock")
-    monkeypatch.setenv("GRAPH_DATA_DIR", str(tmp_path))
     get_settings.cache_clear()
     reset_llm_client_cache()
-    seed_m2_qa_graph(tmp_path)
-    return tmp_path
+    seed_m2_qa_graph(graph_dir)
+    run_async(register_ready_paper("hss-001"))
+    return graph_dir
 
 
 def test_format_sse_event_matches_api_contract_section_8() -> None:
@@ -124,10 +127,11 @@ async def test_b04_graph_missing_emits_error_then_done_in_sse(
 ) -> None:
     empty = tmp_path / "empty-graphs"
     empty.mkdir()
+    setup_qa_persistence_env(tmp_path, monkeypatch, graph_dir=empty)
     monkeypatch.setenv("LLM_MODE", "mock")
-    monkeypatch.setenv("GRAPH_DATA_DIR", str(empty))
     get_settings.cache_clear()
     reset_llm_client_cache()
+    run_async(register_ready_paper("hss-001"))
 
     response = await api_client.post(
         "/api/v1/papers/hss-001/qa/stream",

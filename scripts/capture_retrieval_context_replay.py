@@ -61,7 +61,7 @@ async def _capture() -> None:
     rc = enrich_hss_detail_replay_vectors(rc)
 
     paper_service = PaperService()
-    seed_from_fixtures(paper_service)
+    await seed_from_fixtures(paper_service._paper_repo, paper_service._pipeline_repo)
 
     engine = _GraphQaEngine(store=store, paper_service=paper_service)
     events = [evt async for evt in engine.stream(PAPER_ID, QUESTION, retrieval_context=rc)]

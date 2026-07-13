@@ -254,6 +254,7 @@ flowchart LR
 uv sync
 cp .env.example .env   # 默认 LLM_MODE=mock；接华为云时改为 live 并填 Key
 uv sync --group dev
+uv run python scripts/init_db.py          # 或：uv run alembic upgrade head（首次/升级 Schema）
 uv run python scripts/check_backend.py   # ruff lint + format-check + pytest（排除 red）
 uv run python scripts/run_d_gates.py     # D-01～D-10 代码基座（含 FE npm run check，可 --skip-frontend）
 uv run python -m uvicorn backend.main:app --reload --host 127.0.0.1 --port 8000

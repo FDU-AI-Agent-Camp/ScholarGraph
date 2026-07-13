@@ -15,6 +15,8 @@ from backend.graph.store import GraphStore
 from backend.schemas.graph import GraphEdge, GraphNode, UnifiedPaperGraph
 from backend.schemas.paradigm import Paradigm
 
+from tests.helpers.persistence_testkit import seed_qa_graph_with_db
+
 # ---------------------------------------------------------------------------
 # fake LLM harness — real async generators, not mocks
 # ---------------------------------------------------------------------------
@@ -58,11 +60,6 @@ def _bad_llm() -> object:
     return obj
 
 
-# ---------------------------------------------------------------------------
-# fixtures
-# ---------------------------------------------------------------------------
-
-
 @pytest.fixture
 def hss_graph() -> UnifiedPaperGraph:
     return UnifiedPaperGraph(
@@ -79,11 +76,9 @@ def hss_graph() -> UnifiedPaperGraph:
 
 
 @pytest.fixture
-def store_with_graph(tmp_path: Path, hss_graph: UnifiedPaperGraph) -> GraphStore:
-    """GraphStore that already contains *hss_graph*."""
-    s = GraphStore(base_dir=tmp_path)
-    s.save(hss_graph)
-    return s
+def store_with_graph(tmp_path: Path, hss_graph: UnifiedPaperGraph, monkeypatch: pytest.MonkeyPatch) -> GraphStore:
+    """GraphStore that already contains *hss_graph* and a matching READY paper row."""
+    return seed_qa_graph_with_db(tmp_path, monkeypatch, hss_graph)
 
 
 @pytest.fixture

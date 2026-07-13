@@ -1,5 +1,6 @@
 """FastAPI application factory."""
 
+import asyncio
 import logging
 from contextlib import asynccontextmanager
 
@@ -17,7 +18,19 @@ logger = logging.getLogger(__name__)
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Initialize long-lived RAG clients once; routes reuse via ``app.state``."""
+    from backend.events.pipeline_finalized_handlers import register_pipeline_finalized_handlers
     from backend.rag.hybrid_retriever import bind_hybrid_retriever, create_hybrid_retriever, reset_hybrid_retriever
+    from backend.services.paper_service import get_paper_service
+
+    register_pipeline_finalized_handlers()
+    from backend.events.bus import install_default_event_bus_hooks
+
+    install_default_event_bus_hooks()
+    from backend.repositories import register_main_event_loop
+
+    register_main_event_loop(asyncio.get_running_loop())
+    # Schema must be applied out-of-band: ``uv run python scripts/init_db.py``.
+    await get_paper_service().bootstrap()
 
     preconfigured = getattr(app.state, "hybrid_retriever", None)
     if preconfigured is not None:
@@ -31,6 +44,10 @@ async def lifespan(app: FastAPI):
     try:
         yield
     finally:
+        from backend.events.bus import stop_event_bus_worker
+
+        stop_event_bus_worker()
+        register_main_event_loop(None)
         reset_hybrid_retriever()
         if hasattr(app.state, "hybrid_retriever"):
             delattr(app.state, "hybrid_retriever")

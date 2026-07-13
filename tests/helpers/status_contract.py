@@ -27,3 +27,18 @@ def assert_snapshot_matches_contract(snapshot: PaperStatusData) -> None:
         error_code=snapshot.error_code,
         failed_during=snapshot.failed_during,
     )
+
+
+def assert_terminal_ready_envelope(data: dict) -> None:
+    """HTTP status payload must satisfy api-contract terminal ready triple."""
+    assert data["status"] == "ready"
+    # ScholarGraph api-contract uses stage=ready (not "completed") at 100%.
+    assert data["stage"] == "ready"
+    assert data["percent"] == 100
+
+
+def assert_terminal_failed_envelope(data: dict) -> None:
+    """HTTP status payload must satisfy api-contract terminal failed triple."""
+    assert data["status"] == "failed"
+    assert data["stage"] == "failed"
+    assert data.get("error_code")

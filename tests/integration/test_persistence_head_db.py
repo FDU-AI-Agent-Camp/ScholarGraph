@@ -1,0 +1,42 @@
+"""Integration tests: head/classify/extract warnings survive service restart (INT-HEAD-01)."""
+
+from __future__ import annotations
+
+import pytest
+
+from tests.helpers.persistence_testkit import register_test_paper, restart_paper_service
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_head_refine_warnings_persist_across_restart(persistence_env) -> None:
+    paper_id = "warn-head-001"
+    await register_test_paper(paper_id)
+    service = await restart_paper_service()
+    service.record_head_refine_warnings(paper_id, ["head_refine_timeout"])
+
+    service = await restart_paper_service()
+    assert service.get_head_refine_warnings(paper_id) == ["head_refine_timeout"]
+    status = await service.get_status(paper_id)
+    assert status.head_refine_warnings == ["head_refine_timeout"]
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_all_warning_categories_persist_across_restart(persistence_env) -> None:
+    paper_id = "warn-all-001"
+    await register_test_paper(paper_id)
+    service = await restart_paper_service()
+    service.record_head_refine_warnings(paper_id, ["head_refine_timeout"])
+    service.record_classify_warnings(paper_id, ["classifier_heuristic_fallback"])
+    service.record_extract_warnings(paper_id, ["extract_heuristic_fallback"])
+
+    service = await restart_paper_service()
+    detail = await service.get_paper(paper_id)
+    assert detail.classify_warnings == ["classifier_heuristic_fallback"]
+    assert detail.extract_warnings == ["extract_heuristic_fallback"]
+
+    status = await service.get_status(paper_id)
+    assert status.head_refine_warnings == ["head_refine_timeout"]
+    assert status.classify_warnings == ["classifier_heuristic_fallback"]
+    assert status.extract_warnings == ["extract_heuristic_fallback"]
