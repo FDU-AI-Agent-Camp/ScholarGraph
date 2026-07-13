@@ -1,0 +1,70 @@
+# Patrol Nightly / Release gate — live embedding regression + benchmark (hard block).
+# PR gate (backend.yml) intentionally excludes live_patrol to avoid flaky external API calls.
+name: Patrol Release Gate
+
+on:
+  schedule:
+    - cron: "0 18 * * *"
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - "backend/**"
+      - "tests/**"
+      - "scripts/benchmark_patrol.py"
+      - "scripts/benchmark_patrol_metrics.py"
+      - "scripts/validate_patrol_golden.py"
+      - "data/patrol_method_overlap_golden.json"
+      - "data/patrol_golden_set.json"
+      - "pyproject.toml"
+      - "uv.lock"
+      - ".github/workflows/patrol-release-gate.yml"
+
+jobs:
+  patrol-live-gate:
+    runs-on: ubuntu-latest
+    env:
+      LLM_MODE: live
+      EMBEDDING_MODEL: bge-m3
+      PATROL_SEMANTIC_THRESHOLD: "0.88"
+      ENABLE_PATROL_SEMANTIC_PATH: "true"
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Sync dependencies
+        run: uv sync --frozen --group dev
+
+      - name: Inject embedding credentials
+        env:
+          PATROL_EMBEDDING_API_KEY: ${{ secrets.PATROL_EMBEDDING_API_KEY }}
+          SCHOLARGRAPH_API_KEY: ${{ secrets.SCHOLARGRAPH_API_KEY }}
+        run: |
+          if [ -n "$PATROL_EMBEDDING_API_KEY" ]; then
+            echo "EMBEDDING_API_KEY=$PATROL_EMBEDDING_API_KEY" >> "$GITHUB_ENV"
+          elif [ -n "$SCHOLARGRAPH_API_KEY" ]; then
+            echo "EMBEDDING_API_KEY=$SCHOLARGRAPH_API_KEY" >> "$GITHUB_ENV"
+            echo "SCHOLARGRAPH_API_KEY=$SCHOLARGRAPH_API_KEY" >> "$GITHUB_ENV"
+          else
+            echo "::error::Missing PATROL_EMBEDDING_API_KEY or SCHOLARGRAPH_API_KEY repository secret."
+            exit 1
+          fi
+
+      - name: Validate golden config snapshot (strict)
+        run: uv run python scripts/validate_patrol_golden.py --strict --json
+
+      - name: Live patrol pytest gate
+        run: uv run python -m pytest -q --tb=short -m live_patrol
+
+      - name: Live patrol benchmark gate
+        run: uv run python scripts/benchmark_patrol.py --live --mode all
+
+      - name: Upload patrol benchmark report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: patrol-benchmark-report
+          path: data/benchmark_reports/patrol-*.json

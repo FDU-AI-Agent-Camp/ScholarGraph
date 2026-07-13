@@ -15,6 +15,9 @@ on:
       - '.github/workflows/backend.yml'
       - 'pyrightconfig.json'
       - 'Makefile'
+      - 'data/patrol_method_overlap_golden.json'
+      - 'data/patrol_golden_set.json'
+      - '.github/workflows/patrol-release-gate.yml'
   pull_request:
     branches: [develop, main]
     paths:
@@ -27,6 +30,9 @@ on:
       - '.github/workflows/backend.yml'
       - 'pyrightconfig.json'
       - 'Makefile'
+      - 'data/patrol_method_overlap_golden.json'
+      - 'data/patrol_golden_set.json'
+      - '.github/workflows/patrol-release-gate.yml'
 
 jobs:
   gate:
@@ -53,8 +59,8 @@ jobs:
       - name: Ruff format check
         run: uv run ruff format --check backend tests scripts
 
-      - name: Pytest not red
-        run: uv run pytest -q -m "not red and not live_mineru and not live_grobid"
+      - name: Pytest PR gate (stub only, no live_patrol)
+        run: uv run pytest -q -m "not red and not live and not live_patrol and not live_mineru and not live_grobid and not live_benchmark and not live_e10 and not live_judge and not live_head_merge"
 
       - name: Upload coverage report
         if: always()
