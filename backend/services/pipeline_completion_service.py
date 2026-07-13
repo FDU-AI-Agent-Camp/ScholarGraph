@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from functools import lru_cache
 from typing import TYPE_CHECKING, Any
 
@@ -21,6 +22,8 @@ from backend.services.graph_persistence_service import (
 
 if TYPE_CHECKING:
     from backend.services.paper_service import PaperService
+
+logger = logging.getLogger(__name__)
 
 
 def complete_paper_pipeline(
@@ -79,10 +82,11 @@ def complete_paper_pipeline(
     run_async(
         paper_service._paper_repo.update_paths(paper_id, graph_path=graph_path),
     )
+    graph_version = run_async(paper_service._paper_repo.get_graph_version(paper_id))
     run_async(
         paper_service._paper_repo.update_graph_version(
             paper_id,
-            graph_version="1",
+            graph_version=graph_version,
             extractor_config_hash=config_hash,
         ),
     )
@@ -96,11 +100,34 @@ def complete_paper_pipeline(
         status_service.mark_ready_with_warnings(paper_id, message="; ".join(reasons))
 
     from backend.events.bus import get_event_bus
+    from backend.events.pipeline_finalized_contract import pipeline_finalized_correlation_id
     from backend.events.types import PipelineFinalized
 
-    get_event_bus().publish_sync(
-        PipelineFinalized(paper_id=paper_id, full_text=full_text, graph=graph),
+    correlation_id = pipeline_finalized_correlation_id(paper_id)
+    logger.info(
+        "pipeline_db_committed",
+        extra={
+            "correlation_id": correlation_id,
+            "paper_id": paper_id,
+            "status": final_status.value,
+            "channel": "persistence_db",
+        },
     )
+
+    finalized_event = PipelineFinalized(paper_id=paper_id, full_text=full_text, graph=graph)
+    logger.info(
+        "pipeline_finalized_publishing",
+        extra={
+            "correlation_id": correlation_id,
+            "paper_id": paper_id,
+            "event_type": finalized_event.event_type.value,
+            "channel": "event_bus_publisher",
+            "full_text_chars": len(full_text),
+            "graph_node_count": len(graph.nodes),
+            "graph_edge_count": len(graph.edges),
+        },
+    )
+    get_event_bus().publish_sync(finalized_event)
 
 
 class PipelineCompletionService:
@@ -116,6 +143,7 @@ class PipelineCompletionService:
         graph_data: dict[str, Any],
         classification_data: dict[str, Any],
         extract_warnings: list[str] | None = None,
+        full_text: str = "",
     ) -> UnifiedPaperGraph:
         try:
             graph = UnifiedPaperGraph.model_validate(graph_data)
@@ -130,6 +158,7 @@ class PipelineCompletionService:
                 classification=classification,
                 graph=graph,
                 extract_warnings=extract_warnings,
+                full_text=full_text,
             )
             return graph
         except ServiceError:

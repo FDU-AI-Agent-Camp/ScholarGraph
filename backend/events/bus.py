@@ -107,3 +107,6 @@ def reset_event_bus_cache() -> None:
     if get_event_bus.cache_info().currsize:
         get_event_bus().reset()
     get_event_bus.cache_clear()
+    from backend.events.pipeline_finalized_handlers import register_pipeline_finalized_handlers
+
+    register_pipeline_finalized_handlers()

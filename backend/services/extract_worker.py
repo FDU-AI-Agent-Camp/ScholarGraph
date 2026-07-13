@@ -62,6 +62,7 @@ async def _run_full_extraction(
             paper_id,
             graph_data=graph.model_dump(mode="json"),
             classification_data=classification.model_dump(mode="json"),
+            full_text=full_text,
         )
         status_service.mark_ready(paper_id)
         logger.info(

@@ -281,8 +281,36 @@ async def record_warnings(self, paper_id, *, head_refine=None, classify=None, ex
 - `complete_paper_pipeline` 中更新 `papers.graph_path`、最终 `status`。
 - 同时写入 `graph_version` 与 `extractor_config_hash`（基于当前抽取配置/Prompt/模型计算哈希）。
 - 保留 `GraphStore().save(graph)` 写磁盘 JSON。
+- finalize 成功后 **仅** 通过事件总线发射 `PipelineFinalized(paper_id, full_text, graph)`；**禁止**在 LangGraph `store_node` 内直调 RAG 索引。
 
-### 4.5 启动加载
+### 4.5 `PipelineFinalized` 事件契约（SSOT）
+
+**发射点**：`complete_paper_pipeline()` 在图谱持久化与 `mark_ready*` 之后，调用 `EventBus.publish_sync(PipelineFinalized(...))`。
+
+**载荷字段（冻结，勿随意增删）**：
+
+| 字段 | 类型 | 说明 |
+|---|---|---|
+| `paper_id` | `str` | 已完成建图的论文 ID |
+| `full_text` | `str` | PyMuPDF 抽取的全文，供 RAG chunk 切分 |
+| `graph` | `UnifiedPaperGraph` | 已写入 `GraphStore` 的图谱快照 |
+
+定义位置：`backend/events/types.py` → `PipelineFinalized`。
+
+**消费方（事件驱动 SSOT）**：
+
+- **当前（persistence-core 临时桩）**：`backend/events/pipeline_finalized_handlers.py` 内 `temporary_pipeline_finalized_rag_handler` 监听 `EventType.PIPELINE_FINALIZED`，记录结构化日志并委托 `RagIndexService.index_paper_for_rag_async()`，维持端到端可用性。
+- **目标（组员 A / `feature/backend/rag-vector-store`）**：在 `backend/rag/handlers.py` 使用 `@on_event(EventType.PIPELINE_FINALIZED)` 注册生产 Handler，接管向量化逻辑。
+- **合并策略**：rag-vector-store PR 合并时，由 persistence-core 负责人删除 `pipeline_finalized_handlers.py` 中的临时桩，避免双索引。
+
+**已废弃**：`backend/graph/nodes.py` `store_node` 对 `_index_paper_for_rag_async` 的同步直调（D4 清理项）。
+
+**功能可用性（临时桩契约审计 + 可观测性）**：
+
+- 订阅入口调用 `validate_pipeline_finalized_payload()`（`backend/events/pipeline_finalized_contract.py`），强类型校验 `PipelineFinalized`：`paper_id` 在 DB 存在、`full_text` 非空、`graph` JSON 往返反序列化成功且拓扑完整（节点非空、边端点合法）。
+- 发布端（`complete_paper_pipeline` 内 `publish_sync` 直前）打 `pipeline_finalized_publishing`；订阅端（临时 handler 第一行）打 `pipeline_finalized_consumed`。两条日志共享 `correlation_id`（当前等于 `paper_id`），可凭时间戳与内容判定事件通道端到端打通。
+
+### 4.6 启动加载
 
 - `PaperService.__init__` 不再从 fixture 直接注入内存，而是从 DB `SELECT` 全部 papers 列表。
 - fixture seed 改为可选：
@@ -291,7 +319,7 @@ async def record_warnings(self, paper_id, *, head_refine=None, classify=None, ex
       seed_from_fixtures(repo)
   ```
 
-### 4.6 环境变量
+### 4.7 环境变量
 
 ```env
 # 默认 SQLite；生产可改为 postgresql+asyncpg://...

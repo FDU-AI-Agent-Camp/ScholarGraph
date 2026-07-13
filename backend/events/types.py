@@ -14,7 +14,13 @@ class EventType(StrEnum):
 
 @dataclass(frozen=True)
 class PipelineFinalized:
-    """Emitted after graph persistence and paper status reaches a ready terminal state."""
+    """Emitted after graph persistence and paper status reaches a ready terminal state.
+
+    Frozen contract (do not rename or remove fields without a version bump):
+    - ``paper_id``: finalized paper identifier
+    - ``full_text``: PyMuPDF-extracted body used for chunk indexing
+    - ``graph``: persisted ``UnifiedPaperGraph`` snapshot
+    """
 
     paper_id: str
     full_text: str

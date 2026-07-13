@@ -17,9 +17,11 @@ logger = logging.getLogger(__name__)
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Initialize long-lived RAG clients once; routes reuse via ``app.state``."""
+    from backend.events.pipeline_finalized_handlers import register_pipeline_finalized_handlers
     from backend.rag.hybrid_retriever import bind_hybrid_retriever, create_hybrid_retriever, reset_hybrid_retriever
     from backend.services.paper_service import get_paper_service
 
+    register_pipeline_finalized_handlers()
     await get_paper_service().bootstrap()
 
     preconfigured = getattr(app.state, "hybrid_retriever", None)
