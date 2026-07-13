@@ -1,6 +1,6 @@
 """Tests for PipelineCompletionService — store-step business orchestration."""
 
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from backend.schemas.graph import UnifiedPaperGraph
@@ -21,11 +21,16 @@ def test_finalize_validates_persists_and_marks_ready(
     service = PipelineCompletionService(graph_persistence=persistence)
     graph = sample_graph.model_copy(update={"paper_id": registered_paper})
 
-    result = service.finalize(
-        registered_paper,
-        graph_data=graph.model_dump(mode="json"),
-        classification_data=sample_classification.model_dump(mode="json"),
-    )
+    with patch(
+        "backend.services.rag_index_service.RagIndexService.index_paper_for_rag_async",
+        new_callable=AsyncMock,
+    ):
+        result = service.finalize(
+            registered_paper,
+            graph_data=graph.model_dump(mode="json"),
+            classification_data=sample_classification.model_dump(mode="json"),
+            full_text="service test full text body",
+        )
 
     persistence.save.assert_called_once()
     assert result.paper_id == registered_paper

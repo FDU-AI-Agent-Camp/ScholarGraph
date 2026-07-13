@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from backend.repositories.paper_repository import PaperRepository
@@ -47,11 +47,16 @@ async def test_upload_ready_survives_service_restart(
     )
     persistence = MagicMock(spec=GraphPersistenceService)
     completion = PipelineCompletionService(graph_persistence=persistence)
-    completion.finalize(
-        paper_id,
-        graph_data=graph.model_dump(mode="json"),
-        classification_data=classification.model_dump(mode="json"),
-    )
+    with patch(
+        "backend.services.rag_index_service.RagIndexService.index_paper_for_rag_async",
+        new_callable=AsyncMock,
+    ):
+        completion.finalize(
+            paper_id,
+            graph_data=graph.model_dump(mode="json"),
+            classification_data=classification.model_dump(mode="json"),
+            full_text="restart integration full text body",
+        )
 
     service = await restart_paper_service()
     items, total = await service.list_papers()

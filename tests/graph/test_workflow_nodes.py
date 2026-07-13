@@ -326,7 +326,10 @@ async def test_store_node_delegates_finalize_to_completion_service(
                 "backend.graph.nodes.get_pipeline_completion_service",
                 return_value=completion_svc,
             ),
-            patch("backend.graph.nodes._index_paper_for_rag_async") as mock_rag_index,
+            patch(
+                "backend.services.rag_index_service.RagIndexService.index_paper_for_rag_async",
+                new_callable=AsyncMock,
+            ) as mock_rag_index,
         ):
             mock_rag_index.return_value = None
             out = await nodes.store_node(post_extract_state)
@@ -343,7 +346,10 @@ async def test_store_node_triggers_rag_indexing_after_finalize(
 ) -> None:
     with (
         patch("backend.services.graph_persistence_service.GraphStore") as store_cls,
-        patch("backend.graph.nodes._index_paper_for_rag_async") as mock_rag_index,
+        patch(
+            "backend.services.rag_index_service.RagIndexService.index_paper_for_rag_async",
+            new_callable=AsyncMock,
+        ) as mock_rag_index,
     ):
         store_cls.return_value.save = MagicMock()
         persistence = GraphPersistenceService(store=store_cls.return_value)
@@ -355,7 +361,7 @@ async def test_store_node_triggers_rag_indexing_after_finalize(
             await nodes.store_node(post_extract_state)
 
     mock_rag_index.assert_awaited_once()
-    call_kwargs = mock_rag_index.call_args.kwargs
+    call_kwargs = mock_rag_index.await_args.kwargs
     assert call_kwargs["full_text"] == post_extract_state["full_text"]
     assert call_kwargs["graph"].paper_id == post_extract_state["paper_id"]
 
@@ -382,7 +388,10 @@ async def test_store_node_rag_index_failure_does_not_block_ready(
     paper_id = post_extract_state["paper_id"]
     with (
         patch("backend.services.graph_persistence_service.GraphStore") as store_cls,
-        patch("backend.graph.nodes._index_paper_for_rag_async", side_effect=RuntimeError("RAG crashed")),
+        patch(
+            "backend.services.rag_index_service.RagIndexService.index_paper_for_rag_async",
+            side_effect=RuntimeError("RAG crashed"),
+        ),
     ):
         store_cls.return_value.save = MagicMock()
         persistence = GraphPersistenceService(store=store_cls.return_value)
@@ -408,19 +417,24 @@ async def test_store_node_rag_index_failure_records_extract_warning(
     paper_id = post_extract_state["paper_id"]
     with (
         patch("backend.services.graph_persistence_service.GraphStore") as store_cls,
-        patch("backend.graph.nodes._index_paper_for_rag_async") as mock_rag_index,
+        patch(
+            "backend.services.rag_index_service.RagIndexService.index_paper_for_rag_async",
+            new_callable=AsyncMock,
+        ) as mock_rag_async,
     ):
         store_cls.return_value.save = MagicMock()
         persistence = GraphPersistenceService(store=store_cls.return_value)
         completion_svc = PipelineCompletionService(graph_persistence=persistence)
 
-        async def failing_rag_index(*_args: Any, **_kwargs: Any) -> None:
+        async def failing_rag_async(*_args: Any, **kwargs: Any) -> None:
             from backend.services.paper_service import get_paper_service
 
-            get_paper_service().record_extract_warnings(paper_id, [RAG_INDEX_WARNING_CODE])
-            raise RuntimeError("RAG crashed")
+            get_paper_service().record_extract_warnings(
+                kwargs.get("paper_id") or _args[0],
+                [RAG_INDEX_WARNING_CODE],
+            )
 
-        mock_rag_index.side_effect = failing_rag_index
+        mock_rag_async.side_effect = failing_rag_async
         with patch(
             "backend.graph.nodes.get_pipeline_completion_service",
             return_value=completion_svc,

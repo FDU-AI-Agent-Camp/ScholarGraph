@@ -50,6 +50,7 @@ async def test_finalize_publishes_pipeline_finalized_event(persistence_env) -> N
             paper_id,
             graph_data=graph.model_dump(mode="json"),
             classification_data=classification.model_dump(mode="json"),
+            full_text="pipeline full text body",
         )
         await bus.drain()
     finally:
@@ -57,4 +58,5 @@ async def test_finalize_publishes_pipeline_finalized_event(persistence_env) -> N
 
     assert len(seen) == 1
     assert seen[0].paper_id == paper_id
+    assert seen[0].full_text == "pipeline full text body"
     assert seen[0].graph.paper_id == paper_id
