@@ -2,18 +2,15 @@
 
 from __future__ import annotations
 
-import asyncio
-from collections.abc import Coroutine
-from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, TypeVar
 
 import pytest
 from backend.config import get_settings
 from backend.db.base import get_async_engine, reset_database_caches
 from backend.db.bootstrap import ensure_schema
 from backend.graph.store import GraphStore
+from backend.repositories.async_bridge import run_async
 from backend.repositories.paper_repository import get_paper_repository
 from backend.repositories.pipeline_repository import get_pipeline_repository
 from backend.schemas.graph import UnifiedPaperGraph
@@ -25,19 +22,6 @@ async def init_isolated_database(db_path: Path) -> None:
     """Create schema in a dedicated SQLite file."""
     reset_database_caches()
     await ensure_schema(get_async_engine())
-
-
-_T = TypeVar("_T")
-
-
-def run_async(coro: Coroutine[Any, Any, _T]) -> _T:
-    """Run a coroutine from sync or pytest-asyncio contexts."""
-    try:
-        asyncio.get_running_loop()
-    except RuntimeError:
-        return asyncio.run(coro)
-    with ThreadPoolExecutor(max_workers=1) as executor:
-        return executor.submit(asyncio.run, coro).result()
 
 
 def _ready_pipeline_snapshot(paper_id: str, status: PaperStatus) -> PaperStatusData:

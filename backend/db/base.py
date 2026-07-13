@@ -69,6 +69,9 @@ async_session_factory = get_async_session_factory
 
 def reset_database_caches() -> None:
     """Clear cached engine/session factories (tests and env changes)."""
+    from backend.repositories.async_bridge import dispose_cached_engine_if_present
+
+    dispose_cached_engine_if_present()
     get_async_engine.cache_clear()
     get_async_session_factory.cache_clear()
 

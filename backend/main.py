@@ -1,5 +1,6 @@
 """FastAPI application factory."""
 
+import asyncio
 import logging
 from contextlib import asynccontextmanager
 
@@ -22,6 +23,9 @@ async def lifespan(app: FastAPI):
     from backend.services.paper_service import get_paper_service
 
     register_pipeline_finalized_handlers()
+    from backend.repositories import register_main_event_loop
+
+    register_main_event_loop(asyncio.get_running_loop())
     await get_paper_service().bootstrap()
 
     preconfigured = getattr(app.state, "hybrid_retriever", None)
@@ -36,6 +40,7 @@ async def lifespan(app: FastAPI):
     try:
         yield
     finally:
+        register_main_event_loop(None)
         reset_hybrid_retriever()
         if hasattr(app.state, "hybrid_retriever"):
             delattr(app.state, "hybrid_retriever")
