@@ -37,11 +37,21 @@ uv run python scripts/run_patrol.py --seed-demo-graphs
 
 ## 启动命令
 
-**终端 1 — 后端（仓库根目录）**
+**终端 1 — 后端（仓库根目录，Demo Profile 必开）**
 
 ```bash
+export APP_PROFILE=demo
 uv run uvicorn backend.main:app --reload --host 127.0.0.1 --port 8000
 ```
+
+Windows PowerShell：
+
+```powershell
+$env:APP_PROFILE='demo'
+uv run uvicorn backend.main:app --reload --host 127.0.0.1 --port 8000
+```
+
+`APP_PROFILE=demo` 会叠加加载 `.env.demo`，其中 **硬性开启** `RERANKER_ENABLED=true` 与 `RERANKER_MODEL=bge-reranker-large`。若 Reranker 未配置或握手失败，应用将在启动期 Fail-Fast 阻断。
 
 **终端 2 — 前端**
 

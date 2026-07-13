@@ -21,6 +21,10 @@ async def lifespan(app: FastAPI):
     from backend.events.pipeline_finalized_handlers import register_pipeline_finalized_handlers
     from backend.rag.hybrid_retriever import bind_hybrid_retriever, create_hybrid_retriever, reset_hybrid_retriever
     from backend.services.paper_service import get_paper_service
+    from backend.startup.profile_validation import probe_reranker_connectivity
+
+    settings = get_settings()
+    await probe_reranker_connectivity(settings)
 
     register_pipeline_finalized_handlers()
     from backend.events.bus import install_default_event_bus_hooks
@@ -54,7 +58,10 @@ async def lifespan(app: FastAPI):
 
 
 def create_app() -> FastAPI:
+    from backend.startup.profile_validation import run_startup_profile_validation
+
     settings = get_settings()
+    run_startup_profile_validation(settings)
     if settings.is_llm_mock:
         logger.warning(
             "LLM_MODE=mock — 云服务尚未接入；问答 / 巡检 / 抽取使用本地 Mock 响应（见 GET /api/v1/health）",

@@ -8,6 +8,8 @@ import os
 # Keep unit tests independent of developer ``.env`` (LLM_MODE=live, custom models, etc.).
 os.environ.setdefault("SCHOLARGRAPH_IGNORE_DOTENV", "1")
 os.environ.setdefault("APP_ENV", "test")
+os.environ.setdefault("APP_PROFILE", "ci")
+os.environ.setdefault("STARTUP_RERANKER_PROBE", "false")
 from collections.abc import Iterator
 from contextlib import contextmanager
 from pathlib import Path

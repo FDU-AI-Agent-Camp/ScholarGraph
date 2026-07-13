@@ -60,6 +60,9 @@ def _clustering_category(node_type: str) -> str:
     return category_map.get(node_type, "Concept")
 
 
+AppProfile = Literal["ci", "demo", "prod"]
+
+
 class Settings(PatrolSettingsMixin, QaSettingsMixin, BaseSettings):
     """Runtime configuration; values come from `.env` at repository root."""
 
@@ -71,8 +74,14 @@ class Settings(PatrolSettingsMixin, QaSettingsMixin, BaseSettings):
     )
 
     app_env: Literal["development", "staging", "production", "test"] = "development"
+    app_profile: AppProfile | None = Field(default=None, validation_alias="APP_PROFILE")
     debug: bool = True
     log_level: str = "INFO"
+    startup_reranker_probe_enabled: bool = Field(
+        default=True,
+        validation_alias="STARTUP_RERANKER_PROBE",
+        description="demo/prod 启动时是否对 Reranker 做微量握手探针",
+    )
 
     api_host: str = "127.0.0.1"
     api_port: int = 8000
@@ -334,6 +343,18 @@ class Settings(PatrolSettingsMixin, QaSettingsMixin, BaseSettings):
         validation_alias="CLASSIFIER_PROFILE_LLM_TIMEOUT_SECONDS",
     )
 
+    @field_validator("app_profile", mode="before")
+    @classmethod
+    def normalize_app_profile(cls, value: object) -> AppProfile | None:
+        if value is None:
+            return None
+        if isinstance(value, str):
+            normalized = value.strip().lower()
+            if not normalized:
+                return None
+            return normalized  # type: ignore[return-value]
+        return value  # type: ignore[return-value]
+
     @field_validator("cors_origins", mode="before")
     @classmethod
     def split_cors_origins(cls, value: str | list[str]) -> str:
@@ -456,6 +477,16 @@ class Settings(PatrolSettingsMixin, QaSettingsMixin, BaseSettings):
         return key
 
 
+def _resolve_profile_env_files() -> tuple[str, ...] | None:
+    """Return layered env files for demo/prod; ``None`` lets pydantic use model default."""
+    profile = os.environ.get("APP_PROFILE", "").strip().lower()
+    if profile == "demo":
+        return (".env", ".env.demo")
+    if profile == "prod":
+        return (".env", ".env.prod")
+    return (".env",)
+
+
 def _should_ignore_dotenv() -> bool:
     """Whether ``get_settings()`` should skip loading repository ``.env``.
 
@@ -476,4 +507,5 @@ def get_settings() -> Settings:
         # during tests, so monkeypatched environment variables stay deterministic.
         # pydantic_settings accepts _env_file at runtime but pyright cannot see it.
         return Settings(_env_file=None)  # type: ignore[call-arg]
-    return Settings()
+    env_files = _resolve_profile_env_files()
+    return Settings(_env_file=env_files)  # type: ignore[call-arg]
