@@ -175,6 +175,55 @@ class PaperService:
         if paper is None:
             raise ApiError("PAPER_NOT_FOUND", f"论文不存在: {paper_id}", status_code=404)
 
+    def require_paper_for_pipeline(self, paper_id: str) -> None:
+        """Raise pipeline ServiceError when the paper row is missing."""
+        from backend.services.errors import PIPELINE_FAILED_CODE, ServiceError
+
+        if run_async(self._paper_repo.get(paper_id)) is None:
+            msg = f"paper not found: {paper_id}"
+            raise ServiceError(PIPELINE_FAILED_CODE, msg)
+
+    def get_extract_quality_thresholds(self) -> tuple[float, float, float]:
+        """Quality-gate thresholds used during pipeline finalize."""
+        return (
+            self._settings.extract_min_supports_rationale_coverage,
+            self._settings.extract_max_isolated_node_ratio,
+            self._settings.extract_max_generic_edge_ratio,
+        )
+
+    def compute_extractor_config_hash(self) -> str:
+        from backend.services.extractor_config_fingerprint import compute_extractor_config_hash
+
+        return compute_extractor_config_hash(self._settings)
+
+    def update_pipeline_classification(
+        self,
+        paper_id: str,
+        classification: ParadigmClassification,
+    ) -> None:
+        run_async(self._paper_repo.update_classification(paper_id, classification))
+
+    def update_pipeline_graph_path(self, paper_id: str, *, graph_path: str) -> None:
+        run_async(self._paper_repo.update_paths(paper_id, graph_path=graph_path))
+
+    def get_pipeline_graph_version(self, paper_id: str) -> str:
+        return run_async(self._paper_repo.get_graph_version(paper_id))
+
+    def update_pipeline_graph_version(
+        self,
+        paper_id: str,
+        *,
+        graph_version: str,
+        extractor_config_hash: str,
+    ) -> None:
+        run_async(
+            self._paper_repo.update_graph_version(
+                paper_id,
+                graph_version=graph_version,
+                extractor_config_hash=extractor_config_hash,
+            ),
+        )
+
     def set_status_snapshot(
         self,
         paper_id: str,

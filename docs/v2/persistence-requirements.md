@@ -294,6 +294,7 @@ async def record_warnings(self, paper_id, *, head_refine=None, classify=None, ex
 | `paper_id` | `str` | 已完成建图的论文 ID |
 | `full_text` | `str` | PyMuPDF 抽取的全文，供 RAG chunk 切分 |
 | `graph` | `UnifiedPaperGraph` | 已写入 `GraphStore` 的图谱快照 |
+| `page_break_offsets` | `list[int] \| None` | 归一化全文中的分页累积偏移（供 chunk 页码推断，可选） |
 
 定义位置：`backend/events/types.py` → `PipelineFinalized`。
 

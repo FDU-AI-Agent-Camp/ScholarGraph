@@ -185,6 +185,7 @@ async def store_node(state: WorkflowState) -> WorkflowState:
             classification_data=state["classification"],
             extract_warnings=state.get("extract_warnings"),
             full_text=state["full_text"],
+            page_break_offsets=state.get("page_break_offsets"),
         )
     except ServiceError as exc:
         return _failure_patch(exc, stage=PipelineStage.STORING)

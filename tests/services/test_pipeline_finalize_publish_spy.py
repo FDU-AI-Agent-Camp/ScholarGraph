@@ -49,6 +49,7 @@ def test_finalize_publishes_pipeline_finalized_once_with_contract_payload(
                 graph_data=graph.model_dump(mode="json"),
                 classification_data=sample_classification.model_dump(mode="json"),
                 full_text=full_text,
+                page_break_offsets=[10, 20],
             )
 
         publish_spy.assert_called_once()
@@ -57,6 +58,7 @@ def test_finalize_publishes_pipeline_finalized_once_with_contract_payload(
         assert published_event.paper_id == paper_id
         assert published_event.full_text == full_text
         assert published_event.graph.paper_id == paper_id
+        assert published_event.page_break_offsets == [10, 20]
         assert published_event.event_type == EventType.PIPELINE_FINALIZED
         assert len(published_event.graph.nodes) >= 1
     finally:

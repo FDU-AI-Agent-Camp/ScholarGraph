@@ -79,4 +79,5 @@ async def test_temporary_pipeline_finalized_handler_delegates_to_rag_index_servi
         paper_id,
         full_text="full body",
         graph=graph,
+        page_break_offsets=None,
     )

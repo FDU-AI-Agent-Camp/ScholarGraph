@@ -20,11 +20,13 @@ class PipelineFinalized:
     - ``paper_id``: finalized paper identifier
     - ``full_text``: PyMuPDF-extracted body used for chunk indexing
     - ``graph``: persisted ``UnifiedPaperGraph`` snapshot
+    - ``page_break_offsets``: normalized-text cumulative offsets per page break (optional)
     """
 
     paper_id: str
     full_text: str
     graph: UnifiedPaperGraph
+    page_break_offsets: list[int] | None = None
 
     @property
     def event_type(self) -> EventType:

@@ -65,6 +65,7 @@ async def temporary_pipeline_finalized_rag_handler(event: PipelineFinalized) -> 
         event.paper_id,
         full_text=event.full_text,
         graph=graph,
+        page_break_offsets=event.page_break_offsets,
     )
 
 
