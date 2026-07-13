@@ -49,9 +49,14 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     )
     parser.add_argument(
         "--mode",
-        choices=["lens_clash", "contradiction"],
+        choices=["lens_clash", "contradiction", "method_overlap", "claim_evolution"],
         default="lens_clash",
         help="seed 后可选执行的 CLI 巡检模式（冒烟）",
+    )
+    parser.add_argument(
+        "--seed-stem-demo",
+        action="store_true",
+        help="额外 seed STEM 评测图谱（stem-001/stem-002）",
     )
     parser.add_argument(
         "--smoke-patrol",
@@ -61,19 +66,26 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     return parser.parse_args(argv)
 
 
-def run_seed() -> int:
-    cmd = [sys.executable, str(REPO_ROOT / "scripts" / "run_patrol.py"), "--seed-demo-graphs"]
-    print(">>", " ".join(cmd))
-    completed = subprocess.run(cmd, cwd=REPO_ROOT, check=False)
-    return completed.returncode
+def run_seed(*, include_stem: bool = False) -> int:
+    cmds = [[sys.executable, str(REPO_ROOT / "scripts" / "run_patrol.py"), "--seed-demo-graphs"]]
+    if include_stem:
+        cmds.append([sys.executable, str(REPO_ROOT / "scripts" / "run_patrol.py"), "--seed-stem-demo"])
+    exit_code = 0
+    for cmd in cmds:
+        print(">>", " ".join(cmd))
+        completed = subprocess.run(cmd, cwd=REPO_ROOT, check=False)
+        if completed.returncode != 0:
+            exit_code = completed.returncode
+    return exit_code
 
 
 def run_patrol_smoke(mode: str) -> int:
+    paper_ids = "stem-001,stem-002" if mode in {"method_overlap", "claim_evolution"} else "hss-001,hss-002"
     cmd = [
         sys.executable,
         str(REPO_ROOT / "scripts" / "run_patrol.py"),
         "--paper-ids",
-        "hss-001,hss-002",
+        paper_ids,
         "--mode",
         mode,
         "--compact",
@@ -103,7 +115,8 @@ def print_instructions() -> None:
     print("巡检页操作：")
     print("  1. 打开 /patrol")
     print("  2. paper_ids 输入 hss-001,hss-002")
-    print("  3. mode 选择 lens_clash 或 contradiction")
+    print("  3. mode 选择 lens_clash / contradiction / method_overlap / claim_evolution")
+    print("  4. V2 模式请使用 stem-001,stem-002（需 --seed-stem-demo）")
     print("  4. 点击「运行巡检」，查看 insights 与 node_refs 表格")
     print()
     print(f"后端 OpenAPI: {BACKEND_BASE}/docs")
@@ -115,7 +128,7 @@ def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
 
     if not args.skip_seed:
-        exit_code = run_seed()
+        exit_code = run_seed(include_stem=args.seed_stem_demo)
         if exit_code != 0:
             print(f"seed 失败，退出码 {exit_code}", file=sys.stderr)
             return exit_code
