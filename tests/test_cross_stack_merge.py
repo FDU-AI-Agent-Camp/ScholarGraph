@@ -73,7 +73,7 @@ async def test_merge_health_for_fe_proxy(api_client: AsyncClient) -> None:
     assert response.status_code == 200
     body = response.json()
     _assert_api_envelope(body)
-    assert body["data"].get("status") == "ok"
+    assert body["data"].get("status") == "healthy"
 
 
 @pytest.mark.asyncio

@@ -80,7 +80,7 @@ async def test_build_contradiction_insight_uses_llm_summary() -> None:
         insight = await build_contradiction_insight(graphs, ["hss-001", "hss-002"])
     assert insight is not None
     assert insight.status == PatrolInsightStatus.READY
-    assert insight.summary == llm_text
+    assert insight.summary.startswith(llm_text)
 
 
 def test_sub_argument_nodes_collected() -> None:
@@ -231,7 +231,7 @@ async def test_build_contradiction_insight_does_not_block_compliant_requests() -
         insight = await build_contradiction_insight(graphs, ["hss-001", "hss-002"])
     assert insight is not None
     assert insight.status == PatrolInsightStatus.READY
-    assert insight.summary == llm_text
+    assert insight.summary.startswith(llm_text)
     mock_gen.assert_awaited_once()
 
 

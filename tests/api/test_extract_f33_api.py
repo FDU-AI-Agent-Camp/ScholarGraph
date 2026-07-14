@@ -39,7 +39,12 @@ def test_api_f33_graph_hss_fixture_passes_unified_schema() -> None:
 
 
 @pytest.mark.asyncio
-async def test_api_f33_get_hss_graph_returns_whitelisted_node_types(api_client: AsyncClient) -> None:
+async def test_api_f33_get_hss_graph_returns_whitelisted_node_types(
+    api_client: AsyncClient,
+    tmp_path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _seed_isolated_hss_fixture_graph(tmp_path, monkeypatch)
     response = await api_client.get("/api/v1/papers/hss-001/graph")
 
     assert response.status_code == 200
@@ -55,10 +60,16 @@ async def test_api_f33_get_hss_graph_returns_whitelisted_node_types(api_client: 
     edge_types = {edge["type"] for edge in data["edges"]}
     assert node_types <= HSS_WHITELIST_NODE_VALUES
     assert edge_types <= HSS_EDGE_TYPES
+    get_settings.cache_clear()
 
 
 @pytest.mark.asyncio
-async def test_api_f33_get_hss_graph_contains_argumentation_types(api_client: AsyncClient) -> None:
+async def test_api_f33_get_hss_graph_contains_argumentation_types(
+    api_client: AsyncClient,
+    tmp_path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _seed_isolated_hss_fixture_graph(tmp_path, monkeypatch)
     response = await api_client.get("/api/v1/papers/hss-001/graph")
 
     assert response.status_code == 200
@@ -69,10 +80,16 @@ async def test_api_f33_get_hss_graph_contains_argumentation_types(api_client: As
     assert "Thesis" in node_types
     assert "SubArgument" in node_types
     assert "SUB_ARGUMENT_OF" in edge_types
+    get_settings.cache_clear()
 
 
 @pytest.mark.asyncio
-async def test_api_f33_get_hss_graph_excludes_stem_only_node_types(api_client: AsyncClient) -> None:
+async def test_api_f33_get_hss_graph_excludes_stem_only_node_types(
+    api_client: AsyncClient,
+    tmp_path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _seed_isolated_hss_fixture_graph(tmp_path, monkeypatch)
     response = await api_client.get("/api/v1/papers/hss-001/graph")
 
     assert response.status_code == 200
@@ -81,6 +98,19 @@ async def test_api_f33_get_hss_graph_excludes_stem_only_node_types(api_client: A
     assert not forbidden, f"HSS API graph must not expose STEM-only types: {sorted(forbidden)}"
     for stem_type in ("Metric", "Baseline", "Dataset"):
         assert stem_type not in node_types
+    get_settings.cache_clear()
+
+
+def _seed_isolated_hss_fixture_graph(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    graphs_dir = tmp_path / "graphs"
+    graphs_dir.mkdir(parents=True, exist_ok=True)
+    monkeypatch.setenv("GRAPH_DATA_DIR", str(graphs_dir))
+    get_settings.cache_clear()
+    from backend.services.paper_service import get_paper_service
+
+    get_paper_service.cache_clear()
+    payload = json.loads((FIXTURES_DIR / "graph-hss.json").read_text(encoding="utf-8"))
+    GraphStore(base_dir=graphs_dir).save(UnifiedPaperGraph.model_validate(payload["data"]))
 
 
 @pytest.mark.asyncio

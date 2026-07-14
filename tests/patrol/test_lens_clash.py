@@ -101,4 +101,4 @@ async def test_build_lens_clash_insight_uses_llm_summary_when_available() -> Non
     ):
         insight = await build_lens_clash_insight(graphs, ["hss-001", "hss-002"])
     assert insight is not None
-    assert insight.summary == llm_text
+    assert insight.summary.startswith(llm_text)

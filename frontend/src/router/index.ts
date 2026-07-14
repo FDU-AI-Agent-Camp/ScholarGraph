@@ -49,8 +49,8 @@ const router = createRouter({
 })
 
 router.beforeEach(async (to) => {
-  if (to.path.startsWith('/patrol')) {
-    const { useHealthStore } = await import('@/stores/health')
+  const { isPatrolRouteForPrefetch, useHealthStore } = await import('@/stores/health')
+  if (isPatrolRouteForPrefetch(to.path)) {
     const healthStore = useHealthStore()
     await healthStore.ensureLoaded()
   }

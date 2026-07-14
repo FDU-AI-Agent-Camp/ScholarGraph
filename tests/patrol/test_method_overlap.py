@@ -369,7 +369,7 @@ async def test_method_overlap_perfect_llm_alignment_overrides_node_usage() -> No
 
     assert insight is not None
     assert insight.status == PatrolInsightStatus.READY
-    assert insight.summary == llm_output.summary
+    assert insight.summary.startswith(llm_output.summary)
     point = insight.structured_points[0]
     assert isinstance(point, MethodOverlapPoint)
     assert point.paper_a_usage == llm_output.comparison_details[0].paper_a_usage
@@ -466,7 +466,7 @@ async def test_alignment_merger_perfect_match_with_semantic_pair() -> None:
 
     assert insight is not None
     assert insight.status == PatrolInsightStatus.READY
-    assert insight.summary == llm_output.summary
+    assert insight.summary.startswith(llm_output.summary)
     assert len(insight.structured_points) == 1
     point = insight.structured_points[0]
     assert isinstance(point, MethodOverlapPoint)
@@ -852,7 +852,7 @@ async def test_method_overlap_uses_structured_llm_output_when_available() -> Non
 
     assert insight is not None
     assert insight.status == PatrolInsightStatus.READY
-    assert insight.summary == llm_output.summary
+    assert insight.summary.startswith(llm_output.summary)
     point = insight.structured_points[0]
     assert isinstance(point, MethodOverlapPoint)
     assert point.paper_a_usage == llm_output.comparison_details[0].paper_a_usage

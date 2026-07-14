@@ -1,14 +1,15 @@
 <script setup lang="ts">
 import { Close, Document, HomeFilled, Menu, Search } from '@element-plus/icons-vue'
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 
 import PatrolRerankerOnboardingGuard from '@/components/health/PatrolRerankerOnboardingGuard.vue'
 import { MOBILE_NAV_MAX_WIDTH_PX, SHELL_BASELINE_COPY } from '@/constants/shellCopy'
 import { RouteName } from '@/router/meta'
-import { useHealthStore } from '@/stores/health'
+import { isPatrolRouteForPrefetch, useHealthStore } from '@/stores/health'
 
 const route = useRoute()
+const router = useRouter()
 const healthStore = useHealthStore()
 
 const mobileNavOpen = ref(false)
@@ -75,7 +76,7 @@ watch(
   () => route.path,
   (path) => {
     mobileNavOpen.value = false
-    if (path.startsWith('/patrol')) {
+    if (isPatrolRouteForPrefetch(path)) {
       void healthStore.ensureLoaded(true)
     }
   },

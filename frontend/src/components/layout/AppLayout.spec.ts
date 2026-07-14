@@ -1,3 +1,4 @@
+import { createPinia, setActivePinia } from 'pinia'
 import { ref } from 'vue'
 import { flushPromises, mount, type VueWrapper } from '@vue/test-utils'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -11,6 +12,27 @@ const routePath = ref('/papers')
 const routeName = ref<string | symbol | null | undefined>(RouteName.Papers)
 const routeParams = ref<Record<string, string | string[]>>({})
 const routerPush = vi.hoisted(() => vi.fn())
+
+vi.mock('@/api/health', () => ({
+  fetchHealth: vi.fn().mockResolvedValue({
+    data: {
+      status: 'healthy',
+      version: '0.0.0-test',
+      components: {
+        patrol_service: {
+          status: 'fully_functional',
+          claim_rq_funnel_enabled: true,
+          reranker_status: 'READY',
+          active_profile: 'ci',
+        },
+      },
+      llm_mode: 'mock',
+      llm_connected: true,
+      llm_note: 'ok',
+    },
+    meta: { request_id: 'test' },
+  }),
+}))
 
 function mockMatchMedia(matches = false): void {
   Object.defineProperty(window, 'matchMedia', {
@@ -45,10 +67,14 @@ vi.mock('vue-router', () => ({
 }))
 
 function mountLayout(): VueWrapper {
+  const pinia = createPinia()
+  setActivePinia(pinia)
   return mount(AppLayout, {
     global: {
+      plugins: [pinia],
       stubs: {
         transition: false,
+        PatrolRerankerOnboardingGuard: true,
         'el-container': { template: '<div class="el-container-stub"><slot /></div>' },
         'el-aside': {
           props: ['width'],

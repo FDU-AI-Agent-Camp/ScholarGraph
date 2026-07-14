@@ -45,11 +45,17 @@ def test_phase_e_p8_paper_status_data_exposes_head_refine_warnings() -> None:
 def test_phase_e_p9_health_route_exposes_grobid_probe() -> None:
     import inspect
 
+    from backend.api import health_telemetry
     from backend.api.routes import health
 
-    source = inspect.getsource(health.health)
-    assert "grobid_connected" in source
-    assert "grobid_note" in source
+    route_source = inspect.getsource(health.health)
+    assert "grobid_connected" in route_source
+    assert "build_enriched_health_payload" in route_source
+
+    payload_source = inspect.getsource(health_telemetry.build_enriched_health_payload)
+    assert "grobid_connected" in payload_source
+    assert "grobid_note" in payload_source
+    assert "grobid_url" in payload_source
 
 
 def test_phase_e_p8_openapi_status_documents_head_refine_warnings() -> None:
