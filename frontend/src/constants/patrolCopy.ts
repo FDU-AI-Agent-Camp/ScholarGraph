@@ -1,7 +1,7 @@
 /** design-spec §11 + ui-design-progress §1.4.4 Patrol baseline copy. */
 export const PATROL_BASELINE_COPY = {
   pageTitle: '共同体巡检',
-  subtitle: '跨论文探测理论视角冲突与论点矛盾 · 需 2 篇 ready 论文',
+  subtitle: '跨论文四模式巡检（视角冲突、论点矛盾、方法重叠、观点演进）· 需 2 篇 ready 论文',
   configTitle: '巡检配置',
   paperLabelA: '论文 A',
   paperLabelB: '论文 B',
