@@ -133,11 +133,15 @@ backend/rag/
 ├── vector_store.py           # ChromaDB 统一封装（Chunks + Entities + Relations）
 ├── vector_store_replace.py   # P13：run_id 快照 replace + Generation Guard 激活闸
 ├── indexing_run_registry.py  # P13：进程内 run 世代 revoke / may_activate
-├── indexing_watchdog.py      # P13：独立线程 sync 扫尾 + 冷启动 reconcile
+├── indexing_watchdog.py      # P13：独立线程编排扫尾（promote 走 PaperService）
 ├── handlers.py               # PipelineFinalized → wait_for 索引 + 孤儿 run 补偿
 ├── hybrid_retriever.py       # 统一向量召回 + 可选 A 尺度图谱
 ├── qa_router.py              # 问题尺度判定
 └── models.py                 # RAG 相关 Pydantic schemas
+
+# 状态机外观（勿再直触 PaperService._pipeline_repo）
+backend/services/paper_pipeline_ops.py   # promote / heartbeat / snapshot 公开 API
+backend/repositories/pipeline_sync.py    # 独立线程 sync SQL 物理写
 ```
 
 > **设计选择**：采用 3 个独立 collection（`paper_chunks`、`paper_entities`、`paper_relations`），每个 collection 内部用 `paper_id` 过滤。这样实现简单、类型清晰，也便于未来独立调优 top-k。
@@ -327,7 +331,13 @@ await _promote_terminal_status(...)  # ready | ready_with_warnings + RagIndexed
 - 重新抽取（re-extract）时先 `delete_by_paper` / `replace_paper_index` 再重建。  
 - `index_paper_for_rag` 按 `paper_id` 加锁，upsert 幂等。  
 - **孤儿线程 hardening（已落地）**：`IndexingRunRegistry` 在 `replace_paper_index` 生成 `run_id` 时 `begin`；`wait_for` 超时立刻 `revoke`。激活前校验 `may_activate`（revoked 否 + `inflight` 世代匹配）+ Task `cancelling()`，否决则打 `[Generation Guard] … Aborting database update.`、不清 DB active、并清理该 run。**cancel/refuse 路径不得 `clear` revoke**（否则超时侧无法拿到 run_id 调度补偿，且 `may_activate` 会假阳性）；仅成功激活或补偿结束才 `clear`。超时另起 fire-and-forget 补偿清理（延迟 0/5/10s 调用 `delete_run`；若 active 仍指向该 run 则先 `set_active_run_id(None)` 写 **SQL NULL**）。线程池内 upsert 或仍会跑完，但**不得合法激活**；脏数据最终被按 run_id 抹除。竞态放大测例见 `tests/rag/test_orphan_run_race_amplification.py`。  
-- **主循环假死**：heartbeat / HTTP / `publish_sync(RagIndexed)` 仍依赖主 loop（starve 时事件投递可滞后）；macro watchdog 已在独立线程用 **sync** 读库 promote，**状态轮询**仍可看到 `ready_with_warnings`。彻底进程级解耦可再用 cron 脚本。研发期用 `ASYNCIO_SLOW_CALLBACK_MS` 逼出裸同步 I/O。
+- **主循环假死（知情架构残留）**：heartbeat / HTTP / `publish_sync(RagIndexed)` 仍依赖 FastAPI 主 loop（starve 时事件投递可滞后）；macro watchdog 已在独立线程用 **sync** 读库 promote，**状态轮询**仍可看到 `ready_with_warnings`。进程级完全解耦（外部 Message Broker / Web↔Worker 多进程）属演进项，见本地 `problems-v2.md` Part E · P13 残留 2。研发期用 `ASYNCIO_SLOW_CALLBACK_MS` 逼出裸同步 I/O。  
+- **状态写入封装（已收拢）**：RAG handler / indexing watchdog / status guard / re-extract **不得**直触 `PaperService._pipeline_repo`；经 `PaperPipelineOpsMixin` 公开方法（`promote_paper_to_terminal_status` / `promote_stuck_indexing_paper[_sync]` / `touch_indexing_heartbeat` / `save_pipeline_snapshot` 等）。sync 扫库物理写在 `backend/repositories/pipeline_sync.py`，由 `PaperService.promote_stuck_indexing_paper_sync` 编排 + 发 `RagIndexed`。  
+- **验证矩阵**：  
+  - 静态：`scripts/check_pipeline_repo_lod.py`（AST；挂入 `make ci` / `check_backend`）拒绝任何非 facade 文件访问 `._pipeline_repo`。  
+  - 领域：`tests/services/test_paper_domain_service.py` — `indexing→ready*` + 自动 `RagIndexed`；对已终态/非 INDEXING 调用抛 `InvalidStateTransitionError` 且不改库。  
+  - 进程内隔离：`test_watchdog_works_during_event_loop_starvation`（P13 release-gate）。  
+  - 多进程 / 外部 broker 混沌：`tests/architecture/test_architecture_chaos_resilience.py`（`@pytest.mark.architecture_evolution`，默认 skip，待演进落地）。
 
 ### 3.7 配置项
 
