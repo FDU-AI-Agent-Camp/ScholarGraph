@@ -48,6 +48,7 @@ from scripts.benchmark_patrol_metrics import (  # noqa: E402
     build_method_overlap_metrics,
     build_v1_mode_metrics,
 )
+from scripts.benchmark_patrol_robustness import run_robustness_fault_matrix  # noqa: E402
 
 EXIT_SUCCESS = 0
 EXIT_FAILED = 1
@@ -115,6 +116,7 @@ def _build_report(
     live: bool,
     concurrency: int,
     results: list[CaseResult],
+    robustness_metrics: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     passed_count = sum(1 for row in results if row.passed)
     evaluation_metrics: dict[str, Any] = {}
@@ -149,6 +151,7 @@ def _build_report(
             "pass_rate": round(passed_count / len(results), 4) if results else 0.0,
         },
         "evaluation_metrics": evaluation_metrics,
+        "robustness_metrics": robustness_metrics or {},
         "breakdown": [
             {
                 "case_id": row.case_id,
@@ -219,7 +222,14 @@ async def async_main(argv: list[str] | None = None) -> int:
         validate_golden_config_snapshot()
 
     all_results = await run_benchmark_modes(modes, live=live, concurrency=concurrency)
-    report = _build_report(args.mode, live=live, concurrency=concurrency, results=all_results)
+    robustness_metrics = await run_robustness_fault_matrix()
+    report = _build_report(
+        args.mode,
+        live=live,
+        concurrency=concurrency,
+        results=all_results,
+        robustness_metrics=robustness_metrics,
+    )
     _REPORT_DIR.mkdir(parents=True, exist_ok=True)
     output_path = args.output or _REPORT_DIR / f"patrol-{datetime.now(UTC).strftime('%Y%m%dT%H%M%SZ')}.json"
     output_path.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
@@ -229,8 +239,11 @@ async def async_main(argv: list[str] | None = None) -> int:
     print(json.dumps(report["totals"], ensure_ascii=False))
     if report.get("evaluation_metrics"):
         print(json.dumps(report["evaluation_metrics"], ensure_ascii=False, indent=2))
+    print(json.dumps(report["robustness_metrics"], ensure_ascii=False, indent=2))
 
-    return EXIT_SUCCESS if report["totals"]["failed"] == 0 else EXIT_FAILED
+    robustness_ok = bool(robustness_metrics.get("all_graceful"))
+    cases_ok = report["totals"]["failed"] == 0
+    return EXIT_SUCCESS if cases_ok and robustness_ok else EXIT_FAILED
 
 
 def main(argv: list[str] | None = None) -> int:

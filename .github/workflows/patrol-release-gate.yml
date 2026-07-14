@@ -12,6 +12,7 @@ on:
       - "backend/**"
       - "tests/**"
       - "scripts/benchmark_patrol.py"
+      - "scripts/benchmark_patrol_robustness.py"
       - "data/patrol_v1_golden_set.json"
       - "scripts/benchmark_patrol_evaluators.py"
       - "scripts/benchmark_patrol_metrics.py"
@@ -64,6 +65,9 @@ jobs:
 
       - name: Mock patrol suite gate
         run: uv run python -m pytest -q --tb=short tests/patrol/test_patrol_suite_gate.py
+
+      - name: Patrol RAG fault-injection gate
+        run: uv run python -m pytest -q --tb=short -m patrol_fault_injection
 
       - name: Live patrol logic pytest gate
         run: uv run python -m pytest -q --tb=short -m live_patrol_logic

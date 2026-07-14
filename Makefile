@@ -30,6 +30,7 @@ ci:
 ci-patrol-release:
 	uv run python scripts/validate_patrol_golden.py --strict --json
 	uv run python -m pytest -q --tb=short tests/patrol/ -m "not live_patrol_logic"
+	uv run python -m pytest -q --tb=short -m patrol_fault_injection
 	uv run python -m pytest -q --tb=short -m live_patrol_logic
 	uv run python -m pytest -q --tb=short -m demo_profile_check
 	uv run python scripts/benchmark_patrol.py --mode all --live

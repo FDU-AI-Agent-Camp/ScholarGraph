@@ -98,6 +98,7 @@ def test_d01_d02_backend_ci_matches_check_backend_commands() -> None:
     assert "pytest -q" in makefile
     assert "PR_GATE_MARKERS" in makefile
     assert "live_patrol_logic" in makefile
+    assert "patrol_fault_injection" in makefile
     assert "live_mineru" in makefile
     assert "live_grobid" in makefile
 
