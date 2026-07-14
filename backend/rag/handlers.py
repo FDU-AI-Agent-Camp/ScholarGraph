@@ -25,10 +25,13 @@ logger = logging.getLogger(__name__)
 RAG_INDEX_WARNING_CODE = "rag_index_failed"
 RAG_INDEX_TIMEOUT_WARNING = "rag_index_timeout"
 RAG_PIPELINE_HANDLER_NAME = "on_pipeline_finalized_for_rag"
+# Delayed retries so late to_thread upserts after wait_for cancel are still erased.
+ORPHAN_RUN_CLEANUP_DELAYS_SECONDS: tuple[float, ...] = (0.0, 5.0, 10.0)
 
 _OFFICIAL_HANDLER_REGISTERED = False
 _INDEX_LOCKS: dict[str, asyncio.Lock] = {}
 _INDEX_LOCKS_GUARD = asyncio.Lock()
+_ORPHAN_CLEANUP_TASKS: set[asyncio.Task[None]] = set()
 
 
 async def _lock_for_paper(paper_id: str) -> asyncio.Lock:
@@ -127,6 +130,62 @@ async def _heartbeat_loop(paper_id: str, stop_event: asyncio.Event, *, interval_
             continue
 
 
+async def _compensate_revoked_index_run(
+    paper_id: str,
+    run_id: str,
+    *,
+    delays_seconds: tuple[float, ...] = ORPHAN_RUN_CLEANUP_DELAYS_SECONDS,
+) -> None:
+    """Delete a revoked run_id with delayed retries (compensating transaction).
+
+    Does not delete a different active run left by a later successful re-index.
+    If the revoked run somehow became active, clear the active pointer first.
+    """
+    from backend.rag.indexing_run_registry import get_indexing_run_registry
+
+    registry = get_indexing_run_registry()
+    store = VectorStore(paper_service=get_paper_service())
+    for delay in delays_seconds:
+        if delay > 0:
+            await asyncio.sleep(delay)
+        try:
+            active = get_paper_service().get_active_run_id(paper_id)
+            if active == run_id:
+                # Late activate won the race — undo the commit pointer, keep graph READY.
+                get_paper_service().set_active_run_id(paper_id, "")
+            await store.delete_run(paper_id, run_id)
+            logger.info(
+                "orphan_index_run_cleanup",
+                extra={"paper_id": paper_id, "run_id": run_id, "delay_seconds": delay},
+            )
+        except Exception:
+            logger.exception(
+                "orphan_index_run_cleanup_failed",
+                extra={"paper_id": paper_id, "run_id": run_id, "delay_seconds": delay},
+            )
+    registry.clear(paper_id, run_id)
+
+
+def _schedule_orphan_run_cleanup(paper_id: str, run_id: str) -> None:
+    """Fire-and-forget compensating cleanup after wait_for timeout."""
+    task = asyncio.create_task(
+        _compensate_revoked_index_run(paper_id, run_id),
+        name=f"rag-orphan-cleanup:{paper_id}:{run_id}",
+    )
+    _ORPHAN_CLEANUP_TASKS.add(task)
+    task.add_done_callback(_ORPHAN_CLEANUP_TASKS.discard)
+
+
+def _revoke_and_schedule_orphan_cleanup(paper_id: str) -> str | None:
+    """Revoke the in-flight run (if any) and schedule delayed Chroma cleanup."""
+    from backend.rag.indexing_run_registry import get_indexing_run_registry
+
+    revoked_run_id = get_indexing_run_registry().revoke(paper_id)
+    if revoked_run_id is not None:
+        _schedule_orphan_run_cleanup(paper_id, revoked_run_id)
+    return revoked_run_id
+
+
 async def _index_with_heartbeat_and_timeout(
     paper_id: str,
     *,
@@ -161,6 +220,10 @@ async def _index_with_heartbeat_and_timeout(
             ),
             timeout=timeout_seconds,
         )
+    except TimeoutError:
+        # Revoke before / as cancel unwinds so late set_active_run_id is gated.
+        _revoke_and_schedule_orphan_cleanup(paper_id)
+        raise
     finally:
         stop_event.set()
         hb_task.cancel()
@@ -309,6 +372,9 @@ async def on_pipeline_finalized_for_rag(event: PipelineFinalized) -> None:
         if not success:
             failure_warnings = [RAG_INDEX_WARNING_CODE]
     except TimeoutError:
+        # Defensive second revoke: wait_for path already revoked; keeps cleanup if
+        # index_fn raised TimeoutError without going through that helper.
+        _revoke_and_schedule_orphan_cleanup(event.paper_id)
         logger.error(
             "pipeline_finalized_rag_index_timeout",
             extra={
