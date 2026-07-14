@@ -54,4 +54,26 @@ describe('patrol API module', () => {
       mode: 'contradiction',
     })
   })
+
+  it.each([
+    ['method_overlap', ['stem-001', 'stem-002']] as const,
+    ['claim_evolution', ['stem-001', 'stem-002']] as const,
+  ])('runPatrol forwards V2 mode %s (接口)', async (mode, paperIds) => {
+    mockPostData.mockResolvedValue({
+      data: {
+        mode,
+        paper_ids: paperIds,
+        insights: [],
+        generated_at: '2026-07-14T00:00:00Z',
+      },
+      meta: { request_id: `req-patrol-${mode}` },
+    })
+
+    await runPatrol([...paperIds], { mode })
+
+    expect(mockPostData).toHaveBeenCalledWith('/patrol', {
+      paper_ids: [...paperIds],
+      mode,
+    })
+  })
 })
