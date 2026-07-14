@@ -15,7 +15,8 @@
 1. ruff check        （默认不自动修复）
 2. ruff format --check
 3. pyright backend   （静态类型检查）
-4. pytest            （动态单元测试）
+4. RAG I/O timeout 静态审计 + P13 release-gate 矩阵
+5. pytest            （动态单元测试）
 """
 
 from __future__ import annotations
@@ -80,6 +81,8 @@ def main(argv: list[str] | None = None) -> int:
         ("pyright", [sys.executable, "-m", "pyright", "backend"]),
         # P13: keep wait_for / httpx timeout / [P13_WATCHDOG_HEAL] wire unbroken.
         ("rag io timeouts", [sys.executable, "scripts/check_rag_io_timeouts.py"]),
+        # P13: orphan-thread + watchdog debt matrix (generation / compensate / starve / cold-boot).
+        ("p13 release gate", [sys.executable, "scripts/check_p13_release_gate.py"]),
     ]
     if not args.lint_only:
         # Use ``python -m pytest`` to avoid Windows entry-point canonicalisation issues.

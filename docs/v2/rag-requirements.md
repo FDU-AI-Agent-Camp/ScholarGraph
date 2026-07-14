@@ -288,10 +288,18 @@ await _promote_terminal_status(...)  # ready | ready_with_warnings + RagIndexed
 2. **进程级**：EventBus fire-and-forget；生命周期应 `register_pipeline_finalized_handlers`；拓扑测 `tests/events/test_event_bus_topology.py` 断言排他订阅。  
 3. **P13 双层 indexing watchdog（已落地）**：  
    - **微观**：`on_pipeline_finalized_for_rag` 对 `index_paper_for_rag_async` 包 `asyncio.wait_for`（`RAG_SINGLE_INDEX_TIMEOUT_SECONDS`，默认 120s）；超时写入 `rag_index_timeout` 并 promote `ready_with_warnings`。  
-   - **宏观（out-of-loop）**：`pipeline_runs.indexing_started_at` + `indexing_heartbeat`；lifespan 在**独立 daemon 线程**启动扫尾（非主 asyncio Task），线程内 `sleep` + `run_async(scan…)` 走 async-bridge loop。主线程被假异步同步 I/O 堵死时，监控线程仍可调度。仅当 **started 超时且 heartbeat 陈旧** 才强制收尾（`rag_indexing_stuck_timeout` + `RagIndexed(success=False)`）。Handler 按 `RAG_INDEXING_HEARTBEAT_INTERVAL_SECONDS` 续命。生产也可改跑外部 cron/Celery Beat 读库 promote（与进程完全解耦）。  
+   - **宏观（out-of-loop）**：`pipeline_runs.indexing_started_at` + `indexing_heartbeat`；lifespan 在**独立 daemon 线程**启动扫尾（非主 asyncio Task），线程内 `sleep` + **sync SQLAlchemy** `scan_and_promote_stuck_indexing_sync`（禁止 `run_async` 派回 FastAPI loop——主 loop 假死时 `run_coroutine_threadsafe` 也会停搏）。仅当 **started 超时且 heartbeat 陈旧** 才强制收尾（`rag_indexing_stuck_timeout` + `RagIndexed(success=False)`）。Handler 按 `RAG_INDEXING_HEARTBEAT_INTERVAL_SECONDS` 续命。饥饿放大测例：`tests/rag/test_watchdog_main_loop_starvation.py`。生产也可改跑外部 cron/Celery Beat 读库 promote（与进程完全解耦）。  
    - **冷启动**：进程起来时 reconcile 所有遗留 `indexing`（EventBus 内存队列不跨进程；忽略心跳门闩）。  
    - **Loop 阻塞检测（研发期）**：`ASYNCIO_SLOW_CALLBACK_MS`（默认 auto：development/test=100ms）开启 `loop.set_debug` + `slow_callback_duration`，假异步超阈值会打警告栈。  
-   - **CI 防退化**：`scripts/check_rag_io_timeouts.py`（`make ci` / `check_backend`）断言 handler `wait_for` + dedicated-thread watchdog + 可配置超时 knobs + `httpx.*.Client` 必须带 `timeout=`；强制收尾日志带 `[P13_WATCHDOG_HEAL]`。  
+   - **CI 防退化**：`scripts/check_rag_io_timeouts.py`（`make ci` / `check_backend`）断言 handler `wait_for` + dedicated-thread sync watchdog + 可配置超时 knobs + `httpx.*.Client` 必须带 `timeout=`；强制收尾日志带 `[P13_WATCHDOG_HEAL]`。
+   - **P13 Release Gate 矩阵**（`make p13-release-gate` / `scripts/check_p13_release_gate.py`，`@pytest.mark.p13_release_gate`）：
+
+| 分类 | 用例 | 防御边界 |
+| --- | --- | --- |
+| 并发/时域 | `test_orphan_thread_cannot_override_new_generation` | Run ID 世代双检 |
+| 自愈/补偿 | `test_cleanup_task_removes_delayed_orphan_data` | Chroma 后置补偿扫尾 |
+| 隔离监控 | `test_watchdog_works_during_event_loop_starvation` | Watchdog 线程隔离主 loop 假死 |
+| 临界自愈 | `test_cold_boot_reconciliation_clears_zombie_states` | 冷启动僵尸清洗 |  
 4. **Patrol**：索引未就绪时 insight 带 `is_degraded` + `INDEX_NOT_READY`；降级结果**不入**服务端进程 cache，HTTP `Cache-Control: private, no-store`，FE 10s/30s/60s 自愈轮询可拿到新鲜结果。健康报告 24h cache 键含 `graph_version` + `active index_run_id`，re-extract / 重索引后自动失效。Watchdog 强制终态后 Patrol 仍走 P9 降级闭环。
 
 注意：
@@ -299,8 +307,8 @@ await _promote_terminal_status(...)  # ready | ready_with_warnings + RagIndexed
 - 失败不导致流水线 `failed`，但可能以 `ready_with_warnings` 暴露。  
 - 重新抽取（re-extract）时先 `delete_by_paper` / `replace_paper_index` 再重建。  
 - `index_paper_for_rag` 按 `paper_id` 加锁，upsert 幂等。  
-- **孤儿线程 hardening（已落地）**：`IndexingRunRegistry` 在 `replace_paper_index` 生成 `run_id` 时 `begin`；`wait_for` 超时立刻 `revoke`。激活前校验 `may_activate` + Task `cancelling()`，否决则不清 DB active、并清理该 run。超时另起 fire-and-forget 补偿清理（延迟 0/5/10s 调用 `delete_run`；若 active 仍指向该 run 则先清空指针）。线程池内 upsert 或仍会跑完，但**不得合法激活**；脏数据最终被按 run_id 抹除。  
-- **主循环假死**：heartbeat（跑在索引协程旁）与 HTTP 仍依赖主 loop；macro watchdog 已迁到独立线程，可继续读库 promote。彻底进程级解耦可再用 cron 脚本。研发期用 `ASYNCIO_SLOW_CALLBACK_MS` 逼出裸同步 I/O。
+- **孤儿线程 hardening（已落地）**：`IndexingRunRegistry` 在 `replace_paper_index` 生成 `run_id` 时 `begin`；`wait_for` 超时立刻 `revoke`。激活前校验 `may_activate` + Task `cancelling()`，否决则打 `[Generation Guard] … Aborting database update.`、不清 DB active、并清理该 run。**cancel/refuse 路径不得 `clear` revoke**（否则超时侧无法拿到 run_id 调度补偿，且 `may_activate` 会假阳性）；仅成功激活或补偿结束才 `clear`。超时另起 fire-and-forget 补偿清理（延迟 0/5/10s 调用 `delete_run`；若 active 仍指向该 run 则先清空指针）。线程池内 upsert 或仍会跑完，但**不得合法激活**；脏数据最终被按 run_id 抹除。竞态放大测例见 `tests/rag/test_orphan_run_race_amplification.py`。  
+- **主循环假死**：heartbeat（跑在索引协程旁）与 HTTP 仍依赖主 loop；macro watchdog 已在独立线程用 **sync** 读库 promote（主 loop `time.sleep` 硬阻塞时仍可 heal）。彻底进程级解耦可再用 cron 脚本。研发期用 `ASYNCIO_SLOW_CALLBACK_MS` 逼出裸同步 I/O。
 
 ### 3.7 配置项
 
