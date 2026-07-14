@@ -1,9 +1,14 @@
-"""P13 dual-layer indexing watchdog — macro sweep + cold-boot reconcile."""
+"""P13 dual-layer indexing watchdog — macro sweep + cold-boot reconcile.
+
+The macro loop runs on a **dedicated daemon thread** and schedules DB work via
+``run_async`` (async-bridge loop). FastAPI's main asyncio loop can be blocked by
+false-async sync I/O without stalling this watchdog.
+"""
 
 from __future__ import annotations
 
-import asyncio
 import logging
+import threading
 from datetime import UTC, datetime, timedelta
 
 from backend.config import get_settings
@@ -16,8 +21,11 @@ logger = logging.getLogger(__name__)
 RAG_INDEXING_STUCK_WARNING = "rag_indexing_stuck_timeout"
 # Structured ops marker for ELK / CloudWatch alert rules (rate spike ⇒ RAG congestion).
 P13_WATCHDOG_HEAL_TAG = "[P13_WATCHDOG_HEAL]"
-_WATCHDOG_STOP: asyncio.Event | None = None
-_WATCHDOG_TASK: asyncio.Task[None] | None = None
+_WATCHDOG_THREAD_STOP = threading.Event()
+_WATCHDOG_THREAD: threading.Thread | None = None
+_WATCHDOG_THREAD_LOCK = threading.Lock()
+WATCHDOG_THREAD_JOIN_TIMEOUT_SECONDS = 5.0
+WATCHDOG_THREAD_NAME = "rag-indexing-watchdog"
 
 
 async def promote_stuck_indexing_paper(
@@ -154,37 +162,45 @@ async def reconcile_indexing_on_startup() -> list[str]:
     return promoted
 
 
-async def _watchdog_loop(stop_event: asyncio.Event) -> None:
+def _watchdog_thread_main() -> None:
+    """OS thread body: sleep → run_async(scan) on the async-bridge loop."""
+    from backend.repositories.async_bridge import run_async
+
     settings = get_settings()
-    interval = settings.rag_indexing_watchdog_interval_seconds
-    while not stop_event.is_set():
+    interval = max(0.05, float(settings.rag_indexing_watchdog_interval_seconds))
+    while not _WATCHDOG_THREAD_STOP.is_set():
         try:
-            await scan_and_promote_stuck_indexing()
+            run_async(scan_and_promote_stuck_indexing())
         except Exception:
             logger.exception("indexing_watchdog_scan_failed")
-        try:
-            await asyncio.wait_for(stop_event.wait(), timeout=interval)
-        except TimeoutError:
-            continue
+        # Interruptible sleep so shutdown does not wait a full interval.
+        if _WATCHDOG_THREAD_STOP.wait(timeout=interval):
+            break
 
 
 def start_indexing_watchdog() -> None:
-    """Idempotently start the lifespan-scoped macro watchdog loop."""
-    global _WATCHDOG_STOP, _WATCHDOG_TASK
+    """Idempotently start the out-of-loop macro watchdog on a daemon thread."""
+    global _WATCHDOG_THREAD
 
     settings = get_settings()
     if not settings.rag_indexing_watchdog_enabled:
         return
-    if _WATCHDOG_TASK is not None and not _WATCHDOG_TASK.done():
-        return
-    _WATCHDOG_STOP = asyncio.Event()
-    _WATCHDOG_TASK = asyncio.create_task(
-        _watchdog_loop(_WATCHDOG_STOP),
-        name="rag-indexing-watchdog",
-    )
+    with _WATCHDOG_THREAD_LOCK:
+        if _WATCHDOG_THREAD is not None and _WATCHDOG_THREAD.is_alive():
+            return
+        _WATCHDOG_THREAD_STOP.clear()
+        thread = threading.Thread(
+            target=_watchdog_thread_main,
+            name=WATCHDOG_THREAD_NAME,
+            daemon=True,
+        )
+        _WATCHDOG_THREAD = thread
+        thread.start()
     logger.info(
         "indexing_watchdog_started",
         extra={
+            "mode": "dedicated_thread",
+            "thread_name": WATCHDOG_THREAD_NAME,
             "interval_seconds": settings.rag_indexing_watchdog_interval_seconds,
             "stuck_after_seconds": settings.rag_indexing_watchdog_seconds,
             "heartbeat_stale_seconds": settings.rag_indexing_heartbeat_stale_seconds,
@@ -192,19 +208,25 @@ def start_indexing_watchdog() -> None:
     )
 
 
-async def stop_indexing_watchdog() -> None:
-    """Cancel the macro watchdog loop (lifespan shutdown)."""
-    global _WATCHDOG_STOP, _WATCHDOG_TASK
+def stop_indexing_watchdog(*, join_timeout_seconds: float = WATCHDOG_THREAD_JOIN_TIMEOUT_SECONDS) -> None:
+    """Signal and join the macro watchdog thread (lifespan shutdown)."""
+    global _WATCHDOG_THREAD
 
-    if _WATCHDOG_STOP is not None:
-        _WATCHDOG_STOP.set()
-    task = _WATCHDOG_TASK
-    _WATCHDOG_TASK = None
-    _WATCHDOG_STOP = None
-    if task is None:
+    with _WATCHDOG_THREAD_LOCK:
+        thread = _WATCHDOG_THREAD
+        _WATCHDOG_THREAD = None
+    _WATCHDOG_THREAD_STOP.set()
+    if thread is None or not thread.is_alive():
         return
-    task.cancel()
-    try:
-        await task
-    except asyncio.CancelledError:
-        pass
+    thread.join(timeout=join_timeout_seconds)
+    if thread.is_alive():
+        logger.warning(
+            "indexing_watchdog_stop_timed_out",
+            extra={"join_timeout_seconds": join_timeout_seconds},
+        )
+
+
+def watchdog_thread_is_alive() -> bool:
+    """Test helper: whether the dedicated monitor thread is running."""
+    thread = _WATCHDOG_THREAD
+    return thread is not None and thread.is_alive()

@@ -42,7 +42,8 @@ async def lifespan(app: FastAPI):
         stop_indexing_watchdog,
     )
 
-    # P13: promote orphaned INDEXING rows left by a previous process, then start macro loop.
+    # P13: promote orphaned INDEXING rows left by a previous process, then start
+    # the out-of-loop macro watchdog (dedicated OS thread + async-bridge scans).
     await reconcile_indexing_on_startup()
     start_indexing_watchdog()
 
@@ -60,7 +61,7 @@ async def lifespan(app: FastAPI):
     finally:
         from backend.events.bus import stop_event_bus_worker
 
-        await stop_indexing_watchdog()
+        stop_indexing_watchdog()
         stop_event_bus_worker()
         register_main_event_loop(None)
         reset_hybrid_retriever()
