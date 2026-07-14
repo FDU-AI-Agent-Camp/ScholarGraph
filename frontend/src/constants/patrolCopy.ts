@@ -36,6 +36,21 @@ export const PATROL_BASELINE_COPY = {
   insufficientInsightPhaseLabel: '拦截阶段',
   nodeRefGraphLink: '查看图谱',
 
+  /** Structured point field labels (F-R3) — shared by *PointCard.vue. */
+  pointFieldPaperA: '论文 A',
+  pointFieldPaperB: '论文 B',
+  pointFieldDataset: '数据集',
+  pointFieldScore: '重叠分',
+  pointFieldMatch: '匹配',
+  pointFieldEvidence: '证据',
+  pointFieldFit: '问题契合',
+  pointFieldLensA: '视角 A',
+  pointFieldLensB: '视角 B',
+  pointFieldAspect: '冲突面',
+  pointFieldPointA: '论点 A',
+  pointFieldPointB: '论点 B',
+  pointFieldConflict: '冲突类型',
+
   degradationBannerTitle: '巡检结果可能不完整',
   degradationBannerHint: '您可以稍后刷新重试；若索引仍在构建，页面将自动尝试补齐证据。',
   degradationIndexNotReady:
