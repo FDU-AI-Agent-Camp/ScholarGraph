@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING
 from backend.api.exceptions import ApiError
 from backend.graph.store import GraphStore
 from backend.llm.embeddings import EmbeddingClient, get_embedding_client
+from backend.patrol.degradation import report_has_rag_degradation
 from backend.patrol.errors import PatrolError
 from backend.patrol.result_cache import (
     InMemoryPatrolResultCache,
@@ -83,7 +84,9 @@ class PatrolService:
                 status_code=exc.status_code,
             ) from exc
 
-        if self._cache_enabled and self._cache is not None:
+        # Never cache degraded (thin RAG) reports — FE heal polls at 10s/30s/60s must
+        # re-run analyzers once the index lands, not reuse a 60s stale entry (P9).
+        if self._cache_enabled and self._cache is not None and not report_has_rag_degradation(report):
             self._cache.set(cache_key, report)
         return report
 

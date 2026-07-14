@@ -6,10 +6,7 @@ from pydantic import BaseModel, Field
 
 from backend.api.deps import get_request_id
 from backend.api.responses import success
-from backend.patrol.degradation import (
-    PATROL_DEGRADED_CACHE_MAX_AGE_SECONDS,
-    report_has_rag_degradation,
-)
+from backend.patrol.degradation import report_has_rag_degradation
 from backend.schemas.patrol import PatrolMode
 from backend.services.patrol_service import PatrolService
 
@@ -37,13 +34,10 @@ async def run_patrol_route(
     report = await service.run_patrol(body.paper_ids, body.mode)
     envelope = success(report, request_id)
     if report_has_rag_degradation(report):
-        # Short TTL so thin (degraded) results do not stick in intermediaries.
+        # Do not let intermediaries retain thin RAG results; process cache also skips
+        # degraded reports so FE heal polls (10s/30s/60s) recompute against live index.
         return JSONResponse(
             content=envelope,
-            headers={
-                "Cache-Control": (
-                    f"private, max-age={PATROL_DEGRADED_CACHE_MAX_AGE_SECONDS}, must-revalidate"
-                ),
-            },
+            headers={"Cache-Control": "private, no-store"},
         )
     return envelope

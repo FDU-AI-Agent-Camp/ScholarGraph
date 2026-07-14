@@ -1,7 +1,9 @@
-"""Short-lived Patrol result cache with degraded TTL truncation (P9).
+"""Patrol result cache (healthy / thick-context reports only at service call sites).
 
-In-memory by default; Redis-compatible interface for a future swap without
-changing PatrolService call sites.
+``PatrolService`` skips ``set`` when a report is RAG-degraded so FE heal polls are
+not stuck on a 60s thin snapshot. ``set`` still applies a short TTL if a caller
+ever stores a degraded report (defense in depth). In-memory by default;
+Redis-compatible interface for a future swap without changing call sites.
 """
 
 from __future__ import annotations

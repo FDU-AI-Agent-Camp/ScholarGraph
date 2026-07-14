@@ -9,7 +9,6 @@ from unittest.mock import AsyncMock
 import pytest
 from backend.patrol.circuit_breaker import CircuitState, VectorStoreCircuitBreaker
 from backend.patrol.degradation import (
-    PATROL_DEGRADED_CACHE_MAX_AGE_SECONDS,
     RAG_DEGRADED_META_KEY,
     legacy_meta_from_profile,
     make_degradation_profile,
@@ -187,7 +186,7 @@ async def test_rag_degradation_index_not_ready(
         )
 
     assert response.status_code == 200
-    assert "max-age=60" in response.headers.get("cache-control", "")
+    assert response.headers.get("cache-control") == "private, no-store"
     body = response.json()
     assert_api_envelope(body)
     insight = body["data"]["insights"][0]
@@ -288,11 +287,16 @@ def test_degradation_profile_json_schema_rejects_null_and_missing_fields() -> No
 
 @pytest.mark.patrol_fault_injection
 @pytest.mark.asyncio
-async def test_degraded_cache_ttl_truncated_then_refresh_after_expiry(
+async def test_degraded_reports_are_not_cached_so_heal_poll_can_refresh(
     monkeypatch: pytest.MonkeyPatch,
     patrol_graph_dir,
 ) -> None:
-    """Degraded TTL=60s; after expiry + index ready, cache refreshes to thick TTL=24h."""
+    """Degraded (thin RAG) reports must not enter the process cache.
+
+    FE heal delays are 10s / 30s / 60s; caching degraded results for 60s would make
+    the first two heal attempts hit a stale INDEX_NOT_READY snapshot even after the
+    index lands. Healthy reports still use the 24h TTL.
+    """
     _seed_method_overlap_graphs(patrol_graph_dir)
     clock = {"now": 0.0}
 
@@ -315,26 +319,26 @@ async def test_degraded_cache_ttl_truncated_then_refresh_after_expiry(
         assert r1.json()["data"]["insights"][0]["is_degraded"] is True
 
         key = build_patrol_cache_key(["stem-001", "stem-002"], PatrolMode.METHOD_OVERLAP)
-        assert cache.inspect_ttl(key) == PATROL_DEGRADED_CACHE_MAX_AGE_SECONDS
+        assert cache.inspect_ttl(key) is None
+        exists_after_first = len(store.exists_calls)
 
-        # T+10s: still cache hit (degraded)
+        # T+10s heal-shaped re-request must recompute (no degraded cache hit).
         clock["now"] = 10.0
         r2 = await client.post(
             "/api/v1/patrol",
             json={"paper_ids": ["stem-001", "stem-002"], "mode": "method_overlap"},
         )
         assert r2.json()["data"]["insights"][0]["is_degraded"] is True
-        exists_while_cached = len(store.exists_calls)
+        assert len(store.exists_calls) > exists_after_first
+        assert cache.inspect_ttl(key) is None
 
-        # Flip index ready, advance past TTL
         store.exists_map = {"stem-001": True, "stem-002": True}
         store.query_chunks_by_paper = {
             "stem-001": [AsyncMock(text="chunk-a")],
             "stem-002": [AsyncMock(text="chunk-b")],
         }
-        # Simplify: return empty chunks but no degradation when exists True
         store.query_error = None
-        clock["now"] = 65.0
+        clock["now"] = 15.0
 
         r3 = await client.post(
             "/api/v1/patrol",
@@ -346,7 +350,6 @@ async def test_degraded_cache_ttl_truncated_then_refresh_after_expiry(
     assert insight["is_degraded"] is False
     assert insight.get("degradation_profile") in (None, {})
     assert cache.inspect_ttl(key) == PATROL_HEALTHY_CACHE_MAX_AGE_SECONDS
-    assert len(store.exists_calls) > exists_while_cached
     _ = service
 
     app.dependency_overrides.clear()
