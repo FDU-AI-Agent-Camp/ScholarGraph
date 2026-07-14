@@ -1,4 +1,4 @@
-"""Live automation regression for method_overlap (``@pytest.mark.live_patrol``).
+"""Live automation regression for method_overlap (``@pytest.mark.live_patrol_logic``).
 
 Architecture::
 
@@ -11,7 +11,7 @@ Architecture::
       3. Assert: dual-layer (primary + drift guard)
 
 Requires ``LLM_MODE=live`` and embedding API credentials (or Ollama).
-Excluded from default CI via ``live_patrol`` marker.
+Excluded from default CI via ``live_patrol_logic`` marker.
 """
 
 from __future__ import annotations
@@ -36,7 +36,7 @@ from tests.patrol.method_overlap_live_engine import (
     run_live_dual_assertion,
 )
 
-pytestmark = pytest.mark.live_patrol
+pytestmark = pytest.mark.live_patrol_logic
 
 
 @pytest.fixture
@@ -52,7 +52,7 @@ def live_patrol_env(monkeypatch: pytest.MonkeyPatch) -> None:
 @pytest.fixture
 def require_live_patrol_embedding(live_patrol_env: None) -> None:
     if not live_embedding_available():
-        pytest.skip("live_patrol unavailable: set LLM_MODE=live and embedding API credentials")
+        pytest.skip("live_patrol_logic unavailable: set LLM_MODE=live and embedding API credentials")
 
 
 def test_method_overlap_golden_set_v2_schema() -> None:

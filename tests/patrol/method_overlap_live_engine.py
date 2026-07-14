@@ -75,7 +75,7 @@ def build_live_patrol_context(
     """Assemble live runner context: hydrated graphs + production embedding client."""
     client = embedding_client or get_embedding_client()
     if client.is_mock:
-        msg = "live_patrol requires a non-mock EmbeddingClient (set LLM_MODE=live and API credentials)"
+        msg = "live_patrol_logic requires a non-mock EmbeddingClient (set LLM_MODE=live and API credentials)"
         raise RuntimeError(msg)
 
     resolved_settings = settings or get_settings()

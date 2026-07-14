@@ -1,8 +1,8 @@
 #!/usr/bin/env python
 """Validate Patrol golden config snapshots against runtime Settings.
 
-Used by Nightly/Release gate before ``pytest -m live_patrol`` and
-``scripts/benchmark_patrol.py --live``.
+Used by Nightly/Release gate before ``pytest -m live_patrol_logic`` and
+``scripts/benchmark_patrol.py --mode all --live``.
 
 Usage (from repo root)::
 

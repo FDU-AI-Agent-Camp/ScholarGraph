@@ -8,7 +8,7 @@
     "embedding_model": "bge-m3",
     "enable_patrol_semantic_path": true,
     "snapshot_recorded_at": "2026-07-13",
-    "notes": "Live/Nightly gate baseline. Update when intentionally changing PATROL_SEMANTIC_THRESHOLD or EMBEDDING_MODEL, then re-run live_patrol + benchmark_patrol --live."
+    "notes": "Live/Nightly gate baseline. Update when intentionally changing PATROL_SEMANTIC_THRESHOLD or EMBEDDING_MODEL, then re-run live_patrol_logic + benchmark_patrol --mode all --live."
   },
   "baseline_matrix": [
     "SYNONYM_TRUE_POSITIVE",

@@ -59,8 +59,8 @@ jobs:
       - name: Ruff format check
         run: uv run ruff format --check backend tests scripts
 
-      - name: Pytest PR gate (stub only, no live_patrol / demo_profile_check)
-        run: uv run pytest -q -m "not red and not live and not live_patrol and not demo_profile_check and not live_mineru and not live_grobid and not live_benchmark and not live_e10 and not live_judge and not live_head_merge"
+      - name: Pytest PR gate (stub only, no live_patrol_logic / live_qa_logic)
+        run: uv run pytest -q -m "not red and not live_patrol_logic and not live_qa_logic and not demo_profile_check and not live_mineru and not live_grobid and not live_benchmark and not live_e10 and not live_judge and not live_head_merge"
 
       - name: Upload coverage report
         if: always()

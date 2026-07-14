@@ -39,6 +39,19 @@ class ClaimEvolutionCaseTelemetry:
     passed: bool
     coarse_score: float | None
     rerank_score: float | None
+    live_coarse_score: float | None = None
+    live_rerank_score: float | None = None
+    drift_warnings: list[str] | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class V1CaseTelemetry:
+    """Per-case telemetry for V1 lens_clash / contradiction golden cases."""
+
+    case_id: str
+    expectation: str
+    passed: bool
+    detail: str
 
 
 def _round4(value: float | None) -> float | None:
@@ -215,11 +228,19 @@ def build_claim_evolution_metrics(cases: Sequence[ClaimEvolutionCaseTelemetry]) 
             "case_id": row.case_id,
             "coarse_score": _round4(row.coarse_score),
             "rerank_score": _round4(row.rerank_score),
+            "live_coarse_score": _round4(row.live_coarse_score),
+            "live_rerank_score": _round4(row.live_rerank_score),
             "golden_polarity": row.golden_polarity,
+            "drift_warnings": row.drift_warnings or [],
         }
         for row in cases
-        if row.coarse_score is not None or row.rerank_score is not None
+        if row.coarse_score is not None
+        or row.rerank_score is not None
+        or row.live_coarse_score is not None
+        or row.live_rerank_score is not None
     ]
+
+    drift_warning_count = sum(len(row.drift_warnings or []) for row in cases)
 
     return {
         "confusion": {"tp": tp, "fp": fp, "fn": fn, "tn": tn},
@@ -227,4 +248,20 @@ def build_claim_evolution_metrics(cases: Sequence[ClaimEvolutionCaseTelemetry]) 
         "recall": recall,
         "pass_rate": pass_rate,
         "mock_score_distribution": mock_margins,
+        "drift_warning_count": drift_warning_count,
+    }
+
+
+def build_v1_mode_metrics(cases: Sequence[V1CaseTelemetry]) -> dict[str, Any]:
+    """Pass-rate summary for V1 rule-based golden cases."""
+    passed = sum(1 for row in cases if row.passed)
+    return {
+        "cases": len(cases),
+        "passed": passed,
+        "failed": len(cases) - passed,
+        "pass_rate": _safe_ratio(passed, len(cases)),
+        "breakdown": [
+            {"case_id": row.case_id, "expectation": row.expectation, "passed": row.passed, "detail": row.detail}
+            for row in cases
+        ],
     }

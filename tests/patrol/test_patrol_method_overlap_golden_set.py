@@ -31,9 +31,7 @@ def test_method_overlap_golden_set_file_exists_and_validates() -> None:
 
 def test_method_overlap_golden_set_includes_nb_lr_false_positive_defect() -> None:
     golden = load_method_overlap_golden_set()
-    defect = next(
-        pair for pair in golden.pairs if pair.archetype == GoldenArchetype.CORRELATED_FALSE_POSITIVE
-    )
+    defect = next(pair for pair in golden.pairs if pair.archetype == GoldenArchetype.CORRELATED_FALSE_POSITIVE)
     assert defect.issue_id == "NB_LR_FALSE_POSITIVE"
     assert defect.shared_topology.resonant_dataset_labels == []
 

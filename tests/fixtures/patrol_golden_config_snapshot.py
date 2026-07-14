@@ -12,7 +12,7 @@ from tests.fixtures.patrol_method_overlap_golden import (
 _BASELINE_UPDATE_HINT = (
     "若阈值或 Embedding 模型变更有意为之，请同步更新 "
     "data/patrol_method_overlap_golden.json 的 config_snapshot，并重新跑 "
-    "pytest -m live_patrol 与 scripts/benchmark_patrol.py --live 以刷新基准线。"
+    "pytest -m live_patrol_logic 与 scripts/benchmark_patrol.py --mode all --live 以刷新基准线。"
 )
 
 

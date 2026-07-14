@@ -46,7 +46,7 @@ def patch_patrol_settings(monkeypatch: pytest.MonkeyPatch, **overrides: bool | i
     reset_patrol_runtime_caches()
 
 
-_LIVE_PATROL_MARKERS = frozenset({"live_patrol", "demo_profile_check"})
+_LIVE_PATROL_MARKERS = frozenset({"live_patrol_logic", "demo_profile_check"})
 
 
 def _uses_live_patrol_settings(request: pytest.FixtureRequest) -> bool:
@@ -57,7 +57,7 @@ def _uses_live_patrol_settings(request: pytest.FixtureRequest) -> bool:
 def _enforce_golden_config_snapshot_for_live_patrol(
     request: pytest.FixtureRequest,
 ) -> Iterator[None]:
-    """Block live_patrol / demo_profile_check when config diverges from golden snapshot."""
+    """Block live_patrol_logic / demo_profile_check when config diverges from golden snapshot."""
     if not _uses_live_patrol_settings(request):
         yield
         return

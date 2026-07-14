@@ -96,7 +96,10 @@ def test_d01_d02_backend_ci_matches_check_backend_commands() -> None:
     assert "uv run ruff check backend tests scripts" in makefile
     assert "uv run ruff format --check backend tests scripts" in makefile
     assert "pytest -q" in makefile
-    assert '-m "not red and not live_mineru and not live_grobid"' in makefile
+    assert "PR_GATE_MARKERS" in makefile
+    assert "live_patrol_logic" in makefile
+    assert "live_mineru" in makefile
+    assert "live_grobid" in makefile
 
 
 def test_d03_d04_frontend_ci_runs_check_not_only_typecheck() -> None:
