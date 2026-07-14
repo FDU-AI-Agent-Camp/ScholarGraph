@@ -137,6 +137,8 @@ class VectorStore(ChunkTextLookupMixin):
         # Serialize concurrent replaces for the same paper so that only one new
         # run can be created and activated at a time. This prevents races where
         # multiple coroutines activate different runs and leave stale data visible.
+        previous_run_id: str | None = None
+        activated = False
         async with self._replace_locks.setdefault(paper_id, asyncio.Lock()):
             # Capture the previous active run before writing the new one, so cleanup
             # can target exactly that run and never accidentally remove data written
@@ -147,26 +149,56 @@ class VectorStore(ChunkTextLookupMixin):
             # the new run, preventing it from deleting data from the upcoming run.
             await self._await_pending_cleanups(paper_id)
 
+            from backend.rag.indexing_run_registry import get_indexing_run_registry
+
+            registry = get_indexing_run_registry()
             run_id = _generate_run_id()
+            registry.begin(paper_id, run_id)
             try:
                 await self._index_chunks(chunks, run_id=run_id)
                 await self._index_entities(entities, run_id=run_id)
                 await self._index_relations(relations, run_id=run_id)
 
+                # Cancellation / wait_for timeout may still reach sync code after the
+                # last await; refuse activation when the attempt was revoked or the
+                # Task is already cancelling (P13 orphan-thread gate).
+                current_task = asyncio.current_task()
+                is_cancelling = bool(current_task is not None and getattr(current_task, "cancelling", lambda: 0)() > 0)
+                if is_cancelling or not registry.may_activate(paper_id, run_id):
+                    registry.revoke(paper_id, run_id)
+                    await self._cleanup_run_safely(paper_id, run_id)
+                    registry.clear(paper_id, run_id)
+                    if is_cancelling:
+                        raise asyncio.CancelledError()
+                    logger.warning(
+                        "index_run_activation_revoked",
+                        extra={"paper_id": paper_id, "run_id": run_id},
+                    )
+                    return
+
                 # Activation is the commit point. Failures before this leave the old run active.
                 self._paper_service.set_active_run_id(paper_id, run_id)
+                activated = True
+                registry.clear(paper_id, run_id)
                 self.clear_chunk_text_lru()
+            except asyncio.CancelledError:
+                registry.revoke(paper_id, run_id)
+                await self._cleanup_run_safely(paper_id, run_id)
+                registry.clear(paper_id, run_id)
+                raise
             except Exception:
                 # Best-effort cleanup of the partially-written run so failed replaces
                 # do not leave orphan data in ChromaDB. The original exception is
                 # re-raised after cleanup attempts.
+                registry.revoke(paper_id, run_id)
                 await self._cleanup_run_safely(paper_id, run_id)
+                registry.clear(paper_id, run_id)
                 raise
 
         # Best-effort async cleanup of exactly the previous run now that the new
         # run is live. Targeting the explicit previous run id avoids deleting data
         # belonging to a newer failed or concurrent replace.
-        if previous_run_id:
+        if activated and previous_run_id:
             task = asyncio.create_task(self._cleanup_run(paper_id, previous_run_id))
             self._pending_cleanups.setdefault(paper_id, set()).add(task)
             task.add_done_callback(lambda _: self._pending_cleanups.get(paper_id, set()).discard(task))
@@ -413,6 +445,10 @@ class VectorStore(ChunkTextLookupMixin):
         pending = self._pending_cleanups.pop(paper_id, set())
         if pending:
             await asyncio.gather(*pending, return_exceptions=True)
+
+    async def delete_run(self, paper_id: str, run_id: str) -> None:
+        """Public best-effort deletion of one index_run_id snapshot (compensating cleanup)."""
+        await self._cleanup_run(paper_id, run_id)
 
     async def _cleanup_run_safely(self, paper_id: str, run_id: str) -> None:
         """Best-effort deletion of a partially-written run; logs but never raises."""
