@@ -66,6 +66,7 @@ export type UnifiedPaperGraph = {
 }
 
 export type PatrolMode = Schema['PatrolMode']
+export type PatrolPoint = Schema['PatrolPoint']
 
 export type PatrolInsight = Schema['PatrolInsight']
 export type PatrolExclusionLogic = Schema['PatrolExclusionLogic']
