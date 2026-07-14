@@ -9,6 +9,7 @@ from backend.schemas.graph import GraphEdge, GraphNode, UnifiedPaperGraph
 from backend.schemas.paper import PaperStatus
 from backend.schemas.paradigm import Paradigm, ParadigmClassification
 from backend.services.paper_service import get_paper_service
+from tests.helpers.event_bus_testkit import drain_event_bus_sync
 from tests.helpers.persistence_testkit import register_test_paper
 
 
@@ -117,6 +118,7 @@ async def test_complete_pipeline_marks_ready_when_quality_gate_passes(
     graph = _make_graph(paper_id, supports_with_rationale=2, supports_without_rationale=0, isolated_nodes=0)
 
     service.complete_pipeline(paper_id, classification=classification, graph=graph)
+    drain_event_bus_sync()
 
     paper = await service.get_paper(paper_id)
     assert paper.status == PaperStatus.READY
@@ -133,6 +135,7 @@ async def test_complete_pipeline_marks_ready_with_warnings_on_low_rationale(
     graph = _make_graph(paper_id, supports_with_rationale=1, supports_without_rationale=3, isolated_nodes=0)
 
     service.complete_pipeline(paper_id, classification=classification, graph=graph)
+    drain_event_bus_sync()
 
     paper = await service.get_paper(paper_id)
     assert paper.status == PaperStatus.READY_WITH_WARNINGS
@@ -149,6 +152,7 @@ async def test_complete_pipeline_marks_ready_with_warnings_on_high_isolation(
     graph = _make_graph(paper_id, supports_with_rationale=2, supports_without_rationale=0, isolated_nodes=6)
 
     service.complete_pipeline(paper_id, classification=classification, graph=graph)
+    drain_event_bus_sync()
 
     paper = await service.get_paper(paper_id)
     assert paper.status == PaperStatus.READY_WITH_WARNINGS
@@ -177,6 +181,7 @@ async def test_complete_pipeline_marks_ready_with_warnings_on_high_generic_edge_
     monkeypatch.setattr(settings, "extract_max_generic_edge_ratio", 0.3)
 
     service.complete_pipeline(paper_id, classification=classification, graph=graph)
+    drain_event_bus_sync()
 
     paper = await service.get_paper(paper_id)
     assert paper.status == PaperStatus.READY_WITH_WARNINGS

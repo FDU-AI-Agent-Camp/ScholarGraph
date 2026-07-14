@@ -49,9 +49,19 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     )
     parser.add_argument(
         "--mode",
-        choices=["lens_clash", "contradiction"],
+        choices=["lens_clash", "contradiction", "method_overlap", "claim_evolution"],
         default="lens_clash",
         help="seed 后可选执行的 CLI 巡检模式（冒烟）",
+    )
+    parser.add_argument(
+        "--no-stem-seed",
+        action="store_true",
+        help="仅 seed HSS 图谱（默认同时 seed stem-001/stem-002）",
+    )
+    parser.add_argument(
+        "--smoke-all-patrol",
+        action="store_true",
+        help="seed 后依次冒烟四模式（lens_clash / contradiction / method_overlap / claim_evolution）",
     )
     parser.add_argument(
         "--smoke-patrol",
@@ -61,19 +71,21 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     return parser.parse_args(argv)
 
 
-def run_seed() -> int:
-    cmd = [sys.executable, str(REPO_ROOT / "scripts" / "run_patrol.py"), "--seed-demo-graphs"]
+def run_seed(*, include_stem: bool = True) -> int:
+    flag = "--seed-demo-graphs" if include_stem else "--seed-hss-demo"
+    cmd = [sys.executable, str(REPO_ROOT / "scripts" / "run_patrol.py"), flag]
     print(">>", " ".join(cmd))
     completed = subprocess.run(cmd, cwd=REPO_ROOT, check=False)
     return completed.returncode
 
 
 def run_patrol_smoke(mode: str) -> int:
+    paper_ids = "stem-001,stem-002" if mode in {"method_overlap", "claim_evolution"} else "hss-001,hss-002"
     cmd = [
         sys.executable,
         str(REPO_ROOT / "scripts" / "run_patrol.py"),
         "--paper-ids",
-        "hss-001,hss-002",
+        paper_ids,
         "--mode",
         mode,
         "--compact",
@@ -89,9 +101,14 @@ def print_instructions() -> None:
     print("ScholarGraph 浏览器全链路演示")
     print("=" * 60)
     print()
-    print("终端 1（仓库根目录）— 启动后端：")
-    print("  uv sync --group dev")
+    print("终端 1（仓库根目录）— 启动后端（Demo Profile 必开）：")
+    print("  # Linux/macOS")
+    print("  export APP_PROFILE=demo")
     print("  uv run uvicorn backend.main:app --reload --host 127.0.0.1 --port 8000")
+    print("  # Windows PowerShell")
+    print("  $env:APP_PROFILE='demo'")
+    print("  uv run uvicorn backend.main:app --reload --host 127.0.0.1 --port 8000")
+    print("  # 说明：APP_PROFILE=demo 会自动叠加加载 .env.demo（RERANKER_ENABLED=true）")
     print()
     print("终端 2（frontend/）— 启动前端：")
     print("  cd frontend && npm install && npm run dev")
@@ -103,8 +120,9 @@ def print_instructions() -> None:
     print("巡检页操作：")
     print("  1. 打开 /patrol")
     print("  2. paper_ids 输入 hss-001,hss-002")
-    print("  3. mode 选择 lens_clash 或 contradiction")
-    print("  4. 点击「运行巡检」，查看 insights 与 node_refs 表格")
+    print("  3. mode 选择 lens_clash / contradiction / method_overlap / claim_evolution")
+    print("  4. V2 模式使用 stem-001,stem-002（默认 seed 已包含 STEM 语料）")
+    print("  5. 点击「运行巡检」，查看 insights、structured_points 与 node_refs 表格")
     print()
     print(f"后端 OpenAPI: {BACKEND_BASE}/docs")
     print("完整文档: docs/v1/eval/frontend-demo-path.md")
@@ -115,12 +133,18 @@ def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
 
     if not args.skip_seed:
-        exit_code = run_seed()
+        exit_code = run_seed(include_stem=not args.no_stem_seed)
         if exit_code != 0:
             print(f"seed 失败，退出码 {exit_code}", file=sys.stderr)
             return exit_code
 
-    if args.smoke_patrol:
+    if args.smoke_all_patrol:
+        for mode in ("lens_clash", "contradiction", "method_overlap", "claim_evolution"):
+            exit_code = run_patrol_smoke(mode)
+            if exit_code != 0:
+                print(f"patrol CLI 冒烟失败（{mode}），退出码 {exit_code}", file=sys.stderr)
+                return exit_code
+    elif args.smoke_patrol:
         exit_code = run_patrol_smoke(args.mode)
         if exit_code != 0:
             print(f"patrol CLI 冒烟失败，退出码 {exit_code}", file=sys.stderr)

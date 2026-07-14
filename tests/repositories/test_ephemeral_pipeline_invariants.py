@@ -213,8 +213,8 @@ async def test_active_run_id_visibility_follows_committed_writes(persistence_env
     service.set_active_run_id(paper_id, "run-v2")
     assert service.get_active_run_id(paper_id) == "run-v2"
 
-    service.set_active_run_id(paper_id, "")
-    assert service.get_active_run_id(paper_id) == ""
+    service.set_active_run_id(paper_id, None)
+    assert service.get_active_run_id(paper_id) is None
 
 
 def test_active_run_id_reads_nonblocking_under_concurrent_pipeline_writes(

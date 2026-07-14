@@ -17,6 +17,7 @@ from backend.services.pipeline_completion_service import PipelineCompletionServi
 from httpx import AsyncClient
 
 from tests.graph.test_qa import _fake_llm
+from tests.helpers.event_bus_testkit import drain_event_bus
 from tests.helpers.persistence_testkit import (
     mock_graph_persistence,
     restart_paper_service,
@@ -77,6 +78,7 @@ async def test_upload_ready_survives_service_restart(
             classification_data=classification.model_dump(mode="json"),
             full_text="restart integration full text body",
         )
+        await drain_event_bus()
 
     service = await restart_paper_service()
     items, total = await service.list_papers()

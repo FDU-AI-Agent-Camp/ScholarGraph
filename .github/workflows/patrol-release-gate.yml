@@ -1,0 +1,86 @@
+# Patrol Nightly / Release gate — live embedding regression + benchmark (hard block).
+# PR gate (backend.yml) intentionally excludes live_patrol_logic to avoid flaky external API calls.
+name: Patrol Release Gate
+
+on:
+  schedule:
+    - cron: "0 18 * * *"
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - "backend/**"
+      - "tests/**"
+      - "scripts/benchmark_patrol.py"
+      - "scripts/benchmark_patrol_robustness.py"
+      - "data/patrol_v1_golden_set.json"
+      - "scripts/benchmark_patrol_evaluators.py"
+      - "scripts/benchmark_patrol_metrics.py"
+      - "scripts/validate_patrol_golden.py"
+      - "data/patrol_method_overlap_golden.json"
+      - "data/patrol_golden_set.json"
+      - "pyproject.toml"
+      - "uv.lock"
+      - ".github/workflows/patrol-release-gate.yml"
+
+jobs:
+  patrol-live-gate:
+    runs-on: ubuntu-latest
+    env:
+      APP_PROFILE: demo
+      LLM_MODE: live
+      RERANKER_ENABLED: "true"
+      RERANKER_MODEL: bge-reranker-large
+      STARTUP_RERANKER_PROBE: "false"
+      EMBEDDING_MODEL: bge-m3
+      PATROL_SEMANTIC_THRESHOLD: "0.88"
+      ENABLE_PATROL_SEMANTIC_PATH: "true"
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Sync dependencies
+        run: uv sync --frozen --group dev
+
+      - name: Inject embedding credentials
+        env:
+          PATROL_EMBEDDING_API_KEY: ${{ secrets.PATROL_EMBEDDING_API_KEY }}
+          SCHOLARGRAPH_API_KEY: ${{ secrets.SCHOLARGRAPH_API_KEY }}
+        run: |
+          if [ -n "$PATROL_EMBEDDING_API_KEY" ]; then
+            echo "EMBEDDING_API_KEY=$PATROL_EMBEDDING_API_KEY" >> "$GITHUB_ENV"
+          elif [ -n "$SCHOLARGRAPH_API_KEY" ]; then
+            echo "EMBEDDING_API_KEY=$SCHOLARGRAPH_API_KEY" >> "$GITHUB_ENV"
+            echo "SCHOLARGRAPH_API_KEY=$SCHOLARGRAPH_API_KEY" >> "$GITHUB_ENV"
+          else
+            echo "::error::Missing PATROL_EMBEDDING_API_KEY or SCHOLARGRAPH_API_KEY repository secret."
+            exit 1
+          fi
+
+      - name: Validate golden config snapshot (strict)
+        run: uv run python scripts/validate_patrol_golden.py --strict --json
+
+      - name: Mock patrol suite gate
+        run: uv run python -m pytest -q --tb=short tests/patrol/test_patrol_suite_gate.py
+
+      - name: Patrol RAG fault-injection gate
+        run: uv run python -m pytest -q --tb=short -m patrol_fault_injection
+
+      - name: Live patrol logic pytest gate
+        run: uv run python -m pytest -q --tb=short -m live_patrol_logic
+
+      - name: Demo profile admission gate
+        run: uv run python -m pytest -q --tb=short -m demo_profile_check
+
+      - name: Four-mode live patrol benchmark gate
+        run: uv run python scripts/benchmark_patrol.py --mode all --live
+
+      - name: Upload patrol benchmark report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: patrol-benchmark-report
+          path: data/benchmark_reports/patrol-*.json

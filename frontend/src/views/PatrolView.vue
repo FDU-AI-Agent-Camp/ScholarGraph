@@ -4,18 +4,34 @@ import { RouterLink, useRouter } from 'vue-router'
 
 import { isApiClientError } from '@/api/client'
 import * as patrolApi from '@/api/patrol'
-import type { PatrolInsight, PatrolMode, PatrolReport } from '@/api/types'
+import type { PatrolMode, PatrolReport } from '@/api/types'
 import InsightCard from '@/components/ui/InsightCard.vue'
+import InsufficientDataInsightCard from '@/components/ui/InsufficientDataInsightCard.vue'
+import { usePatrolHealPoll } from '@/composables/usePatrolHealPoll'
 import { PATROL_BASELINE_COPY } from '@/constants/patrolCopy'
 import { RouteName } from '@/router/meta'
 import { usePaperStore } from '@/stores/paper'
 import { getUnknownErrorMessage } from '@/utils/errors'
+import {
+  degradationBannerDescription,
+  degradationBannerTitle,
+  evidencePlaceholderMessage,
+  extractReportDegradation,
+} from '@/utils/patrolDegradation'
 import {
   buildPatrolPaperIds,
   resolvePatrolApiError,
   validatePatrolSelection,
   type PatrolErrorPresentation,
 } from '@/utils/patrolForm'
+import { isInsufficientDataInsight } from '@/utils/patrolInsufficientData'
+import {
+  PATROL_MODE_OPTIONS,
+  patrolGraphLinkForNodeRef,
+  patrolInsightKey,
+  patrolModeLabel,
+  patrolNodeRefKey,
+} from '@/utils/patrolViewHelpers'
 
 const router = useRouter()
 const paperStore = usePaperStore()
@@ -25,50 +41,34 @@ const paperIdB = ref('hss-002')
 const mode = ref<PatrolMode>('lens_clash')
 const loading = ref(false)
 const report = ref<PatrolReport | null>(null)
+const lastPaperIds = ref<[string, string] | null>(null)
 const validationError = ref<string | null>(null)
 const apiError = ref<PatrolErrorPresentation | null>(null)
 
-const modeOptions = [
-  {
-    value: 'lens_clash' as const,
-    label: PATROL_BASELINE_COPY.modeLensClashLabel,
-    caption: PATROL_BASELINE_COPY.modeLensClashCaption,
+const { healing, scheduleHealPoll, stopHealPoll } = usePatrolHealPoll({
+  report,
+  paperIds: lastPaperIds,
+  mode,
+  runPatrol: async (paperIds, patrolMode) => {
+    const res = await patrolApi.runPatrol(paperIds, { mode: patrolMode })
+    return res.data
   },
-  {
-    value: 'contradiction' as const,
-    label: PATROL_BASELINE_COPY.modeContradictionLabel,
-    caption: PATROL_BASELINE_COPY.modeContradictionCaption,
-  },
-]
+})
 
+const degradationProfile = computed(() => (report.value ? extractReportDegradation(report.value) : null))
+const modeOptions = PATROL_MODE_OPTIONS
 const paperOptions = computed(() => paperStore.items)
 const runButtonLabel = computed(() =>
   loading.value ? PATROL_BASELINE_COPY.runButtonLoading : PATROL_BASELINE_COPY.runButton,
 )
+const modeLabel = patrolModeLabel
+const insightKey = patrolInsightKey
+const nodeRefKey = patrolNodeRefKey
+const graphLinkForNodeRef = patrolGraphLinkForNodeRef
 
 onMounted(() => {
   void paperStore.fetchList().catch(() => undefined)
 })
-
-function modeLabel(value: PatrolMode): string {
-  return modeOptions.find((item) => item.value === value)?.label ?? value
-}
-
-function insightKey(insight: PatrolInsight): string {
-  return insight.insight_id
-}
-
-function nodeRefKey(ref: PatrolInsight['node_refs'][number]): string {
-  return `${ref.paper_id}:${ref.node_id}`
-}
-
-function graphLinkForNodeRef(ref: PatrolInsight['node_refs'][number]) {
-  return {
-    name: RouteName.PaperGraph,
-    params: { paperId: ref.paper_id },
-    query: { node: ref.node_id },
-  }
-}
 
 function clearErrors(): void {
   validationError.value = null
@@ -79,6 +79,8 @@ function resetPaperSelection(): void {
   paperIdA.value = ''
   paperIdB.value = ''
   report.value = null
+  lastPaperIds.value = null
+  stopHealPoll()
   clearErrors()
 }
 
@@ -97,6 +99,8 @@ async function run(): Promise<void> {
   validationError.value = validation
   if (validation) {
     report.value = null
+    lastPaperIds.value = null
+    stopHealPoll()
     apiError.value = null
     return
   }
@@ -104,11 +108,14 @@ async function run(): Promise<void> {
   loading.value = true
   clearErrors()
   report.value = null
+  stopHealPoll()
   const [firstId, secondId] = buildPatrolPaperIds(paperIdA.value, paperIdB.value)
+  lastPaperIds.value = [firstId, secondId]
 
   try {
     const res = await patrolApi.runPatrol([firstId, secondId], { mode: mode.value })
     report.value = res.data
+    scheduleHealPoll()
   } catch (error: unknown) {
     if (isApiClientError(error)) {
       apiError.value = resolvePatrolApiError(error.code, error.message)
@@ -228,28 +235,56 @@ async function run(): Promise<void> {
 
       <h2 class="text-h2 patrol-view__report-title">{{ PATROL_BASELINE_COPY.reportTitle }}</h2>
 
+      <el-alert
+        v-if="degradationProfile"
+        type="warning"
+        :title="degradationBannerTitle(degradationProfile)"
+        :description="degradationBannerDescription(degradationProfile)"
+        show-icon
+        :closable="false"
+        class="patrol-view__alert patrol-view__degradation-banner"
+      />
+      <p v-if="healing" class="text-caption patrol-view__healing-hint">
+        {{ PATROL_BASELINE_COPY.degradationHealingHint }}
+      </p>
+
       <div class="patrol-view__insights">
-        <InsightCard
-          v-for="item in report.insights"
-          :key="insightKey(item)"
-          :variant="report.mode"
-          :title="item.title"
-          :insight-id="item.insight_id"
-          :summary="item.summary"
-        >
-          <div v-if="item.node_refs.length" class="patrol-view__node-refs">
-            <RouterLink
-              v-for="nodeRef in item.node_refs"
-              :key="nodeRefKey(nodeRef)"
-              :to="graphLinkForNodeRef(nodeRef)"
-              class="patrol-node-ref text-body"
+        <template v-for="item in report.insights" :key="insightKey(item)">
+          <InsufficientDataInsightCard
+            v-if="isInsufficientDataInsight(item)"
+            :variant="report.mode"
+            :title="item.title"
+            :insight-id="item.insight_id"
+            :summary="item.summary"
+            :exclusion-logic="item.exclusion_logic"
+          />
+          <InsightCard
+            v-else
+            :variant="report.mode"
+            :title="item.title"
+            :insight-id="item.insight_id"
+            :summary="item.summary"
+          >
+            <div
+              v-if="item.is_degraded || item.degradation_profile"
+              class="patrol-view__evidence-placeholder text-caption"
             >
-              <span class="patrol-node-ref__label">{{ nodeRef.label }}</span>
-              <span class="text-mono patrol-node-ref__meta">({{ nodeRef.paper_id }} · {{ nodeRef.node_id }})</span>
-              <span class="patrol-node-ref__action">{{ PATROL_BASELINE_COPY.nodeRefGraphLink }}</span>
-            </RouterLink>
-          </div>
-        </InsightCard>
+              {{ evidencePlaceholderMessage() }}
+            </div>
+            <div v-if="item.node_refs.length" class="patrol-view__node-refs">
+              <RouterLink
+                v-for="nodeRef in item.node_refs"
+                :key="nodeRefKey(nodeRef)"
+                :to="graphLinkForNodeRef(nodeRef)"
+                class="patrol-node-ref text-body"
+              >
+                <span class="patrol-node-ref__label">{{ nodeRef.label }}</span>
+                <span class="text-mono patrol-node-ref__meta">({{ nodeRef.paper_id }} · {{ nodeRef.node_id }})</span>
+                <span class="patrol-node-ref__action">{{ PATROL_BASELINE_COPY.nodeRefGraphLink }}</span>
+              </RouterLink>
+            </div>
+          </InsightCard>
+        </template>
       </div>
     </section>
   </div>
@@ -445,6 +480,20 @@ async function run(): Promise<void> {
 .patrol-view__report-title {
   margin: 0;
   color: var(--color-text-primary);
+}
+
+.patrol-view__healing-hint {
+  margin: 0;
+  color: var(--color-text-secondary);
+}
+
+.patrol-view__evidence-placeholder {
+  margin-bottom: var(--spacing-12);
+  padding: var(--spacing-12);
+  border: 1px dashed var(--color-border);
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--color-warning, #ca8a04) 8%, transparent);
+  color: var(--color-text-secondary);
 }
 
 .patrol-view__insights {

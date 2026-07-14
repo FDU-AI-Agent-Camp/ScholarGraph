@@ -20,6 +20,26 @@ def _merge_warning_codes(existing: list[str] | None, incoming: list[str]) -> lis
     return list(dict.fromkeys([*(existing or []), *incoming]))
 
 
+def _resolve_indexing_timestamps(
+    *,
+    existing_started_at: datetime | None,
+    existing_heartbeat: datetime | None,
+    status: PaperStatus,
+    now: datetime,
+) -> tuple[datetime | None, datetime | None]:
+    """Wall-clock checkpoint + initial heartbeat on enter INDEXING; clear on leave."""
+    if status == PaperStatus.INDEXING:
+        started = existing_started_at or now
+        # First enter sets a pulse; later save_status calls preserve the last heartbeat.
+        heartbeat = existing_heartbeat or now
+        return started, heartbeat
+    return None, None
+
+
+def _as_utc(value: datetime) -> datetime:
+    return value if value.tzinfo is not None else value.replace(tzinfo=UTC)
+
+
 class PipelineRepository:
     """Latest pipeline snapshot per paper (one row per paper_id)."""
 
@@ -33,6 +53,12 @@ class PipelineRepository:
 
             run = await session.get(PipelineRunRow, paper_id)
             now = datetime.now(UTC)
+            indexing_started_at, indexing_heartbeat = _resolve_indexing_timestamps(
+                existing_started_at=None if run is None else run.indexing_started_at,
+                existing_heartbeat=None if run is None else run.indexing_heartbeat,
+                status=data.status,
+                now=now,
+            )
             if run is None:
                 run = PipelineRunRow(
                     paper_id=paper_id,
@@ -46,6 +72,8 @@ class PipelineRepository:
                     extract_warnings=list(data.extract_warnings),
                     active_rag_run_id=None,
                     preview_graph=None,
+                    indexing_started_at=indexing_started_at,
+                    indexing_heartbeat=indexing_heartbeat,
                     created_at=now,
                     updated_at=now,
                 )
@@ -59,6 +87,8 @@ class PipelineRepository:
                 run.head_refine_warnings = list(data.head_refine_warnings)
                 run.classify_warnings = list(data.classify_warnings)
                 run.extract_warnings = list(data.extract_warnings)
+                run.indexing_started_at = indexing_started_at
+                run.indexing_heartbeat = indexing_heartbeat
                 run.updated_at = now
 
             paper.status = data.status.value
@@ -112,18 +142,23 @@ class PipelineRepository:
     async def get_active_rag_run_id(self, paper_id: str) -> str | None:
         async with get_async_session_factory()() as session:
             run = await session.get(PipelineRunRow, paper_id)
-            if run is None or run.active_rag_run_id is None:
+            if run is None:
                 return None
-            return run.active_rag_run_id
+            value = run.active_rag_run_id
+            # Treat legacy empty-string clears as unset (column is nullable).
+            if value is None or value == "":
+                return None
+            return value
 
-    async def set_active_rag_run_id(self, paper_id: str, run_id: str) -> None:
+    async def set_active_rag_run_id(self, paper_id: str, run_id: str | None) -> None:
+        """Set the active RAG run id, or clear it (``None`` / ``""`` → SQL NULL)."""
         async with get_async_session_factory()() as session:
             await self._begin_immediate(session)
             run = await session.get(PipelineRunRow, paper_id)
             if run is None:
                 msg = f"pipeline run not found: {paper_id}"
                 raise KeyError(msg)
-            run.active_rag_run_id = run_id if run_id else ""
+            run.active_rag_run_id = run_id if run_id else None
             run.updated_at = datetime.now(UTC)
             await session.commit()
 
@@ -189,6 +224,58 @@ class PipelineRepository:
         await self.save_status(paper_id, snapshot)
         await self.clear_ephemeral_pipeline_state(paper_id)
         return snapshot
+
+    async def touch_indexing_heartbeat(self, paper_id: str, *, at: datetime | None = None) -> bool:
+        """Refresh ``indexing_heartbeat`` while the paper remains in INDEXING."""
+        async with get_async_session_factory()() as session:
+            await self._begin_immediate(session)
+            paper = await session.get(PaperRow, paper_id)
+            run = await session.get(PipelineRunRow, paper_id)
+            if paper is None or run is None:
+                return False
+            if paper.status != PaperStatus.INDEXING.value:
+                return False
+            pulse = at or datetime.now(UTC)
+            run.indexing_heartbeat = pulse
+            run.updated_at = pulse
+            paper.updated_at = pulse
+            await session.commit()
+            return True
+
+    async def list_stuck_indexing_papers(
+        self,
+        *,
+        older_than: datetime | None = None,
+        heartbeat_stale_before: datetime | None = None,
+        limit: int = 200,
+    ) -> list[tuple[str, datetime | None, datetime | None]]:
+        """Return ``(paper_id, indexing_started_at, indexing_heartbeat)`` for stuck INDEXING rows.
+
+        When ``older_than`` is set, only rows whose start checkpoint is strictly before
+        that instant are returned. When ``heartbeat_stale_before`` is set, rows with a
+        fresher heartbeat are excluded (active long-running indexors).
+        """
+        async with get_async_session_factory()() as session:
+            stmt = (
+                select(PipelineRunRow)
+                .join(PaperRow, PaperRow.paper_id == PipelineRunRow.paper_id)
+                .where(PaperRow.status == PaperStatus.INDEXING.value)
+                .order_by(PipelineRunRow.updated_at.asc())
+                .limit(limit)
+            )
+            rows = list((await session.scalars(stmt)).all())
+            out: list[tuple[str, datetime | None, datetime | None]] = []
+            for run in rows:
+                started = run.indexing_started_at or run.updated_at
+                if older_than is not None and started is not None:
+                    if _as_utc(started) >= _as_utc(older_than):
+                        continue
+                heartbeat = run.indexing_heartbeat
+                if heartbeat_stale_before is not None and heartbeat is not None:
+                    if _as_utc(heartbeat) >= _as_utc(heartbeat_stale_before):
+                        continue
+                out.append((run.paper_id, run.indexing_started_at, run.indexing_heartbeat))
+            return out
 
     async def delete_run(self, paper_id: str) -> bool:
         """Delete the pipeline snapshot row for a paper (test teardown / compat shim)."""

@@ -78,17 +78,11 @@ def complete_paper_pipeline(
     merged_extract_warnings = list(extract_warnings or ())
     if warnings:
         merged_extract_warnings = list(dict.fromkeys([*merged_extract_warnings, *warnings]))
-    if final_status == PaperStatus.READY:
-        status_service.mark_ready(
-            paper_id,
-            append_extract_warnings=merged_extract_warnings or None,
-        )
-    else:
-        status_service.mark_ready_with_warnings(
-            paper_id,
-            message="; ".join(reasons),
-            append_extract_warnings=merged_extract_warnings or None,
-        )
+    # P10 state gate: do not advertise READY until RAG index completes.
+    status_service.mark_indexing(
+        paper_id,
+        append_extract_warnings=merged_extract_warnings or None,
+    )
 
     from backend.events.bus import get_event_bus
     from backend.events.pipeline_finalized_contract import pipeline_finalized_correlation_id
@@ -100,7 +94,8 @@ def complete_paper_pipeline(
         extra={
             "correlation_id": correlation_id,
             "paper_id": paper_id,
-            "status": final_status.value,
+            "status": PaperStatus.INDEXING.value,
+            "terminal_status": final_status.value,
             "channel": "persistence_db",
         },
     )
@@ -110,6 +105,8 @@ def complete_paper_pipeline(
         full_text=full_text,
         graph=graph,
         page_break_offsets=page_break_offsets,
+        terminal_status=final_status,
+        warning_message="; ".join(reasons) if reasons else None,
     )
     logger.info(
         "pipeline_finalized_publishing",

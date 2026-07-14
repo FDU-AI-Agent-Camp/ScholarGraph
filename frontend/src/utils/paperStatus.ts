@@ -2,7 +2,7 @@ import type { FailedDuringStage, PaperStatus, PaperStatusData } from '@/api/type
 
 export type { FailedDuringStage }
 
-export type TerminalPaperStatus = Extract<PaperStatus, 'ready' | 'failed'>
+export type TerminalPaperStatus = Extract<PaperStatus, 'ready' | 'ready_with_warnings' | 'failed'>
 
 export interface FailedPaperStatusData extends PaperStatusData {
   status: 'failed'
@@ -10,7 +10,7 @@ export interface FailedPaperStatusData extends PaperStatusData {
   failed_during?: FailedDuringStage | null
 }
 
-const TERMINAL_STATUSES: ReadonlySet<TerminalPaperStatus> = new Set(['ready', 'failed'])
+const TERMINAL_STATUSES: ReadonlySet<TerminalPaperStatus> = new Set(['ready', 'ready_with_warnings', 'failed'])
 
 export function isTerminalStatus(status: PaperStatus): status is TerminalPaperStatus {
   return TERMINAL_STATUSES.has(status as TerminalPaperStatus)

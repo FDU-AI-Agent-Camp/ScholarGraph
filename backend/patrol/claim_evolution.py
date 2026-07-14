@@ -4,20 +4,28 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Mapping
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 from backend.config import get_settings
 from backend.llm.client import LlmClient
 from backend.llm.embeddings import EmbeddingClient, get_embedding_client
 from backend.patrol.claim_evolution_rq_gate import align_research_question_pair
+from backend.patrol.exclusion import (
+    PHASE_CLAIM_RECALL,
+    PHASE_NODE_PRECHECK,
+    PHASE_RQ_ALIGNMENT,
+    make_exclusion_logic,
+)
 from backend.patrol.llm_summary import generate_claim_evolution_summary
 from backend.patrol.node_selection import select_primary_node
-from backend.patrol.rag_service import PatrolRAGService
+from backend.patrol.rag_service import PatrolRAGService, attach_degradation_fields
 from backend.schemas.graph import GraphNode, NodeType, UnifiedPaperGraph
 from backend.schemas.patrol import (
     ClaimEvolutionPoint,
     EvolutionType,
     NodeRef,
+    PatrolDegradationProfile,
+    PatrolExclusionReason,
     PatrolInsight,
     PatrolInsightStatus,
     PatrolMode,
@@ -133,6 +141,15 @@ async def build_claim_evolution_insight(
             status=PatrolInsightStatus.INSUFFICIENT_DATA,
             paper_ids=[left_id, right_id],
             node_refs=[],
+            exclusion_logic=make_exclusion_logic(
+                PatrolExclusionReason.MISSING_REQUIRED_NODES,
+                phase=PHASE_NODE_PRECHECK,
+                description=summary,
+                metrics={
+                    "missing_node_types": ["ResearchQuestion", "Thesis"],
+                    "affected_papers": missing,
+                },
+            ),
         )
 
     left_question_pool = _dedupe_question_nodes(left_questions + left_theses)
@@ -157,6 +174,16 @@ async def build_claim_evolution_insight(
             status=PatrolInsightStatus.INSUFFICIENT_DATA,
             paper_ids=[left_id, right_id],
             node_refs=[],
+            exclusion_logic=make_exclusion_logic(
+                PatrolExclusionReason.RQ_GATE_FAILED,
+                phase=PHASE_RQ_ALIGNMENT,
+                description=summary,
+                metrics={
+                    "coarse_threshold": settings.patrol_claim_rq_coarse_threshold,
+                    "rerank_threshold": settings.patrol_claim_rq_rerank_threshold,
+                    "reranker_enabled": settings.reranker_enabled,
+                },
+            ),
         )
 
     left_question, right_question = aligned_pair
@@ -200,9 +227,15 @@ async def build_claim_evolution_insight(
                 NodeRef(paper_id=left_id, node_id=left_question.id, label=left_question.label),
                 NodeRef(paper_id=right_id, node_id=right_question.id, label=right_question.label),
             ],
+            exclusion_logic=make_exclusion_logic(
+                PatrolExclusionReason.NO_RECALLABLE_CLAIMS,
+                phase=PHASE_CLAIM_RECALL,
+                description=summary,
+                metrics={"claim_chunk_top_k": settings.patrol_claim_chunk_top_k},
+            ),
         )
 
-    context, meta = await _build_claim_evolution_context(
+    context, degradation = await _build_claim_evolution_context(
         graphs,
         paper_ids,
         vector_store=vector_store,
@@ -253,7 +286,7 @@ async def build_claim_evolution_insight(
             NodeRef(paper_id=right_id, node_id=right_question.id, label=right_question.label),
         ],
         structured_points=[point],
-        meta=meta,
+        **attach_degradation_fields(degradation),
     )
 
 
@@ -284,7 +317,7 @@ async def _build_claim_evolution_context(
     vector_store: VectorStore | None = None,
     extra_claim_chunks: dict[str, list[str]] | None = None,
     anchor_nodes: dict[str, GraphNode] | None = None,
-) -> tuple[str, dict[str, Any]]:
+) -> tuple[str, PatrolDegradationProfile | None]:
     settings = get_settings()
     sections: list[str] = []
     extra_claim_chunks = extra_claim_chunks or {}
@@ -314,13 +347,13 @@ async def _build_claim_evolution_context(
         )
 
     rag_service = PatrolRAGService(vector_store)
-    rag_sections, meta = await rag_service.enrich_context(
+    rag_sections, degradation = await rag_service.enrich_context(
         PatrolMode.CLAIM_EVOLUTION,
         paper_queries,
     )
     sections.extend(rag_sections)
 
-    return "\n\n".join(sections), meta
+    return "\n\n".join(sections), degradation
 
 
 def _fallback_claim_evolution_summary(left_question: str, right_question: str) -> str:

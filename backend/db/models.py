@@ -71,6 +71,8 @@ class PipelineRunRow(Base):
     extract_warnings: Mapped[list[str]] = mapped_column(JSON, default=list)
     active_rag_run_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
     preview_graph: Mapped[dict[str, object] | None] = mapped_column(JSON, nullable=True)
+    indexing_started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    indexing_heartbeat: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utc_now)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),

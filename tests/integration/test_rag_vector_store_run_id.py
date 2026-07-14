@@ -245,7 +245,7 @@ async def test_delete_by_paper_clears_active_run_id(
 
     await store.delete_by_paper(paper_id)
 
-    assert paper_service.get_active_run_id(paper_id) == ""
+    assert paper_service.get_active_run_id(paper_id) is None
     assert await store.exists(paper_id) is False
 
 

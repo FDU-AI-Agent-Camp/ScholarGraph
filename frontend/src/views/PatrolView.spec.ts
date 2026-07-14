@@ -46,6 +46,7 @@ const contradictionReport: DataResponse<PatrolReport> = {
         status: 'ready',
         paper_ids: ['hss-001', 'hss-002'],
         node_refs: [],
+        is_degraded: false,
       },
     ],
   },
@@ -68,6 +69,7 @@ const patrolReport: DataResponse<PatrolReport> = {
           { paper_id: 'hss-001', node_id: 'n_lens_a', label: '消费社会' },
           { paper_id: 'hss-002', node_id: 'n_lens_b', label: 'public sphere' },
         ],
+        is_degraded: false,
       },
     ],
   },
@@ -195,6 +197,47 @@ describe('PatrolView', () => {
     expect(link.attributes('data-to')).toContain('n_lens_a')
   })
 
+  it('shows RAG degradation banner when is_degraded (P9/F8)', async () => {
+    mockRunPatrol.mockResolvedValue({
+      data: {
+        mode: 'method_overlap',
+        paper_ids: ['stem-001', 'stem-002'],
+        generated_at: '2026-07-13T19:15:00Z',
+        insights: [
+          {
+            insight_id: 'ins-mo-1',
+            title: '方法重叠',
+            summary: '图谱比对完成。',
+            status: 'ready',
+            paper_ids: ['stem-001', 'stem-002'],
+            node_refs: [],
+            is_degraded: true,
+            degradation_profile: {
+              component: 'RAG_CONTEXT',
+              reason_code: 'INDEX_NOT_READY',
+              affected_papers: ['stem-001'],
+              severity: 'WARNING',
+              timestamp: '2026-07-13T19:15:00Z',
+            },
+          },
+        ],
+      },
+      meta: { request_id: 'req-degraded' },
+    })
+
+    const wrapper = await mountPatrolView()
+    await setPaperSelection(wrapper, 'stem-001', 'stem-002')
+    // switch mode isn't required — report content drives the banner
+    await wrapper.find('.patrol-run-stub').trigger('click')
+    await flushPromises()
+
+    const banner = wrapper.find('.patrol-view__degradation-banner')
+    expect(banner.exists()).toBe(true)
+    expect(banner.attributes('data-title')).toBe(PATROL_BASELINE_COPY.degradationBannerTitle)
+    expect(banner.attributes('data-desc')).toContain('stem-001')
+    expect(wrapper.text()).toContain(PATROL_BASELINE_COPY.degradationEvidencePlaceholder)
+  })
+
   it('maps GRAPH_NOT_READY to baseline error title and papers CTA (7.6)', async () => {
     mockRunPatrol.mockRejectedValue(new ApiClientError({ code: 'GRAPH_NOT_READY', message: '图谱未就绪' }, 409))
 
@@ -224,6 +267,47 @@ describe('PatrolView', () => {
     const selects = wrapper.findAll('.patrol-select-stub')
     expect((selects[0]?.element as HTMLInputElement).value).toBe('')
     expect((selects[1]?.element as HTMLInputElement).value).toBe('')
+  })
+
+  it('renders channel-B insufficient_data insights with warning card (F7)', async () => {
+    mockRunPatrol.mockResolvedValue({
+      data: {
+        mode: 'method_overlap',
+        paper_ids: ['hss-001', 'hss-002'],
+        generated_at: '2026-07-14T02:00:00Z',
+        insights: [
+          {
+            insight_id: 'ins-method-overlap-001',
+            title: '方法重叠（Method Overlap）',
+            summary: 'HSS 范式不支持 method_overlap',
+            status: 'insufficient_data',
+            paper_ids: ['hss-001', 'hss-002'],
+            node_refs: [{ paper_id: 'hss-001', node_id: 'n1', label: 'should-hide-link' }],
+            exclusion_logic: {
+              phase: 'PARADIGM_GATE',
+              reason_code: 'PARADIGM_UNSUPPORTED',
+              description: '当前文献属于 HSS 范式，不进行方法重叠分析。',
+              metrics: { required_paradigm: 'STEM' },
+            },
+            is_degraded: false,
+          },
+        ],
+      },
+      meta: { request_id: 'req-insufficient-b' },
+    } satisfies DataResponse<PatrolReport>)
+
+    const wrapper = await mountPatrolView()
+    await setPaperSelection(wrapper, 'hss-001', 'hss-002')
+    await wrapper.find('.patrol-run-stub').trigger('click')
+    await flushPromises()
+
+    const warningCard = wrapper.find('[data-testid="insufficient-data-insight-card"]')
+    expect(warningCard.exists()).toBe(true)
+    expect(warningCard.text()).toContain(PATROL_BASELINE_COPY.insufficientInsightBadge)
+    expect(warningCard.text()).toContain('范式不适用')
+    expect(warningCard.text()).toContain('PARADIGM_GATE')
+    expect(wrapper.find('.patrol-insight').exists()).toBe(false)
+    expect(wrapper.text()).not.toContain(PATROL_BASELINE_COPY.nodeRefGraphLink)
   })
 
   it('passes lens_clash report mode variant to InsightCard', async () => {

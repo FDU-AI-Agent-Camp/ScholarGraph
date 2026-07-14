@@ -44,4 +44,4 @@ async def test_g4_health_mock_mode_without_api_key(api_client: AsyncClient, monk
     assert response.status_code == 200
     body = response.json()["data"]
     assert body["llm_mode"] == "mock"
-    assert body["status"] == "ok"
+    assert body["status"] == "healthy"

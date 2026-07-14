@@ -76,11 +76,9 @@ def force_reextract(paper_service: PaperService, paper_id: str) -> PaperStatusDa
     _clear_in_memory_state(paper_service, paper_id)
 
     run_async(paper_service._paper_repo.reset_for_reextract(paper_id))
-    snapshot = run_async(
-        paper_service._pipeline_repo.reset_for_reextract(
-            paper_id,
-            message=_REEXTRACT_QUEUED_MESSAGE,
-        ),
+    snapshot = paper_service.reset_pipeline_for_reextract(
+        paper_id,
+        message=_REEXTRACT_QUEUED_MESSAGE,
     )
 
     schedule_paper_pipeline(paper_id, pdf_path)

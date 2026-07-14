@@ -14,7 +14,7 @@ export const PATROL_BASELINE_COPY = {
   modeContradictionCaption: '核心论点矛盾 · 人文社科/理工科',
   modeLabel: '巡检模式',
   hintSummary: '本地联调提示',
-  hintBody: '在后端 seed demo 图谱后再运行巡检：',
+  hintBody: '在后端 seed HSS + STEM demo 图谱后再运行巡检（V2 模式用 stem-001,stem-002）：',
   hintCommand: 'uv run python scripts/run_patrol.py --seed-demo-graphs',
   validationExactTwo: '请输入恰好 2 个 paper_id',
   validationDuplicate: (paperId: string) => `论文 A 与论文 B 不能选择同一篇论文（${paperId}）`,
@@ -25,5 +25,20 @@ export const PATROL_BASELINE_COPY = {
   insufficientDataTitle: '数据不足',
   insufficientDataDescription: '换用 ready 状态的论文再试',
   insufficientDataCta: '换用论文',
+  /** Channel-B 200 + status=insufficient_data (F7) — not the same as 422 alert. */
+  insufficientInsightBadge: '阴性结论',
+  insufficientInsightFallbackTitle: '分析已完成，未形成可报告洞察',
+  insufficientInsightHint: '这是完整巡检后的确定性结论，并非请求失败。无需深入对比详情。',
+  insufficientInsightPhaseLabel: '拦截阶段',
   nodeRefGraphLink: '查看图谱',
+
+  degradationBannerTitle: '巡检结果可能不完整',
+  degradationBannerHint: '您可以稍后刷新重试；若索引仍在构建，页面将自动尝试补齐证据。',
+  degradationIndexNotReady:
+    '图谱比对已完成，但底层原文语义索引仍在构建中。当前展示的计算结果可能缺少部分深度文本证据。',
+  degradationQueryFailed: '向量检索部分失败，当前结果主要基于图谱结构，可能缺少原文片段证据。',
+  degradationStoreUnavailable: '向量库暂时不可用，当前结果仅基于图谱结构生成。',
+  degradationGeneric: 'RAG 上下文已降级，结果可能不完整。',
+  degradationEvidencePlaceholder: '原文片段尚未索引完成，证据链暂不可用。',
+  degradationHealingHint: '正在后台等待索引就绪并自动刷新…',
 } as const

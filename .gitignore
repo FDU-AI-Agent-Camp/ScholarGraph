@@ -44,6 +44,8 @@ pip-wheel-metadata/
 data/*
 !data/.gitkeep
 !data/patrol_golden_set.json
+!data/patrol_method_overlap_golden.json
+!data/patrol_v1_golden_set.json
 !data/qa_golden_set.json
 !data/mock_vector_store.json
 !data/chunk_manifests/

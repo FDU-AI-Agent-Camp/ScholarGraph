@@ -7,7 +7,6 @@ import logging
 import threading
 from collections import defaultdict
 from collections.abc import Awaitable, Callable
-from functools import lru_cache
 from typing import Any
 
 from backend.events.types import EventType
@@ -151,11 +150,15 @@ async def _await_cancelled_task(task: asyncio.Task[None]) -> None:
         pass
 
 
+_EVENT_BUS: EventBus | None = None
+_DEFAULTS_INSTALLED = False
+
+
 def stop_event_bus_worker() -> None:
     """Stop the cached bus worker without clearing handlers or singleton state."""
-    if not get_event_bus.cache_info().currsize:
+    if _EVENT_BUS is None:
         return
-    get_event_bus()._stop_worker()
+    _EVENT_BUS._stop_worker()
 
 
 def on_event(event_type: EventType) -> Callable[[EventHandler], EventHandler]:
@@ -175,18 +178,29 @@ def install_default_event_bus_hooks() -> None:
     get_event_bus().set_handler_error_callback(persist_event_handler_failure)
 
 
-@lru_cache
 def get_event_bus() -> EventBus:
-    return EventBus()
+    """Return the process-wide bus, installing official RAG defaults on first use."""
+    global _EVENT_BUS, _DEFAULTS_INSTALLED
+
+    if _EVENT_BUS is None:
+        _EVENT_BUS = EventBus()
+    if not _DEFAULTS_INSTALLED:
+        # Mark installed before register/hooks so nested get_event_bus() is safe.
+        _DEFAULTS_INSTALLED = True
+        from backend.events.pipeline_finalized_handlers import register_pipeline_finalized_handlers
+
+        register_pipeline_finalized_handlers()
+        install_default_event_bus_hooks()
+    return _EVENT_BUS
 
 
 def reset_event_bus_cache() -> None:
-    if get_event_bus.cache_info().currsize:
-        get_event_bus().reset()
-    else:
-        stop_event_bus_worker()
-    get_event_bus.cache_clear()
-    from backend.events.pipeline_finalized_handlers import register_pipeline_finalized_handlers
+    """Clear singleton bus state and reinstall official defaults (tests)."""
+    global _EVENT_BUS, _DEFAULTS_INSTALLED
 
-    register_pipeline_finalized_handlers()
-    install_default_event_bus_hooks()
+    if _EVENT_BUS is not None:
+        _EVENT_BUS.reset()
+        _EVENT_BUS._stop_worker()
+    _EVENT_BUS = None
+    _DEFAULTS_INSTALLED = False
+    get_event_bus()

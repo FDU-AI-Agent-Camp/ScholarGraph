@@ -49,6 +49,44 @@ class QaSettingsMixin:
         ge=500,
         validation_alias="QA_RETRIEVAL_CONTEXT_MAX_CHARS",
     )
+    # P13 dual-layer indexing watchdog (sync dedicated-thread macro + wait_for micro)
+    rag_single_index_timeout_seconds: float = Field(
+        default=120.0,
+        gt=0.0,
+        validation_alias="RAG_SINGLE_INDEX_TIMEOUT_SECONDS",
+        description="Layer-1 asyncio.wait_for timeout around a single paper RAG index build.",
+    )
+    rag_indexing_watchdog_seconds: float = Field(
+        default=300.0,
+        gt=0.0,
+        validation_alias="RAG_INDEXING_WATCHDOG_SECONDS",
+        description="Layer-2: force-promote when indexing_started_at is older than this "
+        "(and heartbeat is missing/stale).",
+    )
+    rag_indexing_watchdog_interval_seconds: float = Field(
+        default=60.0,
+        gt=0.0,
+        validation_alias="RAG_INDEXING_WATCHDOG_INTERVAL_SECONDS",
+        description="Layer-2 dedicated OS-thread sleep interval between sync DB scans.",
+    )
+    rag_indexing_watchdog_enabled: bool = Field(
+        default=True,
+        validation_alias="RAG_INDEXING_WATCHDOG_ENABLED",
+        description="Enable cold-boot reconcile + out-of-loop macro watchdog thread.",
+    )
+    rag_indexing_heartbeat_interval_seconds: float = Field(
+        default=15.0,
+        gt=0.0,
+        validation_alias="RAG_INDEXING_HEARTBEAT_INTERVAL_SECONDS",
+        description="How often the indexing handler touches indexing_heartbeat.",
+    )
+    rag_indexing_heartbeat_stale_seconds: float = Field(
+        default=90.0,
+        gt=0.0,
+        validation_alias="RAG_INDEXING_HEARTBEAT_STALE_SECONDS",
+        description="Layer-2: only force-promote when indexing_heartbeat is missing "
+        "or older than this (avoids killing slow-but-alive builds).",
+    )
 
     @property
     def qa_model_effective(self) -> str:

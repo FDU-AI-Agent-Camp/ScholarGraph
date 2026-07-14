@@ -27,7 +27,7 @@ def test_finalize_publishes_pipeline_finalized_once_with_contract_payload(
     full_text = "spy-test full paper body for RAG indexing"
 
     bus = EventBus()
-    bus.subscribe(EventType.PIPELINE_FINALIZED, handler_module.temporary_pipeline_finalized_rag_handler)
+    bus.subscribe(EventType.PIPELINE_FINALIZED, handler_module.pipeline_finalized_rag_handler)
 
     original_get = bus_module.get_event_bus
     bus_module.get_event_bus = lambda: bus  # type: ignore[assignment]

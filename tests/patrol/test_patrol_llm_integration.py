@@ -33,7 +33,7 @@ async def test_run_patrol_lens_clash_with_structured_llm(tmp_path) -> None:
         store=GraphStore(base_dir=store_dir),
         llm_client=_mock_llm_client(llm_summary),
     )
-    assert report.insights[0].summary == llm_summary
+    assert report.insights[0].summary.startswith(llm_summary)
 
 
 async def test_run_patrol_contradiction_with_structured_llm() -> None:
@@ -60,7 +60,7 @@ async def test_run_patrol_contradiction_with_structured_llm() -> None:
     )
     assert report.mode == PatrolMode.CONTRADICTION
     assert report.insights[0].status == PatrolInsightStatus.READY
-    assert report.insights[0].summary == llm_summary
+    assert report.insights[0].summary.startswith(llm_summary)
 
 
 async def test_run_patrol_llm_fallback_to_template_when_client_raises() -> None:

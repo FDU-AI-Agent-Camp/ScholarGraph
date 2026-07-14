@@ -281,6 +281,8 @@ async def test_run_patrol_contradiction_uses_vector_store() -> None:
     vector_store.query_chunks.assert_any_await("论点 A 引言 结论 核心论点 论证", paper_id="hss-001", top_k=3)
     vector_store.query_chunks.assert_any_await("论点 B 引言 结论 核心论点 论证", paper_id="hss-002", top_k=3)
     # No degradation flag because exists() returned True.
+    assert report.insights[0].is_degraded is False
+    assert report.insights[0].degradation_profile is None
     assert "patrol_rag_context_degraded" not in report.insights[0].meta
 
 

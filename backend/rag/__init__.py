@@ -1,7 +1,6 @@
 """RAG vector indexing primitives for ScholarGraph V2."""
 
 from backend.rag.chunking import chunk_text
-from backend.rag.handlers import index_paper_for_rag
 from backend.rag.indexing import graph_to_entities, graph_to_relations
 from backend.rag.models import (
     EmbeddingClientProtocol,
@@ -23,22 +22,27 @@ from backend.rag.models import (
 )
 from backend.rag.vector_store import VectorStore
 
-_HYBRID_RETRIEVER_EXPORTS = frozenset(
+_LAZY_EXPORTS = frozenset(
     {
         "HybridRetriever",
         "bind_hybrid_retriever",
         "create_hybrid_retriever",
         "get_hybrid_retriever",
         "reset_hybrid_retriever",
+        "index_paper_for_rag",
     }
 )
 
 
 def __getattr__(name: str) -> object:
-    """Defer hybrid_retriever import — it pulls graph.query during llm.client init."""
-    if name not in _HYBRID_RETRIEVER_EXPORTS:
+    """Defer heavy imports (hybrid retriever / handlers) until attribute access."""
+    if name not in _LAZY_EXPORTS:
         msg = f"module {__name__!r} has no attribute {name!r}"
         raise AttributeError(msg)
+    if name == "index_paper_for_rag":
+        from backend.rag.handlers import index_paper_for_rag
+
+        return index_paper_for_rag
     from backend.rag.hybrid_retriever import (
         HybridRetriever,
         bind_hybrid_retriever,

@@ -3,14 +3,13 @@
 from __future__ import annotations
 
 from collections.abc import AsyncIterator
-from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
 from backend.graph.qa import _MVP_PREVIEW_PREFIX, _GraphQaEngine
 from backend.graph.store import GraphStore
 from backend.schemas.graph import GraphNode, UnifiedPaperGraph
-from backend.schemas.paper import PaperDetail, PaperStatus
+from backend.schemas.paper import PaperStatus
 from backend.schemas.paradigm import Paradigm
 from backend.services.paper_service import get_paper_service
 
@@ -36,27 +35,6 @@ def _fake_llm(text: str, chunk_size: int = 5) -> object:
     obj = type("FakeLlmClient", (), {})()
     obj.chat = _FakeChat(text, chunk_size)
     return obj
-
-
-def _make_paper(
-    paper_id: str,
-    status: PaperStatus = PaperStatus.PROCESSING,
-    preview_available: bool = False,
-) -> PaperDetail:
-    service = get_paper_service()
-    now = datetime.now(UTC)
-    paper = PaperDetail(
-        paper_id=paper_id,
-        title="preview qa test",
-        status=status,
-        preview_available=preview_available,
-        created_at=now,
-        updated_at=now,
-    )
-    service._papers[paper_id] = paper
-    if preview_available:
-        service.mark_preview_available(paper_id)
-    return paper
 
 
 @pytest.fixture
@@ -135,10 +113,10 @@ class TestQaStreamPreview:
         prompt = captured[0]
         assert _MVP_PREVIEW_PREFIX in prompt
 
-    async def test_processing_paper_without_preview_is_rejected(self) -> None:
+    async def test_processing_paper_without_preview_is_rejected(self, persistence_env) -> None:
         paper_id = "preview-qa-003"
+        await register_test_paper(paper_id, status=PaperStatus.PROCESSING)
         service = get_paper_service()
-        service._papers[paper_id] = _make_paper(paper_id, preview_available=False)
 
         engine = _GraphQaEngine(paper_service=service)
         events = [evt async for evt in engine.stream(paper_id, "问题")]
@@ -159,10 +137,11 @@ class TestQaStreamPreview:
         assert errors[0].data["code"] == "GRAPH_NOT_FOUND"
         assert events[-1].event == "done"
 
-    async def test_ready_paper_does_not_inject_mvp_prefix(self, tmp_path: Path) -> None:
+    async def test_ready_paper_does_not_inject_mvp_prefix(self, tmp_path: Path, persistence_env) -> None:
         paper_id = "preview-qa-ready-001"
+        await register_test_paper(paper_id, status=PaperStatus.READY)
         service = get_paper_service()
-        service._papers[paper_id] = _make_paper(paper_id, status=PaperStatus.READY, preview_available=True)
+        service.mark_preview_available(paper_id)
         full_graph = UnifiedPaperGraph(
             paper_id=paper_id,
             paradigm=Paradigm.STEM,

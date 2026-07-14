@@ -29,10 +29,16 @@ async def test_health_patrol_funnel_disabled_in_live_mode(
     body = response.json()
     assert_success_envelope(body)
     data = body["data"]
+    assert data["status"] == "degraded"
+    assert data["components"]["patrol_service"]["claim_rq_funnel_enabled"] is False
+    assert data["components"]["patrol_service"]["reranker_status"] == "DISABLED_FALLBACK_ACTIVE"
+    assert data["components"]["patrol_service"]["status"] == "degraded"
     assert data["patrol_claim_rq_funnel_enabled"] is False
     assert isinstance(data["patrol_config_warnings"], list)
     assert len(data["patrol_config_warnings"]) >= 1
     assert "RERANKER_ENABLED=false" in data["patrol_config_warnings"][0]
+    assert data["components"]["patrol_service"]["warnings"]
+    assert any("Reranker is disabled" in item for item in data["components"]["patrol_service"]["warnings"])
     assert "严格双塔回退" in data["patrol_note"]
 
 
@@ -55,6 +61,9 @@ async def test_health_patrol_funnel_enabled_when_reranker_configured(
     get_settings.cache_clear()
 
     data = response.json()["data"]
+    assert data["status"] == "healthy"
+    assert data["components"]["patrol_service"]["claim_rq_funnel_enabled"] is True
+    assert data["components"]["patrol_service"]["reranker_status"] == "READY"
     assert data["patrol_claim_rq_funnel_enabled"] is True
     assert data["patrol_config_warnings"] == []
     assert "漏斗已启用" in data["patrol_note"]

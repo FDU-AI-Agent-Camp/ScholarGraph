@@ -48,4 +48,12 @@ const router = createRouter({
   routes,
 })
 
+router.beforeEach(async (to) => {
+  const { isPatrolRouteForPrefetch, useHealthStore } = await import('@/stores/health')
+  if (isPatrolRouteForPrefetch(to.path)) {
+    const healthStore = useHealthStore()
+    await healthStore.ensureLoaded()
+  }
+})
+
 export default router

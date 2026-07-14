@@ -278,8 +278,10 @@ components:
 
     PaperStatus:
       type: string
-      enum: [pending, processing, ready, ready_with_warnings, failed]
+      enum: [pending, processing, indexing, ready, ready_with_warnings, failed]
       description: |
+        `indexing` means the graph is persisted and VectorStore indexing is in
+        progress (P10 state gate). Poll until `ready` / `ready_with_warnings`.
         `ready_with_warnings` means the graph is available but failed the
         confidence gate (e.g. low SUPPORTS rationale coverage, too many
         isolated nodes, or a high ratio of generic fallback edges such as
@@ -287,7 +289,7 @@ components:
 
     PipelineStage:
       type: string
-      enum: [ingesting, head_refining, classifying, extracting, storing, ready, failed]
+      enum: [ingesting, head_refining, classifying, extracting, storing, indexing, ready, failed]
 
     FailedDuringStage:
       type: string
@@ -359,14 +361,26 @@ components:
       properties:
         data:
           type: object
-          required: [status, version, llm_mode, llm_connected, llm_note]
+          required: [status, version, llm_mode, llm_connected, llm_note, components]
           properties:
             status:
               type: string
-              example: ok
+              enum: [healthy, degraded]
+              description: Aggregate health — degraded when Patrol claim_evolution funnel is incomplete in live mode.
+              example: healthy
             version:
               type: string
               example: 1.0.0
+            app_profile:
+              type: string
+              nullable: true
+              enum: [ci, demo, prod]
+            components:
+              type: object
+              required: [patrol_service]
+              properties:
+                patrol_service:
+                  $ref: "#/components/schemas/PatrolServiceHealth"
             llm_mode:
               type: string
               enum: [mock, live]
@@ -377,8 +391,43 @@ components:
             llm_note:
               type: string
               example: Mock 模式：LLM 云服务尚未接入，问答/巡检返回本地模板。
+            grobid_url:
+              type: string
+            grobid_connected:
+              type: boolean
+            grobid_note:
+              type: string
+            patrol_claim_rq_funnel_enabled:
+              type: boolean
+            patrol_config_warnings:
+              type: array
+              items:
+                type: string
+            patrol_note:
+              type: string
         meta:
           $ref: "#/components/schemas/Meta"
+
+    PatrolServiceHealth:
+      type: object
+      required: [status, claim_rq_funnel_enabled, reranker_status, active_profile]
+      properties:
+        status:
+          type: string
+          enum: [fully_functional, degraded]
+        claim_rq_funnel_enabled:
+          type: boolean
+        reranker_status:
+          type: string
+          enum: [READY, DISABLED_FALLBACK_ACTIVE, MISCONFIGURED, MOCK_LOCAL]
+        active_profile:
+          type: string
+          nullable: true
+          enum: [ci, demo, prod]
+        warnings:
+          type: array
+          items:
+            type: string
 
     PaperSummary:
       type: object
@@ -757,6 +806,11 @@ components:
       required: [mode]
       discriminator:
         propertyName: mode
+        mapping:
+          contradiction: "#/components/schemas/ContradictionPoint"
+          lens_clash: "#/components/schemas/LensClashPoint"
+          method_overlap: "#/components/schemas/MethodOverlapPoint"
+          claim_evolution: "#/components/schemas/ClaimEvolutionPoint"
       oneOf:
         - $ref: "#/components/schemas/ContradictionPoint"
         - $ref: "#/components/schemas/LensClashPoint"
@@ -904,12 +958,83 @@ components:
       description: |
         Insight readiness status.
         `ready` means the insight was produced from a full LLM analysis.
-        `insufficient_data` means the graphs lacked required node types or did not meet
-        the mode-specific comparison criteria. Examples:
-        - lens_clash: missing AnalyticalLens nodes.
+        `insufficient_data` is a conclusive channel-B negative determination (HTTP 200),
+        not an API error. Read `exclusion_logic` for the structured reason. Examples:
         - contradiction: missing Thesis or SubArgument nodes.
-        - method_overlap: no overlapping Method or Dataset labels.
-        - claim_evolution: ResearchQuestion/Thesis too dissimilar, or claims are identical.
+        - method_overlap: HSS paradigm unsupported, missing Method, or no overlap.
+        - claim_evolution: ResearchQuestion/Thesis too dissimilar, or no claims.
+        Channel A (HTTP 422 PATROL_INSUFFICIENT_DATA) is reserved for hard preflight
+        barriers such as lens_clash with no AnalyticalLens nodes.
+
+    PatrolExclusionReason:
+      type: string
+      enum:
+        - MISSING_REQUIRED_NODES
+        - PARADIGM_UNSUPPORTED
+        - NO_OVERLAP
+        - RQ_GATE_FAILED
+        - NO_RECALLABLE_CLAIMS
+      description: |
+        Typed channel-B exclusion reasons for insufficient_data insights (P11/F7):
+        - MISSING_REQUIRED_NODES: required graph node types absent.
+        - PARADIGM_UNSUPPORTED: mode not applicable for paper paradigm (e.g. HSS + method_overlap).
+        - NO_OVERLAP: analyzers finished; no significant method/dataset overlap.
+        - RQ_GATE_FAILED: claim_evolution RQ/Thesis alignment funnel rejected the pair.
+        - NO_RECALLABLE_CLAIMS: no Claim nodes and VectorStore recall found nothing.
+
+    PatrolExclusionLogic:
+      type: object
+      required: [phase, reason_code, description]
+      description: Structured negative-determination payload when status=insufficient_data.
+      properties:
+        phase:
+          type: string
+          description: Pipeline stage tag (PARADIGM_GATE, NODE_PRECHECK, OVERLAP_MATCH, …).
+        reason_code:
+          $ref: "#/components/schemas/PatrolExclusionReason"
+        description:
+          type: string
+          description: Human-readable explanation of why the run concluded negatively.
+        metrics:
+          type: object
+          additionalProperties: true
+          description: Optional diagnostic numbers (thresholds, scores, counts).
+
+    PatrolDegradationReason:
+      type: string
+      enum: [INDEX_NOT_READY, QUERY_FAILED, VECTOR_STORE_UNAVAILABLE]
+      description: |
+        Typed RAG context degradation reasons:
+        - INDEX_NOT_READY: graph ready but vector index still building / missing.
+        - QUERY_FAILED: vector store reachable but chunk recall failed.
+        - VECTOR_STORE_UNAVAILABLE: Chroma/cluster down or network unreachable.
+
+    PatrolDegradationSeverity:
+      type: string
+      enum: [WARNING, ERROR]
+
+    PatrolDegradationComponent:
+      type: string
+      enum: [RAG_CONTEXT]
+
+    PatrolDegradationProfile:
+      type: object
+      required: [component, reason_code, affected_papers, severity, timestamp]
+      description: First-class degradation contract when Patrol RAG context is thinned (P9/F8).
+      properties:
+        component:
+          $ref: "#/components/schemas/PatrolDegradationComponent"
+        reason_code:
+          $ref: "#/components/schemas/PatrolDegradationReason"
+        affected_papers:
+          type: array
+          items:
+            type: string
+        severity:
+          $ref: "#/components/schemas/PatrolDegradationSeverity"
+        timestamp:
+          type: string
+          format: date-time
 
     PatrolInsight:
       type: object
@@ -939,10 +1064,27 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/PatrolPoint"
+        is_degraded:
+          type: boolean
+          description: True when RAG context was thinned; read degradation_profile for details. Defaults to false when omitted.
+        degradation_profile:
+          allOf:
+            - $ref: "#/components/schemas/PatrolDegradationProfile"
+          nullable: true
+          description: Explicit RAG degradation profile when is_degraded is true.
+        exclusion_logic:
+          allOf:
+            - $ref: "#/components/schemas/PatrolExclusionLogic"
+          nullable: true
+          description: |
+            Required when status=insufficient_data. Structured channel-B exclusion reason
+            for FE warning-card rendering (P11/F7). Null when status=ready.
         meta:
           type: object
           additionalProperties: true
-          description: Machine-readable metadata about insight generation (e.g. RAG degradation flags).
+          description: |
+            Legacy machine-readable metadata. Prefer is_degraded + degradation_profile.
+            meta.patrol_rag_context_degraded remains a compatibility mirror of the profile.
 
     PatrolResponse:
       type: object

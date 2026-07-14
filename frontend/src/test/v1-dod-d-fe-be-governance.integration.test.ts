@@ -249,7 +249,7 @@ describe('V1 DoD D-11 — OpenAPI contract and health fields', () => {
   it('health fixture fields align with FE expectations (llm_mode / llm_note)', () => {
     const sample = {
       data: {
-        status: 'ok',
+        status: 'healthy',
         llm_mode: 'mock',
         llm_connected: false,
         llm_note: 'Mock 模式：LLM 云服务尚未接入',

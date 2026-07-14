@@ -41,11 +41,29 @@ def upload_dir(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
 
 @pytest.fixture
 def noop_event_bus_publish_sync(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Cut PipelineFinalized publish_sync chain for HTTP contract tests."""
-    monkeypatch.setattr(
-        "backend.events.bus.EventBus.publish_sync",
-        lambda self, event: None,
-    )
+    """Skip RAG EventBus side effects; still promote INDEXING → terminal READY (P10).
+
+    HTTP contract tests intentionally avoid Chroma/embedding work, but after the
+    indexing gate papers must not remain stuck in ``indexing`` when the bus is cut.
+    """
+
+    def _publish_sync(_self: object, event: object) -> None:
+        from backend.events.types import PipelineFinalized
+        from backend.schemas.paper import PaperStatus
+        from backend.services.pipeline_status_service import get_pipeline_status_service
+
+        if not isinstance(event, PipelineFinalized):
+            return
+        status_service = get_pipeline_status_service()
+        if event.terminal_status == PaperStatus.READY_WITH_WARNINGS:
+            status_service.mark_ready_with_warnings(
+                event.paper_id,
+                message=event.warning_message,
+            )
+        else:
+            status_service.mark_ready(event.paper_id)
+
+    monkeypatch.setattr("backend.events.bus.EventBus.publish_sync", _publish_sync)
 
 
 @pytest.fixture

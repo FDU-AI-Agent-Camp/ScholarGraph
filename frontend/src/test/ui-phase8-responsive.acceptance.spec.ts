@@ -197,7 +197,11 @@ describe('Phase 8 responsive & final acceptance (8.1–8.8)', () => {
 
     it('supports Graph deep-link query for Patrol node_refs handoff', () => {
       expect(graphViewSrc).toContain('route.query.node')
-      expect(readFrontendSource('views/PatrolView.vue')).toContain('query: { node: ref.node_id }')
+      const patrolBundle = [
+        readFrontendSource('views/PatrolView.vue'),
+        readFrontendSource('utils/patrolViewHelpers.ts'),
+      ].join('\n')
+      expect(patrolBundle).toContain('query: { node: ref.node_id }')
     })
 
     it('documents check:ci gate in package scripts (8.7 prerequisite)', () => {

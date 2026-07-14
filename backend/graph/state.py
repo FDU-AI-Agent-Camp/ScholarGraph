@@ -27,6 +27,7 @@ STAGE_PERCENT: dict[PipelineStage, int] = {
     PipelineStage.CLASSIFYING: 50,
     PipelineStage.EXTRACTING: 80,
     PipelineStage.STORING: 95,
+    PipelineStage.INDEXING: 98,
     PipelineStage.READY: 100,
     PipelineStage.FAILED: 0,
 }

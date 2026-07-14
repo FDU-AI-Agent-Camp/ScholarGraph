@@ -7,57 +7,17 @@ from typing import Literal
 from pydantic import AliasChoices, Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+from backend.config_clustering import (
+    DEFAULT_EMBEDDING_MODEL_THRESHOLDS,
+    DYNAMIC_CLUSTERING_THRESHOLDS,
+)
+from backend.config_clustering import (
+    clustering_category as _clustering_category,
+)
 from backend.config_patrol import PatrolSettingsMixin
 from backend.config_qa import QaSettingsMixin
 
-# Different embedding models train with different vector-space densities.
-# Hard-coding a single threshold would break when switching models, so we keep
-# per-model defaults and allow explicit env overrides.
-DEFAULT_EMBEDDING_MODEL_THRESHOLDS: dict[str, dict[str, float]] = {
-    "bge-m3": {
-        "similarity": 0.85,
-        "knn": 0.75,
-    },
-    "text-embedding-3-small": {
-        "similarity": 0.65,
-        "knn": 0.55,
-    },
-    "default": {
-        "similarity": 0.80,
-        "knn": 0.70,
-    },
-}
-
-# Per-paradigm, per-node-category similarity thresholds for semantic clustering.
-# A single global threshold causes over-merging for Method nodes (too loose) and
-# under-merging for Dataset nodes (too strict).  Categories are intentionally
-# coarse-grained so the matrix stays small and maintainable; unknown types fall
-# back to the "Concept" bucket.
-DYNAMIC_CLUSTERING_THRESHOLDS: dict[str, dict[str, float]] = {
-    "STEM": {
-        "Method": 0.92,
-        "Dataset": 0.82,
-        "Metric": 0.88,
-        "Baseline": 0.88,
-        "Concept": 0.88,
-    },
-    "HSS": {
-        "Method": 0.86,
-        "Dataset": 0.80,
-        "Concept": 0.82,
-    },
-}
-
-
-def _clustering_category(node_type: str) -> str:
-    """Map a concrete node type to its coarse threshold category."""
-    category_map: dict[str, str] = {
-        "Method": "Method",
-        "Dataset": "Dataset",
-        "Metric": "Metric",
-        "Baseline": "Baseline",
-    }
-    return category_map.get(node_type, "Concept")
+AppProfile = Literal["ci", "demo", "prod"]
 
 
 class Settings(PatrolSettingsMixin, QaSettingsMixin, BaseSettings):
@@ -71,8 +31,23 @@ class Settings(PatrolSettingsMixin, QaSettingsMixin, BaseSettings):
     )
 
     app_env: Literal["development", "staging", "production", "test"] = "development"
+    app_profile: AppProfile | None = Field(default=None, validation_alias="APP_PROFILE")
     debug: bool = True
     log_level: str = "INFO"
+    asyncio_slow_callback_ms: float = Field(
+        default=-1.0,
+        validation_alias="ASYNCIO_SLOW_CALLBACK_MS",
+        description=(
+            "Loop block detector: set_debug + slow_callback_duration (ms). "
+            "-1 = auto (100ms in development/test, off in staging/production); "
+            "0 = force off; >0 = explicit threshold."
+        ),
+    )
+    startup_reranker_probe_enabled: bool = Field(
+        default=True,
+        validation_alias="STARTUP_RERANKER_PROBE",
+        description="demo/prod 启动时是否对 Reranker 做微量握手探针",
+    )
 
     api_host: str = "127.0.0.1"
     api_port: int = 8000
@@ -334,6 +309,18 @@ class Settings(PatrolSettingsMixin, QaSettingsMixin, BaseSettings):
         validation_alias="CLASSIFIER_PROFILE_LLM_TIMEOUT_SECONDS",
     )
 
+    @field_validator("app_profile", mode="before")
+    @classmethod
+    def normalize_app_profile(cls, value: object) -> AppProfile | None:
+        if value is None:
+            return None
+        if isinstance(value, str):
+            normalized = value.strip().lower()
+            if not normalized:
+                return None
+            return normalized  # type: ignore[return-value]
+        return value  # type: ignore[return-value]
+
     @field_validator("cors_origins", mode="before")
     @classmethod
     def split_cors_origins(cls, value: str | list[str]) -> str:
@@ -456,6 +443,16 @@ class Settings(PatrolSettingsMixin, QaSettingsMixin, BaseSettings):
         return key
 
 
+def _resolve_profile_env_files() -> tuple[str, ...] | None:
+    """Return layered env files for demo/prod; ``None`` lets pydantic use model default."""
+    profile = os.environ.get("APP_PROFILE", "").strip().lower()
+    if profile == "demo":
+        return (".env", ".env.demo")
+    if profile == "prod":
+        return (".env", ".env.prod")
+    return (".env",)
+
+
 def _should_ignore_dotenv() -> bool:
     """Whether ``get_settings()`` should skip loading repository ``.env``.
 
@@ -476,4 +473,5 @@ def get_settings() -> Settings:
         # during tests, so monkeypatched environment variables stay deterministic.
         # pydantic_settings accepts _env_file at runtime but pyright cannot see it.
         return Settings(_env_file=None)  # type: ignore[call-arg]
-    return Settings()
+    env_files = _resolve_profile_env_files()
+    return Settings(_env_file=env_files)  # type: ignore[call-arg]

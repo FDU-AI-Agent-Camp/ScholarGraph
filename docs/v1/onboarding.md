@@ -48,7 +48,9 @@ uv sync
 
 # 环境变量
 cp .env.example .env
-# 默认 LLM_MODE=mock，无需 Key 即可联调
+# 默认 APP_PROFILE=ci + LLM_MODE=mock，无需 Key 即可联调
+# 验收演示：export APP_PROFILE=demo（叠加 .env.demo，RERANKER 硬性开启）
+# 生产部署：export APP_PROFILE=prod（叠加 .env.prod）
 # 接华为云 ModelArts MaaS：LLM_MODE=live，填 SCHOLARGRAPH_API_KEY + LLM_API_BASE_URL
 # 模型名见 .env.example（默认 DeepSeek-V3-64K / Qwen3-32B-64K，与 backend/config.py 一致）
 
@@ -72,6 +74,7 @@ cp .env.example .env
 
 ```bash
 uv run pytest
+export APP_PROFILE=ci
 uv run uvicorn backend.main:app --reload --host 127.0.0.1 --port 8000
 # 浏览器打开 http://127.0.0.1:8000/api/v1/health 或 http://127.0.0.1:8000/docs
 ```

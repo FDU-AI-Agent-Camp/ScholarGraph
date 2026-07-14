@@ -108,6 +108,9 @@ async def test_api_ready_with_warnings_for_low_quality_graph(
         classification=ParadigmClassification(paradigm=Paradigm.HSS, confidence=0.9, reason="test"),
         graph=graph,
     )
+    from tests.helpers.event_bus_testkit import drain_event_bus
+
+    await drain_event_bus()
 
     status_resp = await api_client.get(f"/api/v1/papers/{paper_id}/status")
     assert status_resp.status_code == 200
@@ -136,6 +139,9 @@ async def test_api_ready_for_high_quality_graph(
         classification=ParadigmClassification(paradigm=Paradigm.HSS, confidence=0.9, reason="test"),
         graph=graph,
     )
+    from tests.helpers.event_bus_testkit import drain_event_bus
+
+    await drain_event_bus()
 
     status_resp = await api_client.get(f"/api/v1/papers/{paper_id}/status")
     assert status_resp.status_code == 200

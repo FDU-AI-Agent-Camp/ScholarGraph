@@ -46,9 +46,37 @@ def patch_patrol_settings(monkeypatch: pytest.MonkeyPatch, **overrides: bool | i
     reset_patrol_runtime_caches()
 
 
+_LIVE_PATROL_MARKERS = frozenset({"live_patrol_logic", "demo_profile_check"})
+
+
+def _uses_live_patrol_settings(request: pytest.FixtureRequest) -> bool:
+    return any(request.node.get_closest_marker(name) for name in _LIVE_PATROL_MARKERS)
+
+
 @pytest.fixture(autouse=True)
-def _isolate_patrol_settings(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
+def _enforce_golden_config_snapshot_for_live_patrol(
+    request: pytest.FixtureRequest,
+) -> Iterator[None]:
+    """Block live_patrol_logic / demo_profile_check when config diverges from golden snapshot."""
+    if not _uses_live_patrol_settings(request):
+        yield
+        return
+
+    from tests.fixtures.patrol_golden_config_snapshot import validate_golden_config_snapshot
+
+    validate_golden_config_snapshot()
+    yield
+
+
+@pytest.fixture(autouse=True)
+def _isolate_patrol_settings(monkeypatch: pytest.MonkeyPatch, request: pytest.FixtureRequest) -> Iterator[None]:
     """Prevent cross-test Settings / embedding singleton pollution in patrol suite."""
+    if _uses_live_patrol_settings(request):
+        reset_patrol_runtime_caches()
+        yield
+        reset_patrol_runtime_caches()
+        return
+
     monkeypatch.setenv("LLM_MODE", "mock")
     reset_patrol_runtime_caches()
     yield

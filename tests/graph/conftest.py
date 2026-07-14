@@ -1,7 +1,6 @@
 """Shared fixtures for graph / workflow tests."""
 
 from collections.abc import Iterator
-from datetime import UTC, datetime
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -9,12 +8,14 @@ import pytest
 from backend.config import get_settings
 from backend.graph.state import STAGE_PERCENT, WorkflowState, initial_workflow_state
 from backend.graph.workflow import get_compiled_paper_pipeline
+from backend.repositories.async_bridge import run_async
 from backend.schemas.graph import GraphEdge, GraphNode, UnifiedPaperGraph
-from backend.schemas.paper import PaperDetail, PaperStatus, PipelineStage
+from backend.schemas.paper import PaperStatus, PipelineStage
 from backend.schemas.paradigm import Paradigm, ParadigmClassification
 from backend.services.graph_persistence_service import GraphPersistenceService
-from backend.services.paper_service import get_paper_service
 from backend.services.pipeline_completion_service import PipelineCompletionService
+
+from tests.helpers.persistence_testkit import register_test_paper
 
 
 @pytest.fixture
@@ -38,22 +39,19 @@ def clear_compiled_pipeline_cache() -> Iterator[None]:
 
 
 @pytest.fixture
-def workflow_paper(tmp_path: Path) -> tuple[str, Path]:
-    """Register a pending paper and create a minimal PDF on disk."""
+def workflow_paper(tmp_path: Path, persistence_env: dict) -> tuple[str, Path]:
+    """Register a pending paper (SQLite) and create a minimal PDF on disk."""
     paper_id = "wf-test-paper"
     pdf_path = tmp_path / f"{paper_id}.pdf"
     pdf_path.write_bytes(b"%PDF-1.4\n% mock content")
-
-    now = datetime.now(UTC)
-    service = get_paper_service()
-    service._papers[paper_id] = PaperDetail(
-        paper_id=paper_id,
-        title="workflow unit test",
-        status=PaperStatus.PENDING,
-        created_at=now,
-        updated_at=now,
+    run_async(
+        register_test_paper(
+            paper_id,
+            title="workflow unit test",
+            pdf_path=str(pdf_path),
+            status=PaperStatus.PENDING,
+        ),
     )
-    service._status.pop(paper_id, None)
     return paper_id, pdf_path
 
 

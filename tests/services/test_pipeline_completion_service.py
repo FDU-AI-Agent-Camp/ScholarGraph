@@ -24,6 +24,7 @@ def test_finalize_validates_persists_and_marks_ready(
     with patch(
         "backend.services.rag_index_service.RagIndexService.index_paper_for_rag_async",
         new_callable=AsyncMock,
+        return_value=True,
     ):
         result = service.finalize(
             registered_paper,
@@ -36,6 +37,9 @@ def test_finalize_validates_persists_and_marks_ready(
     assert result.paper_id == registered_paper
     import asyncio
 
+    from tests.helpers.event_bus_testkit import drain_event_bus_sync
+
+    drain_event_bus_sync()
     paper = asyncio.run(get_paper_service().get_paper(registered_paper))
     assert paper.status == PaperStatus.READY
     assert paper.classification == sample_classification

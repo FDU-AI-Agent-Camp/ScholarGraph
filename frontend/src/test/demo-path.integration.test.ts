@@ -28,6 +28,8 @@ const detailViewSrc = readFrontendSource('views/PaperDetailView.vue')
 const statusPanelSrc = readFrontendSource('components/papers/PaperStatusPanel.vue')
 const graphViewSrc = readFrontendSource('views/PaperGraphView.vue')
 const patrolViewSrc = readFrontendSource('views/PatrolView.vue')
+const patrolViewHelpersSrc = readFrontendSource('utils/patrolViewHelpers.ts')
+const patrolViewBundleSrc = `${patrolViewSrc}\n${patrolViewHelpersSrc}`
 const tagCitationSrc = readFrontendSource('components/ui/TagCitation.vue')
 const paperGraphUtilSrc = readFrontendSource('utils/paperGraph.ts')
 
@@ -193,9 +195,9 @@ describe('design-spec §16 Prototype 答辩路径', () => {
 
   describe('Patrol → [node_ref] → Graph / Deep-Link', () => {
     it('graphLinkForNodeRef builds PaperGraph route with node query', () => {
-      expect(patrolViewSrc).toContain('graphLinkForNodeRef')
-      expect(patrolViewSrc).toContain('query: { node: ref.node_id }')
-      expect(patrolViewSrc).toContain('RouteName.PaperGraph')
+      expect(patrolViewBundleSrc).toContain('graphLinkForNodeRef')
+      expect(patrolViewBundleSrc).toContain('query: { node: ref.node_id }')
+      expect(patrolViewBundleSrc).toContain('RouteName.PaperGraph')
       expect(patrolViewSrc).toContain('PATROL_BASELINE_COPY.nodeRefGraphLink')
     })
 

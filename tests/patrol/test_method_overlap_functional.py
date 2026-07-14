@@ -25,6 +25,12 @@ from backend.schemas.graph import GraphEdge, GraphNode, NodeType, UnifiedPaperGr
 from backend.schemas.paradigm import Paradigm
 from backend.schemas.patrol import MethodOverlapPoint, OverlapType, PatrolInsightStatus
 from backend.schemas.patrol_llm import MethodComparativeDetail, MethodOverlapOutput
+from tests.fixtures.method_overlap_benchmark_stubs import (
+    GoldenPcaEmbeddingClient as _GoldenPcaEmbeddingClient,
+)
+from tests.fixtures.method_overlap_benchmark_stubs import (
+    NbLrNoiseEmbeddingClient as _NbLrNoiseEmbeddingClient,
+)
 from tests.helpers.patrol_graphs import (
     build_pca_mnist_synonym_golden_corpus,
     build_stem_graph_with_method_dataset_rq,
@@ -41,23 +47,6 @@ _LR_CIRCUIT_BREAKER_VECTOR = [_LIVE_NB_LR_COSINE, math.sqrt(1.0 - _LIVE_NB_LR_CO
 _LIVE_NB_LR_NOISE_COSINE = 0.90
 _NB_NOISE_VECTOR = [1.0, 0.0]
 _LR_NOISE_VECTOR = [_LIVE_NB_LR_NOISE_COSINE, math.sqrt(1.0 - _LIVE_NB_LR_NOISE_COSINE**2)]
-
-
-class _GoldenPcaEmbeddingClient:
-    """Deterministic vectors for PCA ↔ Principal Component Analysis (not is_mock)."""
-
-    is_mock = False
-
-    async def embed_texts(self, texts: list[str]) -> list[list[float]]:
-        vectors: dict[str, list[float]] = {}
-        for text in texts:
-            if text.startswith("PCA") or text.startswith("PCA "):
-                vectors[text] = [1.0, 0.0, 0.0]
-            elif "Principal Component Analysis" in text:
-                vectors[text] = [0.99, 0.01, 0.0]
-            else:
-                vectors[text] = [0.0, 0.0, 1.0]
-        return [vectors.get(text, [0.0, 0.0, 0.0]).copy() for text in texts]
 
 
 @pytest.fixture
@@ -152,7 +141,7 @@ async def test_functional_topology_resonance_pca_synonym_golden_corpus_end_to_en
 
     assert insight is not None
     assert insight.status == PatrolInsightStatus.READY
-    assert insight.summary == llm_output.summary
+    assert insight.summary.startswith(llm_output.summary)
 
     assert len(insight.structured_points) == 2
     method_point = next(p for p in insight.structured_points if p.overlap_type == OverlapType.METHOD)
@@ -293,23 +282,6 @@ async def test_boundary_semantic_path_disabled_short_circuits_without_embedding(
     with pytest.raises(AssertionError, match="must not be called when entry gate short-circuits"):
         await spy_client.embed_texts(["Naive Bayes"])
     await high_sim_client.embed_texts(["Naive Bayes", "Logistic Regression"])
-
-
-class _NbLrNoiseEmbeddingClient:
-    """Live false-positive pair: NB ↔ LR cosine ≈ 0.90; disjoint RQ vectors."""
-
-    is_mock = False
-
-    async def embed_texts(self, texts: list[str]) -> list[list[float]]:
-        vectors: list[list[float]] = []
-        for text in texts:
-            if text.startswith("Naive Bayes"):
-                vectors.append(_NB_NOISE_VECTOR.copy())
-            elif text.startswith("Logistic Regression"):
-                vectors.append(_LR_NOISE_VECTOR.copy())
-            else:
-                vectors.append([0.0, 0.0])
-        return vectors
 
 
 def _build_nb_lr_noise_live_graphs() -> tuple[dict, tuple[str, str]]:

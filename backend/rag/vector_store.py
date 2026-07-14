@@ -1,4 +1,8 @@
-"""ChromaDB-backed vector store for RAG chunks, entities, and relations."""
+"""ChromaDB-backed vector store for RAG chunks, entities, and relations.
+
+Run-id snapshot replace + generation-guard activation live in
+``vector_store_replace.ReplacePaperIndexMixin`` (P13; keeps this module under D-12).
+"""
 
 from __future__ import annotations
 
@@ -20,6 +24,7 @@ from backend.rag.models import (
 )
 from backend.rag.protocols import VectorStoreProtocol
 from backend.rag.vector_store_chunk_text import ChunkTextLookupMixin
+from backend.rag.vector_store_replace import GENERATION_GUARD_LOG_PREFIX, ReplacePaperIndexMixin
 from backend.rag.vector_store_utils import (
     DEFAULT_EMBEDDING_DIMENSION,
     ChromaMetadata,
@@ -30,11 +35,9 @@ from backend.rag.vector_store_utils import (
     _default_embedding_client,
     _embed_in_batches,
     _entity_chroma_id,
-    _generate_run_id,
     _persistent_chroma_client,
     _relation_chroma_id,
     _result_has_ids,
-    _validate_evidence_paper_ids,
     clean_metadata,
     query_evidence_collection,
 )
@@ -49,12 +52,13 @@ __all__ = [
     "ChromaMetadata",
     "ChromaWhere",
     "CollectionProtocol",
+    "GENERATION_GUARD_LOG_PREFIX",
     "VectorStore",
     "clean_metadata",
 ]
 
 
-class VectorStore(ChunkTextLookupMixin):
+class VectorStore(ChunkTextLookupMixin, ReplacePaperIndexMixin):
     """Thin ChromaDB wrapper used by downstream RAG retrieval modules."""
 
     def __init__(
@@ -107,69 +111,6 @@ class VectorStore(ChunkTextLookupMixin):
             client.get_or_create_collection(name=self._settings.chromadb_relation_collection, embedding_function=None),
         )
         self._bind_chunk_text_lru()
-
-    async def replace_paper_index(
-        self,
-        paper_id: str,
-        *,
-        chunks: list[PaperChunk],
-        entities: list[PaperEntity],
-        relations: list[PaperRelation],
-    ) -> None:
-        """Replace all indexed evidence for one paper using index_run_id snapshot switching.
-
-        A new run id is created, data is upserted with that run id, and only after
-        all three collections succeed is the new run activated. If anything fails,
-        queries continue to see the previously active run. Old runs are cleaned up
-        asynchronously after activation.
-        """
-
-        _validate_evidence_paper_ids(paper_id, chunks, entities, relations)
-
-        if self._paper_service is None:
-            # Fallback for callers that do not supply a paper service: old behavior.
-            await self.delete_by_paper(paper_id)
-            await self.index_chunks(chunks)
-            await self.index_entities(entities)
-            await self.index_relations(relations)
-            return
-
-        # Serialize concurrent replaces for the same paper so that only one new
-        # run can be created and activated at a time. This prevents races where
-        # multiple coroutines activate different runs and leave stale data visible.
-        async with self._replace_locks.setdefault(paper_id, asyncio.Lock()):
-            # Capture the previous active run before writing the new one, so cleanup
-            # can target exactly that run and never accidentally remove data written
-            # by concurrent or failed replaces.
-            previous_run_id = self._paper_service.get_active_run_id(paper_id)
-
-            # Ensure any stale cleanup from a previous replace finishes before we write
-            # the new run, preventing it from deleting data from the upcoming run.
-            await self._await_pending_cleanups(paper_id)
-
-            run_id = _generate_run_id()
-            try:
-                await self._index_chunks(chunks, run_id=run_id)
-                await self._index_entities(entities, run_id=run_id)
-                await self._index_relations(relations, run_id=run_id)
-
-                # Activation is the commit point. Failures before this leave the old run active.
-                self._paper_service.set_active_run_id(paper_id, run_id)
-                self.clear_chunk_text_lru()
-            except Exception:
-                # Best-effort cleanup of the partially-written run so failed replaces
-                # do not leave orphan data in ChromaDB. The original exception is
-                # re-raised after cleanup attempts.
-                await self._cleanup_run_safely(paper_id, run_id)
-                raise
-
-        # Best-effort async cleanup of exactly the previous run now that the new
-        # run is live. Targeting the explicit previous run id avoids deleting data
-        # belonging to a newer failed or concurrent replace.
-        if previous_run_id:
-            task = asyncio.create_task(self._cleanup_run(paper_id, previous_run_id))
-            self._pending_cleanups.setdefault(paper_id, set()).add(task)
-            task.add_done_callback(lambda _: self._pending_cleanups.get(paper_id, set()).discard(task))
 
     async def index_chunks(self, chunks: list[PaperChunk]) -> None:
         """Upsert paper text chunks into the chunk collection using the active run id."""
@@ -342,7 +283,7 @@ class VectorStore(ChunkTextLookupMixin):
         )
         self.clear_chunk_text_lru()
         if self._paper_service is not None:
-            self._paper_service.set_active_run_id(paper_id, "")
+            self._paper_service.set_active_run_id(paper_id, None)
 
     async def exists(self, paper_id: str) -> bool:
         """Return true when a complete active index run exists for the paper.
@@ -413,6 +354,10 @@ class VectorStore(ChunkTextLookupMixin):
         pending = self._pending_cleanups.pop(paper_id, set())
         if pending:
             await asyncio.gather(*pending, return_exceptions=True)
+
+    async def delete_run(self, paper_id: str, run_id: str) -> None:
+        """Public best-effort deletion of one index_run_id snapshot (compensating cleanup)."""
+        await self._cleanup_run(paper_id, run_id)
 
     async def _cleanup_run_safely(self, paper_id: str, run_id: str) -> None:
         """Best-effort deletion of a partially-written run; logs but never raises."""

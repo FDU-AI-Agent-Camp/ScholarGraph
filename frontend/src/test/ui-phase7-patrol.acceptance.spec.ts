@@ -9,6 +9,8 @@ import { loadDesignTokenMap, readFrontendSource } from '@/test/helpers/designTok
 import { resolvePatrolApiError } from '@/utils/patrolForm'
 
 const patrolViewSrc = readFrontendSource('views/PatrolView.vue')
+const patrolViewHelpersSrc = readFrontendSource('utils/patrolViewHelpers.ts')
+const patrolViewBundleSrc = `${patrolViewSrc}\n${patrolViewHelpersSrc}`
 const patrolCopySrc = readFrontendSource('constants/patrolCopy.ts')
 const patrolFormSrc = readFrontendSource('utils/patrolForm.ts')
 const insightCardSrc = readFrontendSource('components/ui/InsightCard.vue')
@@ -40,8 +42,8 @@ describe('Phase 7 Patrol acceptance (7.1–7.6)', () => {
       expect(patrolViewSrc).toContain('patrol-mode-segment')
       expect(patrolViewSrc).toContain('patrol-mode-segment__item--active')
       expect(patrolViewSrc).toContain('background: var(--color-primary)')
-      expect(patrolViewSrc).toContain('PATROL_BASELINE_COPY.modeLensClashCaption')
-      expect(patrolViewSrc).toContain('PATROL_BASELINE_COPY.modeContradictionCaption')
+      expect(patrolViewBundleSrc).toContain('PATROL_BASELINE_COPY.modeLensClashCaption')
+      expect(patrolViewBundleSrc).toContain('PATROL_BASELINE_COPY.modeContradictionCaption')
     })
   })
 
@@ -57,8 +59,8 @@ describe('Phase 7 Patrol acceptance (7.1–7.6)', () => {
   describe('7.5 InsightCard node_refs link to graph ?node=', () => {
     it('links node refs through RouterLink with PaperGraph route query', () => {
       expect(patrolViewSrc).toContain('InsightCard')
-      expect(patrolViewSrc).toContain('RouteName.PaperGraph')
-      expect(patrolViewSrc).toContain('query: { node: ref.node_id }')
+      expect(patrolViewBundleSrc).toContain('RouteName.PaperGraph')
+      expect(patrolViewBundleSrc).toContain('query: { node: ref.node_id }')
       expect(insightCardSrc).toContain('insight-card--lens_clash')
       expect(insightCardSrc).toContain('insight-card--contradiction')
     })

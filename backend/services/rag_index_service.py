@@ -25,11 +25,10 @@ class RagIndexService:
         full_text: str,
         graph: UnifiedPaperGraph,
         page_break_offsets: list[int] | None = None,
-    ) -> None:
+    ) -> bool:
         """Build the RAG vector index for one finalized paper.
 
-        This facade keeps LangGraph nodes free of config, vector store, and
-        handler imports; nodes only depend on this backend.services facade.
+        Returns True when indexing succeeded or was intentionally skipped (mock).
         """
 
         from backend.services.paper_service import get_paper_service
@@ -37,14 +36,14 @@ class RagIndexService:
         settings = get_settings()
         if settings.is_llm_mock:
             logger.info("rag_index_skipped_in_mock_mode", extra={"paper_id": paper_id})
-            return
+            return True
 
         logger.info(RAG_INDEX_STAGE_MESSAGE, extra={"paper_id": paper_id})
         vector_store = VectorStore(
             chroma_path=settings.chromadb_path,
             paper_service=get_paper_service(),
         )
-        await index_paper_for_rag(
+        return await index_paper_for_rag(
             paper_id,
             full_text=full_text,
             graph=graph,

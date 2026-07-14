@@ -21,6 +21,10 @@ async def lifespan(app: FastAPI):
     from backend.events.pipeline_finalized_handlers import register_pipeline_finalized_handlers
     from backend.rag.hybrid_retriever import bind_hybrid_retriever, create_hybrid_retriever, reset_hybrid_retriever
     from backend.services.paper_service import get_paper_service
+    from backend.startup.profile_validation import probe_reranker_connectivity
+
+    settings = get_settings()
+    await probe_reranker_connectivity(settings)
 
     register_pipeline_finalized_handlers()
     from backend.events.bus import install_default_event_bus_hooks
@@ -29,8 +33,23 @@ async def lifespan(app: FastAPI):
     from backend.repositories import register_main_event_loop
 
     register_main_event_loop(asyncio.get_running_loop())
+    from backend.startup.asyncio_debug import configure_asyncio_block_detector
+
+    configure_asyncio_block_detector(asyncio.get_running_loop())
     # Schema must be applied out-of-band: ``uv run python scripts/init_db.py``.
     await get_paper_service().bootstrap()
+
+    from backend.rag.indexing_watchdog import (
+        reconcile_indexing_on_startup,
+        start_indexing_watchdog,
+        stop_indexing_watchdog,
+    )
+
+    # P13: promote orphaned INDEXING rows left by a previous process, then start
+    # the out-of-loop macro watchdog (dedicated OS thread + sync SQLAlchemy scans;
+    # must not run_async onto the FastAPI loop — main-loop starvation would stall heal).
+    await reconcile_indexing_on_startup()
+    start_indexing_watchdog()
 
     preconfigured = getattr(app.state, "hybrid_retriever", None)
     if preconfigured is not None:
@@ -46,6 +65,7 @@ async def lifespan(app: FastAPI):
     finally:
         from backend.events.bus import stop_event_bus_worker
 
+        stop_indexing_watchdog()
         stop_event_bus_worker()
         register_main_event_loop(None)
         reset_hybrid_retriever()
@@ -54,7 +74,10 @@ async def lifespan(app: FastAPI):
 
 
 def create_app() -> FastAPI:
+    from backend.startup.profile_validation import run_startup_profile_validation
+
     settings = get_settings()
+    run_startup_profile_validation(settings)
     if settings.is_llm_mock:
         logger.warning(
             "LLM_MODE=mock — 云服务尚未接入；问答 / 巡检 / 抽取使用本地 Mock 响应（见 GET /api/v1/health）",

@@ -439,7 +439,7 @@ async def test_upsert_single_batch_when_documents_fit() -> None:
 async def test_validate_evidence_paper_ids_boundary_cases() -> None:
     """Direct unit tests for the paper_id consistency helper."""
 
-    from backend.rag.vector_store import _validate_evidence_paper_ids
+    from backend.rag.vector_store_utils import _validate_evidence_paper_ids
 
     local_chunk = _chunk("paper-1", 0, "local")
     local_entity = PaperEntity(

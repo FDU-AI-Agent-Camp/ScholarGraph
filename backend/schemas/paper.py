@@ -12,6 +12,8 @@ from backend.schemas.paradigm import Paradigm, ParadigmClassification
 class PaperStatus(StrEnum):
     PENDING = "pending"
     PROCESSING = "processing"
+    # Graph persisted; VectorStore index still building (P10 state gate).
+    INDEXING = "indexing"
     READY = "ready"
     READY_WITH_WARNINGS = "ready_with_warnings"
     FAILED = "failed"
@@ -23,6 +25,7 @@ class PipelineStage(StrEnum):
     CLASSIFYING = "classifying"
     EXTRACTING = "extracting"
     STORING = "storing"
+    INDEXING = "indexing"
     READY = "ready"
     FAILED = "failed"
 

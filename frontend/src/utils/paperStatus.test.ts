@@ -6,11 +6,13 @@ import { failedStatus, processingStatus, readyStatus } from '@/test/fixtures/pap
 import { isFailedStatus, isReadyStatus, isTerminalStatus } from '@/utils/paperStatus'
 
 describe('paperStatus helpers', () => {
-  it('isTerminalStatus is true for ready and failed only', () => {
+  it('isTerminalStatus stops polling for ready / ready_with_warnings / failed', () => {
     expect(isTerminalStatus('ready')).toBe(true)
+    expect(isTerminalStatus('ready_with_warnings')).toBe(true)
     expect(isTerminalStatus('failed')).toBe(true)
     expect(isTerminalStatus('pending')).toBe(false)
     expect(isTerminalStatus('processing')).toBe(false)
+    expect(isTerminalStatus('indexing')).toBe(false)
   })
 
   it('isFailedStatus narrows failed payloads with error fields', () => {

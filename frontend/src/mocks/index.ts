@@ -9,4 +9,6 @@ export { default as paperStatusFailed } from '../../../docs/api/fixtures/paper-s
 export { default as paperStatusProcessing } from '../../../docs/api/fixtures/paper-status-processing.json'
 export { default as graphHss } from '../../../docs/api/fixtures/graph-hss.json'
 export { default as patrolLensClash } from '../../../docs/api/fixtures/patrol-lens-clash.json'
+export { default as patrolMethodOverlap } from '../../../docs/api/fixtures/patrol-method-overlap.json'
+export { default as patrolClaimEvolution } from '../../../docs/api/fixtures/patrol-claim-evolution.json'
 export { default as qaStreamV2Frames } from '../../../docs/api/fixtures/qa-stream-v2-frames.json'

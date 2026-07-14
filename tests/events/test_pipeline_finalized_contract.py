@@ -1,4 +1,4 @@
-"""Contract validation tests for PipelineFinalized temporary handler."""
+"""Contract validation tests for PipelineFinalized official RAG handler."""
 
 from __future__ import annotations
 
@@ -120,8 +120,7 @@ async def test_finalize_publish_and_consume_share_correlation_id(
     classification = ParadigmClassification(paradigm=Paradigm.HSS, confidence=0.9, reason="log")
 
     bus = EventBus()
-    handler_module.register_pipeline_finalized_handlers(force=True)
-    bus.subscribe(EventType.PIPELINE_FINALIZED, handler_module.temporary_pipeline_finalized_rag_handler)
+    bus.subscribe(EventType.PIPELINE_FINALIZED, handler_module.pipeline_finalized_rag_handler)
 
     original_get = bus_module.get_event_bus
     bus_module.get_event_bus = lambda: bus  # type: ignore[assignment]
@@ -177,7 +176,7 @@ def test_handler_immediate_db_read_never_dirty_reads(
     from backend.services import pipeline_completion_service as pcs_module
 
     bus = EventBus()
-    bus.subscribe(EventType.PIPELINE_FINALIZED, handler_module.temporary_pipeline_finalized_rag_handler)
+    bus.subscribe(EventType.PIPELINE_FINALIZED, handler_module.pipeline_finalized_rag_handler)
 
     original_get = bus_module.get_event_bus
     bus_module.get_event_bus = lambda: bus  # type: ignore[assignment]
