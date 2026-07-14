@@ -27,12 +27,18 @@ REQUIRED_TEST_NAMES: tuple[str, ...] = (
 )
 
 
+# Scope to tests/rag so unrelated modules (e.g. patrol suite gates that load
+# golden JSON at collection time) cannot abort P13 collect with Import/FileNotFound.
+_P13_COLLECT_ROOT = "tests/rag"
+
+
 def _collect_p13_nodeids() -> list[str]:
     proc = subprocess.run(
         [
             sys.executable,
             "-m",
             "pytest",
+            _P13_COLLECT_ROOT,
             "--collect-only",
             "-q",
             "-m",
@@ -82,6 +88,7 @@ def main() -> int:
             sys.executable,
             "-m",
             "pytest",
+            _P13_COLLECT_ROOT,
             "-q",
             "--tb=short",
             "-m",
