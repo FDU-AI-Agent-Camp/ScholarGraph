@@ -23,6 +23,7 @@ ci:
 	uv run ruff check backend tests scripts
 	uv run ruff format --check backend tests scripts
 	uv run pyright backend
+	uv run python scripts/check_rag_io_timeouts.py
 	uv run python -m pytest -q --tb=short --cov=backend --cov-report=xml --cov-report=term-missing --cov-fail-under=30 -m "$(PR_GATE_MARKERS)"
 	uv run pip-audit --desc --format=json --local --path=.venv > pip-audit-report.json || true
 

@@ -78,6 +78,8 @@ def main(argv: list[str] | None = None) -> int:
         ("ruff check", ruff_check_cmd),
         ("ruff format", ruff_format_cmd),
         ("pyright", [sys.executable, "-m", "pyright", "backend"]),
+        # P13: keep wait_for / httpx timeout / [P13_WATCHDOG_HEAL] wire unbroken.
+        ("rag io timeouts", [sys.executable, "scripts/check_rag_io_timeouts.py"]),
     ]
     if not args.lint_only:
         # Use ``python -m pytest`` to avoid Windows entry-point canonicalisation issues.
