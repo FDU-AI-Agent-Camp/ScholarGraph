@@ -1,8 +1,9 @@
+import { mount } from '@vue/test-utils'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { nextTick, ref } from 'vue'
+import { defineComponent, nextTick, ref } from 'vue'
 
 import type { PatrolMode, PatrolReport } from '@/api/types'
-import { usePatrolHealPoll } from '@/composables/usePatrolHealPoll'
+import { usePatrolHealPoll, type UsePatrolHealPollOptions } from '@/composables/usePatrolHealPoll'
 
 function degradedReport(): PatrolReport {
   return {
@@ -50,6 +51,21 @@ function healthyReport(): PatrolReport {
   }
 }
 
+function mountHealPoll(options: UsePatrolHealPollOptions) {
+  let api: ReturnType<typeof usePatrolHealPoll> | undefined
+  const Host = defineComponent({
+    setup() {
+      api = usePatrolHealPoll(options)
+      return () => null
+    },
+  })
+  const wrapper = mount(Host)
+  if (api === undefined) {
+    throw new Error('usePatrolHealPoll did not initialize')
+  }
+  return { wrapper, api }
+}
+
 describe('usePatrolHealPoll', () => {
   beforeEach(() => {
     vi.useFakeTimers()
@@ -65,7 +81,7 @@ describe('usePatrolHealPoll', () => {
     const mode = ref<PatrolMode>('method_overlap')
     const runPatrol = vi.fn().mockResolvedValue(healthyReport())
 
-    const { healing, scheduleHealPoll, stopHealPoll } = usePatrolHealPoll({
+    const { wrapper, api } = mountHealPoll({
       report,
       paperIds,
       mode,
@@ -73,21 +89,22 @@ describe('usePatrolHealPoll', () => {
       delaysMs: [10_000, 30_000],
     })
 
-    scheduleHealPoll()
-    expect(healing.value).toBe(true)
+    api.scheduleHealPoll()
+    expect(api.healing.value).toBe(true)
 
     await vi.advanceTimersByTimeAsync(10_000)
     await nextTick()
 
     expect(runPatrol).toHaveBeenCalledTimes(1)
     expect(report.value?.insights[0]?.is_degraded).toBe(false)
-    expect(healing.value).toBe(false)
+    expect(api.healing.value).toBe(false)
 
     // Further ticks should not storm the network
     await vi.advanceTimersByTimeAsync(60_000)
     expect(runPatrol).toHaveBeenCalledTimes(1)
 
-    stopHealPoll()
+    api.stopHealPoll()
+    wrapper.unmount()
   })
 
   it('does not schedule when reason is not INDEX_NOT_READY', () => {
@@ -110,7 +127,7 @@ describe('usePatrolHealPoll', () => {
     const mode = ref<PatrolMode>('method_overlap')
     const runPatrol = vi.fn()
 
-    const { healing, scheduleHealPoll } = usePatrolHealPoll({
+    const { wrapper, api } = mountHealPoll({
       report,
       paperIds,
       mode,
@@ -118,8 +135,9 @@ describe('usePatrolHealPoll', () => {
       delaysMs: [1_000],
     })
 
-    scheduleHealPoll()
-    expect(healing.value).toBe(false)
+    api.scheduleHealPoll()
+    expect(api.healing.value).toBe(false)
     expect(runPatrol).not.toHaveBeenCalled()
+    wrapper.unmount()
   })
 })
