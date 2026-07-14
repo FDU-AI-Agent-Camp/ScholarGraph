@@ -1,4 +1,4 @@
-.PHONY: check check-lint check-no-fix ci ci-patrol-release ci-demo-profile-check p13-release-gate format type test
+.PHONY: check check-lint check-no-fix ci ci-patrol-release ci-demo-profile-check p13-release-gate pipeline-repo-lod format type test
 
 # PR 门禁：排除所有 live / 外部依赖 marker，仅跑内存 Stub 回归
 PR_GATE_MARKERS := not red and not live_patrol_logic and not live_qa_logic and not demo_profile_check and not live_mineru and not live_grobid and not live_benchmark and not live_e10 and not live_judge and not live_head_merge
@@ -24,9 +24,14 @@ ci:
 	uv run ruff format --check backend tests scripts
 	uv run pyright backend
 	uv run python scripts/check_rag_io_timeouts.py
+	uv run python scripts/check_pipeline_repo_lod.py
 	uv run python scripts/check_p13_release_gate.py
 	uv run python -m pytest -q --tb=short --cov=backend --cov-report=xml --cov-report=term-missing --cov-fail-under=30 -m "$(PR_GATE_MARKERS)"
 	uv run pip-audit --desc --format=json --local --path=.venv > pip-audit-report.json || true
+
+# PaperService 封装边界：禁止 backend 其他模块触碰 ._pipeline_repo
+pipeline-repo-lod:
+	uv run python scripts/check_pipeline_repo_lod.py
 
 # P13 孤儿线程 / Watchdog 债务回归矩阵（也可单独本地跑）
 p13-release-gate:
