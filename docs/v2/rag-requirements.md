@@ -298,7 +298,7 @@ await _promote_terminal_status(...)  # ready | ready_with_warnings + RagIndexed
 - 失败不导致流水线 `failed`，但可能以 `ready_with_warnings` 暴露。  
 - 重新抽取（re-extract）时先 `delete_by_paper` / `replace_paper_index` 再重建。  
 - `index_paper_for_rag` 按 `paper_id` 加锁，upsert 幂等。  
-- **孤儿线程（best-effort）**：VectorStore 重活经 `asyncio.to_thread`；`wait_for` 超时取消的是 coroutine await，**不保证**取消线程池内 Chroma/embedding。已 promote 后陈旧线程仍可能 upsert / `set_active_run_id`；与后续 re-extract 的竞态多数由 paper 级锁缓解。后续增强可选超时路径显式 `delete_by_paper` 或令牌失效，当前按知情残留接受。  
+- **孤儿线程 hardening（已落地）**：`IndexingRunRegistry` 在 `replace_paper_index` 生成 `run_id` 时 `begin`；`wait_for` 超时立刻 `revoke`。激活前校验 `may_activate` + Task `cancelling()`，否决则不清 DB active、并清理该 run。超时另起 fire-and-forget 补偿清理（延迟 0/5/10s 调用 `delete_run`；若 active 仍指向该 run 则先清空指针）。线程池内 upsert 或仍会跑完，但**不得合法激活**；脏数据最终被按 run_id 抹除。  
 - 同进程内若同步码**不经** `to_thread` 堵死事件循环，heartbeat / macro watchdog / HTTP 会一并挂起——属架构约束，非 P13 回退。
 
 ### 3.7 配置项

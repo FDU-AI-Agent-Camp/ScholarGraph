@@ -41,6 +41,17 @@ def check_rag_handler_wait_for() -> list[str]:
         )
     if "RAG_INDEX_TIMEOUT_WARNING" not in source:
         errors.append(f"{_HANDLERS.relative_to(REPO_ROOT)}: missing RAG_INDEX_TIMEOUT_WARNING path")
+    if "_revoke_and_schedule_orphan_cleanup" not in source:
+        errors.append(
+            f"{_HANDLERS.relative_to(REPO_ROOT)}: missing orphan-run revoke/cleanup on timeout",
+        )
+    registry = BACKEND / "rag" / "indexing_run_registry.py"
+    if not registry.is_file():
+        errors.append(f"{registry.relative_to(REPO_ROOT)}: missing IndexingRunRegistry module")
+    else:
+        reg_src = _read(registry)
+        if "may_activate" not in reg_src or "revoke" not in reg_src:
+            errors.append(f"{registry.relative_to(REPO_ROOT)}: registry must expose revoke/may_activate")
     return errors
 
 
