@@ -20,6 +20,48 @@ class PatrolInsightStatus(StrEnum):
     INSUFFICIENT_DATA = "insufficient_data"
 
 
+class PatrolDegradationReason(StrEnum):
+    """Machine-readable reasons why Patrol RAG context was thinned."""
+
+    INDEX_NOT_READY = "INDEX_NOT_READY"
+    QUERY_FAILED = "QUERY_FAILED"
+    VECTOR_STORE_UNAVAILABLE = "VECTOR_STORE_UNAVAILABLE"
+
+
+class PatrolDegradationSeverity(StrEnum):
+    WARNING = "WARNING"
+    ERROR = "ERROR"
+
+
+class PatrolDegradationComponent(StrEnum):
+    RAG_CONTEXT = "RAG_CONTEXT"
+
+
+class PatrolDegradationProfile(BaseModel):
+    """First-class degradation contract for thin RAG context (P9 / F8)."""
+
+    component: PatrolDegradationComponent = Field(
+        default=PatrolDegradationComponent.RAG_CONTEXT,
+        description="Which subsystem degraded; currently always RAG_CONTEXT.",
+    )
+    reason_code: PatrolDegradationReason = Field(
+        ...,
+        description="Typed degradation reason — INDEX_NOT_READY / QUERY_FAILED / VECTOR_STORE_UNAVAILABLE.",
+    )
+    affected_papers: list[str] = Field(
+        default_factory=list,
+        description="Paper IDs whose vector index was missing or whose chunk query failed.",
+    )
+    severity: PatrolDegradationSeverity = Field(
+        default=PatrolDegradationSeverity.WARNING,
+        description="UI severity hint; VECTOR_STORE_UNAVAILABLE maps to ERROR.",
+    )
+    timestamp: datetime = Field(
+        ...,
+        description="UTC timestamp when the degradation was recorded.",
+    )
+
+
 class EvolutionType(StrEnum):
     """Relationship between two claims addressing the same research question."""
 
@@ -153,9 +195,20 @@ class PatrolInsight(BaseModel):
             Field(discriminator="mode"),
         ]
     ] = Field(default_factory=list)
+    is_degraded: bool = Field(
+        default=False,
+        description="True when RAG context was thinned; prefer degradation_profile over meta.",
+    )
+    degradation_profile: PatrolDegradationProfile | None = Field(
+        default=None,
+        description="Explicit RAG degradation contract when is_degraded is true.",
+    )
     meta: dict[str, Any] = Field(
         default_factory=dict,
-        description="Machine-readable metadata about insight generation (e.g. degradation flags).",
+        description=(
+            "Legacy machine-readable metadata. Prefer is_degraded + degradation_profile; "
+            "meta.patrol_rag_context_degraded remains a compatibility mirror."
+        ),
     )
 
 
