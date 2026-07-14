@@ -23,6 +23,7 @@ from backend.services.paper_service import get_paper_service
 logger = logging.getLogger(__name__)
 
 RAG_INDEX_WARNING_CODE = "rag_index_failed"
+RAG_INDEX_TIMEOUT_WARNING = "rag_index_timeout"
 RAG_PIPELINE_HANDLER_NAME = "on_pipeline_finalized_for_rag"
 
 _OFFICIAL_HANDLER_REGISTERED = False
@@ -110,7 +111,72 @@ def _record_index_warning(paper_id: str, exc_type_name: str, exc_msg: str) -> No
         logger.exception("failed_to_record_rag_index_warning", extra={"paper_id": paper_id})
 
 
-async def _promote_terminal_status(event: PipelineFinalized, *, success: bool) -> None:
+async def _heartbeat_loop(paper_id: str, stop_event: asyncio.Event, *, interval_seconds: float) -> None:
+    """Keep indexing_heartbeat fresh while a long index build is still running."""
+    from backend.repositories.pipeline_repository import get_pipeline_repository
+
+    repo = get_pipeline_repository()
+    while not stop_event.is_set():
+        try:
+            await repo.touch_indexing_heartbeat(paper_id)
+        except Exception:
+            logger.exception("indexing_heartbeat_touch_failed", extra={"paper_id": paper_id})
+        try:
+            await asyncio.wait_for(stop_event.wait(), timeout=interval_seconds)
+        except TimeoutError:
+            continue
+
+
+async def _index_with_heartbeat_and_timeout(
+    paper_id: str,
+    *,
+    full_text: str,
+    graph: UnifiedPaperGraph,
+    page_break_offsets: list[int] | None,
+    timeout_seconds: float,
+    heartbeat_interval_seconds: float,
+    index_fn: Callable[..., Awaitable[bool | None]],
+) -> bool | None:
+    """Run index build under wait_for while pulsing indexing_heartbeat."""
+    stop_event = asyncio.Event()
+    # Initial pulse so watchdog sees an alive task immediately.
+    try:
+        from backend.repositories.pipeline_repository import get_pipeline_repository
+
+        await get_pipeline_repository().touch_indexing_heartbeat(paper_id)
+    except Exception:
+        logger.exception("indexing_heartbeat_initial_touch_failed", extra={"paper_id": paper_id})
+
+    hb_task = asyncio.create_task(
+        _heartbeat_loop(paper_id, stop_event, interval_seconds=heartbeat_interval_seconds),
+        name=f"rag-index-heartbeat:{paper_id}",
+    )
+    try:
+        return await asyncio.wait_for(
+            index_fn(
+                paper_id,
+                full_text=full_text,
+                graph=graph,
+                page_break_offsets=page_break_offsets,
+            ),
+            timeout=timeout_seconds,
+        )
+    finally:
+        stop_event.set()
+        hb_task.cancel()
+        try:
+            await hb_task
+        except asyncio.CancelledError:
+            pass
+
+
+async def _promote_terminal_status(
+    event: PipelineFinalized,
+    *,
+    success: bool,
+    warning_codes: list[str] | None = None,
+    message_override: str | None = None,
+) -> None:
     """Promote paper status via async repo I/O (safe inside the EventBus worker)."""
     from datetime import UTC, datetime
 
@@ -128,14 +194,17 @@ async def _promote_terminal_status(event: PipelineFinalized, *, success: bool) -
     if terminal not in {PaperStatus.READY, PaperStatus.READY_WITH_WARNINGS}:
         terminal = PaperStatus.READY
 
-    append_warnings = [RAG_INDEX_WARNING_CODE] if not success else None
+    append_warnings: list[str] | None
     if not success:
+        append_warnings = list(warning_codes or [RAG_INDEX_WARNING_CODE])
         status = PaperStatus.READY_WITH_WARNINGS
-        message = "建图完成，但向量索引构建失败"
+        message = message_override or "建图完成，但向量索引构建失败"
     elif terminal == PaperStatus.READY_WITH_WARNINGS:
+        append_warnings = None
         status = PaperStatus.READY_WITH_WARNINGS
         message = event.warning_message or "建图完成，但图谱置信度未达门控，请复核"
     else:
+        append_warnings = None
         status = PaperStatus.READY
         message = DEFAULT_STAGE_MESSAGES[PipelineStage.READY]
 
@@ -217,16 +286,41 @@ async def on_pipeline_finalized_for_rag(event: PipelineFinalized) -> None:
         },
     )
 
+    from backend.config import get_settings
     from backend.services.rag_index_service import get_rag_index_service
 
+    settings = get_settings()
+    timeout_seconds = settings.rag_single_index_timeout_seconds
+    success = False
+    failure_warnings: list[str] | None = None
+    failure_message: str | None = None
+
     try:
-        indexed = await get_rag_index_service().index_paper_for_rag_async(
+        indexed = await _index_with_heartbeat_and_timeout(
             event.paper_id,
             full_text=event.full_text,
             graph=graph,
             page_break_offsets=event.page_break_offsets,
+            timeout_seconds=timeout_seconds,
+            heartbeat_interval_seconds=settings.rag_indexing_heartbeat_interval_seconds,
+            index_fn=get_rag_index_service().index_paper_for_rag_async,
         )
         success = True if indexed is None else bool(indexed)
+        if not success:
+            failure_warnings = [RAG_INDEX_WARNING_CODE]
+    except TimeoutError:
+        logger.error(
+            "pipeline_finalized_rag_index_timeout",
+            extra={
+                "correlation_id": correlation_id,
+                "paper_id": event.paper_id,
+                "timeout_seconds": timeout_seconds,
+                "event_type": EventType.PIPELINE_FINALIZED.value,
+            },
+        )
+        success = False
+        failure_warnings = [RAG_INDEX_TIMEOUT_WARNING]
+        failure_message = f"建图完成，但向量索引超时（>{timeout_seconds:.0f}s）"
     except Exception:
         logger.exception(
             "pipeline_finalized_rag_index_failed",
@@ -237,8 +331,14 @@ async def on_pipeline_finalized_for_rag(event: PipelineFinalized) -> None:
             },
         )
         success = False
+        failure_warnings = [RAG_INDEX_WARNING_CODE]
 
-    await _promote_terminal_status(event, success=success)
+    await _promote_terminal_status(
+        event,
+        success=success,
+        warning_codes=failure_warnings,
+        message_override=failure_message,
+    )
     get_event_bus().publish_sync(
         RagIndexed(
             paper_id=event.paper_id,
