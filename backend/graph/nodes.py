@@ -190,11 +190,12 @@ async def store_node(state: WorkflowState) -> WorkflowState:
     except ServiceError as exc:
         return _failure_patch(exc, stage=PipelineStage.STORING)
 
+    # Graph persist done; VectorStore indexing is async (P10). Poll DB until READY.
     return WorkflowState(
-        status=PaperStatus.READY,
-        stage=PipelineStage.READY,
-        percent=STAGE_PERCENT[PipelineStage.READY],
-        message="建图完成",
+        status=PaperStatus.INDEXING,
+        stage=PipelineStage.INDEXING,
+        percent=STAGE_PERCENT[PipelineStage.INDEXING],
+        message="图谱已就绪，正在构建向量索引…",
         failed=False,
     )
 

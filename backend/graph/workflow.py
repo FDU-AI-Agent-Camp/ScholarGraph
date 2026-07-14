@@ -130,7 +130,23 @@ async def run_paper_pipeline(paper_id: str, pdf_path: Path) -> WorkflowState:
 
     if final_state.get("failed"):
         await _ensure_failed_status_persisted(paper_id, final_state)
+        return final_state
 
+    # store_node leaves papers in ``indexing``; wait for official RAG handler to promote.
+    from backend.events.bus import get_event_bus
+    from backend.graph.state import STAGE_PERCENT
+    from backend.schemas.paper import PaperStatus, PipelineStage
+
+    await get_event_bus().drain()
+    snapshot = await paper_service.get_status(paper_id)
+    if snapshot.status in {PaperStatus.READY, PaperStatus.READY_WITH_WARNINGS}:
+        promoted = cast(WorkflowState, dict(final_state))
+        promoted["status"] = snapshot.status
+        promoted["stage"] = PipelineStage.READY
+        promoted["percent"] = STAGE_PERCENT[PipelineStage.READY]
+        promoted["message"] = snapshot.message or "建图完成"
+        promoted["failed"] = False
+        return promoted
     return final_state
 
 

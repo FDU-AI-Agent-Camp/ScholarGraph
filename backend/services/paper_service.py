@@ -233,6 +233,7 @@ class PaperService:
         *,
         classification: ParadigmClassification,
         graph: UnifiedPaperGraph,
+        full_text: str = "pipeline completion placeholder full text",
     ) -> None:
         from backend.services.graph_persistence_service import get_graph_persistence_service
         from backend.services.pipeline_completion_service import complete_paper_pipeline
@@ -244,6 +245,7 @@ class PaperService:
             classification=classification,
             graph=graph,
             graph_path=graph_path,
+            full_text=full_text,
         )
 
     async def force_reextract(self, paper_id: str) -> PaperStatusData:

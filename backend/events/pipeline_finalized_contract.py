@@ -1,4 +1,4 @@
-"""Contract validation for ``PipelineFinalized`` temporary-handler intake."""
+"""Contract validation for ``PipelineFinalized`` official RAG-handler intake."""
 
 from __future__ import annotations
 
