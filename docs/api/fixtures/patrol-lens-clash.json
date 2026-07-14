@@ -21,7 +21,10 @@
             "lens_b": "公共领域",
             "clash_aspect": "ontology"
           }
-        ]
+        ],
+        "is_degraded": false,
+        "degradation_profile": null,
+        "meta": {}
       }
     ],
     "generated_at": "2026-05-19T11:00:00Z"

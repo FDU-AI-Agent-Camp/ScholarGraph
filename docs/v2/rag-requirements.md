@@ -618,6 +618,20 @@ class PatrolInsight(BaseModel):
 
 Patrol 在构造 context 时，除了图谱节点，还应召回两篇论文的关键 chunks（如 Thesis / Method / Dataset 相关段落），提升 LLM 判断的事实依据。
 
+
+### 5.4.1 RAG 降级契约（P9 / F8）
+
+PatrolInsight 对外暴露一等公民降级字段（不以 summary 文本拼接为准）：
+
+| 字段 | 说明 |
+|------|------|
+| is_degraded | RAG context 变薄时为 	rue |
+| degradation_profile.reason_code | INDEX_NOT_READY / QUERY_FAILED / VECTOR_STORE_UNAVAILABLE |
+| degradation_profile.affected_papers | 受影响 paper_id 列表 |
+| meta.patrol_rag_context_degraded | **兼容镜像**（遗留消费方） |
+
+PatrolRAGService.enrich_context 先做 VectorStore.exists 探针：索引缺失则跳过 query_chunks；连通性异常映射为 VECTOR_STORE_UNAVAILABLE。降级 HTTP 响应带 Cache-Control: max-age=60。前端根据 is_degraded 展示 Warning Banner，并对 INDEX_NOT_READY 退避自愈轮询。
+
 ---
 
 ## 6. Phase 4 — 质量回归与金标评估

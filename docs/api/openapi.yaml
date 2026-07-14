@@ -963,6 +963,42 @@ components:
         - method_overlap: no overlapping Method or Dataset labels.
         - claim_evolution: ResearchQuestion/Thesis too dissimilar, or claims are identical.
 
+    PatrolDegradationReason:
+      type: string
+      enum: [INDEX_NOT_READY, QUERY_FAILED, VECTOR_STORE_UNAVAILABLE]
+      description: |
+        Typed RAG context degradation reasons:
+        - INDEX_NOT_READY: graph ready but vector index still building / missing.
+        - QUERY_FAILED: vector store reachable but chunk recall failed.
+        - VECTOR_STORE_UNAVAILABLE: Chroma/cluster down or network unreachable.
+
+    PatrolDegradationSeverity:
+      type: string
+      enum: [WARNING, ERROR]
+
+    PatrolDegradationComponent:
+      type: string
+      enum: [RAG_CONTEXT]
+
+    PatrolDegradationProfile:
+      type: object
+      required: [component, reason_code, affected_papers, severity, timestamp]
+      description: First-class degradation contract when Patrol RAG context is thinned (P9/F8).
+      properties:
+        component:
+          $ref: "#/components/schemas/PatrolDegradationComponent"
+        reason_code:
+          $ref: "#/components/schemas/PatrolDegradationReason"
+        affected_papers:
+          type: array
+          items:
+            type: string
+        severity:
+          $ref: "#/components/schemas/PatrolDegradationSeverity"
+        timestamp:
+          type: string
+          format: date-time
+
     PatrolInsight:
       type: object
       required: [insight_id, title, summary, status, paper_ids, node_refs]
@@ -991,10 +1027,20 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/PatrolPoint"
+        is_degraded:
+          type: boolean
+          description: True when RAG context was thinned; read degradation_profile for details. Defaults to false when omitted.
+        degradation_profile:
+          allOf:
+            - $ref: "#/components/schemas/PatrolDegradationProfile"
+          nullable: true
+          description: Explicit RAG degradation profile when is_degraded is true.
         meta:
           type: object
           additionalProperties: true
-          description: Machine-readable metadata about insight generation (e.g. RAG degradation flags).
+          description: |
+            Legacy machine-readable metadata. Prefer is_degraded + degradation_profile.
+            meta.patrol_rag_context_degraded remains a compatibility mirror of the profile.
 
     PatrolResponse:
       type: object

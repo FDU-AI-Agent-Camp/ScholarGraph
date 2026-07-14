@@ -68,6 +68,8 @@ export type UnifiedPaperGraph = {
 export type PatrolMode = Schema['PatrolMode']
 
 export type PatrolInsight = Schema['PatrolInsight']
+export type PatrolDegradationProfile = Schema['PatrolDegradationProfile']
+export type PatrolDegradationReason = Schema['PatrolDegradationReason']
 
 /** `POST /patrol` response `data` (OpenAPI `PatrolResponse`). */
 export type PatrolReport = {

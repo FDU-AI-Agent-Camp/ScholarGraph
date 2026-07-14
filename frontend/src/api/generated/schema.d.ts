@@ -556,6 +556,27 @@ export interface components {
          * @enum {string}
          */
         PatrolInsightStatus: "ready" | "insufficient_data";
+        /**
+         * @description Typed RAG context degradation reasons:
+         *     - INDEX_NOT_READY: graph ready but vector index still building / missing.
+         *     - QUERY_FAILED: vector store reachable but chunk recall failed.
+         *     - VECTOR_STORE_UNAVAILABLE: Chroma/cluster down or network unreachable.
+         * @enum {string}
+         */
+        PatrolDegradationReason: "INDEX_NOT_READY" | "QUERY_FAILED" | "VECTOR_STORE_UNAVAILABLE";
+        /** @enum {string} */
+        PatrolDegradationSeverity: "WARNING" | "ERROR";
+        /** @enum {string} */
+        PatrolDegradationComponent: "RAG_CONTEXT";
+        /** @description First-class degradation contract when Patrol RAG context is thinned (P9/F8). */
+        PatrolDegradationProfile: {
+            component: components["schemas"]["PatrolDegradationComponent"];
+            reason_code: components["schemas"]["PatrolDegradationReason"];
+            affected_papers: string[];
+            severity: components["schemas"]["PatrolDegradationSeverity"];
+            /** Format: date-time */
+            timestamp: string;
+        };
         PatrolInsight: {
             insight_id: string;
             title: string;
@@ -566,7 +587,14 @@ export interface components {
             paper_ids: string[];
             node_refs: components["schemas"]["NodeRef"][];
             structured_points?: components["schemas"]["PatrolPoint"][];
-            /** @description Machine-readable metadata about insight generation (e.g. RAG degradation flags). */
+            /** @description True when RAG context was thinned; read degradation_profile for details. Defaults to false when omitted. */
+            is_degraded?: boolean;
+            /** @description Explicit RAG degradation profile when is_degraded is true. */
+            degradation_profile?: components["schemas"]["PatrolDegradationProfile"] | null;
+            /**
+             * @description Legacy machine-readable metadata. Prefer is_degraded + degradation_profile.
+             *     meta.patrol_rag_context_degraded remains a compatibility mirror of the profile.
+             */
             meta?: {
                 [key: string]: unknown;
             };

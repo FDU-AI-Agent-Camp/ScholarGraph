@@ -25,6 +25,8 @@
             "evidence_summary": "同一 RQ 下结论从「提升」演进为「与基线相当」。"
           }
         ],
+        "is_degraded": false,
+        "degradation_profile": null,
         "meta": {}
       }
     ],
