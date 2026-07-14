@@ -1,27 +1,25 @@
-"""Patrol result cache (healthy / thick-context reports only at service call sites).
+"""Patrol result cache for healthy (thick-context) reports.
 
-``PatrolService`` skips ``set`` when a report is RAG-degraded so FE heal polls are
-not stuck on a 60s thin snapshot. ``set`` still applies a short TTL if a caller
-ever stores a degraded report (defense in depth). In-memory by default;
-Redis-compatible interface for a future swap without changing call sites.
+Call sites (``PatrolService``) skip ``set`` for RAG-degraded reports and include
+``graph_version`` + active ``index_run_id`` in the cache key so re-extract /
+re-index cannot serve a stale 24h entry. In-memory by default; Redis-compatible
+interface for a future swap without changing call sites.
 """
 
 from __future__ import annotations
 
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from threading import Lock
 from typing import Protocol
 
-from backend.patrol.degradation import (
-    PATROL_DEGRADED_CACHE_MAX_AGE_SECONDS,
-    report_has_rag_degradation,
-)
 from backend.schemas.patrol import PatrolMode, PatrolReport
 
 # Healthy (thick-context) results may be retained longer.
 PATROL_HEALTHY_CACHE_MAX_AGE_SECONDS = 24 * 60 * 60
+_MISSING_GRAPH_VERSION = "missing"
+_MISSING_INDEX_RUN = "-"
 
 
 class PatrolResultCacheProtocol(Protocol):
@@ -58,12 +56,8 @@ class InMemoryPatrolResultCache:
             return entry.report
 
     def set(self, cache_key: str, report: PatrolReport) -> int:
-        """Store report; return the TTL seconds applied."""
-        ttl = (
-            PATROL_DEGRADED_CACHE_MAX_AGE_SECONDS
-            if report_has_rag_degradation(report)
-            else PATROL_HEALTHY_CACHE_MAX_AGE_SECONDS
-        )
+        """Store a healthy report; return the TTL seconds applied."""
+        ttl = PATROL_HEALTHY_CACHE_MAX_AGE_SECONDS
         with self._lock:
             self._entries[cache_key] = _CacheEntry(
                 report=report,
@@ -87,6 +81,33 @@ class InMemoryPatrolResultCache:
             return entry.ttl_seconds
 
 
-def build_patrol_cache_key(paper_ids: list[str], mode: PatrolMode) -> str:
+def collect_patrol_paper_fingerprint(paper_ids: Sequence[str]) -> str:
+    """Build a cache fingerprint from each paper's graph_version + active index run.
+
+    Missing DB rows use placeholders so graph-only / fixture papers still cache
+    safely without raising.
+    """
+    from backend.services.paper_service import get_paper_service
+
+    paper_service = get_paper_service()
+    segments: list[str] = []
+    for paper_id in paper_ids:
+        try:
+            graph_version = paper_service.get_pipeline_graph_version(paper_id)
+        except KeyError:
+            graph_version = _MISSING_GRAPH_VERSION
+        run_id = paper_service.get_active_run_id(paper_id) or _MISSING_INDEX_RUN
+        segments.append(f"{paper_id}@{graph_version}/{run_id}")
+    return ";".join(segments)
+
+
+def build_patrol_cache_key(
+    paper_ids: list[str],
+    mode: PatrolMode,
+    *,
+    paper_fingerprint: str = "",
+) -> str:
     ordered = ",".join(paper_ids)
+    if paper_fingerprint:
+        return f"patrol:{mode.value}:{ordered}:fp={paper_fingerprint}"
     return f"patrol:{mode.value}:{ordered}"

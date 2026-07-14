@@ -16,9 +16,6 @@ from backend.schemas.patrol import (
     PatrolReport,
 )
 
-# Short-lived cache TTL when results are thin due to index/store degradation.
-PATROL_DEGRADED_CACHE_MAX_AGE_SECONDS = 60
-
 # Legacy meta key kept for older FE / tooling until fully migrated.
 RAG_DEGRADED_META_KEY = "patrol_rag_context_degraded"
 

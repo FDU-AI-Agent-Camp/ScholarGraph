@@ -91,6 +91,8 @@ def _install_patrol_service(monkeypatch, *, vector_store: Any, result_cache: Any
         vector_store=vector_store,
         result_cache=result_cache if result_cache is not None else InMemoryPatrolResultCache(),
         cache_enabled=True,
+        # Stable fingerprint for fault-injection suites (no DB rows for stem graphs).
+        paper_fingerprint_fn=lambda ids: ";".join(f"{pid}@1.0.0/-" for pid in ids),
     )
 
     def _get_service() -> PatrolService:
@@ -318,7 +320,12 @@ async def test_degraded_reports_are_not_cached_so_heal_poll_can_refresh(
         assert r1.status_code == 200
         assert r1.json()["data"]["insights"][0]["is_degraded"] is True
 
-        key = build_patrol_cache_key(["stem-001", "stem-002"], PatrolMode.METHOD_OVERLAP)
+        fingerprint = "stem-001@1.0.0/-;stem-002@1.0.0/-"
+        key = build_patrol_cache_key(
+            ["stem-001", "stem-002"],
+            PatrolMode.METHOD_OVERLAP,
+            paper_fingerprint=fingerprint,
+        )
         assert cache.inspect_ttl(key) is None
         exists_after_first = len(store.exists_calls)
 
