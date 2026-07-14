@@ -1,15 +1,22 @@
 #!/usr/bin/env python3
 """
-双文共同体巡检 CLI（BE-4）。
+双文共同体巡检 CLI（四模式：lens_clash / contradiction / method_overlap / claim_evolution）。
 
 在仓库根目录执行::
 
+    # V1 HSS 默认双文（lens_clash）
     uv run python scripts/run_patrol.py --seed-demo-graphs
-    uv run python scripts/run_patrol.py --seed-stem-demo
-    uv run python scripts/run_patrol.py --seed-demo-graphs --smoke-patrol
-    uv run python scripts/run_patrol.py --paper-ids stem-001,stem-002 --mode method_overlap
 
-``--seed-demo-graphs`` 向 ``GRAPH_DATA_DIR`` 写入 ``docs/v1/eval/patrol_samples.md`` 中的评测图谱。
+    # V1 contradiction
+    uv run python scripts/run_patrol.py --paper-ids hss-001,hss-002 --mode contradiction --seed-hss-demo
+
+    # V2 STEM（method_overlap / claim_evolution）
+    uv run python scripts/run_patrol.py --seed-stem-demo
+    uv run python scripts/run_patrol.py --paper-ids stem-001,stem-002 --mode method_overlap
+    uv run python scripts/run_patrol.py --paper-ids stem-001,stem-002 --mode claim_evolution
+
+``--seed-demo-graphs`` 向 ``GRAPH_DATA_DIR`` 写入 HSS+STEM 评测图谱
+（见 ``docs/v1/eval/patrol_samples.md``；V2 契约见 ``docs/v2/rag-requirements.md`` §5）。
 
 退出码：0 成功；1 巡检失败（PatrolError）；2 参数错误。
 """
@@ -41,18 +48,39 @@ EXIT_USAGE_ERROR = 2
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="运行 ScholarGraph 双文巡检（lens_clash / contradiction / method_overlap / claim_evolution）",
+        description=(
+            "运行 ScholarGraph 双文巡检（四模式："
+            "lens_clash / contradiction / method_overlap / claim_evolution）。"
+            "默认 mode=lens_clash + paper_ids=hss-001,hss-002（V1 HSS）；"
+            "V2 STEM 请用 stem-001,stem-002 + method_overlap|claim_evolution。"
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog=(
+            "示例:\n"
+            "  uv run python scripts/run_patrol.py --seed-demo-graphs\n"
+            "  uv run python scripts/run_patrol.py --paper-ids hss-001,hss-002 "
+            "--mode contradiction --seed-hss-demo\n"
+            "  uv run python scripts/run_patrol.py --paper-ids stem-001,stem-002 "
+            "--mode method_overlap --seed-stem-demo\n"
+            "  uv run python scripts/run_patrol.py --paper-ids stem-001,stem-002 "
+            "--mode claim_evolution --seed-stem-demo\n"
+            "评测样例与 V2 契约: docs/v1/eval/patrol_samples.md 、 "
+            "docs/v2/rag-requirements.md §5"
+        ),
     )
     parser.add_argument(
         "--paper-ids",
         default=",".join(CORPUS_HSS_PAPER_IDS),
-        help="逗号分隔的两篇 paper_id（默认 hss-001,hss-002）",
+        help="逗号分隔的两篇 paper_id（默认 hss-001,hss-002；V2 STEM 用 stem-001,stem-002）",
     )
     parser.add_argument(
         "--mode",
         choices=[mode.value for mode in PatrolMode],
         default=PatrolMode.LENS_CLASH.value,
-        help="巡检模式（四模式：lens_clash / contradiction / method_overlap / claim_evolution）",
+        help=(
+            "巡检模式：lens_clash | contradiction | method_overlap | claim_evolution "
+            "（默认 lens_clash；V2 请显式指定 method_overlap / claim_evolution）"
+        ),
     )
     parser.add_argument(
         "--graph-dir",
