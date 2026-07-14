@@ -98,4 +98,33 @@ describe('PatrolStructuredPoints (F2 unit)', () => {
 
     expect(() => mount(PatrolStructuredPoints, { props: { points: roguePoints ?? [] }, ...mountOptions })).not.toThrow()
   })
+
+  it('renders ContradictionPoint structured fields (F12)', async () => {
+    const { default: PatrolStructuredPoints } = await loadPatrolStructuredPoints()
+    const points: PatrolPoint[] = [
+      {
+        mode: 'contradiction',
+        point_a: '零工是剥削',
+        point_b: '零工是自主',
+        conflict_type: 'normative',
+      },
+    ]
+
+    const wrapper = mount(PatrolStructuredPoints, { props: { points }, ...mountOptions })
+
+    expect(wrapper.html()).toContain('patrol-point-card--contradiction')
+    expect(wrapper.text()).toContain('零工是剥削')
+    expect(wrapper.text()).toContain('零工是自主')
+    expect(wrapper.text()).toContain('normative')
+  })
+
+  it('does not surface unknown-mode payload fields in the DOM (越权)', async () => {
+    const { default: PatrolStructuredPoints } = await loadPatrolStructuredPoints()
+    const roguePoints = [
+      { mode: 'not_a_real_mode', overlap_label: 'SHOULD_NOT_SURFACE' },
+    ] as unknown as PatrolInsight['structured_points']
+
+    const wrapper = mount(PatrolStructuredPoints, { props: { points: roguePoints ?? [] }, ...mountOptions })
+    expect(wrapper.text()).not.toContain('SHOULD_NOT_SURFACE')
+  })
 })
