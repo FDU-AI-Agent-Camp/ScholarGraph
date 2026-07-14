@@ -269,6 +269,47 @@ describe('PatrolView', () => {
     expect((selects[1]?.element as HTMLInputElement).value).toBe('')
   })
 
+  it('renders channel-B insufficient_data insights with warning card (F7)', async () => {
+    mockRunPatrol.mockResolvedValue({
+      data: {
+        mode: 'method_overlap',
+        paper_ids: ['hss-001', 'hss-002'],
+        generated_at: '2026-07-14T02:00:00Z',
+        insights: [
+          {
+            insight_id: 'ins-method-overlap-001',
+            title: '方法重叠（Method Overlap）',
+            summary: 'HSS 范式不支持 method_overlap',
+            status: 'insufficient_data',
+            paper_ids: ['hss-001', 'hss-002'],
+            node_refs: [{ paper_id: 'hss-001', node_id: 'n1', label: 'should-hide-link' }],
+            exclusion_logic: {
+              phase: 'PARADIGM_GATE',
+              reason_code: 'PARADIGM_UNSUPPORTED',
+              description: '当前文献属于 HSS 范式，不进行方法重叠分析。',
+              metrics: { required_paradigm: 'STEM' },
+            },
+            is_degraded: false,
+          },
+        ],
+      },
+      meta: { request_id: 'req-insufficient-b' },
+    } satisfies DataResponse<PatrolReport>)
+
+    const wrapper = await mountPatrolView()
+    await setPaperSelection(wrapper, 'hss-001', 'hss-002')
+    await wrapper.find('.patrol-run-stub').trigger('click')
+    await flushPromises()
+
+    const warningCard = wrapper.find('[data-testid="insufficient-data-insight-card"]')
+    expect(warningCard.exists()).toBe(true)
+    expect(warningCard.text()).toContain(PATROL_BASELINE_COPY.insufficientInsightBadge)
+    expect(warningCard.text()).toContain('范式不适用')
+    expect(warningCard.text()).toContain('PARADIGM_GATE')
+    expect(wrapper.find('.patrol-insight').exists()).toBe(false)
+    expect(wrapper.text()).not.toContain(PATROL_BASELINE_COPY.nodeRefGraphLink)
+  })
+
   it('passes lens_clash report mode variant to InsightCard', async () => {
     mockRunPatrol.mockResolvedValue(patrolReport)
 
