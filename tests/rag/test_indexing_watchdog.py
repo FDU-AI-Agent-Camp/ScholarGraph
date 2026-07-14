@@ -252,6 +252,58 @@ async def test_micro_handler_hang_is_cut_by_wait_for_and_promotes_terminal(
 
 
 @pytest.mark.asyncio
+async def test_handler_promote_idempotent_after_watchdog_already_terminal(
+    watchdog_db,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Watchdog sync-promote first; late handler promote must not raise / pollute warnings."""
+    from unittest.mock import AsyncMock
+
+    from backend.events.handler_errors import EVENT_HANDLER_FAILED_CODE
+    from backend.rag.handlers import _promote_terminal_status
+    from backend.rag.indexing_watchdog import promote_stuck_indexing_paper
+    from backend.services.paper_service import get_paper_service
+
+    paper_id = "idempotent-race-001"
+    started = datetime.now(UTC) - timedelta(hours=1)
+    await _put_paper_indexing(paper_id, started_at=started, heartbeat_at=started)
+    assert await promote_stuck_indexing_paper(paper_id) is True
+
+    latest = await get_pipeline_repository().get_latest(paper_id)
+    assert latest is not None
+    assert latest.status == PaperStatus.READY_WITH_WARNINGS
+    warnings_before = list(latest.extract_warnings)
+
+    graph = build_stem_graph_with_method_dataset(
+        paper_id,
+        method_label="PCA",
+        dataset_label="MNIST",
+    )
+    event = PipelineFinalized(
+        paper_id=paper_id,
+        full_text="x" * 200,
+        graph=graph,
+        terminal_status=PaperStatus.READY,
+    )
+
+    # Late promote path after macro heal (also exercises full handler optional).
+    await _promote_terminal_status(event, success=True)
+
+    monkeypatch.setattr(
+        "backend.services.rag_index_service.RagIndexService.index_paper_for_rag_async",
+        AsyncMock(return_value=True),
+    )
+    await on_pipeline_finalized_for_rag(event)
+
+    after = await get_paper_service().get_pipeline_snapshot(paper_id)
+    assert after is not None
+    assert after.status == PaperStatus.READY_WITH_WARNINGS
+    assert after.extract_warnings == warnings_before
+    assert not any(EVENT_HANDLER_FAILED_CODE in item for item in after.extract_warnings)
+    assert not any("refuse promote" in item for item in after.extract_warnings)
+
+
+@pytest.mark.asyncio
 async def test_e2e_watchdog_promote_then_patrol_api_degrades_index_not_ready(
     watchdog_db,
     tmp_path: Path,

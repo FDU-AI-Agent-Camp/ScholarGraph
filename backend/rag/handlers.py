@@ -245,16 +245,44 @@ async def _promote_terminal_status(
     warning_codes: list[str] | None = None,
     message_override: str | None = None,
 ) -> None:
-    """Promote via PaperService facade (includes RagIndexed publish)."""
-    await get_paper_service().promote_paper_to_terminal_status(
-        event.paper_id,
-        success=success,
-        preferred_terminal=event.terminal_status,
-        warning_message=event.warning_message,
-        warning_codes=warning_codes,
-        message_override=message_override,
-        publish_rag_indexed=True,
-    )
+    """Promote via PaperService facade (includes RagIndexed publish).
+
+    Idempotent when macro watchdog (or a prior attempt) already moved the paper to
+    ``ready`` / ``ready_with_warnings``: swallow ``InvalidStateTransitionError`` so
+    EventBus does not persist a fake ``event_handler_failed`` warning.
+    """
+    from backend.schemas.paper import PaperStatus
+    from backend.services.errors import InvalidStateTransitionError
+
+    paper_service = get_paper_service()
+    try:
+        await paper_service.promote_paper_to_terminal_status(
+            event.paper_id,
+            success=success,
+            preferred_terminal=event.terminal_status,
+            warning_message=event.warning_message,
+            warning_codes=warning_codes,
+            message_override=message_override,
+            publish_rag_indexed=True,
+        )
+    except InvalidStateTransitionError as exc:
+        snapshot = await paper_service.get_pipeline_snapshot(event.paper_id)
+        if snapshot is not None and snapshot.status in {
+            PaperStatus.READY,
+            PaperStatus.READY_WITH_WARNINGS,
+        }:
+            logger.info(
+                "pipeline_finalized_promote_idempotent_skip",
+                extra={
+                    "paper_id": event.paper_id,
+                    "current_status": snapshot.status.value,
+                    "from_status": exc.from_status,
+                    "to_status": exc.to_status,
+                    "reason": "already_terminal",
+                },
+            )
+            return
+        raise
 
 
 async def on_pipeline_finalized_for_rag(event: PipelineFinalized) -> None:
