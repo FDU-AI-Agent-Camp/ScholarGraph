@@ -90,6 +90,7 @@ npm run dev
 |------|-----|------|
 | ready | `/papers/hss-001` | 元数据展示；状态面板为 ready |
 | ready_with_warnings | 使用质量门控触发的论文 | 元数据展示；状态面板为 ready_with_warnings，画布带黄色警示边框 |
+| indexing | 真上传流水线（finalize 后） | `BadgeStatus` 显示「索引中」；**非终态**，继续轮询至 `ready` / `ready_with_warnings`；此阶段无 preview 时开图谱页可能 409 |
 | processing | `/papers/hss-002` | 进度条 / stage 轮询 |
 | failed | `/papers/hss-failed-001` | 红色告警：`LLM_JSON_INVALID`、`failed_during: classifying` |
 

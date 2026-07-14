@@ -259,33 +259,40 @@ ChromaDB 配置：
 - embedding 函数统一复用 `EmbeddingClient.embed_texts`。
 - 单篇 QA 时所有查询必须带 `paper_id` metadata 过滤，避免跨论文污染。
 
-### 3.6 写入时机
+### 3.6 写入时机与状态门禁（P10）
 
-在 `pipeline_completion_service.finalize()` 成功后，异步触发索引构建：
+`pipeline_completion_service.finalize()` **不再直接 READY**：图谱落盘后先 `mark_indexing`（`PaperStatus.INDEXING`），再通过 EventBus 发布 `PipelineFinalized`。官方排他订阅者 `backend.rag.handlers.on_pipeline_finalized_for_rag` 完成索引后，再 promote 为 `ready` / `ready_with_warnings`，并发布 `RagIndexed`。
 
 ```python
-async def _index_paper_for_rag(
-    paper_id: str,
-    *,
-    full_text: str,
-    graph: UnifiedPaperGraph,
-) -> None:
-    store = VectorStore()
-    await store.delete_by_paper(paper_id)  # 幂等：先清旧索引
+# finalize (sync path)
+status_service.mark_indexing(paper_id)  # graph on disk; vector index pending
+event_bus.publish(PipelineFinalized(...))
 
-    chunks = chunk_text(paper_id, full_text)
-    entities = graph_to_entities(paper_id, graph)
-    relations = graph_to_relations(paper_id, graph)
-
-    await store.index_chunks(chunks)
-    await store.index_entities(entities)
-    await store.index_relations(relations)
+# EventBus worker → on_pipeline_finalized_for_rag
+await rag_index_service.index_paper_for_rag_async(...)  # delete_by_paper + upsert
+await _promote_terminal_status(...)  # ready | ready_with_warnings + RagIndexed
 ```
 
+**产品面行为（相对「finalize 即 READY」的变更）**：
+
+| 场景 | 行为 |
+|------|------|
+| 状态为 `indexing` 且无 preview | `GET /papers/{id}/graph` → **409 `GRAPH_NOT_READY`**（图谱可能已落盘仍不可读） |
+| FE 上传轮询 | `indexing` **非终态**；需等到 `ready` / `ready_with_warnings` / `failed`（`isTerminalStatus` + `BadgeStatus.indexing`） |
+| EventBus 未消费 / worker 挂起 | 论文可长时间停在 `indexing` |
+
+**超时 / 失败兜底**：
+
+1. **Handler 内失败**：契约校验失败或索引异常 → promote `ready_with_warnings`（不长期卡在 `indexing`），写 `extract_warnings` / 日志，并发布 `RagIndexed(success=False)`。  
+2. **进程级**：EventBus fire-and-forget；生命周期应 `register_pipeline_finalized_handlers`；拓扑测 `tests/events/test_event_bus_topology.py` 断言排他订阅。  
+3. **运维兜底（尚无自动 watchdog）**：若 status 长时间 `indexing`，检查 EventBus worker / RAG handler 日志；必要时重启 API 进程（lifespan 会重绑 handler）或对论文触发 re-extract。演示路径优先 seed 已 `ready` 的图，避免依赖冷索引。  
+4. **Patrol**：索引未就绪时 insight 带 `is_degraded` + `INDEX_NOT_READY`；降级结果**不入**服务端进程 cache，HTTP `Cache-Control: private, no-store`，FE 10s/30s/60s 自愈轮询可拿到新鲜结果。
+
 注意：
-- 不阻塞 `store_node` 返回 ready。
-- 失败不导致流水线 failed，但写入 `extract_warnings: ["rag_index_failed"]` 并记录日志。
-- 重新抽取（re-extract）时先 `delete_by_paper` 再重建。
+
+- 失败不导致流水线 `failed`，但可能以 `ready_with_warnings` 暴露。  
+- 重新抽取（re-extract）时先 `delete_by_paper` / `replace_paper_index` 再重建。  
+- `index_paper_for_rag` 按 `paper_id` 加锁，upsert 幂等。
 
 ### 3.7 配置项
 
@@ -630,7 +637,7 @@ PatrolInsight 对外暴露一等公民降级字段（不以 summary 文本拼接
 | degradation_profile.affected_papers | 受影响 paper_id 列表 |
 | meta.patrol_rag_context_degraded | **兼容镜像**（遗留消费方） |
 
-PatrolRAGService.enrich_context 先做 VectorStore.exists 探针：索引缺失则跳过 query_chunks；连通性异常映射为 VECTOR_STORE_UNAVAILABLE。降级 HTTP 响应带 Cache-Control: max-age=60。前端根据 is_degraded 展示 Warning Banner，并对 INDEX_NOT_READY 退避自愈轮询。
+PatrolRAGService.enrich_context 先做 VectorStore.exists 探针：索引缺失则跳过 query_chunks；连通性异常映射为 VECTOR_STORE_UNAVAILABLE。降级结果不入服务端进程 cache；HTTP Cache-Control: private, no-store。前端根据 is_degraded 展示 Warning Banner，并对 INDEX_NOT_READY 退避自愈轮询（10s/30s/60s）。
 
 ---
 
