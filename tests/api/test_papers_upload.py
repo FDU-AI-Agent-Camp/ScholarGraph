@@ -132,10 +132,10 @@ async def test_create_paper_schedules_pipeline_processing(
             seen_processing = True
             assert data["stage"] in ("ingesting", "classifying", "extracting", "storing")
             break
-        if final_status in ("ready", "failed"):
+        if final_status in ("ready", "ready_with_warnings", "failed"):
             break
 
-    assert seen_processing or final_status in ("ready", "failed")
+    assert seen_processing or final_status in ("ready", "ready_with_warnings", "failed")
 
 
 @pytest.mark.asyncio
@@ -157,7 +157,7 @@ async def test_create_paper_upload_reaches_ready_with_mock_llm(
             await asyncio.sleep(0.05)
             status_resp = await api_client.get(f"/api/v1/papers/{paper_id}/status")
             final_status = status_resp.json()["data"]["status"]
-            if final_status in ("ready", "failed"):
+            if final_status in ("ready", "ready_with_warnings", "failed"):
                 break
 
         assert final_status == "ready"

@@ -154,6 +154,9 @@ def _background_extract_contract_patches(
         yield
 
 
+_TERMINAL_STATUSES = frozenset({"ready", "ready_with_warnings", "failed"})
+
+
 async def _poll_status_until_terminal(
     api_client: AsyncClient,
     paper_id: str,
@@ -167,10 +170,10 @@ async def _poll_status_until_terminal(
         response = await api_client.get(f"/api/v1/papers/{paper_id}/status")
         assert response.status_code == 200
         last = response.json()["data"]
-        if last["status"] in ("ready", "failed"):
+        if last["status"] in _TERMINAL_STATUSES:
             if last["status"] == "ready":
                 assert_terminal_ready_envelope(last)
-            else:
+            elif last["status"] == "failed":
                 assert_terminal_failed_envelope(last)
             return last
     return last
@@ -201,7 +204,7 @@ async def test_long_paper_upload_reaches_ready_via_background_extraction(
             final = status_resp.json()["data"]
             if final.get("stage") == "extracting":
                 saw_extracting = True
-            if final["status"] in ("ready", "failed"):
+            if final["status"] in _TERMINAL_STATUSES:
                 break
 
         assert saw_extracting, "background extraction should surface the extracting stage"
@@ -242,7 +245,7 @@ async def test_graph_returns_409_while_background_extraction_runs(
                 assert_error_envelope(graph_resp.json(), code="GRAPH_NOT_READY")
                 break
             status = (await api_client.get(f"/api/v1/papers/{paper_id}/status")).json()["data"]
-            if status["status"] in ("ready", "failed"):
+            if status["status"] in _TERMINAL_STATUSES:
                 break
 
         assert saw_409, "graph endpoint should return 409 while background extraction runs"
