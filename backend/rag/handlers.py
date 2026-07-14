@@ -1,4 +1,10 @@
-"""Official RAG event handlers and indexing entry points (P10)."""
+"""Official RAG event handlers and indexing entry points (P10 + P13).
+
+P10: ``PipelineFinalized`` → index → promote terminal status + ``RagIndexed``.
+P13: ``wait_for`` + heartbeat; on timeout revoke via ``IndexingRunRegistry`` and
+schedule compensating ``delete_run`` (sticky revoke so cancel-then-timeout still
+yields a run_id). Macro stuck-INDEXING heal lives in ``indexing_watchdog``.
+"""
 
 from __future__ import annotations
 
@@ -177,7 +183,11 @@ def _schedule_orphan_run_cleanup(paper_id: str, run_id: str) -> None:
 
 
 def _revoke_and_schedule_orphan_cleanup(paper_id: str) -> str | None:
-    """Revoke the in-flight run (if any) and schedule delayed Chroma cleanup."""
+    """Revoke the in-flight (or already sticky-revoked) run and schedule cleanup.
+
+    ``IndexingRunRegistry.revoke(paper_id)`` still returns the id when cancel /
+    refuse already moved it into the revoke set, so delayed compensate can run.
+    """
     from backend.rag.indexing_run_registry import get_indexing_run_registry
 
     revoked_run_id = get_indexing_run_registry().revoke(paper_id)

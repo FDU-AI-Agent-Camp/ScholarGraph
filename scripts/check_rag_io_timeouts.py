@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
-"""P13 static concurrency audit: RAG/LLM I/O must declare explicit timeouts.
+"""P13 static concurrency audit: RAG/LLM I/O timeouts + watchdog wiring.
 
 Exit non-zero when critical call sites lose ``asyncio.wait_for`` / HTTP timeouts,
-so CI catches regressions that re-introduce unbounded hangs.
+or when the macro indexing watchdog regresses to scheduling scans via
+``run_async`` onto the FastAPI loop (main-loop starvation would stall heal).
+Paired with ``check_p13_release_gate.py`` for behavioral matrix coverage.
 """
 
 from __future__ import annotations

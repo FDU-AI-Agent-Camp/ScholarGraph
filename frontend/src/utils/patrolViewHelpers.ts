@@ -1,4 +1,8 @@
-/** Presentational helpers shared by PatrolView (keeps the view under D-12 line budget). */
+/**
+ * Presentational helpers for PatrolView (D-12 line-budget extract).
+ * Mode options / graph-link builders live here so acceptance tests can assert
+ * against `PatrolView.vue` + this module as a bundle.
+ */
 
 import type { PatrolInsight, PatrolMode } from '@/api/types'
 import { PATROL_BASELINE_COPY } from '@/constants/patrolCopy'

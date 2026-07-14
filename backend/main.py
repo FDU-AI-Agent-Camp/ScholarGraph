@@ -46,7 +46,8 @@ async def lifespan(app: FastAPI):
     )
 
     # P13: promote orphaned INDEXING rows left by a previous process, then start
-    # the out-of-loop macro watchdog (dedicated OS thread + async-bridge scans).
+    # the out-of-loop macro watchdog (dedicated OS thread + sync SQLAlchemy scans;
+    # must not run_async onto the FastAPI loop — main-loop starvation would stall heal).
     await reconcile_indexing_on_startup()
     start_indexing_watchdog()
 

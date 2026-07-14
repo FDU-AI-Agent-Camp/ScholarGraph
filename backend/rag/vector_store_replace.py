@@ -1,4 +1,12 @@
-"""Replace-paper-index + generation-guard helpers for ``VectorStore`` (P13)."""
+"""Replace-paper-index + generation-guard helpers for ``VectorStore`` (P13).
+
+Keeps ``vector_store.py`` under the D-12 line budget while owning:
+
+- run-id snapshot upsert → activate → async cleanup of the previous run;
+- ``IndexingRunRegistry`` begin/revoke/may_activate gating;
+- sticky revoke on cancel/refuse (timeout-path compensate must still see run_id);
+- structured ``[Generation Guard]`` refuse-activate logs.
+"""
 
 from __future__ import annotations
 

@@ -1,4 +1,8 @@
-"""ChromaDB-backed vector store for RAG chunks, entities, and relations."""
+"""ChromaDB-backed vector store for RAG chunks, entities, and relations.
+
+Run-id snapshot replace + generation-guard activation live in
+``vector_store_replace.ReplacePaperIndexMixin`` (P13; keeps this module under D-12).
+"""
 
 from __future__ import annotations
 
