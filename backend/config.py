@@ -34,6 +34,15 @@ class Settings(PatrolSettingsMixin, QaSettingsMixin, BaseSettings):
     app_profile: AppProfile | None = Field(default=None, validation_alias="APP_PROFILE")
     debug: bool = True
     log_level: str = "INFO"
+    asyncio_slow_callback_ms: float = Field(
+        default=-1.0,
+        validation_alias="ASYNCIO_SLOW_CALLBACK_MS",
+        description=(
+            "Loop block detector: set_debug + slow_callback_duration (ms). "
+            "-1 = auto (100ms in development/test, off in staging/production); "
+            "0 = force off; >0 = explicit threshold."
+        ),
+    )
     startup_reranker_probe_enabled: bool = Field(
         default=True,
         validation_alias="STARTUP_RERANKER_PROBE",

@@ -33,6 +33,9 @@ async def lifespan(app: FastAPI):
     from backend.repositories import register_main_event_loop
 
     register_main_event_loop(asyncio.get_running_loop())
+    from backend.startup.asyncio_debug import configure_asyncio_block_detector
+
+    configure_asyncio_block_detector(asyncio.get_running_loop())
     # Schema must be applied out-of-band: ``uv run python scripts/init_db.py``.
     await get_paper_service().bootstrap()
 
