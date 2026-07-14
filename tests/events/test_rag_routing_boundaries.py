@@ -23,7 +23,6 @@ ALLOWED_RAG_CALLER_PATHS = frozenset(
     {
         BACKEND_ROOT / "rag" / "handlers.py",
         BACKEND_ROOT / "services" / "rag_index_service.py",
-        BACKEND_ROOT / "events" / "pipeline_finalized_handlers.py",
         BACKEND_ROOT / "rag" / "__init__.py",
     },
 )

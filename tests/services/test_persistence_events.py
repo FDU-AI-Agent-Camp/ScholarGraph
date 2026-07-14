@@ -198,12 +198,13 @@ async def test_handler_failure_does_not_break_bus(persistence_env) -> None:
 
 
 @pytest.mark.asyncio
-async def test_temporary_pipeline_finalized_handler_delegates_to_rag_index_service(
+async def test_official_pipeline_finalized_handler_delegates_to_rag_index_service(
     persistence_env,
 ) -> None:
     from unittest.mock import AsyncMock, patch
 
-    from backend.events.pipeline_finalized_handlers import temporary_pipeline_finalized_rag_handler
+    from backend.rag.handlers import on_pipeline_finalized_for_rag
+    from backend.schemas.paper import PaperStatus
     from tests.helpers.persistence_testkit import register_test_paper
 
     paper_id = "evt-rag-1"
@@ -214,13 +215,19 @@ async def test_temporary_pipeline_finalized_handler_delegates_to_rag_index_servi
         nodes=[GraphNode(id="n1", label="M", type="Method")],
         edges=[],
     )
-    event = PipelineFinalized(paper_id=paper_id, full_text="full body", graph=graph)
+    event = PipelineFinalized(
+        paper_id=paper_id,
+        full_text="full body",
+        graph=graph,
+        terminal_status=PaperStatus.READY,
+    )
 
     with patch(
         "backend.services.rag_index_service.RagIndexService.index_paper_for_rag_async",
         new_callable=AsyncMock,
+        return_value=True,
     ) as mock_index:
-        await temporary_pipeline_finalized_rag_handler(event)
+        await on_pipeline_finalized_for_rag(event)
 
     mock_index.assert_awaited_once_with(
         paper_id,

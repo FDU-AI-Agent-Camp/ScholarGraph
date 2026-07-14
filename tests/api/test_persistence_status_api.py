@@ -9,6 +9,7 @@ from backend.schemas.paradigm import Paradigm, ParadigmClassification
 from backend.services.pipeline_completion_service import PipelineCompletionService
 from httpx import AsyncClient
 from tests.api.conftest import assert_success_envelope
+from tests.helpers.event_bus_testkit import drain_event_bus
 from tests.helpers.persistence_testkit import mock_graph_persistence
 from tests.helpers.status_contract import assert_snapshot_matches_contract
 
@@ -66,7 +67,9 @@ async def test_status_ready_after_finalize_matches_contract(
         paper_id,
         graph_data=graph.model_dump(mode="json"),
         classification_data=classification.model_dump(mode="json"),
+        full_text="status api finalize body",
     )
+    await drain_event_bus()
 
     response = await api_client.get(f"/api/v1/papers/{paper_id}/status")
     assert response.status_code == 200

@@ -331,14 +331,15 @@ async def test_store_node_delegates_finalize_to_completion_service(
             patch(
                 "backend.services.rag_index_service.RagIndexService.index_paper_for_rag_async",
                 new_callable=AsyncMock,
-            ) as mock_rag_index,
+                return_value=True,
+            ),
         ):
-            mock_rag_index.return_value = None
             out = await nodes.store_node(post_extract_state)
 
     store_cls.return_value.save.assert_called_once()
-    assert out["status"] == PaperStatus.READY
+    assert out["status"] == PaperStatus.INDEXING
 
+    await drain_event_bus()
     paper = await get_paper_service().get_paper(paper_id)
     assert paper.status == PaperStatus.READY
 
@@ -386,7 +387,7 @@ async def test_store_node_finalize_error_fails(
 async def test_store_node_rag_index_failure_does_not_block_ready(
     post_extract_state: WorkflowState,
 ) -> None:
-    """RAG indexing failures must be swallowed so the paper still reaches ready."""
+    """RAG indexing failures must not leave the paper stuck in ``indexing``."""
 
     paper_id = post_extract_state["paper_id"]
     with (
@@ -405,9 +406,10 @@ async def test_store_node_rag_index_failure_does_not_block_ready(
         ):
             out = await nodes.store_node(post_extract_state)
 
-    assert out["status"] == PaperStatus.READY
+    assert out["status"] == PaperStatus.INDEXING
+    await drain_event_bus()
     status = await get_paper_service().get_status(paper_id)
-    assert status.status == PaperStatus.READY
+    assert status.status == PaperStatus.READY_WITH_WARNINGS
 
 
 async def test_store_node_rag_index_failure_records_extract_warning(
