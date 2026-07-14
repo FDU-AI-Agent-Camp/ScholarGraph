@@ -209,6 +209,10 @@ async def test_official_pipeline_finalized_handler_delegates_to_rag_index_servic
 
     paper_id = "evt-rag-1"
     await register_test_paper(paper_id)
+    # Production finalize marks INDEXING before PipelineFinalized; promote facade gates on that.
+    from backend.services.pipeline_status_service import get_pipeline_status_service
+
+    get_pipeline_status_service().mark_indexing(paper_id, message="indexing for rag handler test")
     graph = UnifiedPaperGraph(
         paper_id=paper_id,
         paradigm=Paradigm.STEM,

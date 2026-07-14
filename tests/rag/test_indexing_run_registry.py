@@ -9,6 +9,7 @@ import pytest
 from backend.rag.indexing_run_registry import IndexingRunRegistry, get_indexing_run_registry
 from backend.rag.models import PaperChunk
 from backend.rag.vector_store import VectorStore
+from backend.services.paper_service import get_paper_service
 
 
 @pytest.fixture(autouse=True)
@@ -174,11 +175,9 @@ async def test_wait_for_timeout_revokes_before_reraising() -> None:
         await asyncio.sleep(60)
         return True
 
+    paper_service = get_paper_service()
     with (
-        patch(
-            "backend.repositories.pipeline_repository.get_pipeline_repository",
-            return_value=MagicMock(touch_indexing_heartbeat=AsyncMock()),
-        ),
+        patch.object(paper_service, "touch_indexing_heartbeat", new_callable=AsyncMock, return_value=True),
         patch("backend.rag.handlers._schedule_orphan_run_cleanup"),
     ):
         with pytest.raises(TimeoutError):
