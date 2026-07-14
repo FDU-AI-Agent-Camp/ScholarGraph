@@ -9,17 +9,17 @@ from typing import TYPE_CHECKING
 from backend.config import get_settings
 from backend.llm.client import LlmClient
 from backend.llm.embeddings import EmbeddingClient, get_embedding_client
-from backend.patrol.llm_summary import generate_method_overlap_summary
-from backend.patrol.method_overlap_points import (
-    build_method_overlap_points,
-    dedupe_node_refs,
-    derive_method_overlap_summary,
-)
 from backend.patrol.exclusion import (
     PHASE_NODE_PRECHECK,
     PHASE_OVERLAP_MATCH,
     PHASE_PARADIGM_GATE,
     make_exclusion_logic,
+)
+from backend.patrol.llm_summary import generate_method_overlap_summary
+from backend.patrol.method_overlap_points import (
+    build_method_overlap_points,
+    dedupe_node_refs,
+    derive_method_overlap_summary,
 )
 from backend.patrol.method_overlap_semantic import find_semantic_method_overlap
 from backend.patrol.overlap_anchor import _OverlapAnchor

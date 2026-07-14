@@ -78,8 +78,7 @@ class PatrolExclusionLogic(BaseModel):
     phase: str = Field(
         ...,
         description=(
-            "Pipeline stage where the exclusion fired "
-            "(e.g. PARADIGM_GATE, NODE_PRECHECK, OVERLAP_MATCH, RQ_ALIGNMENT)."
+            "Pipeline stage where the exclusion fired (e.g. PARADIGM_GATE, NODE_PRECHECK, OVERLAP_MATCH, RQ_ALIGNMENT)."
         ),
     )
     reason_code: PatrolExclusionReason = Field(
@@ -240,8 +239,7 @@ class PatrolInsight(BaseModel):
     exclusion_logic: PatrolExclusionLogic | None = Field(
         default=None,
         description=(
-            "Required when status='insufficient_data': structured reason for the "
-            "negative determination (P11 / F7)."
+            "Required when status='insufficient_data': structured reason for the negative determination (P11 / F7)."
         ),
     )
     meta: dict[str, Any] = Field(

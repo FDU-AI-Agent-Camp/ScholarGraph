@@ -4,6 +4,9 @@ The exclusive official subscriber lives in ``backend.rag.handlers``. This module
 no longer contains temporary handlers — only registration aliases for lifespan /
 tests. Imports of ``backend.rag.handlers`` are deferred to break the
 ``rag.handlers`` ↔ ``events`` package cycle.
+
+Lazy symbols ``pipeline_finalized_rag_handler`` / ``on_pipeline_finalized_for_rag``
+are available via ``__getattr__`` (not listed in ``__all__`` — avoids ruff F822).
 """
 
 from __future__ import annotations
@@ -35,8 +38,6 @@ def __getattr__(name: str) -> Any:
 
 
 __all__ = [
-    "on_pipeline_finalized_for_rag",
-    "pipeline_finalized_rag_handler",
     "register_pipeline_finalized_handlers",
     "unregister_pipeline_finalized_handlers",
 ]

@@ -253,9 +253,7 @@ def _is_rag_indexing_handler(handler: Callable[..., Awaitable[None] | None]) -> 
     qual = getattr(handler, "__qualname__", "")
     module = getattr(handler, "__module__", "")
     blob = f"{module}:{qual}:{name}".lower()
-    return "rag" in blob and (
-        "index" in blob or "pipeline_finalized" in blob or "on_pipeline_finalized" in blob
-    )
+    return "rag" in blob and ("index" in blob or "pipeline_finalized" in blob or "on_pipeline_finalized" in blob)
 
 
 def assert_exclusive_rag_pipeline_subscriber() -> None:
@@ -273,10 +271,7 @@ def assert_exclusive_rag_pipeline_subscriber() -> None:
         raise RuntimeError(msg)
     if rag_handlers and getattr(rag_handlers[0], "__name__", "") != RAG_PIPELINE_HANDLER_NAME:
         name = getattr(rag_handlers[0], "__name__", "?")
-        msg = (
-            f"PIPELINE_FINALIZED RAG handler must be {RAG_PIPELINE_HANDLER_NAME!r}, "
-            f"got {name!r}"
-        )
+        msg = f"PIPELINE_FINALIZED RAG handler must be {RAG_PIPELINE_HANDLER_NAME!r}, got {name!r}"
         raise RuntimeError(msg)
 
 

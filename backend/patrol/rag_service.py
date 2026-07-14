@@ -116,10 +116,7 @@ class PatrolRAGService:
             )
 
         degradation, ready_ids = await self._probe_index_readiness(paper_ids)
-        if (
-            degradation is not None
-            and degradation.reason_code == PatrolDegradationReason.VECTOR_STORE_UNAVAILABLE
-        ):
+        if degradation is not None and degradation.reason_code == PatrolDegradationReason.VECTOR_STORE_UNAVAILABLE:
             self._circuit.record_failure()
             return [], degradation
 

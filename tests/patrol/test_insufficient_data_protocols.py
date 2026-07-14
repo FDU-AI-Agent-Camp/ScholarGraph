@@ -81,9 +81,8 @@ async def test_channel_b_contradiction_missing_thesis_returns_exclusion_logic(
 
 
 def test_patrol_insight_rejects_insufficient_data_without_exclusion_logic() -> None:
-    from pydantic import ValidationError
-
     from backend.schemas.patrol import PatrolInsight, PatrolInsightStatus
+    from pydantic import ValidationError
 
     with pytest.raises(ValidationError, match="exclusion_logic"):
         PatrolInsight(
