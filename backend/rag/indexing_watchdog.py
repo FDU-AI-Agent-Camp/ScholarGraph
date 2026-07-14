@@ -131,6 +131,8 @@ async def promote_stuck_indexing_paper(
         extract_warnings=merged,
     )
     await paper_service._pipeline_repo.save_status(paper_id, snapshot)
+    # EventBus worker still drains on the FastAPI loop: under main-loop starvation
+    # DB status is already promoted; RagIndexed delivery may lag until the loop resumes.
     get_event_bus().publish_sync(
         RagIndexed(
             paper_id=paper_id,
@@ -265,6 +267,8 @@ def promote_stuck_indexing_paper_sync(
         paper.updated_at = now
         db.commit()
 
+    # Same as async promote: status heal is sync-DB durable; event fan-out may wait
+    # on the main loop (acceptable; status polling does not depend on RagIndexed).
     get_event_bus().publish_sync(
         RagIndexed(
             paper_id=paper_id,

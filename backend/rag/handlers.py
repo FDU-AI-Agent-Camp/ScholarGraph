@@ -157,8 +157,8 @@ async def _compensate_revoked_index_run(
         try:
             active = get_paper_service().get_active_run_id(paper_id)
             if active == run_id:
-                # Late activate won the race — undo the commit pointer, keep graph READY.
-                get_paper_service().set_active_run_id(paper_id, "")
+                # Late activate won the race — clear pointer to SQL NULL, keep graph READY.
+                get_paper_service().set_active_run_id(paper_id, None)
             await store.delete_run(paper_id, run_id)
             logger.info(
                 "orphan_index_run_cleanup",

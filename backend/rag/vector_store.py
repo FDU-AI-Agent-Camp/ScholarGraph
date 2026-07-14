@@ -283,7 +283,7 @@ class VectorStore(ChunkTextLookupMixin, ReplacePaperIndexMixin):
         )
         self.clear_chunk_text_lru()
         if self._paper_service is not None:
-            self._paper_service.set_active_run_id(paper_id, "")
+            self._paper_service.set_active_run_id(paper_id, None)
 
     async def exists(self, paper_id: str) -> bool:
         """Return true when a complete active index run exists for the paper.

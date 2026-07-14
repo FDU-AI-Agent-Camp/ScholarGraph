@@ -45,6 +45,25 @@ def test_registry_revoke_returns_already_revoked_for_cleanup_schedule() -> None:
     assert registry.may_activate("p1", "run_a") is False
 
 
+def test_may_activate_requires_inflight_generation_match() -> None:
+    """Dual gate: a superseded run cannot activate even if not (yet) in revoke set."""
+    registry = IndexingRunRegistry()
+    registry.begin("p1", "run_a")
+    registry.begin("p1", "run_b")
+    assert registry.may_activate("p1", "run_a") is False
+    assert registry.may_activate("p1", "run_b") is True
+
+
+def test_sticky_revoke_returns_most_recent_for_paper() -> None:
+    """When multiple revoked ids exist, revoke(paper_id) returns the latest one."""
+    registry = IndexingRunRegistry()
+    registry.begin("p1", "run_a")
+    assert registry.revoke("p1", "run_a") == "run_a"
+    registry.begin("p1", "run_b")
+    assert registry.revoke("p1", "run_b") == "run_b"
+    assert registry.revoke("p1") == "run_b"
+
+
 @pytest.mark.asyncio
 async def test_replace_paper_index_skips_activate_when_revoked() -> None:
     """After begin+revoke, upsert may finish but must not call set_active_run_id."""
@@ -120,7 +139,7 @@ async def test_compensate_revoked_run_clears_active_pointer() -> None:
             delays_seconds=(0.0,),
         )
 
-    paper_service.set_active_run_id.assert_called_with("paper-x", "")
+    paper_service.set_active_run_id.assert_called_with("paper-x", None)
     store.delete_run.assert_awaited_once_with("paper-x", "run_stale")
 
 

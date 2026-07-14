@@ -77,13 +77,13 @@ class PaperService:
 
             await seed_from_fixtures(self._paper_repo, self._pipeline_repo)
 
-    def set_active_run_id(self, paper_id: str, run_id: str) -> None:
-        """Atomically activate a new RAG index run for the paper."""
+    def set_active_run_id(self, paper_id: str, run_id: str | None) -> None:
+        """Atomically activate a RAG index run, or clear it (``None`` / ``""`` → NULL)."""
         self.ensure_paper_exists(paper_id)
         run_async(self._pipeline_repo.set_active_rag_run_id(paper_id, run_id))
 
     def get_active_run_id(self, paper_id: str) -> str | None:
-        """Return the currently active RAG index run id, or None if never indexed."""
+        """Return the currently active RAG index run id, or None when unset/cleared."""
         return run_async(self._pipeline_repo.get_active_rag_run_id(paper_id))
 
     async def list_papers(

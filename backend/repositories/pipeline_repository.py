@@ -142,18 +142,23 @@ class PipelineRepository:
     async def get_active_rag_run_id(self, paper_id: str) -> str | None:
         async with get_async_session_factory()() as session:
             run = await session.get(PipelineRunRow, paper_id)
-            if run is None or run.active_rag_run_id is None:
+            if run is None:
                 return None
-            return run.active_rag_run_id
+            value = run.active_rag_run_id
+            # Treat legacy empty-string clears as unset (column is nullable).
+            if value is None or value == "":
+                return None
+            return value
 
-    async def set_active_rag_run_id(self, paper_id: str, run_id: str) -> None:
+    async def set_active_rag_run_id(self, paper_id: str, run_id: str | None) -> None:
+        """Set the active RAG run id, or clear it (``None`` / ``""`` → SQL NULL)."""
         async with get_async_session_factory()() as session:
             await self._begin_immediate(session)
             run = await session.get(PipelineRunRow, paper_id)
             if run is None:
                 msg = f"pipeline run not found: {paper_id}"
                 raise KeyError(msg)
-            run.active_rag_run_id = run_id if run_id else ""
+            run.active_rag_run_id = run_id if run_id else None
             run.updated_at = datetime.now(UTC)
             await session.commit()
 
