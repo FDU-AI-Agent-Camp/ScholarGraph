@@ -38,15 +38,14 @@ export function shouldHealPoll(profile: PatrolDegradationProfile | null): boolea
   return profile?.reason_code === 'INDEX_NOT_READY'
 }
 
-export function degradationBannerTitle(_profile: PatrolDegradationProfile): string {
+export function degradationBannerTitle(profile: PatrolDegradationProfile): string {
+  void profile
   return PATROL_BASELINE_COPY.degradationBannerTitle
 }
 
 export function degradationBannerDescription(profile: PatrolDegradationProfile): string {
   const reason = REASON_COPY[profile.reason_code] ?? PATROL_BASELINE_COPY.degradationGeneric
-  const papers = profile.affected_papers.length
-    ? `受影响论文：${profile.affected_papers.join('、')}。`
-    : ''
+  const papers = profile.affected_papers.length ? `受影响论文：${profile.affected_papers.join('、')}。` : ''
   return `${reason}${papers ? ` ${papers}` : ''} ${PATROL_BASELINE_COPY.degradationBannerHint}`
 }
 

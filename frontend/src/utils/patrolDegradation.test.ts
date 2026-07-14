@@ -1,11 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
 import type { PatrolReport } from '@/api/types'
-import {
-  degradationBannerDescription,
-  extractReportDegradation,
-  shouldHealPoll,
-} from '@/utils/patrolDegradation'
+import { degradationBannerDescription, extractReportDegradation, shouldHealPoll } from '@/utils/patrolDegradation'
 
 const degradedReport: PatrolReport = {
   mode: 'method_overlap',

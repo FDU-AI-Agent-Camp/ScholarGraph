@@ -42,9 +42,7 @@ describe('patrolInsufficientData helpers', () => {
 
   it('prefers exclusion_logic.description over summary', () => {
     const insight = makeInsight()
-    expect(exclusionDescription(insight.exclusion_logic, insight.summary)).toBe(
-      'HSS 范式不支持 method_overlap',
-    )
+    expect(exclusionDescription(insight.exclusion_logic, insight.summary)).toBe('HSS 范式不支持 method_overlap')
     expect(exclusionDescription(null, 'only summary')).toBe('only summary')
   })
 

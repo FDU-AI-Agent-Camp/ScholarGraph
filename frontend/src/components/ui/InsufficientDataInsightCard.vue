@@ -54,10 +54,10 @@ const phase = computed(() => formatExclusionPhase(props.exclusionLogic?.phase))
 .insufficient-insight-card {
   box-sizing: border-box;
   padding: var(--spacing-24);
-  border: 1px solid color-mix(in srgb, #d97706 35%, var(--color-border));
-  border-left: 4px solid #d97706;
+  border: 1px solid color-mix(in srgb, var(--color-citation-preview-placeholder) 35%, var(--color-border));
+  border-left: 4px solid var(--color-citation-preview-placeholder);
   border-radius: var(--radius-xl);
-  background: color-mix(in srgb, #fbbf24 8%, var(--color-bg-surface));
+  background: color-mix(in srgb, var(--color-citation-preview-placeholder) 8%, var(--color-bg-surface));
   box-shadow: var(--shadow-sm);
 }
 
@@ -82,8 +82,8 @@ const phase = computed(() => formatExclusionPhase(props.exclusionLogic?.phase))
   align-items: center;
   padding: 2px 8px;
   border-radius: var(--radius-sm);
-  background: color-mix(in srgb, #d97706 18%, transparent);
-  color: #92400e;
+  background: color-mix(in srgb, var(--color-citation-preview-placeholder) 18%, transparent);
+  color: var(--color-hss-text);
   font-family: var(--font-sans);
   font-size: var(--text-caption-size);
   font-weight: 600;
@@ -112,7 +112,7 @@ const phase = computed(() => formatExclusionPhase(props.exclusionLogic?.phase))
   font-size: var(--text-body-size);
   font-weight: 600;
   line-height: var(--text-body-leading);
-  color: #92400e;
+  color: var(--color-hss-text);
 }
 
 .insufficient-insight-card__body {
