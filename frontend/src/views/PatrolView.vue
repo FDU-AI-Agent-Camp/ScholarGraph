@@ -4,7 +4,7 @@ import { RouterLink, useRouter } from 'vue-router'
 
 import { isApiClientError } from '@/api/client'
 import * as patrolApi from '@/api/patrol'
-import type { PatrolInsight, PatrolMode, PatrolReport } from '@/api/types'
+import type { PatrolMode, PatrolReport } from '@/api/types'
 import InsightCard from '@/components/ui/InsightCard.vue'
 import InsufficientDataInsightCard from '@/components/ui/InsufficientDataInsightCard.vue'
 import { usePatrolHealPoll } from '@/composables/usePatrolHealPoll'
@@ -25,6 +25,13 @@ import {
   type PatrolErrorPresentation,
 } from '@/utils/patrolForm'
 import { isInsufficientDataInsight } from '@/utils/patrolInsufficientData'
+import {
+  PATROL_MODE_OPTIONS,
+  patrolGraphLinkForNodeRef,
+  patrolInsightKey,
+  patrolModeLabel,
+  patrolNodeRefKey,
+} from '@/utils/patrolViewHelpers'
 
 const router = useRouter()
 const paperStore = usePaperStore()
@@ -48,51 +55,20 @@ const { healing, scheduleHealPoll, stopHealPoll } = usePatrolHealPoll({
   },
 })
 
-const degradationProfile = computed(() =>
-  report.value ? extractReportDegradation(report.value) : null,
-)
-
-const modeOptions = [
-  {
-    value: 'lens_clash' as const,
-    label: PATROL_BASELINE_COPY.modeLensClashLabel,
-    caption: PATROL_BASELINE_COPY.modeLensClashCaption,
-  },
-  {
-    value: 'contradiction' as const,
-    label: PATROL_BASELINE_COPY.modeContradictionLabel,
-    caption: PATROL_BASELINE_COPY.modeContradictionCaption,
-  },
-]
-
+const degradationProfile = computed(() => (report.value ? extractReportDegradation(report.value) : null))
+const modeOptions = PATROL_MODE_OPTIONS
 const paperOptions = computed(() => paperStore.items)
 const runButtonLabel = computed(() =>
   loading.value ? PATROL_BASELINE_COPY.runButtonLoading : PATROL_BASELINE_COPY.runButton,
 )
+const modeLabel = patrolModeLabel
+const insightKey = patrolInsightKey
+const nodeRefKey = patrolNodeRefKey
+const graphLinkForNodeRef = patrolGraphLinkForNodeRef
 
 onMounted(() => {
   void paperStore.fetchList().catch(() => undefined)
 })
-
-function modeLabel(value: PatrolMode): string {
-  return modeOptions.find((item) => item.value === value)?.label ?? value
-}
-
-function insightKey(insight: PatrolInsight): string {
-  return insight.insight_id
-}
-
-function nodeRefKey(ref: PatrolInsight['node_refs'][number]): string {
-  return `${ref.paper_id}:${ref.node_id}`
-}
-
-function graphLinkForNodeRef(ref: PatrolInsight['node_refs'][number]) {
-  return {
-    name: RouteName.PaperGraph,
-    params: { paperId: ref.paper_id },
-    query: { node: ref.node_id },
-  }
-}
 
 function clearErrors(): void {
   validationError.value = null

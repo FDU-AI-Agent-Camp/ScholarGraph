@@ -398,9 +398,12 @@ describe('V1 DoD C-04 — Patrol CLI ↔ HTTP ↔ PatrolView', () => {
   it('patrol corpus node_refs align with backend seed ids (static parity)', () => {
     expect(PATROL_CORPUS_NODE_REFS[0].node_id).toBe('n_lens_molecular_history')
     expect(PATROL_CORPUS_NODE_REFS[1].node_id).toBe('n_lens_political_film')
-    const patrolViewSrc = readFrontendSource('views/PatrolView.vue')
-    expect(patrolViewSrc).toContain('query: { node: ref.node_id }')
-    expect(patrolViewSrc).toContain('RouteName.PaperGraph')
+    const patrolBundle = [
+      readFrontendSource('views/PatrolView.vue'),
+      readFrontendSource('utils/patrolViewHelpers.ts'),
+    ].join('\n')
+    expect(patrolBundle).toContain('query: { node: ref.node_id }')
+    expect(patrolBundle).toContain('RouteName.PaperGraph')
   })
 
   it('runPatrol renders corpus insight with lens_clash variant (functional)', async () => {
