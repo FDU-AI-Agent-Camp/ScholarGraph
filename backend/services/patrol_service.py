@@ -9,6 +9,11 @@ from backend.api.exceptions import ApiError
 from backend.graph.store import GraphStore
 from backend.llm.embeddings import EmbeddingClient, get_embedding_client
 from backend.patrol.errors import PatrolError
+from backend.patrol.result_cache import (
+    InMemoryPatrolResultCache,
+    PatrolResultCacheProtocol,
+    build_patrol_cache_key,
+)
 from backend.patrol.service import run_patrol as patrol_run
 from backend.schemas.patrol import PatrolMode, PatrolReport
 
@@ -39,20 +44,32 @@ class PatrolService:
         *,
         vector_store: VectorStore | None = None,
         embedding_client: EmbeddingClient | None = None,
+        result_cache: PatrolResultCacheProtocol | None = None,
+        cache_enabled: bool = True,
     ) -> None:
         self._store = store
         self._vector_store = vector_store
         self._embedding_client = embedding_client
         self._lazy_vector_store: VectorStore | None = None
         self._lazy_embedding_client: EmbeddingClient | None = None
+        self._cache: PatrolResultCacheProtocol | None = (
+            result_cache if result_cache is not None else InMemoryPatrolResultCache()
+        )
+        self._cache_enabled = cache_enabled
 
     async def run_patrol(
         self,
         paper_ids: list[str],
         mode: PatrolMode = PatrolMode.LENS_CLASH,
     ) -> PatrolReport:
+        cache_key = build_patrol_cache_key(paper_ids, mode)
+        if self._cache_enabled and self._cache is not None:
+            cached = self._cache.get(cache_key)
+            if cached is not None:
+                return cached
+
         try:
-            return await patrol_run(
+            report = await patrol_run(
                 paper_ids,
                 mode,
                 store=self._store,
@@ -65,6 +82,10 @@ class PatrolService:
                 exc.message,
                 status_code=exc.status_code,
             ) from exc
+
+        if self._cache_enabled and self._cache is not None:
+            self._cache.set(cache_key, report)
+        return report
 
     def _resolve_vector_store(self, mode: PatrolMode) -> VectorStore | None:
         if mode not in _PATROL_RAG_MODES:
