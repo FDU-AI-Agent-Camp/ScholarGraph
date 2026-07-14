@@ -4,9 +4,21 @@
  * against `PatrolView.vue` + this module as a bundle.
  */
 
-import type { PatrolInsight, PatrolMode } from '@/api/types'
+import type { PatrolInsight, PatrolMode, PatrolPoint } from '@/api/types'
 import { PATROL_BASELINE_COPY } from '@/constants/patrolCopy'
 import { RouteName } from '@/router/meta'
+
+const HSS_DEMO_PAIR: readonly [string, string] = ['hss-001', 'hss-002']
+const STEM_DEMO_PAIR: readonly [string, string] = ['stem-001', 'stem-002']
+const KNOWN_PATROL_MODES = new Set<PatrolMode>(['lens_clash', 'contradiction', 'method_overlap', 'claim_evolution'])
+
+function isExactPair(paperA: string, paperB: string, pair: readonly [string, string]): boolean {
+  return paperA === pair[0] && paperB === pair[1]
+}
+
+function isKnownDemoPair(paperA: string, paperB: string): boolean {
+  return isExactPair(paperA, paperB, HSS_DEMO_PAIR) || isExactPair(paperA, paperB, STEM_DEMO_PAIR)
+}
 
 export const PATROL_MODE_OPTIONS = [
   {
@@ -56,4 +68,44 @@ export function patrolGraphLinkForNodeRef(ref: PatrolNodeRef) {
     params: { paperId: ref.paper_id },
     query: { node: ref.node_id },
   }
+}
+
+/** Demo corpus recommendation for each OpenAPI PatrolMode (F-R1). */
+export function recommendedDemoPaperPairForMode(mode: PatrolMode): [string, string] {
+  if (mode === 'method_overlap' || mode === 'claim_evolution') {
+    return [STEM_DEMO_PAIR[0], STEM_DEMO_PAIR[1]]
+  }
+  return [HSS_DEMO_PAIR[0], HSS_DEMO_PAIR[1]]
+}
+
+/**
+ * Swap demo defaults when entering a mode that prefers another paradigm pair.
+ * Returns `null` when the current selection is customized or already recommended.
+ */
+export function applyModeDemoPaperPrefill(mode: PatrolMode, paperA: string, paperB: string): [string, string] | null {
+  if (!KNOWN_PATROL_MODES.has(mode) || !isKnownDemoPair(paperA, paperB)) {
+    return null
+  }
+  const recommended = recommendedDemoPaperPairForMode(mode)
+  if (isExactPair(paperA, paperB, recommended)) {
+    return null
+  }
+  return recommended
+}
+
+/** Hide insight-level graph links already rendered on structured point cards (F-R2). */
+export function filterInsightNodeRefsNotCoveredByPoints(
+  insightRefs: PatrolNodeRef[],
+  points: PatrolPoint[] | undefined,
+): PatrolNodeRef[] {
+  const coveredKeys = new Set<string>()
+  for (const point of points ?? []) {
+    const pointRefs = 'node_refs' in point ? point.node_refs : undefined
+    for (const ref of pointRefs ?? []) {
+      if (isUsablePatrolNodeRef(ref)) {
+        coveredKeys.add(patrolNodeRefKey(ref))
+      }
+    }
+  }
+  return insightRefs.filter((ref) => !coveredKeys.has(patrolNodeRefKey(ref)))
 }
