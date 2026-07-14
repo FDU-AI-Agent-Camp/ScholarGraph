@@ -279,7 +279,8 @@ await _promote_terminal_status(...)  # ready | ready_with_warnings + RagIndexed
 |------|------|
 | 状态为 `indexing` 且无 preview | `GET /papers/{id}/graph` → **409 `GRAPH_NOT_READY`**（图谱可能已落盘仍不可读） |
 | FE 上传轮询 | `indexing` **非终态**；需等到 `ready` / `ready_with_warnings` / `failed`（`isTerminalStatus` + `BadgeStatus.indexing`） |
-| EventBus 未消费 / worker 挂起 | 论文可长时间停在 `indexing` |
+| EventBus 未消费 / worker 挂起 | **不再默认永久卡死**：超过 P13 macro watchdog 窗口（started 超时 + heartbeat 陈旧）或冷启动 reconcile 后强制 `ready_with_warnings` |
+| 微观 `wait_for` 超时 | 立即 promote `ready_with_warnings`（`rag_index_timeout`）；线程池内 Chroma/embedding 可能仍短暂续跑（见下方残留） |
 
 **超时 / 失败兜底**：
 
@@ -296,7 +297,9 @@ await _promote_terminal_status(...)  # ready | ready_with_warnings + RagIndexed
 
 - 失败不导致流水线 `failed`，但可能以 `ready_with_warnings` 暴露。  
 - 重新抽取（re-extract）时先 `delete_by_paper` / `replace_paper_index` 再重建。  
-- `index_paper_for_rag` 按 `paper_id` 加锁，upsert 幂等。
+- `index_paper_for_rag` 按 `paper_id` 加锁，upsert 幂等。  
+- **孤儿线程（best-effort）**：VectorStore 重活经 `asyncio.to_thread`；`wait_for` 超时取消的是 coroutine await，**不保证**取消线程池内 Chroma/embedding。已 promote 后陈旧线程仍可能 upsert / `set_active_run_id`；与后续 re-extract 的竞态多数由 paper 级锁缓解。后续增强可选超时路径显式 `delete_by_paper` 或令牌失效，当前按知情残留接受。  
+- 同进程内若同步码**不经** `to_thread` 堵死事件循环，heartbeat / macro watchdog / HTTP 会一并挂起——属架构约束，非 P13 回退。
 
 ### 3.7 配置项
 
