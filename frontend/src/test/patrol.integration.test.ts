@@ -15,6 +15,8 @@ import {
   validatePatrolSelection,
 } from '@/utils/patrolForm'
 import patrolFixture from '../../../docs/api/fixtures/patrol-lens-clash.json'
+import patrolMethodOverlapFixture from '../../../docs/api/fixtures/patrol-method-overlap.json'
+import patrolClaimEvolutionFixture from '../../../docs/api/fixtures/patrol-claim-evolution.json'
 import packageJson from '../../package.json'
 
 describe('patrol integration (fixtures + API + form)', () => {
@@ -36,6 +38,38 @@ describe('patrol integration (fixtures + API + form)', () => {
       { paper_id: 'hss-001', node_id: 'n_lens_a', label: '消费社会' },
       { paper_id: 'hss-002', node_id: 'n_lens_b', label: '公共领域' },
     ])
+    postSpy.mockRestore()
+  })
+
+  it('forwards method_overlap mode with V2 fixture structured_points', async () => {
+    const postSpy = vi
+      .spyOn(client, 'postData')
+      .mockResolvedValue(patrolMethodOverlapFixture as DataResponse<PatrolReport>)
+
+    const result = await runPatrol(['stem-001', 'stem-002'], { mode: 'method_overlap' })
+
+    expect(postSpy).toHaveBeenCalledWith('/patrol', {
+      paper_ids: ['stem-001', 'stem-002'],
+      mode: 'method_overlap',
+    })
+    const point = result.data.insights[0]?.structured_points?.[0]
+    expect(point?.mode).toBe('method_overlap')
+    postSpy.mockRestore()
+  })
+
+  it('forwards claim_evolution mode with V2 fixture structured_points', async () => {
+    const postSpy = vi
+      .spyOn(client, 'postData')
+      .mockResolvedValue(patrolClaimEvolutionFixture as DataResponse<PatrolReport>)
+
+    const result = await runPatrol(['stem-001', 'stem-002'], { mode: 'claim_evolution' })
+
+    expect(postSpy).toHaveBeenCalledWith('/patrol', {
+      paper_ids: ['stem-001', 'stem-002'],
+      mode: 'claim_evolution',
+    })
+    const point = result.data.insights[0]?.structured_points?.[0]
+    expect(point?.mode).toBe('claim_evolution')
     postSpy.mockRestore()
   })
 

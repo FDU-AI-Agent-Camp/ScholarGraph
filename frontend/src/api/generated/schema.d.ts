@@ -196,10 +196,19 @@ export interface components {
         };
         HealthResponse: {
             data?: {
-                /** @example ok */
-                status: string;
+                /**
+                 * @description Aggregate health — degraded when Patrol claim_evolution funnel is incomplete in live mode.
+                 * @example healthy
+                 * @enum {string}
+                 */
+                status: "healthy" | "degraded";
                 /** @example 1.0.0 */
                 version: string;
+                /** @enum {string|null} */
+                app_profile?: "ci" | "demo" | "prod" | null;
+                components: {
+                    patrol_service: components["schemas"]["PatrolServiceHealth"];
+                };
                 /**
                  * @example mock
                  * @enum {string}
@@ -209,8 +218,24 @@ export interface components {
                 llm_connected: boolean;
                 /** @example Mock 模式：LLM 云服务尚未接入，问答/巡检返回本地模板。 */
                 llm_note: string;
+                grobid_url?: string;
+                grobid_connected?: boolean;
+                grobid_note?: string;
+                patrol_claim_rq_funnel_enabled?: boolean;
+                patrol_config_warnings?: string[];
+                patrol_note?: string;
             };
             meta?: components["schemas"]["Meta"];
+        };
+        PatrolServiceHealth: {
+            /** @enum {string} */
+            status: "fully_functional" | "degraded";
+            claim_rq_funnel_enabled: boolean;
+            /** @enum {string} */
+            reranker_status: "READY" | "DISABLED_FALLBACK_ACTIVE" | "MISCONFIGURED" | "MOCK_LOCAL";
+            /** @enum {string|null} */
+            active_profile: "ci" | "demo" | "prod" | null;
+            warnings?: string[];
         };
         PaperSummary: {
             paper_id: string;
@@ -385,7 +410,6 @@ export interface components {
             /** @description 通常为 `"{source_label} → {target_label}"` */
             label: string;
         };
-        ChunkPreviewState: "ready" | "indexing" | "retrieval_timeout" | "l2_timeout" | "hallucinated_id";
         QaStreamCitationChunk: {
             /**
              * @description discriminator enum property added by openapi-typescript
@@ -400,6 +424,16 @@ export interface components {
             text_preview: string;
             preview_state: components["schemas"]["ChunkPreviewState"];
         };
+        /**
+         * @description Chunk 引用预览解析状态（B10）。
+         *     - `ready` — 正常原文预览
+         *     - `indexing` — 向量索引尚未就绪
+         *     - `retrieval_timeout` — 混合检索阶段超时降级
+         *     - `l2_timeout` — 引用点 L2 惰性追溯超时（200ms）
+         *     - `hallucinated_id` — 无法验证的 chunk_id
+         * @enum {string}
+         */
+        ChunkPreviewState: "ready" | "indexing" | "retrieval_timeout" | "l2_timeout" | "hallucinated_id";
         QaStreamCitationPage: {
             /**
              * @description discriminator enum property added by openapi-typescript
@@ -432,7 +466,7 @@ export interface components {
              * @description discriminator enum property added by openapi-typescript
              * @enum {string}
              */
-            mode: "ContradictionPoint";
+            mode: "contradiction";
             point_a: string;
             point_b: string;
             conflict_type: string;
@@ -442,7 +476,7 @@ export interface components {
              * @description discriminator enum property added by openapi-typescript
              * @enum {string}
              */
-            mode: "LensClashPoint";
+            mode: "lens_clash";
             lens_a: string;
             lens_b: string;
             clash_aspect: string;
@@ -452,7 +486,7 @@ export interface components {
              * @description discriminator enum property added by openapi-typescript
              * @enum {string}
              */
-            mode: "MethodOverlapPoint";
+            mode: "method_overlap";
             /**
              * @description Whether the point compares methods or datasets. Dual overlap emits two points (method + dataset); mixed is deprecated.
              * @enum {string}
@@ -485,7 +519,7 @@ export interface components {
              * @description discriminator enum property added by openapi-typescript
              * @enum {string}
              */
-            mode: "ClaimEvolutionPoint";
+            mode: "claim_evolution";
             research_question: string;
             /** @description Paper A's core claim; may be backfilled from VectorStore chunks when no Claim node exists. */
             paper_a_claim?: string | null;

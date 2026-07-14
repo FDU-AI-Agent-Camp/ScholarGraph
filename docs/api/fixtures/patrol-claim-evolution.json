@@ -20,8 +20,8 @@
             "research_question": "PCA 是否提升 MNIST 分类准确率？",
             "paper_a_claim": "PCA 将 MNIST 特征压缩至 50 维后分类准确率提升 3%",
             "paper_b_claim": "主成分分析在 MNIST 上保留 95% 方差，分类性能与基线相当",
-            "evolution_type": "refinement",
-            "problem_fit_score": 0.82,
+            "evolution_type": "refined",
+            "problem_fit_score": 82,
             "evidence_summary": "同一 RQ 下结论从「提升」演进为「与基线相当」。"
           }
         ],

@@ -804,6 +804,11 @@ components:
       required: [mode]
       discriminator:
         propertyName: mode
+        mapping:
+          contradiction: "#/components/schemas/ContradictionPoint"
+          lens_clash: "#/components/schemas/LensClashPoint"
+          method_overlap: "#/components/schemas/MethodOverlapPoint"
+          claim_evolution: "#/components/schemas/ClaimEvolutionPoint"
       oneOf:
         - $ref: "#/components/schemas/ContradictionPoint"
         - $ref: "#/components/schemas/LensClashPoint"
