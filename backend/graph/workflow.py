@@ -1,5 +1,6 @@
 """LangGraph StateGraph: ingest → wait_head_refine → classify → extract → store."""
 
+import asyncio
 from functools import lru_cache
 from pathlib import Path
 from typing import Literal, cast
@@ -133,11 +134,13 @@ async def run_paper_pipeline(paper_id: str, pdf_path: Path) -> WorkflowState:
         return final_state
 
     # store_node leaves papers in ``indexing``; wait for official RAG handler to promote.
+    # Drain on the async-bridge loop (same loop publish_sync uses). Awaiting
+    # EventBus.drain() on the caller loop can cross-loop-deadlock the Queue.
     from backend.events.bus import get_event_bus
     from backend.graph.state import STAGE_PERCENT
     from backend.schemas.paper import PaperStatus, PipelineStage
 
-    await get_event_bus().drain()
+    await asyncio.to_thread(get_event_bus().drain_sync)
     snapshot = await paper_service.get_status(paper_id)
     if snapshot.status in {PaperStatus.READY, PaperStatus.READY_WITH_WARNINGS}:
         promoted = cast(WorkflowState, dict(final_state))
