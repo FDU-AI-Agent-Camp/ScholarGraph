@@ -254,7 +254,7 @@ class VectorStore:
     ) -> None: ...
 ```
 
-`replace_paper_index` 行为要点（详见 §3.6）：新 `run_id` upsert → 仅在 `IndexingRunRegistry.may_activate` 且 Task 未 cancelling 时 `set_active_run_id`；拒绝激活打 `[Generation Guard]` 日志并清理该 run；cancel/refuse **不清** revoke（sticky），供超时路径调度补偿。
+`replace_paper_index` 行为要点（详见 §3.6）：新 `run_id` upsert → 仅在 `IndexingRunRegistry.may_activate`（**未 revoke** 且 `inflight == run_id`）且 Task 未 cancelling 时 `set_active_run_id`；拒绝激活打 `[Generation Guard]` 日志并清理该 run；cancel/refuse **不清** revoke（sticky；同 paper 多条时返回最近 revoke 的 id），供超时路径调度补偿。
 
 返回模型（`backend/rag/models.py`）：
 
@@ -326,8 +326,8 @@ await _promote_terminal_status(...)  # ready | ready_with_warnings + RagIndexed
 - 失败不导致流水线 `failed`，但可能以 `ready_with_warnings` 暴露。  
 - 重新抽取（re-extract）时先 `delete_by_paper` / `replace_paper_index` 再重建。  
 - `index_paper_for_rag` 按 `paper_id` 加锁，upsert 幂等。  
-- **孤儿线程 hardening（已落地）**：`IndexingRunRegistry` 在 `replace_paper_index` 生成 `run_id` 时 `begin`；`wait_for` 超时立刻 `revoke`。激活前校验 `may_activate` + Task `cancelling()`，否决则打 `[Generation Guard] … Aborting database update.`、不清 DB active、并清理该 run。**cancel/refuse 路径不得 `clear` revoke**（否则超时侧无法拿到 run_id 调度补偿，且 `may_activate` 会假阳性）；仅成功激活或补偿结束才 `clear`。超时另起 fire-and-forget 补偿清理（延迟 0/5/10s 调用 `delete_run`；若 active 仍指向该 run 则先清空指针）。线程池内 upsert 或仍会跑完，但**不得合法激活**；脏数据最终被按 run_id 抹除。竞态放大测例见 `tests/rag/test_orphan_run_race_amplification.py`。  
-- **主循环假死**：heartbeat（跑在索引协程旁）与 HTTP 仍依赖主 loop；macro watchdog 已在独立线程用 **sync** 读库 promote（主 loop `time.sleep` 硬阻塞时仍可 heal）。彻底进程级解耦可再用 cron 脚本。研发期用 `ASYNCIO_SLOW_CALLBACK_MS` 逼出裸同步 I/O。
+- **孤儿线程 hardening（已落地）**：`IndexingRunRegistry` 在 `replace_paper_index` 生成 `run_id` 时 `begin`；`wait_for` 超时立刻 `revoke`。激活前校验 `may_activate`（revoked 否 + `inflight` 世代匹配）+ Task `cancelling()`，否决则打 `[Generation Guard] … Aborting database update.`、不清 DB active、并清理该 run。**cancel/refuse 路径不得 `clear` revoke**（否则超时侧无法拿到 run_id 调度补偿，且 `may_activate` 会假阳性）；仅成功激活或补偿结束才 `clear`。超时另起 fire-and-forget 补偿清理（延迟 0/5/10s 调用 `delete_run`；若 active 仍指向该 run 则先 `set_active_run_id(None)` 写 **SQL NULL**）。线程池内 upsert 或仍会跑完，但**不得合法激活**；脏数据最终被按 run_id 抹除。竞态放大测例见 `tests/rag/test_orphan_run_race_amplification.py`。  
+- **主循环假死**：heartbeat / HTTP / `publish_sync(RagIndexed)` 仍依赖主 loop（starve 时事件投递可滞后）；macro watchdog 已在独立线程用 **sync** 读库 promote，**状态轮询**仍可看到 `ready_with_warnings`。彻底进程级解耦可再用 cron 脚本。研发期用 `ASYNCIO_SLOW_CALLBACK_MS` 逼出裸同步 I/O。
 
 ### 3.7 配置项
 
