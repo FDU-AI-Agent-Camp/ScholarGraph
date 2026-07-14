@@ -5,6 +5,7 @@ import { RouterLink, useRouter } from 'vue-router'
 import { isApiClientError } from '@/api/client'
 import * as patrolApi from '@/api/patrol'
 import type { PatrolMode, PatrolReport } from '@/api/types'
+import PatrolStructuredPoints from '@/components/patrol/PatrolStructuredPoints.vue'
 import InsightCard from '@/components/ui/InsightCard.vue'
 import InsufficientDataInsightCard from '@/components/ui/InsufficientDataInsightCard.vue'
 import { usePatrolHealPoll } from '@/composables/usePatrolHealPoll'
@@ -56,14 +57,11 @@ const { healing, scheduleHealPoll, stopHealPoll } = usePatrolHealPoll({
 })
 
 const degradationProfile = computed(() => (report.value ? extractReportDegradation(report.value) : null))
-const modeOptions = PATROL_MODE_OPTIONS
 const paperOptions = computed(() => paperStore.items)
 const runButtonLabel = computed(() =>
   loading.value ? PATROL_BASELINE_COPY.runButtonLoading : PATROL_BASELINE_COPY.runButton,
 )
-const modeLabel = patrolModeLabel
-const insightKey = patrolInsightKey
-const nodeRefKey = patrolNodeRefKey
+/** Alias kept for demo-path / Phase 7 source gates that assert `graphLinkForNodeRef`. */
 const graphLinkForNodeRef = patrolGraphLinkForNodeRef
 
 onMounted(() => {
@@ -182,7 +180,7 @@ async function run(): Promise<void> {
         <span class="text-caption patrol-view__field-label">{{ PATROL_BASELINE_COPY.modeLabel }}</span>
         <div class="patrol-mode-segment" role="tablist" aria-label="巡检模式">
           <button
-            v-for="option in modeOptions"
+            v-for="option in PATROL_MODE_OPTIONS"
             :key="option.value"
             type="button"
             role="tab"
@@ -228,7 +226,7 @@ async function run(): Promise<void> {
 
     <section v-if="report" class="patrol-view__report">
       <div class="patrol-view__report-summary">
-        <span class="patrol-view__mode-badge text-caption">{{ modeLabel(report.mode) }}</span>
+        <span class="patrol-view__mode-badge text-caption">{{ patrolModeLabel(report.mode) }}</span>
         <span class="text-mono patrol-view__report-time">{{ report.generated_at }}</span>
         <span class="text-mono patrol-view__report-ids">{{ report.paper_ids.join(' · ') }}</span>
       </div>
@@ -249,7 +247,7 @@ async function run(): Promise<void> {
       </p>
 
       <div class="patrol-view__insights">
-        <template v-for="item in report.insights" :key="insightKey(item)">
+        <template v-for="item in report.insights" :key="patrolInsightKey(item)">
           <InsufficientDataInsightCard
             v-if="isInsufficientDataInsight(item)"
             :variant="report.mode"
@@ -271,10 +269,11 @@ async function run(): Promise<void> {
             >
               {{ evidencePlaceholderMessage() }}
             </div>
+            <PatrolStructuredPoints v-if="item.structured_points?.length" :points="item.structured_points" />
             <div v-if="item.node_refs.length" class="patrol-view__node-refs">
               <RouterLink
                 v-for="nodeRef in item.node_refs"
-                :key="nodeRefKey(nodeRef)"
+                :key="patrolNodeRefKey(nodeRef)"
                 :to="graphLinkForNodeRef(nodeRef)"
                 class="patrol-node-ref text-body"
               >
