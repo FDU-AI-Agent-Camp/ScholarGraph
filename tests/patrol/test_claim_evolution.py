@@ -391,6 +391,8 @@ async def test_claim_evolution_uses_vector_store_context() -> None:
     vector_store.query_chunks.assert_any_await(expected_query, paper_id="stem-001", top_k=3)
     vector_store.query_chunks.assert_any_await(expected_query, paper_id="stem-002", top_k=3)
     # When vector_store is supplied and exists() returns True, no degradation flag is set.
+    assert insight.is_degraded is False
+    assert insight.degradation_profile is None
     assert "patrol_rag_context_degraded" not in insight.meta
     assert mock_summary.called
     context = mock_summary.call_args.args[0]
@@ -428,8 +430,13 @@ async def test_claim_evolution_records_rag_degradation_when_index_missing() -> N
         )
     assert insight is not None
     assert insight.status == PatrolInsightStatus.READY
+    assert insight.is_degraded is True
+    assert insight.degradation_profile is not None
+    assert insight.degradation_profile.reason_code.value == "INDEX_NOT_READY"
+    assert set(insight.degradation_profile.affected_papers) == {"stem-001", "stem-002"}
     assert insight.meta.get("patrol_rag_context_degraded", {}).get("reason") == "index_not_ready"
     assert set(insight.meta["patrol_rag_context_degraded"]["paper_ids"]) == {"stem-001", "stem-002"}
+    vector_store.query_chunks.assert_not_called()
 
 
 async def test_claim_evolution_llm_structured_output_populates_fields() -> None:

@@ -895,6 +895,8 @@ async def test_method_overlap_uses_vector_store_context() -> None:
     vector_store.query_chunks.assert_any_await("PCA 具体应用场景 数据集配置 实验数值特征", paper_id="stem-001", top_k=3)
     vector_store.query_chunks.assert_any_await("PCA 具体应用场景 数据集配置 实验数值特征", paper_id="stem-002", top_k=3)
     # When vector_store is supplied and exists() returns True, no degradation flag is set.
+    assert insight.is_degraded is False
+    assert insight.degradation_profile is None
     assert "patrol_rag_context_degraded" not in insight.meta
     assert mock_summary.called
     context = mock_summary.call_args.args[0]
@@ -903,7 +905,7 @@ async def test_method_overlap_uses_vector_store_context() -> None:
 
 
 async def test_method_overlap_records_rag_degradation_when_index_missing() -> None:
-    """If VectorStore index is missing, READY insight carries patrol_rag_context_degraded meta."""
+    """If VectorStore index is missing, READY insight carries typed degradation_profile."""
     vector_store = AsyncMock()
     vector_store.exists.return_value = False
     vector_store.query_chunks.return_value = []
@@ -931,8 +933,13 @@ async def test_method_overlap_records_rag_degradation_when_index_missing() -> No
         )
     assert insight is not None
     assert insight.status == PatrolInsightStatus.READY
+    assert insight.is_degraded is True
+    assert insight.degradation_profile is not None
+    assert insight.degradation_profile.reason_code.value == "INDEX_NOT_READY"
+    assert set(insight.degradation_profile.affected_papers) == {"stem-001", "stem-002"}
     assert insight.meta.get("patrol_rag_context_degraded", {}).get("reason") == "index_not_ready"
     assert set(insight.meta["patrol_rag_context_degraded"]["paper_ids"]) == {"stem-001", "stem-002"}
+    vector_store.query_chunks.assert_not_called()
 
 
 async def test_method_overlap_chinese_description_recall() -> None:
