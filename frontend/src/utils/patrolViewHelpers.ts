@@ -19,6 +19,16 @@ export const PATROL_MODE_OPTIONS = [
     label: PATROL_BASELINE_COPY.modeContradictionLabel,
     caption: PATROL_BASELINE_COPY.modeContradictionCaption,
   },
+  {
+    value: 'method_overlap' as const,
+    label: PATROL_BASELINE_COPY.modeMethodOverlapLabel,
+    caption: PATROL_BASELINE_COPY.modeMethodOverlapCaption,
+  },
+  {
+    value: 'claim_evolution' as const,
+    label: PATROL_BASELINE_COPY.modeClaimEvolutionLabel,
+    caption: PATROL_BASELINE_COPY.modeClaimEvolutionCaption,
+  },
 ]
 
 export function patrolModeLabel(value: PatrolMode): string {
