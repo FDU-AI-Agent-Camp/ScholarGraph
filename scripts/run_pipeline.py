@@ -148,6 +148,13 @@ async def run_single_paper_pipeline(
         print("[done] 建图完成，可通过 GET /api/v1/papers/{id}/graph 查看图谱")
         return EXIT_SUCCESS
 
+    if snapshot.status == PaperStatus.READY_WITH_WARNINGS:
+        print(
+            "[done] 建图完成（含告警），可通过 GET /api/v1/papers/{id}/graph 查看图谱",
+            file=sys.stderr,
+        )
+        return EXIT_SUCCESS
+
     print(f"[warn] 终态非常规: status={snapshot.status.value}", file=sys.stderr)
     return EXIT_PIPELINE_FAILED
 
