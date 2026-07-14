@@ -285,8 +285,8 @@ await _promote_terminal_status(...)  # ready | ready_with_warnings + RagIndexed
 
 1. **Handler 内失败**：契约校验失败或索引异常 → promote `ready_with_warnings`（不长期卡在 `indexing`），写 `extract_warnings` / 日志，并发布 `RagIndexed(success=False)`。  
 2. **进程级**：EventBus fire-and-forget；生命周期应 `register_pipeline_finalized_handlers`；拓扑测 `tests/events/test_event_bus_topology.py` 断言排他订阅。  
-3. **运维兜底（尚无自动 watchdog）**：若 status 长时间 `indexing`，检查 EventBus worker / RAG handler 日志；必要时重启 API 进程（lifespan 会重绑 handler）或对论文触发 re-extract。演示路径优先 seed 已 `ready` 的图，避免依赖冷索引。  
-4. **Patrol**：索引未就绪时 insight 带 `is_degraded` + `INDEX_NOT_READY`；降级结果**不入**服务端进程 cache，HTTP `Cache-Control: private, no-store`，FE 10s/30s/60s 自愈轮询可拿到新鲜结果。
+3. **运维兜底（尚无自动 watchdog — 跟踪 P13）**：若 status 长时间 `indexing`，检查 EventBus worker / RAG handler 日志；必要时重启 API 进程（lifespan 会重绑 handler）或对论文触发 re-extract。演示路径优先 seed 已 `ready` 的图，避免依赖冷索引。运行时超时 promote 尚未落地。  
+4. **Patrol**：索引未就绪时 insight 带 `is_degraded` + `INDEX_NOT_READY`；降级结果**不入**服务端进程 cache，HTTP `Cache-Control: private, no-store`，FE 10s/30s/60s 自愈轮询可拿到新鲜结果。健康报告 24h cache 键含 `graph_version` + `active index_run_id`，re-extract / 重索引后自动失效。
 
 注意：
 
