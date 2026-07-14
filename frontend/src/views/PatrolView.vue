@@ -6,6 +6,7 @@ import { isApiClientError } from '@/api/client'
 import * as patrolApi from '@/api/patrol'
 import type { PatrolInsight, PatrolMode, PatrolReport } from '@/api/types'
 import InsightCard from '@/components/ui/InsightCard.vue'
+import InsufficientDataInsightCard from '@/components/ui/InsufficientDataInsightCard.vue'
 import { usePatrolHealPoll } from '@/composables/usePatrolHealPoll'
 import { PATROL_BASELINE_COPY } from '@/constants/patrolCopy'
 import { RouteName } from '@/router/meta'
@@ -23,6 +24,7 @@ import {
   validatePatrolSelection,
   type PatrolErrorPresentation,
 } from '@/utils/patrolForm'
+import { isInsufficientDataInsight } from '@/utils/patrolInsufficientData'
 
 const router = useRouter()
 const paperStore = usePaperStore()
@@ -271,33 +273,42 @@ async function run(): Promise<void> {
       </p>
 
       <div class="patrol-view__insights">
-        <InsightCard
-          v-for="item in report.insights"
-          :key="insightKey(item)"
-          :variant="report.mode"
-          :title="item.title"
-          :insight-id="item.insight_id"
-          :summary="item.summary"
-        >
-          <div
-            v-if="item.is_degraded || item.degradation_profile"
-            class="patrol-view__evidence-placeholder text-caption"
+        <template v-for="item in report.insights" :key="insightKey(item)">
+          <InsufficientDataInsightCard
+            v-if="isInsufficientDataInsight(item)"
+            :variant="report.mode"
+            :title="item.title"
+            :insight-id="item.insight_id"
+            :summary="item.summary"
+            :exclusion-logic="item.exclusion_logic"
+          />
+          <InsightCard
+            v-else
+            :variant="report.mode"
+            :title="item.title"
+            :insight-id="item.insight_id"
+            :summary="item.summary"
           >
-            {{ evidencePlaceholderMessage() }}
-          </div>
-          <div v-if="item.node_refs.length" class="patrol-view__node-refs">
-            <RouterLink
-              v-for="nodeRef in item.node_refs"
-              :key="nodeRefKey(nodeRef)"
-              :to="graphLinkForNodeRef(nodeRef)"
-              class="patrol-node-ref text-body"
+            <div
+              v-if="item.is_degraded || item.degradation_profile"
+              class="patrol-view__evidence-placeholder text-caption"
             >
-              <span class="patrol-node-ref__label">{{ nodeRef.label }}</span>
-              <span class="text-mono patrol-node-ref__meta">({{ nodeRef.paper_id }} · {{ nodeRef.node_id }})</span>
-              <span class="patrol-node-ref__action">{{ PATROL_BASELINE_COPY.nodeRefGraphLink }}</span>
-            </RouterLink>
-          </div>
-        </InsightCard>
+              {{ evidencePlaceholderMessage() }}
+            </div>
+            <div v-if="item.node_refs.length" class="patrol-view__node-refs">
+              <RouterLink
+                v-for="nodeRef in item.node_refs"
+                :key="nodeRefKey(nodeRef)"
+                :to="graphLinkForNodeRef(nodeRef)"
+                class="patrol-node-ref text-body"
+              >
+                <span class="patrol-node-ref__label">{{ nodeRef.label }}</span>
+                <span class="text-mono patrol-node-ref__meta">({{ nodeRef.paper_id }} · {{ nodeRef.node_id }})</span>
+                <span class="patrol-node-ref__action">{{ PATROL_BASELINE_COPY.nodeRefGraphLink }}</span>
+              </RouterLink>
+            </div>
+          </InsightCard>
+        </template>
       </div>
     </section>
   </div>

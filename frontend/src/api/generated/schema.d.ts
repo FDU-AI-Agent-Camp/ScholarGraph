@@ -549,15 +549,38 @@ export interface components {
         /**
          * @description Insight readiness status.
          *     `ready` means the insight was produced from a full LLM analysis.
-         *     `insufficient_data` means the graphs lacked required node types or did not meet
-         *     the mode-specific comparison criteria. Examples:
-         *     - lens_clash: missing AnalyticalLens nodes.
+         *     `insufficient_data` is a conclusive channel-B negative determination (HTTP 200),
+         *     not an API error. Read `exclusion_logic` for the structured reason. Examples:
          *     - contradiction: missing Thesis or SubArgument nodes.
-         *     - method_overlap: no overlapping Method or Dataset labels.
-         *     - claim_evolution: ResearchQuestion/Thesis too dissimilar, or claims are identical.
+         *     - method_overlap: HSS paradigm unsupported, missing Method, or no overlap.
+         *     - claim_evolution: ResearchQuestion/Thesis too dissimilar, or no claims.
+         *     Channel A (HTTP 422 PATROL_INSUFFICIENT_DATA) is reserved for hard preflight
+         *     barriers such as lens_clash with no AnalyticalLens nodes.
          * @enum {string}
          */
         PatrolInsightStatus: "ready" | "insufficient_data";
+        /**
+         * @description Typed channel-B exclusion reasons for insufficient_data insights (P11/F7):
+         *     - MISSING_REQUIRED_NODES: required graph node types absent.
+         *     - PARADIGM_UNSUPPORTED: mode not applicable for paper paradigm (e.g. HSS + method_overlap).
+         *     - NO_OVERLAP: analyzers finished; no significant method/dataset overlap.
+         *     - RQ_GATE_FAILED: claim_evolution RQ/Thesis alignment funnel rejected the pair.
+         *     - NO_RECALLABLE_CLAIMS: no Claim nodes and VectorStore recall found nothing.
+         * @enum {string}
+         */
+        PatrolExclusionReason: "MISSING_REQUIRED_NODES" | "PARADIGM_UNSUPPORTED" | "NO_OVERLAP" | "RQ_GATE_FAILED" | "NO_RECALLABLE_CLAIMS";
+        /** @description Structured negative-determination payload when status=insufficient_data. */
+        PatrolExclusionLogic: {
+            /** @description Pipeline stage tag (PARADIGM_GATE, NODE_PRECHECK, OVERLAP_MATCH, …). */
+            phase: string;
+            reason_code: components["schemas"]["PatrolExclusionReason"];
+            /** @description Human-readable explanation of why the run concluded negatively. */
+            description: string;
+            /** @description Optional diagnostic numbers (thresholds, scores, counts). */
+            metrics?: {
+                [key: string]: unknown;
+            };
+        };
         /**
          * @description Typed RAG context degradation reasons:
          *     - INDEX_NOT_READY: graph ready but vector index still building / missing.
@@ -593,6 +616,11 @@ export interface components {
             is_degraded?: boolean;
             /** @description Explicit RAG degradation profile when is_degraded is true. */
             degradation_profile?: components["schemas"]["PatrolDegradationProfile"] | null;
+            /**
+             * @description Required when status=insufficient_data. Structured channel-B exclusion reason
+             *     for FE warning-card rendering (P11/F7). Null when status=ready.
+             */
+            exclusion_logic?: components["schemas"]["PatrolExclusionLogic"] | null;
             /**
              * @description Legacy machine-readable metadata. Prefer is_degraded + degradation_profile.
              *     meta.patrol_rag_context_degraded remains a compatibility mirror of the profile.

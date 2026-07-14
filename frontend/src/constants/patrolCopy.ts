@@ -25,7 +25,13 @@ export const PATROL_BASELINE_COPY = {
   insufficientDataTitle: '数据不足',
   insufficientDataDescription: '换用 ready 状态的论文再试',
   insufficientDataCta: '换用论文',
+  /** Channel-B 200 + status=insufficient_data (F7) — not the same as 422 alert. */
+  insufficientInsightBadge: '阴性结论',
+  insufficientInsightFallbackTitle: '分析已完成，未形成可报告洞察',
+  insufficientInsightHint: '这是完整巡检后的确定性结论，并非请求失败。无需深入对比详情。',
+  insufficientInsightPhaseLabel: '拦截阶段',
   nodeRefGraphLink: '查看图谱',
+
   degradationBannerTitle: '巡检结果可能不完整',
   degradationBannerHint: '您可以稍后刷新重试；若索引仍在构建，页面将自动尝试补齐证据。',
   degradationIndexNotReady: '图谱比对已完成，但底层原文语义索引仍在构建中。当前展示的计算结果可能缺少部分深度文本证据。',

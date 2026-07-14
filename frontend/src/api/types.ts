@@ -70,6 +70,8 @@ export type PatrolMode = Schema['PatrolMode']
 export type PatrolInsight = Schema['PatrolInsight']
 export type PatrolDegradationProfile = Schema['PatrolDegradationProfile']
 export type PatrolDegradationReason = Schema['PatrolDegradationReason']
+export type PatrolExclusionLogic = Schema['PatrolExclusionLogic']
+export type PatrolExclusionReason = Schema['PatrolExclusionReason']
 
 /** `POST /patrol` response `data` (OpenAPI `PatrolResponse`). */
 export type PatrolReport = {
