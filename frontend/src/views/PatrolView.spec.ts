@@ -46,6 +46,7 @@ const contradictionReport: DataResponse<PatrolReport> = {
         status: 'ready',
         paper_ids: ['hss-001', 'hss-002'],
         node_refs: [],
+        is_degraded: false,
       },
     ],
   },
@@ -68,6 +69,7 @@ const patrolReport: DataResponse<PatrolReport> = {
           { paper_id: 'hss-001', node_id: 'n_lens_a', label: '消费社会' },
           { paper_id: 'hss-002', node_id: 'n_lens_b', label: 'public sphere' },
         ],
+        is_degraded: false,
       },
     ],
   },
@@ -193,6 +195,47 @@ describe('PatrolView', () => {
     expect(link.exists()).toBe(true)
     expect(link.attributes('data-to')).toContain(RouteName.PaperGraph)
     expect(link.attributes('data-to')).toContain('n_lens_a')
+  })
+
+  it('shows RAG degradation banner when is_degraded (P9/F8)', async () => {
+    mockRunPatrol.mockResolvedValue({
+      data: {
+        mode: 'method_overlap',
+        paper_ids: ['stem-001', 'stem-002'],
+        generated_at: '2026-07-13T19:15:00Z',
+        insights: [
+          {
+            insight_id: 'ins-mo-1',
+            title: '方法重叠',
+            summary: '图谱比对完成。',
+            status: 'ready',
+            paper_ids: ['stem-001', 'stem-002'],
+            node_refs: [],
+            is_degraded: true,
+            degradation_profile: {
+              component: 'RAG_CONTEXT',
+              reason_code: 'INDEX_NOT_READY',
+              affected_papers: ['stem-001'],
+              severity: 'WARNING',
+              timestamp: '2026-07-13T19:15:00Z',
+            },
+          },
+        ],
+      },
+      meta: { request_id: 'req-degraded' },
+    })
+
+    const wrapper = await mountPatrolView()
+    await setPaperSelection(wrapper, 'stem-001', 'stem-002')
+    // switch mode isn't required — report content drives the banner
+    await wrapper.find('.patrol-run-stub').trigger('click')
+    await flushPromises()
+
+    const banner = wrapper.find('.patrol-view__degradation-banner')
+    expect(banner.exists()).toBe(true)
+    expect(banner.attributes('data-title')).toBe(PATROL_BASELINE_COPY.degradationBannerTitle)
+    expect(banner.attributes('data-desc')).toContain('stem-001')
+    expect(wrapper.text()).toContain(PATROL_BASELINE_COPY.degradationEvidencePlaceholder)
   })
 
   it('maps GRAPH_NOT_READY to baseline error title and papers CTA (7.6)', async () => {

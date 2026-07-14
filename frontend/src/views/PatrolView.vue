@@ -6,10 +6,17 @@ import { isApiClientError } from '@/api/client'
 import * as patrolApi from '@/api/patrol'
 import type { PatrolInsight, PatrolMode, PatrolReport } from '@/api/types'
 import InsightCard from '@/components/ui/InsightCard.vue'
+import { usePatrolHealPoll } from '@/composables/usePatrolHealPoll'
 import { PATROL_BASELINE_COPY } from '@/constants/patrolCopy'
 import { RouteName } from '@/router/meta'
 import { usePaperStore } from '@/stores/paper'
 import { getUnknownErrorMessage } from '@/utils/errors'
+import {
+  degradationBannerDescription,
+  degradationBannerTitle,
+  evidencePlaceholderMessage,
+  extractReportDegradation,
+} from '@/utils/patrolDegradation'
 import {
   buildPatrolPaperIds,
   resolvePatrolApiError,
@@ -25,8 +32,23 @@ const paperIdB = ref('hss-002')
 const mode = ref<PatrolMode>('lens_clash')
 const loading = ref(false)
 const report = ref<PatrolReport | null>(null)
+const lastPaperIds = ref<[string, string] | null>(null)
 const validationError = ref<string | null>(null)
 const apiError = ref<PatrolErrorPresentation | null>(null)
+
+const { healing, scheduleHealPoll, stopHealPoll } = usePatrolHealPoll({
+  report,
+  paperIds: lastPaperIds,
+  mode,
+  runPatrol: async (paperIds, patrolMode) => {
+    const res = await patrolApi.runPatrol(paperIds, { mode: patrolMode })
+    return res.data
+  },
+})
+
+const degradationProfile = computed(() =>
+  report.value ? extractReportDegradation(report.value) : null,
+)
 
 const modeOptions = [
   {
@@ -79,6 +101,8 @@ function resetPaperSelection(): void {
   paperIdA.value = ''
   paperIdB.value = ''
   report.value = null
+  lastPaperIds.value = null
+  stopHealPoll()
   clearErrors()
 }
 
@@ -97,6 +121,8 @@ async function run(): Promise<void> {
   validationError.value = validation
   if (validation) {
     report.value = null
+    lastPaperIds.value = null
+    stopHealPoll()
     apiError.value = null
     return
   }
@@ -104,11 +130,14 @@ async function run(): Promise<void> {
   loading.value = true
   clearErrors()
   report.value = null
+  stopHealPoll()
   const [firstId, secondId] = buildPatrolPaperIds(paperIdA.value, paperIdB.value)
+  lastPaperIds.value = [firstId, secondId]
 
   try {
     const res = await patrolApi.runPatrol([firstId, secondId], { mode: mode.value })
     report.value = res.data
+    scheduleHealPoll()
   } catch (error: unknown) {
     if (isApiClientError(error)) {
       apiError.value = resolvePatrolApiError(error.code, error.message)
@@ -228,6 +257,19 @@ async function run(): Promise<void> {
 
       <h2 class="text-h2 patrol-view__report-title">{{ PATROL_BASELINE_COPY.reportTitle }}</h2>
 
+      <el-alert
+        v-if="degradationProfile"
+        type="warning"
+        :title="degradationBannerTitle(degradationProfile)"
+        :description="degradationBannerDescription(degradationProfile)"
+        show-icon
+        :closable="false"
+        class="patrol-view__alert patrol-view__degradation-banner"
+      />
+      <p v-if="healing" class="text-caption patrol-view__healing-hint">
+        {{ PATROL_BASELINE_COPY.degradationHealingHint }}
+      </p>
+
       <div class="patrol-view__insights">
         <InsightCard
           v-for="item in report.insights"
@@ -237,6 +279,12 @@ async function run(): Promise<void> {
           :insight-id="item.insight_id"
           :summary="item.summary"
         >
+          <div
+            v-if="item.is_degraded || item.degradation_profile"
+            class="patrol-view__evidence-placeholder text-caption"
+          >
+            {{ evidencePlaceholderMessage() }}
+          </div>
           <div v-if="item.node_refs.length" class="patrol-view__node-refs">
             <RouterLink
               v-for="nodeRef in item.node_refs"
@@ -445,6 +493,20 @@ async function run(): Promise<void> {
 .patrol-view__report-title {
   margin: 0;
   color: var(--color-text-primary);
+}
+
+.patrol-view__healing-hint {
+  margin: 0;
+  color: var(--color-text-secondary);
+}
+
+.patrol-view__evidence-placeholder {
+  margin-bottom: var(--spacing-12);
+  padding: var(--spacing-12);
+  border: 1px dashed var(--color-border);
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--color-warning, #ca8a04) 8%, transparent);
+  color: var(--color-text-secondary);
 }
 
 .patrol-view__insights {

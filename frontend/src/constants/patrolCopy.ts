@@ -26,4 +26,12 @@ export const PATROL_BASELINE_COPY = {
   insufficientDataDescription: '换用 ready 状态的论文再试',
   insufficientDataCta: '换用论文',
   nodeRefGraphLink: '查看图谱',
+  degradationBannerTitle: '巡检结果可能不完整',
+  degradationBannerHint: '您可以稍后刷新重试；若索引仍在构建，页面将自动尝试补齐证据。',
+  degradationIndexNotReady: '图谱比对已完成，但底层原文语义索引仍在构建中。当前展示的计算结果可能缺少部分深度文本证据。',
+  degradationQueryFailed: '向量检索部分失败，当前结果主要基于图谱结构，可能缺少原文片段证据。',
+  degradationStoreUnavailable: '向量库暂时不可用，当前结果仅基于图谱结构生成。',
+  degradationGeneric: 'RAG 上下文已降级，结果可能不完整。',
+  degradationEvidencePlaceholder: '原文片段尚未索引完成，证据链暂不可用。',
+  degradationHealingHint: '正在后台等待索引就绪并自动刷新…',
 } as const
