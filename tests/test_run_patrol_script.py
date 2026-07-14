@@ -58,6 +58,8 @@ async def test_main_success_with_seed_demo_graphs(run_patrol_module, tmp_path: P
     assert exit_code == 0
     assert (graph_dir / "hss-001.json").is_file()
     assert (graph_dir / "hss-002.json").is_file()
+    assert (graph_dir / "stem-001.json").is_file()
+    assert (graph_dir / "stem-002.json").is_file()
 
 
 async def test_main_returns_patrol_failed_exit(run_patrol_module, tmp_path: Path) -> None:
@@ -107,6 +109,7 @@ async def test_main_smoke_patrol_alias_only(run_patrol_module, tmp_path: Path) -
     )
     assert exit_code == 0
     assert (graph_dir / "hss-001.json").is_file()
+    assert (graph_dir / "stem-001.json").is_file()
 
 
 def test_cli_subprocess_runs_patrol_with_seed(tmp_path: Path) -> None:
@@ -201,6 +204,8 @@ def test_execute_patrol_prints_openapi_shape(run_patrol_module, tmp_path: Path, 
             run_patrol_module.PatrolMode.LENS_CLASH,
             graph_dir=graph_dir,
             seed_demo_graphs=True,
+            seed_hss_demo=False,
+            seed_stem_demo=False,
         )
         run_patrol_module.print_report(report, compact=True)
 

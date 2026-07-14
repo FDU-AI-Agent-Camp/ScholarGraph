@@ -29,8 +29,11 @@ uv run python scripts/run_patrol.py --paper-ids hss-001,hss-002 --mode contradic
 在仓库根目录（需 `uv sync`）：
 
 ```bash
-# 向 GRAPH_DATA_DIR 写入评测用图谱并运行 lens_clash
+# 向 GRAPH_DATA_DIR 写入 HSS + STEM 评测图谱并运行 lens_clash（默认双轨 seed）
 uv run python scripts/run_patrol.py --seed-demo-graphs
+
+# 仅 seed HSS 语料
+uv run python scripts/run_patrol.py --seed-hss-demo
 
 # 指定 paper_id 与输出
 uv run python scripts/run_patrol.py --paper-ids hss-001,hss-002 --mode lens_clash --seed-demo-graphs
@@ -40,7 +43,7 @@ uv run python scripts/run_patrol.py --paper-ids hss-001,hss-002 --mode lens_clas
 
 ## V2 模式（method_overlap / claim_evolution）
 
-STEM 演示语料 `stem-001` / `stem-002`（PCA 同义词对 + 对齐 RQ）：
+STEM 演示语料 `stem-001` / `stem-002`（PCA 同义词对 + 对齐 RQ）已包含在 `--seed-demo-graphs` 中；亦可单独写入：
 
 ```bash
 uv run python scripts/run_patrol.py --seed-stem-demo

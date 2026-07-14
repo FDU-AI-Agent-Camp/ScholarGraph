@@ -99,7 +99,6 @@ def run_seed() -> None:
     repo_root = Path(__file__).resolve().parents[1]
     seed_cmds = [
         [sys.executable, str(repo_root / "scripts" / "run_patrol.py"), "--seed-demo-graphs"],
-        [sys.executable, str(repo_root / "scripts" / "run_patrol.py"), "--seed-stem-demo"],
         # hss-001 恢复为 M2 graph-hss，供 GET graph + QA SSE 探针
         [sys.executable, str(repo_root / "scripts" / "run_qa.py"), "--seed-demo-graph"],
     ]

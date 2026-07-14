@@ -115,6 +115,12 @@ def seed_corpus_patrol_graphs(store_dir: Path) -> GraphStore:
     return seed_patrol_graphs(store_dir, CORPUS_PATROL_LENSES)
 
 
+def seed_all_demo_patrol_graphs(store_dir: Path) -> GraphStore:
+    """Write HSS + STEM demo graphs for one-shot frontend / CLI rehearsal."""
+    seed_corpus_patrol_graphs(store_dir)
+    return seed_stem_patrol_graphs(store_dir)
+
+
 def seed_stem_patrol_graphs(store_dir: Path) -> GraphStore:
     """Write STEM micro-corpus for method_overlap / claim_evolution demo."""
     store = GraphStore(base_dir=store_dir)

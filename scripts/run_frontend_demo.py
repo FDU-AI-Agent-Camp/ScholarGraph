@@ -54,9 +54,14 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         help="seed 后可选执行的 CLI 巡检模式（冒烟）",
     )
     parser.add_argument(
-        "--seed-stem-demo",
+        "--no-stem-seed",
         action="store_true",
-        help="额外 seed STEM 评测图谱（stem-001/stem-002）",
+        help="仅 seed HSS 图谱（默认同时 seed stem-001/stem-002）",
+    )
+    parser.add_argument(
+        "--smoke-all-patrol",
+        action="store_true",
+        help="seed 后依次冒烟四模式（lens_clash / contradiction / method_overlap / claim_evolution）",
     )
     parser.add_argument(
         "--smoke-patrol",
@@ -66,17 +71,12 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     return parser.parse_args(argv)
 
 
-def run_seed(*, include_stem: bool = False) -> int:
-    cmds = [[sys.executable, str(REPO_ROOT / "scripts" / "run_patrol.py"), "--seed-demo-graphs"]]
-    if include_stem:
-        cmds.append([sys.executable, str(REPO_ROOT / "scripts" / "run_patrol.py"), "--seed-stem-demo"])
-    exit_code = 0
-    for cmd in cmds:
-        print(">>", " ".join(cmd))
-        completed = subprocess.run(cmd, cwd=REPO_ROOT, check=False)
-        if completed.returncode != 0:
-            exit_code = completed.returncode
-    return exit_code
+def run_seed(*, include_stem: bool = True) -> int:
+    flag = "--seed-demo-graphs" if include_stem else "--seed-hss-demo"
+    cmd = [sys.executable, str(REPO_ROOT / "scripts" / "run_patrol.py"), flag]
+    print(">>", " ".join(cmd))
+    completed = subprocess.run(cmd, cwd=REPO_ROOT, check=False)
+    return completed.returncode
 
 
 def run_patrol_smoke(mode: str) -> int:
@@ -121,8 +121,8 @@ def print_instructions() -> None:
     print("  1. 打开 /patrol")
     print("  2. paper_ids 输入 hss-001,hss-002")
     print("  3. mode 选择 lens_clash / contradiction / method_overlap / claim_evolution")
-    print("  4. V2 模式请使用 stem-001,stem-002（需 --seed-stem-demo）")
-    print("  4. 点击「运行巡检」，查看 insights 与 node_refs 表格")
+    print("  4. V2 模式使用 stem-001,stem-002（默认 seed 已包含 STEM 语料）")
+    print("  5. 点击「运行巡检」，查看 insights、structured_points 与 node_refs 表格")
     print()
     print(f"后端 OpenAPI: {BACKEND_BASE}/docs")
     print("完整文档: docs/v1/eval/frontend-demo-path.md")
@@ -133,12 +133,18 @@ def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
 
     if not args.skip_seed:
-        exit_code = run_seed(include_stem=args.seed_stem_demo)
+        exit_code = run_seed(include_stem=not args.no_stem_seed)
         if exit_code != 0:
             print(f"seed 失败，退出码 {exit_code}", file=sys.stderr)
             return exit_code
 
-    if args.smoke_patrol:
+    if args.smoke_all_patrol:
+        for mode in ("lens_clash", "contradiction", "method_overlap", "claim_evolution"):
+            exit_code = run_patrol_smoke(mode)
+            if exit_code != 0:
+                print(f"patrol CLI 冒烟失败（{mode}），退出码 {exit_code}", file=sys.stderr)
+                return exit_code
+    elif args.smoke_patrol:
         exit_code = run_patrol_smoke(args.mode)
         if exit_code != 0:
             print(f"patrol CLI 冒烟失败，退出码 {exit_code}", file=sys.stderr)

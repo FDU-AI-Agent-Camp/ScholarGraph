@@ -25,7 +25,12 @@ from pathlib import Path
 from backend.config import get_settings
 from backend.graph.store import GraphStore
 from backend.patrol.errors import PatrolError
-from backend.patrol.samples import CORPUS_HSS_PAPER_IDS, seed_corpus_patrol_graphs, seed_stem_patrol_graphs
+from backend.patrol.samples import (
+    CORPUS_HSS_PAPER_IDS,
+    seed_all_demo_patrol_graphs,
+    seed_corpus_patrol_graphs,
+    seed_stem_patrol_graphs,
+)
 from backend.patrol.service import run_patrol
 from backend.schemas.patrol import PatrolMode, PatrolReport
 
@@ -58,7 +63,12 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument(
         "--seed-demo-graphs",
         action="store_true",
-        help="运行前写入 patrol_samples 评测图谱（开发冒烟用）",
+        help="运行前写入 HSS + STEM 评测图谱（hss-001/002 + stem-001/002）",
+    )
+    parser.add_argument(
+        "--seed-hss-demo",
+        action="store_true",
+        help="仅写入 HSS 评测图谱（hss-001/hss-002）",
     )
     parser.add_argument(
         "--smoke-patrol",
@@ -99,12 +109,15 @@ async def execute_patrol(
     *,
     graph_dir: Path,
     seed_demo_graphs: bool,
+    seed_hss_demo: bool,
     seed_stem_demo: bool,
 ) -> PatrolReport:
     graph_dir.mkdir(parents=True, exist_ok=True)
     if seed_demo_graphs:
+        seed_all_demo_patrol_graphs(graph_dir)
+    elif seed_hss_demo:
         seed_corpus_patrol_graphs(graph_dir)
-    if seed_stem_demo:
+    elif seed_stem_demo:
         seed_stem_patrol_graphs(graph_dir)
     store = GraphStore(base_dir=graph_dir)
     return await run_patrol(paper_ids, mode, store=store)
@@ -134,6 +147,7 @@ async def async_main(argv: list[str] | None = None) -> int:
             mode,
             graph_dir=graph_dir,
             seed_demo_graphs=args.seed_demo_graphs or args.smoke_patrol,
+            seed_hss_demo=args.seed_hss_demo,
             seed_stem_demo=args.seed_stem_demo,
         )
     except PatrolError as exc:

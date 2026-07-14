@@ -25,9 +25,14 @@ uv run python scripts/run_frontend_demo.py
 # 仅打印 URL，不 seed
 uv run python scripts/run_frontend_demo.py --skip-seed
 
-# seed 后额外跑 CLI 巡检冒烟
-uv run python scripts/run_frontend_demo.py --smoke-patrol --mode lens_clash
+# seed 后额外跑 CLI 巡检冒烟（单模式）
+uv run python scripts/run_frontend_demo.py --smoke-patrol --mode method_overlap
+
+# seed 后四模式依次冒烟
+uv run python scripts/run_frontend_demo.py --smoke-all-patrol
 ```
+
+默认 seed 会写入 **HSS + STEM** 图谱（`hss-001/002` + `stem-001/002`），开箱即可试 V2 `method_overlap` / `claim_evolution`。
 
 等价手动 seed：
 
@@ -111,11 +116,11 @@ npm run dev
 - 操作：
   1. `paper_ids` 输入：`hss-001,hss-002`（恰好 2 篇）
   2. `mode` 选择四模式之一（`lens_clash` / `contradiction` / `method_overlap` / `claim_evolution`）
-  3. V2 模式使用 `stem-001,stem-002` 前先执行 `run_patrol.py --seed-stem-demo`
+  3. V2 模式使用 `stem-001,stem-002`（默认 seed 已包含 STEM 语料）
   4. 点击「运行巡检」
 - 验收：
   - 展示 `mode`、`generated_at`、`paper_ids`；
-  - 每条 insight 含 `title`、`summary`、`node_refs` 表格（paper_id / node_id / label）。
+  - 每条 insight 含 `title`、`summary`、`structured_points`（V2）与 `node_refs` 表格。
 - 错误态：
   - `409 GRAPH_NOT_READY`：先执行 `run_patrol.py --seed-demo-graphs`
   - `422 PATROL_INSUFFICIENT_DATA`：切换 mode 或检查图谱节点类型

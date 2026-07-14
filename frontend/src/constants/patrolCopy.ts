@@ -14,7 +14,7 @@ export const PATROL_BASELINE_COPY = {
   modeContradictionCaption: '核心论点矛盾 · 人文社科/理工科',
   modeLabel: '巡检模式',
   hintSummary: '本地联调提示',
-  hintBody: '在后端 seed demo 图谱后再运行巡检：',
+  hintBody: '在后端 seed HSS + STEM demo 图谱后再运行巡检（V2 模式用 stem-001,stem-002）：',
   hintCommand: 'uv run python scripts/run_patrol.py --seed-demo-graphs',
   validationExactTwo: '请输入恰好 2 个 paper_id',
   validationDuplicate: (paperId: string) => `论文 A 与论文 B 不能选择同一篇论文（${paperId}）`,
