@@ -6,6 +6,7 @@ import { describe, expect, it } from 'vitest'
 
 import type { components } from '@/api/types'
 import LensClashPointCard from '@/components/patrol/LensClashPointCard.vue'
+import { PATROL_BASELINE_COPY } from '@/constants/patrolCopy'
 
 type LensClashPoint = components['schemas']['LensClashPoint']
 
@@ -34,7 +35,7 @@ describe('LensClashPointCard (F12 unit)', () => {
       props: { point: basePoint({ clash_aspect: '' }) },
     })
 
-    expect(wrapper.text()).toContain('Lens A')
+    expect(wrapper.text()).toContain(PATROL_BASELINE_COPY.pointFieldLensA)
     expect(wrapper.text()).toContain('消费社会')
   })
 
