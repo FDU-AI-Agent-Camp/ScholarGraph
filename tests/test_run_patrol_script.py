@@ -29,6 +29,11 @@ def test_run_patrol_help_exits_zero() -> None:
     assert "--paper-ids" in result.stdout
     assert "--seed-demo-graphs" in result.stdout
     assert "--smoke-patrol" in result.stdout
+    # P12: help must advertise all four PatrolMode values (not V1-only lens_clash).
+    help_text = result.stdout
+    for mode_name in ("lens_clash", "contradiction", "method_overlap", "claim_evolution"):
+        assert mode_name in help_text, f"missing mode in --help: {mode_name}"
+    assert "rag-requirements.md" in help_text or "§5" in help_text
 
 
 def test_parse_args_defaults(run_patrol_module) -> None:
