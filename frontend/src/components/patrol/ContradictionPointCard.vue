@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { components } from '@/api/types'
+import { PATROL_BASELINE_COPY } from '@/constants/patrolCopy'
 
 type ContradictionPoint = components['schemas']['ContradictionPoint']
 
@@ -12,54 +13,19 @@ defineProps<{
   <article class="patrol-point-card patrol-point-card--contradiction">
     <dl class="patrol-point-card__fields">
       <div class="patrol-point-card__row">
-        <dt>Point A</dt>
+        <dt>{{ PATROL_BASELINE_COPY.pointFieldPointA }}</dt>
         <dd>{{ point.point_a }}</dd>
       </div>
       <div class="patrol-point-card__row">
-        <dt>Point B</dt>
+        <dt>{{ PATROL_BASELINE_COPY.pointFieldPointB }}</dt>
         <dd>{{ point.point_b }}</dd>
       </div>
       <div class="patrol-point-card__row">
-        <dt>Conflict</dt>
+        <dt>{{ PATROL_BASELINE_COPY.pointFieldConflict }}</dt>
         <dd>{{ point.conflict_type }}</dd>
       </div>
     </dl>
   </article>
 </template>
 
-<style scoped>
-.patrol-point-card {
-  display: flex;
-  flex-direction: column;
-  gap: var(--spacing-12);
-  padding: var(--spacing-16);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-  background: var(--color-bg-subtle);
-}
-
-.patrol-point-card__fields {
-  margin: 0;
-  display: flex;
-  flex-direction: column;
-  gap: var(--spacing-8);
-}
-
-.patrol-point-card__row {
-  display: grid;
-  grid-template-columns: 5.5rem minmax(0, 1fr);
-  gap: var(--spacing-8);
-}
-
-.patrol-point-card__row dt {
-  margin: 0;
-  color: var(--color-text-secondary);
-  font-size: var(--text-caption-size);
-}
-
-.patrol-point-card__row dd {
-  margin: 0;
-  color: var(--color-text-primary);
-  white-space: pre-wrap;
-}
-</style>
+<style src="./patrolPointCard.css"></style>

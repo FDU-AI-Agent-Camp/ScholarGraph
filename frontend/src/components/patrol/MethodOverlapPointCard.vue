@@ -23,27 +23,27 @@ const usableNodeRefs = computed(() => (props.point.node_refs ?? []).filter(isUsa
     </header>
     <dl class="patrol-point-card__fields">
       <div class="patrol-point-card__row">
-        <dt>Paper A</dt>
+        <dt>{{ PATROL_BASELINE_COPY.pointFieldPaperA }}</dt>
         <dd>{{ point.paper_a_usage }}</dd>
       </div>
       <div class="patrol-point-card__row">
-        <dt>Paper B</dt>
+        <dt>{{ PATROL_BASELINE_COPY.pointFieldPaperB }}</dt>
         <dd>{{ point.paper_b_usage }}</dd>
       </div>
       <div v-if="point.dataset_a || point.dataset_b" class="patrol-point-card__row">
-        <dt>Dataset</dt>
+        <dt>{{ PATROL_BASELINE_COPY.pointFieldDataset }}</dt>
         <dd>{{ [point.dataset_a, point.dataset_b].filter(Boolean).join(' · ') }}</dd>
       </div>
       <div v-if="point.overlap_score != null" class="patrol-point-card__row">
-        <dt>Score</dt>
+        <dt>{{ PATROL_BASELINE_COPY.pointFieldScore }}</dt>
         <dd class="text-mono">{{ point.overlap_score }}</dd>
       </div>
       <div v-if="point.match_type" class="patrol-point-card__row">
-        <dt>Match</dt>
+        <dt>{{ PATROL_BASELINE_COPY.pointFieldMatch }}</dt>
         <dd>{{ point.match_type }}</dd>
       </div>
       <div v-if="point.evidence_summary" class="patrol-point-card__row">
-        <dt>Evidence</dt>
+        <dt>{{ PATROL_BASELINE_COPY.pointFieldEvidence }}</dt>
         <dd>{{ point.evidence_summary }}</dd>
       </div>
     </dl>
@@ -63,87 +63,4 @@ const usableNodeRefs = computed(() => (props.point.node_refs ?? []).filter(isUsa
   </article>
 </template>
 
-<style scoped>
-.patrol-point-card {
-  display: flex;
-  flex-direction: column;
-  gap: var(--spacing-12);
-  padding: var(--spacing-16);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-  background: var(--color-bg-subtle);
-}
-
-.patrol-point-card__header {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: var(--spacing-8);
-}
-
-.patrol-point-card__label {
-  font-family: var(--font-sans);
-  font-size: var(--text-body-size);
-  font-weight: 600;
-  color: var(--color-text-primary);
-}
-
-.patrol-point-card__type {
-  color: var(--color-text-secondary);
-}
-
-.patrol-point-card__fields {
-  margin: 0;
-  display: flex;
-  flex-direction: column;
-  gap: var(--spacing-8);
-}
-
-.patrol-point-card__row {
-  display: grid;
-  grid-template-columns: 5.5rem minmax(0, 1fr);
-  gap: var(--spacing-8);
-}
-
-.patrol-point-card__row dt {
-  margin: 0;
-  color: var(--color-text-secondary);
-  font-size: var(--text-caption-size);
-}
-
-.patrol-point-card__row dd {
-  margin: 0;
-  color: var(--color-text-primary);
-  white-space: pre-wrap;
-}
-
-.patrol-point-card__node-refs {
-  display: flex;
-  flex-direction: column;
-  gap: var(--spacing-8);
-}
-
-.patrol-point-node-ref {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--spacing-8);
-  padding: var(--spacing-8) var(--spacing-12);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-  background: var(--color-bg-canvas);
-  color: var(--color-text-primary);
-  text-decoration: none;
-}
-
-.patrol-point-node-ref__meta {
-  color: var(--color-text-secondary);
-}
-
-.patrol-point-node-ref__action {
-  margin-left: auto;
-  color: var(--color-primary);
-  font-size: var(--text-caption-size);
-}
-</style>
+<style src="./patrolPointCard.css"></style>
