@@ -27,8 +27,9 @@ from collections.abc import Sequence
 
 RUFF_TARGETS = ("backend", "tests", "scripts")
 DEFAULT_PYTEST_MARKER = (
-    "not red and not live and not live_patrol and not demo_profile_check and not live_mineru "
-    "and not live_grobid and not live_benchmark and not live_e10 and not live_judge and not live_head_merge"
+    "not red and not live_patrol_logic and not live_qa_logic and not demo_profile_check "
+    "and not live_mineru and not live_grobid and not live_benchmark and not live_e10 "
+    "and not live_judge and not live_head_merge"
 )
 EXIT_SUCCESS = 0
 EXIT_FAILURE = 1
