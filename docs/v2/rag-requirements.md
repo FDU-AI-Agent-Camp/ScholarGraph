@@ -526,18 +526,30 @@ SSE `citation` 事件字段：
 
 触发：两篇 STEM 论文的 `Method` / `Dataset` 高度重合。
 
-输出结构：
+> **契约以 OpenAPI 为准**：[`docs/api/openapi.yaml`](../../api/openapi.yaml) 中 `MethodOverlapPoint`；示例 fixture 见 [`patrol-method-overlap.json`](../../api/fixtures/patrol-method-overlap.json)。
+
+输出结构（`structured_points[]` 元素）：
 
 ```json
 {
   "mode": "method_overlap",
-  "method": "PCA",
-  "paper_a_usage": "用于降维",
-  "paper_b_usage": "用于特征选择",
-  "dataset_a": "Dataset A",
-  "dataset_b": "Dataset B"
+  "overlap_type": "method",
+  "overlap_label": "PCA",
+  "overlap_score": 0.99,
+  "match_type": "semantic",
+  "paper_a_usage": "Applied PCA to MNIST pixel vectors before k-NN classification",
+  "paper_b_usage": "Principal Component Analysis compressed MNIST features to 50 dimensions",
+  "dataset_a": "MNIST",
+  "dataset_b": "MNIST",
+  "evidence_summary": "同义词方法标签在共享 MNIST 数据集上共振。",
+  "node_refs": [
+    { "paper_id": "stem-001", "node_id": "n_method_pca", "label": "PCA" },
+    { "paper_id": "stem-002", "node_id": "n_method_pca_full", "label": "Principal Component Analysis" }
+  ]
 }
 ```
+
+`method` 字段为 `@computed_field` 兼容别名，等价于 `overlap_label`（旧客户端可读，新实现请用 `overlap_label`）。
 
 #### `claim_evolution`
 
@@ -545,55 +557,61 @@ SSE `citation` 事件字段：
 
 **部署配置（live / 演示）**：RQ 对齐采用 TD-4 两阶段漏斗——双塔粗筛（`PATROL_CLAIM_RQ_COARSE_THRESHOLD`，默认 0.42）→ Cross-Encoder 精排（`PATROL_RERANK_THRESHOLD`，默认 0.60）。**需 `RERANKER_ENABLED=true` 且配置 `RERANKER_MODEL`**；默认 `.env.example` 中 `RERANKER_ENABLED=false` 会回退严格双塔阈值（中文 0.75 / 英文 0.55），与 CI 金标门禁行为不一致，易导致大量 `INSUFFICIENT_DATA`。启动后见 `GET /api/v1/health` 的 `patrol_note`。
 
-输出结构：
+> **契约以 OpenAPI 为准**：`ClaimEvolutionPoint`；示例 fixture 见 [`patrol-claim-evolution.json`](../../api/fixtures/patrol-claim-evolution.json)。
+
+输出结构（`structured_points[]` 元素）：
 
 ```json
 {
   "mode": "claim_evolution",
-  "research_question": "...",
-  "paper_a_claim": "...",
-  "paper_b_claim": "...",
-  "evidence_summary": "..."
+  "research_question": "PCA 是否提升 MNIST 分类准确率？",
+  "paper_a_claim": "PCA 将 MNIST 特征压缩至 50 维后分类准确率提升 3%",
+  "paper_b_claim": "主成分分析在 MNIST 上保留 95% 方差，分类性能与基线相当",
+  "evolution_type": "refined",
+  "problem_fit_score": 82,
+  "evidence_summary": "同一 RQ 下结论从「提升」演进为「与基线相当」。"
 }
 ```
 
-### 5.3 强类型子 Schema
+### 5.3 强类型子 Schema（已实现）
 
-`backend/schemas/patrol.py` 当前 `PatrolInsight.structured_points` 为 `list[dict]`，需改为：
+`backend/schemas/patrol.py` 中 `PatrolInsight.structured_points` 已使用 **discriminated union**（`mode` 字段区分四类 `PatrolPoint`）。前端类型以 `frontend/src/api/generated/schema.d.ts` 的 `PatrolPoint` 联合类型为准。
 
 ```python
 class PatrolPoint(BaseModel):
     mode: Literal["contradiction", "lens_clash", "method_overlap", "claim_evolution"]
 
-class ContradictionPoint(PatrolPoint):
-    mode: Literal["contradiction"]
-    point_a: str
-    point_b: str
-    conflict_type: str
-
-class LensClashPoint(PatrolPoint):
-    mode: Literal["lens_clash"]
-    lens_a: str
-    lens_b: str
-    clash_aspect: str
-
 class MethodOverlapPoint(PatrolPoint):
     mode: Literal["method_overlap"]
-    method: str
+    overlap_type: OverlapType
+    overlap_label: str
+    overlap_score: float | None
+    match_type: Literal["literal", "semantic"] | None
+    node_refs: list[NodeRef]
     paper_a_usage: str
     paper_b_usage: str
+    dataset_a: str | None
+    dataset_b: str | None
+    evidence_summary: str | None
+    # method: computed alias → overlap_label
 
 class ClaimEvolutionPoint(PatrolPoint):
     mode: Literal["claim_evolution"]
     research_question: str
-    paper_a_claim: str
-    paper_b_claim: str
+    paper_a_claim: str | None
+    paper_b_claim: str | None
+    evolution_type: EvolutionType | None  # inherit | contradict | refined
+    problem_fit_score: int | None         # 0-100
+    evidence_summary: str | None
 
 class PatrolInsight(BaseModel):
     ...
-    structured_points: list[
-        Union[ContradictionPoint, LensClashPoint, MethodOverlapPoint, ClaimEvolutionPoint]
-    ] = Field(..., discriminator="mode")
+    structured_points: Sequence[
+        Annotated[
+            ContradictionPoint | LensClashPoint | MethodOverlapPoint | ClaimEvolutionPoint,
+            Field(discriminator="mode"),
+        ]
+    ]
 ```
 
 ### 5.4 Patrol 混合 Context
