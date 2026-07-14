@@ -304,7 +304,7 @@ def mock_agent_services_only(
 @pytest.fixture
 def persistence_env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     """Isolated SQLite DB + upload/graph dirs for persistence-core tests."""
-    import asyncio
+    from backend.repositories.async_bridge import run_async
 
     db_path = tmp_path / "scholargraph.db"
     upload_dir = tmp_path / "uploads"
@@ -317,7 +317,8 @@ def persistence_env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setenv("GRAPH_DATA_DIR", str(graph_dir))
     monkeypatch.setenv("SEED_DEMO_PAPERS", "false")
     reset_persistence_singletons()
-    asyncio.run(init_isolated_database(db_path))
+    # Use the async bridge — pytest-asyncio may already have a running loop.
+    run_async(init_isolated_database(db_path))
     yield {
         "db_path": db_path,
         "upload_dir": upload_dir,

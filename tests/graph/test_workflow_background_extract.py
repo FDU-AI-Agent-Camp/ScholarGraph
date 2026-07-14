@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -16,7 +15,8 @@ from backend.schemas.graph import GraphNode, UnifiedPaperGraph
 from backend.schemas.paper import PaperStatus, PipelineStage
 from backend.schemas.paradigm import Paradigm, ParadigmClassification
 from backend.services.errors import ServiceError
-from backend.services.paper_service import get_paper_service
+
+from tests.helpers.persistence_testkit import register_test_paper
 
 
 @pytest.fixture
@@ -67,26 +67,17 @@ def _make_preview_graph(paper_id: str) -> UnifiedPaperGraph:
     )
 
 
-def _register_paper(paper_id: str) -> None:
-    from backend.schemas.paper import PaperDetail
-
-    service = get_paper_service()
-    now = datetime.now(UTC)
-    service._papers[paper_id] = PaperDetail(
-        paper_id=paper_id,
-        title="bg routing test",
-        status=PaperStatus.PROCESSING,
-        created_at=now,
-        updated_at=now,
-    )
+async def _register_paper(paper_id: str) -> None:
+    await register_test_paper(paper_id, title="bg routing test", status=PaperStatus.PROCESSING)
 
 
 class TestExtractNodeBackgroundRouting:
     async def test_long_paper_schedules_background_and_returns_preview(
         self,
         long_paper_state: WorkflowState,
+        persistence_env: dict,
     ) -> None:
-        _register_paper(long_paper_state["paper_id"])
+        await _register_paper(long_paper_state["paper_id"])
         preview = _make_preview_graph(long_paper_state["paper_id"])
         agent_svc = MagicMock()
         agent_svc.extract_graph_background = AsyncMock(
@@ -105,8 +96,9 @@ class TestExtractNodeBackgroundRouting:
     async def test_short_paper_uses_synchronous_path(
         self,
         short_paper_state: WorkflowState,
+        persistence_env: dict,
     ) -> None:
-        _register_paper(short_paper_state["paper_id"])
+        await _register_paper(short_paper_state["paper_id"])
         graph = _make_preview_graph(short_paper_state["paper_id"])
         agent_svc = MagicMock()
         agent_svc.extract_graph = AsyncMock(return_value=ExtractResult(graph=graph, warnings=[]))
@@ -124,23 +116,12 @@ class TestWorkflowBackgroundRouting:
     async def test_long_paper_pipeline_ends_at_extract_stage(
         self,
         tmp_path: Path,
-        monkeypatch: pytest.MonkeyPatch,
+        persistence_env: dict,
     ) -> None:
         paper_id = "wf-long-001"
         pdf_path = tmp_path / "paper.pdf"
         pdf_path.write_bytes(b"%PDF-1.4 fake pdf content")
-
-        service = get_paper_service()
-        from backend.schemas.paper import PaperDetail
-
-        now = datetime.now(UTC)
-        service._papers[paper_id] = PaperDetail(
-            paper_id=paper_id,
-            title="long wf",
-            status=PaperStatus.PENDING,
-            created_at=now,
-            updated_at=now,
-        )
+        await register_test_paper(paper_id, title="long wf", pdf_path=str(pdf_path))
 
         preview = _make_preview_graph(paper_id)
         agent_svc = MagicMock()
@@ -189,25 +170,15 @@ class TestWorkflowBackgroundRouting:
 
 
 class TestWorkflowForegroundRouting:
-    async def test_short_paper_pipeline_runs_to_ready(
+    async def test_short_paper_pipeline_runs_to_indexing(
         self,
         tmp_path: Path,
+        persistence_env: dict,
     ) -> None:
         paper_id = "wf-short-001"
         pdf_path = tmp_path / "paper.pdf"
         pdf_path.write_bytes(b"%PDF-1.4 fake pdf content")
-
-        service = get_paper_service()
-        from backend.schemas.paper import PaperDetail
-
-        now = datetime.now(UTC)
-        service._papers[paper_id] = PaperDetail(
-            paper_id=paper_id,
-            title="short wf",
-            status=PaperStatus.PENDING,
-            created_at=now,
-            updated_at=now,
-        )
+        await register_test_paper(paper_id, title="short wf", pdf_path=str(pdf_path))
 
         graph = _make_preview_graph(paper_id)
         agent_svc = MagicMock()
@@ -251,7 +222,8 @@ class TestWorkflowForegroundRouting:
             final = await run_paper_pipeline(paper_id, pdf_path)
 
         assert final.get("background_extraction_scheduled") is None
-        assert final.get("stage") == PipelineStage.READY
+        # P10: LangGraph store step ends at INDEXING; READY is after RAG EventBus promote.
+        assert final.get("stage") == PipelineStage.INDEXING
         completion_svc.finalize.assert_called_once()
 
 
@@ -259,22 +231,12 @@ class TestWorkflowBackgroundFailure:
     async def test_background_extract_service_error_routes_to_fail(
         self,
         tmp_path: Path,
+        persistence_env: dict,
     ) -> None:
         paper_id = "wf-bg-fail-001"
         pdf_path = tmp_path / "paper.pdf"
         pdf_path.write_bytes(b"%PDF-1.4 fake pdf content")
-
-        service = get_paper_service()
-        from backend.schemas.paper import PaperDetail
-
-        now = datetime.now(UTC)
-        service._papers[paper_id] = PaperDetail(
-            paper_id=paper_id,
-            title="bg fail wf",
-            status=PaperStatus.PENDING,
-            created_at=now,
-            updated_at=now,
-        )
+        await register_test_paper(paper_id, title="bg fail wf", pdf_path=str(pdf_path))
 
         agent_svc = MagicMock()
         agent_svc.classify_paradigm = AsyncMock(

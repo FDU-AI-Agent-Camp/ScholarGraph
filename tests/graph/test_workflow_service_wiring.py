@@ -105,7 +105,8 @@ async def test_store_node_reaches_persistence_via_completion_service(
 
     assert len(saved) == 1
     assert saved[0].paper_id == post_extract_state["paper_id"]
-    assert out["status"] == "ready"
+    # P10: store step returns INDEXING; READY follows EventBus RAG promote.
+    assert out["status"] == "indexing"
 
 
 async def test_nodes_never_call_be_when_services_are_mocked_at_boundary(
