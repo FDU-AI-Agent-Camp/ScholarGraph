@@ -16,7 +16,11 @@ from backend.graph.state import STAGE_PERCENT
 from backend.rag.handlers import RAG_INDEX_TIMEOUT_WARNING, on_pipeline_finalized_for_rag
 from backend.rag.indexing_watchdog import (
     RAG_INDEXING_STUCK_WARNING,
+    WATCHDOG_THREAD_NAME,
     scan_and_promote_stuck_indexing,
+    start_indexing_watchdog,
+    stop_indexing_watchdog,
+    watchdog_thread_is_alive,
 )
 from backend.repositories.async_bridge import run_async
 from backend.repositories.pipeline_repository import get_pipeline_repository
@@ -316,3 +320,57 @@ async def test_e2e_watchdog_promote_then_patrol_api_degrades_index_not_ready(
     assert insight["degradation_profile"]["reason_code"] == "INDEX_NOT_READY"
 
     app.dependency_overrides.clear()
+
+
+def test_watchdog_runs_on_dedicated_daemon_thread(
+    watchdog_db,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Macro watchdog must not be an asyncio.Task on the FastAPI loop."""
+    import threading
+    import time
+    from unittest.mock import patch
+
+    monkeypatch.setenv("RAG_INDEXING_WATCHDOG_INTERVAL_SECONDS", "0.05")
+    get_settings.cache_clear()
+    scan_calls = {"n": 0}
+
+    async def _counting_scan(**_kwargs):
+        scan_calls["n"] += 1
+        return []
+
+    stop_indexing_watchdog()
+    with patch(
+        "backend.rag.indexing_watchdog.scan_and_promote_stuck_indexing",
+        side_effect=_counting_scan,
+    ):
+        start_indexing_watchdog()
+        assert watchdog_thread_is_alive()
+        names = {t.name for t in threading.enumerate()}
+        assert WATCHDOG_THREAD_NAME in names
+        deadline = time.monotonic() + 2.0
+        while scan_calls["n"] < 1 and time.monotonic() < deadline:
+            time.sleep(0.05)
+        stop_indexing_watchdog()
+    assert scan_calls["n"] >= 1
+    assert not watchdog_thread_is_alive()
+
+
+def test_asyncio_block_detector_auto_enables_in_test_env(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import asyncio
+
+    from backend.startup.asyncio_debug import configure_asyncio_block_detector
+
+    monkeypatch.setenv("APP_ENV", "test")
+    monkeypatch.setenv("ASYNCIO_SLOW_CALLBACK_MS", "-1")
+    get_settings.cache_clear()
+    loop = asyncio.new_event_loop()
+    try:
+        assert configure_asyncio_block_detector(loop) is True
+        assert loop.get_debug() is True
+        assert loop.slow_callback_duration == pytest.approx(0.1)
+    finally:
+        loop.close()
+        get_settings.cache_clear()

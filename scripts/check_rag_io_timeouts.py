@@ -65,6 +65,14 @@ def check_watchdog_heal_log_tag() -> list[str]:
         errors.append(f"{_WATCHDOG.relative_to(REPO_ROOT)}: promote log must include P13_WATCHDOG_HEAL_TAG")
     if "indexing_watchdog_cold_boot_reconcile" not in source or "P13_WATCHDOG_HEAL_TAG" not in source:
         errors.append(f"{_WATCHDOG.relative_to(REPO_ROOT)}: cold-boot reconcile must tag P13_WATCHDOG_HEAL")
+    if "threading.Thread" not in source or "dedicated_thread" not in source:
+        errors.append(
+            f"{_WATCHDOG.relative_to(REPO_ROOT)}: macro watchdog must run on a dedicated OS thread",
+        )
+    if "run_async(scan_and_promote_stuck_indexing())" not in source:
+        errors.append(
+            f"{_WATCHDOG.relative_to(REPO_ROOT)}: thread body must schedule scan via run_async",
+        )
     return errors
 
 
