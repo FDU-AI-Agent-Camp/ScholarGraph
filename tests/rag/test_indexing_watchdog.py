@@ -17,6 +17,7 @@ from backend.rag.handlers import RAG_INDEX_TIMEOUT_WARNING, on_pipeline_finalize
 from backend.rag.indexing_watchdog import (
     RAG_INDEXING_STUCK_WARNING,
     WATCHDOG_THREAD_NAME,
+    reset_watchdog_sync_engine,
     scan_and_promote_stuck_indexing,
     start_indexing_watchdog,
     stop_indexing_watchdog,
@@ -42,8 +43,12 @@ def watchdog_db(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setenv("RAG_INDEXING_WATCHDOG_ENABLED", "true")
     get_settings.cache_clear()
     reset_persistence_singletons()
+    reset_watchdog_sync_engine()
+    stop_indexing_watchdog()
     run_async(init_isolated_database(db_path))
     yield
+    stop_indexing_watchdog()
+    reset_watchdog_sync_engine()
     reset_persistence_singletons()
     get_settings.cache_clear()
 
@@ -154,11 +159,12 @@ async def test_macro_active_heartbeat_prevents_promote_of_long_index(watchdog_db
 
 
 @pytest.mark.asyncio
-async def test_cold_boot_lifespan_reconciles_zombie_indexing_batch(
+@pytest.mark.p13_release_gate
+async def test_cold_boot_reconciliation_clears_zombie_states(
     watchdog_db,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """运维冷启动自愈：多篇断电僵尸在 lifespan yield（对外就绪）前被静默 promote。"""
+    """临界自愈：startup lifespan 瞬间清洗历史 INDEXING 僵尸，无脏状态残留。"""
     stale = datetime.now(UTC) - timedelta(hours=2)
     zombie_ids = ("zombie-a", "zombie-b", "zombie-c")
     for pid in zombie_ids:
@@ -335,13 +341,13 @@ def test_watchdog_runs_on_dedicated_daemon_thread(
     get_settings.cache_clear()
     scan_calls = {"n": 0}
 
-    async def _counting_scan(**_kwargs):
+    def _counting_scan(**_kwargs):
         scan_calls["n"] += 1
         return []
 
     stop_indexing_watchdog()
     with patch(
-        "backend.rag.indexing_watchdog.scan_and_promote_stuck_indexing",
+        "backend.rag.indexing_watchdog.scan_and_promote_stuck_indexing_sync",
         side_effect=_counting_scan,
     ):
         start_indexing_watchdog()

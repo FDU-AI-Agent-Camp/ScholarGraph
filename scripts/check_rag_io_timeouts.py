@@ -69,9 +69,14 @@ def check_watchdog_heal_log_tag() -> list[str]:
         errors.append(
             f"{_WATCHDOG.relative_to(REPO_ROOT)}: macro watchdog must run on a dedicated OS thread",
         )
-    if "run_async(scan_and_promote_stuck_indexing())" not in source:
+    if "scan_and_promote_stuck_indexing_sync()" not in source:
         errors.append(
-            f"{_WATCHDOG.relative_to(REPO_ROOT)}: thread body must schedule scan via run_async",
+            f"{_WATCHDOG.relative_to(REPO_ROOT)}: thread body must use sync scan (not run_async onto the FastAPI loop)",
+        )
+    if "run_async(scan_and_promote_stuck_indexing())" in source:
+        errors.append(
+            f"{_WATCHDOG.relative_to(REPO_ROOT)}: thread body must not run_async(scan…) "
+            "(main-loop starvation would stall the watchdog)",
         )
     return errors
 
