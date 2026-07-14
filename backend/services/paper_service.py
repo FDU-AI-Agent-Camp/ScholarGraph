@@ -13,6 +13,7 @@ from backend.db.base import reset_database_caches
 from backend.repositories import run_async
 from backend.repositories.paper_repository import PaperRepository, get_paper_repository
 from backend.repositories.pipeline_repository import PipelineRepository, get_pipeline_repository
+from backend.repositories.pipeline_sync import reset_pipeline_sync_engine
 from backend.schemas.graph import UnifiedPaperGraph
 from backend.schemas.ingest_head import IngestHead, PersistedHeadRefine
 from backend.schemas.paper import (
@@ -25,6 +26,7 @@ from backend.schemas.paper import (
     PipelineStage,
 )
 from backend.schemas.paradigm import Paradigm, ParadigmClassification
+from backend.services.paper_pipeline_ops import PaperPipelineOpsMixin
 from backend.services.paper_pipeline_scheduler import schedule_paper_pipeline
 
 MAX_UPLOAD_BYTES = 32 * 1024 * 1024
@@ -43,6 +45,7 @@ def reset_persistence_singletons() -> None:
     reset_database_caches()
     get_paper_repository.cache_clear()
     get_pipeline_repository.cache_clear()
+    reset_pipeline_sync_engine()
     get_paper_service.cache_clear()
     from backend.services.graph_persistence_service import get_graph_persistence_service
     from backend.services.pipeline_completion_service import get_pipeline_completion_service
@@ -56,8 +59,12 @@ def reset_persistence_singletons() -> None:
     reset_event_bus_cache()
 
 
-class PaperService:
-    """DB-backed paper store; pipeline ephemeral state lives in ``pipeline_runs``."""
+class PaperService(PaperPipelineOpsMixin):
+    """DB-backed paper store; pipeline ephemeral state lives in ``pipeline_runs``.
+
+    External RAG / watchdog callers must use ``PaperPipelineOpsMixin`` public
+    methods (e.g. ``promote_paper_to_terminal_status``) instead of ``_pipeline_repo``.
+    """
 
     def __init__(
         self,

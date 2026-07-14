@@ -25,6 +25,7 @@ _IO_SCAN_ROOTS = (
 
 _HANDLERS = BACKEND / "rag" / "handlers.py"
 _WATCHDOG = BACKEND / "rag" / "indexing_watchdog.py"
+_PIPELINE_OPS = BACKEND / "services" / "paper_pipeline_ops.py"
 
 
 def _read(path: Path) -> str:
@@ -60,25 +61,35 @@ def check_rag_handler_wait_for() -> list[str]:
 def check_watchdog_heal_log_tag() -> list[str]:
     """Macro heal/cold-boot must emit the ops-alert marker ``[P13_WATCHDOG_HEAL]``."""
     errors: list[str] = []
-    source = _read(_WATCHDOG)
-    if 'P13_WATCHDOG_HEAL_TAG = "[P13_WATCHDOG_HEAL]"' not in source:
-        errors.append(f"{_WATCHDOG.relative_to(REPO_ROOT)}: missing P13_WATCHDOG_HEAL_TAG constant")
-    if "P13_WATCHDOG_HEAL_TAG" not in source or "indexing_watchdog_promoted" not in source:
-        errors.append(f"{_WATCHDOG.relative_to(REPO_ROOT)}: promote log must include P13_WATCHDOG_HEAL_TAG")
-    if "indexing_watchdog_cold_boot_reconcile" not in source or "P13_WATCHDOG_HEAL_TAG" not in source:
+    watchdog = _read(_WATCHDOG)
+    pipeline_ops = _read(_PIPELINE_OPS) if _PIPELINE_OPS.is_file() else ""
+    if 'P13_WATCHDOG_HEAL_TAG = "[P13_WATCHDOG_HEAL]"' not in pipeline_ops:
+        errors.append(
+            f"{_PIPELINE_OPS.relative_to(REPO_ROOT)}: missing P13_WATCHDOG_HEAL_TAG constant "
+            "(PaperService promote facade owns heal logs)",
+        )
+    if "P13_WATCHDOG_HEAL_TAG" not in pipeline_ops or "indexing_watchdog_promoted" not in pipeline_ops:
+        errors.append(
+            f"{_PIPELINE_OPS.relative_to(REPO_ROOT)}: promote log must include P13_WATCHDOG_HEAL_TAG",
+        )
+    if "indexing_watchdog_cold_boot_reconcile" not in watchdog or "P13_WATCHDOG_HEAL_TAG" not in watchdog:
         errors.append(f"{_WATCHDOG.relative_to(REPO_ROOT)}: cold-boot reconcile must tag P13_WATCHDOG_HEAL")
-    if "threading.Thread" not in source or "dedicated_thread" not in source:
+    if "threading.Thread" not in watchdog or "dedicated_thread" not in watchdog:
         errors.append(
             f"{_WATCHDOG.relative_to(REPO_ROOT)}: macro watchdog must run on a dedicated OS thread",
         )
-    if "scan_and_promote_stuck_indexing_sync()" not in source:
+    if "scan_and_promote_stuck_indexing_sync()" not in watchdog:
         errors.append(
             f"{_WATCHDOG.relative_to(REPO_ROOT)}: thread body must use sync scan (not run_async onto the FastAPI loop)",
         )
-    if "run_async(scan_and_promote_stuck_indexing())" in source:
+    if "run_async(scan_and_promote_stuck_indexing())" in watchdog:
         errors.append(
             f"{_WATCHDOG.relative_to(REPO_ROOT)}: thread body must not run_async(scan…) "
             "(main-loop starvation would stall the watchdog)",
+        )
+    if "promote_stuck_indexing_paper_sync" not in watchdog or "get_paper_service()" not in watchdog:
+        errors.append(
+            f"{_WATCHDOG.relative_to(REPO_ROOT)}: sync promote must go through PaperService facade",
         )
     return errors
 

@@ -18,12 +18,11 @@ from backend.events.pipeline_finalized_contract import (
     pipeline_finalized_correlation_id,
     validate_pipeline_finalized_payload,
 )
-from backend.events.types import EventType, PipelineFinalized, RagIndexed
+from backend.events.types import EventType, PipelineFinalized
 from backend.rag.chunking import chunk_text
 from backend.rag.indexing import graph_to_entities, graph_to_relations
 from backend.rag.vector_store import VectorStore
 from backend.schemas.graph import UnifiedPaperGraph
-from backend.schemas.paper import PaperStatus
 from backend.services.paper_service import get_paper_service
 
 logger = logging.getLogger(__name__)
@@ -122,12 +121,10 @@ def _record_index_warning(paper_id: str, exc_type_name: str, exc_msg: str) -> No
 
 async def _heartbeat_loop(paper_id: str, stop_event: asyncio.Event, *, interval_seconds: float) -> None:
     """Keep indexing_heartbeat fresh while a long index build is still running."""
-    from backend.repositories.pipeline_repository import get_pipeline_repository
-
-    repo = get_pipeline_repository()
+    paper_service = get_paper_service()
     while not stop_event.is_set():
         try:
-            await repo.touch_indexing_heartbeat(paper_id)
+            await paper_service.touch_indexing_heartbeat(paper_id)
         except Exception:
             logger.exception("indexing_heartbeat_touch_failed", extra={"paper_id": paper_id})
         try:
@@ -210,9 +207,7 @@ async def _index_with_heartbeat_and_timeout(
     stop_event = asyncio.Event()
     # Initial pulse so watchdog sees an alive task immediately.
     try:
-        from backend.repositories.pipeline_repository import get_pipeline_repository
-
-        await get_pipeline_repository().touch_indexing_heartbeat(paper_id)
+        await get_paper_service().touch_indexing_heartbeat(paper_id)
     except Exception:
         logger.exception("indexing_heartbeat_initial_touch_failed", extra={"paper_id": paper_id})
 
@@ -250,65 +245,16 @@ async def _promote_terminal_status(
     warning_codes: list[str] | None = None,
     message_override: str | None = None,
 ) -> None:
-    """Promote paper status via async repo I/O (safe inside the EventBus worker)."""
-    from datetime import UTC, datetime
-
-    from backend.graph.state import STAGE_PERCENT
-    from backend.schemas.paper import PaperStatusData, PipelineStage
-    from backend.services.paper_service import get_paper_service
-    from backend.services.pipeline_status_service import (
-        DEFAULT_STAGE_MESSAGES,
-        validate_failed_error_fields,
-        validate_status_contract,
+    """Promote via PaperService facade (includes RagIndexed publish)."""
+    await get_paper_service().promote_paper_to_terminal_status(
+        event.paper_id,
+        success=success,
+        preferred_terminal=event.terminal_status,
+        warning_message=event.warning_message,
+        warning_codes=warning_codes,
+        message_override=message_override,
+        publish_rag_indexed=True,
     )
-
-    paper_service = get_paper_service()
-    terminal = event.terminal_status
-    if terminal not in {PaperStatus.READY, PaperStatus.READY_WITH_WARNINGS}:
-        terminal = PaperStatus.READY
-
-    append_warnings: list[str] | None
-    if not success:
-        append_warnings = list(warning_codes or [RAG_INDEX_WARNING_CODE])
-        status = PaperStatus.READY_WITH_WARNINGS
-        message = message_override or "建图完成，但向量索引构建失败"
-    elif terminal == PaperStatus.READY_WITH_WARNINGS:
-        append_warnings = None
-        status = PaperStatus.READY_WITH_WARNINGS
-        message = event.warning_message or "建图完成，但图谱置信度未达门控，请复核"
-    else:
-        append_warnings = None
-        status = PaperStatus.READY
-        message = DEFAULT_STAGE_MESSAGES[PipelineStage.READY]
-
-    stage = PipelineStage.READY
-    percent = STAGE_PERCENT[PipelineStage.READY]
-    validate_status_contract(status=status, stage=stage, percent=percent)
-    validate_failed_error_fields(status=status, error_code=None, failed_during=None)
-
-    now = datetime.now(UTC)
-    existing = await paper_service._pipeline_repo.get_latest(event.paper_id)
-    if existing is None:
-        msg = f"pipeline run missing for paper {event.paper_id}"
-        raise RuntimeError(msg)
-    merged_extract_warnings = list(existing.extract_warnings)
-    if append_warnings:
-        merged_extract_warnings = list(dict.fromkeys([*merged_extract_warnings, *append_warnings]))
-    snapshot = PaperStatusData(
-        paper_id=event.paper_id,
-        status=status,
-        percent=percent,
-        stage=stage,
-        message=message,
-        updated_at=now,
-        preview_available=bool(existing.preview_available),
-        error_code=None,
-        failed_during=None,
-        head_refine_warnings=list(existing.head_refine_warnings),
-        classify_warnings=list(existing.classify_warnings),
-        extract_warnings=merged_extract_warnings,
-    )
-    await paper_service._pipeline_repo.save_status(event.paper_id, snapshot)
 
 
 async def on_pipeline_finalized_for_rag(event: PipelineFinalized) -> None:
@@ -337,15 +283,8 @@ async def on_pipeline_finalized_for_rag(event: PipelineFinalized) -> None:
             },
         )
         # Avoid leaving papers stuck in ``indexing``; do not re-raise (would double-write via
-        # EventBus error hook and contend on SQLite).
+        # EventBus error hook and contend on SQLite). Facades publish RagIndexed.
         await _promote_terminal_status(event, success=False)
-        get_event_bus().publish_sync(
-            RagIndexed(
-                paper_id=event.paper_id,
-                success=False,
-                terminal_status=PaperStatus.READY_WITH_WARNINGS,
-            ),
-        )
         return
 
     logger.info(
@@ -414,13 +353,6 @@ async def on_pipeline_finalized_for_rag(event: PipelineFinalized) -> None:
         success=success,
         warning_codes=failure_warnings,
         message_override=failure_message,
-    )
-    get_event_bus().publish_sync(
-        RagIndexed(
-            paper_id=event.paper_id,
-            success=success,
-            terminal_status=event.terminal_status if success else PaperStatus.READY_WITH_WARNINGS,
-        ),
     )
 
 

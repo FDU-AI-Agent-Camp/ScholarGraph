@@ -80,7 +80,7 @@ def persist_status_snapshot(
     paper_service.ensure_paper_exists(paper_id)
     now = datetime.now(UTC)
     preview_available = paper_service.is_preview_available(paper_id)
-    existing = run_async(paper_service._pipeline_repo.get_latest(paper_id))
+    existing = run_async(paper_service.get_pipeline_snapshot(paper_id))
     merged_extract_warnings = list(existing.extract_warnings if existing is not None else [])
     if append_extract_warnings:
         merged_extract_warnings = list(dict.fromkeys([*merged_extract_warnings, *append_extract_warnings]))
@@ -98,7 +98,7 @@ def persist_status_snapshot(
         classify_warnings=existing.classify_warnings if existing is not None else [],
         extract_warnings=merged_extract_warnings,
     )
-    run_async(paper_service._pipeline_repo.save_status(paper_id, snapshot))
+    run_async(paper_service.save_pipeline_snapshot(paper_id, snapshot))
     return snapshot
 
 
