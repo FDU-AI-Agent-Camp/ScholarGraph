@@ -288,9 +288,10 @@ await _promote_terminal_status(...)  # ready | ready_with_warnings + RagIndexed
 2. **进程级**：EventBus fire-and-forget；生命周期应 `register_pipeline_finalized_handlers`；拓扑测 `tests/events/test_event_bus_topology.py` 断言排他订阅。  
 3. **P13 双层 indexing watchdog（已落地）**：  
    - **微观**：`on_pipeline_finalized_for_rag` 对 `index_paper_for_rag_async` 包 `asyncio.wait_for`（`RAG_SINGLE_INDEX_TIMEOUT_SECONDS`，默认 120s）；超时写入 `rag_index_timeout` 并 promote `ready_with_warnings`。  
-   - **宏观**：`pipeline_runs.indexing_started_at` + `indexing_heartbeat`；lifespan 挂载周期扫尾（`RAG_INDEXING_WATCHDOG_SECONDS` / `INTERVAL`）；仅当 **started 超时且 heartbeat 陈旧**（`RAG_INDEXING_HEARTBEAT_STALE_SECONDS`）才强制收尾，写入 `rag_indexing_stuck_timeout`、promote、发布 `RagIndexed(success=False)`。Handler 索引期间按 `RAG_INDEXING_HEARTBEAT_INTERVAL_SECONDS` 续命，避免大文件误杀。  
+   - **宏观（out-of-loop）**：`pipeline_runs.indexing_started_at` + `indexing_heartbeat`；lifespan 在**独立 daemon 线程**启动扫尾（非主 asyncio Task），线程内 `sleep` + `run_async(scan…)` 走 async-bridge loop。主线程被假异步同步 I/O 堵死时，监控线程仍可调度。仅当 **started 超时且 heartbeat 陈旧** 才强制收尾（`rag_indexing_stuck_timeout` + `RagIndexed(success=False)`）。Handler 按 `RAG_INDEXING_HEARTBEAT_INTERVAL_SECONDS` 续命。生产也可改跑外部 cron/Celery Beat 读库 promote（与进程完全解耦）。  
    - **冷启动**：进程起来时 reconcile 所有遗留 `indexing`（EventBus 内存队列不跨进程；忽略心跳门闩）。  
-   - **CI 防退化**：`scripts/check_rag_io_timeouts.py`（`make ci` / `check_backend`）断言 handler `wait_for` + 可配置超时 knobs + `backend/{rag,llm,patrol}` 内 `httpx.*.Client` 必须带 `timeout=`；强制收尾日志带 `[P13_WATCHDOG_HEAL]`（ELK/CloudWatch 可按该 tag 做小时级频次告警）。  
+   - **Loop 阻塞检测（研发期）**：`ASYNCIO_SLOW_CALLBACK_MS`（默认 auto：development/test=100ms）开启 `loop.set_debug` + `slow_callback_duration`，假异步超阈值会打警告栈。  
+   - **CI 防退化**：`scripts/check_rag_io_timeouts.py`（`make ci` / `check_backend`）断言 handler `wait_for` + dedicated-thread watchdog + 可配置超时 knobs + `httpx.*.Client` 必须带 `timeout=`；强制收尾日志带 `[P13_WATCHDOG_HEAL]`。  
 4. **Patrol**：索引未就绪时 insight 带 `is_degraded` + `INDEX_NOT_READY`；降级结果**不入**服务端进程 cache，HTTP `Cache-Control: private, no-store`，FE 10s/30s/60s 自愈轮询可拿到新鲜结果。健康报告 24h cache 键含 `graph_version` + `active index_run_id`，re-extract / 重索引后自动失效。Watchdog 强制终态后 Patrol 仍走 P9 降级闭环。
 
 注意：
@@ -299,7 +300,7 @@ await _promote_terminal_status(...)  # ready | ready_with_warnings + RagIndexed
 - 重新抽取（re-extract）时先 `delete_by_paper` / `replace_paper_index` 再重建。  
 - `index_paper_for_rag` 按 `paper_id` 加锁，upsert 幂等。  
 - **孤儿线程 hardening（已落地）**：`IndexingRunRegistry` 在 `replace_paper_index` 生成 `run_id` 时 `begin`；`wait_for` 超时立刻 `revoke`。激活前校验 `may_activate` + Task `cancelling()`，否决则不清 DB active、并清理该 run。超时另起 fire-and-forget 补偿清理（延迟 0/5/10s 调用 `delete_run`；若 active 仍指向该 run 则先清空指针）。线程池内 upsert 或仍会跑完，但**不得合法激活**；脏数据最终被按 run_id 抹除。  
-- 同进程内若同步码**不经** `to_thread` 堵死事件循环，heartbeat / macro watchdog / HTTP 会一并挂起——属架构约束，非 P13 回退。
+- **主循环假死**：heartbeat（跑在索引协程旁）与 HTTP 仍依赖主 loop；macro watchdog 已迁到独立线程，可继续读库 promote。彻底进程级解耦可再用 cron 脚本。研发期用 `ASYNCIO_SLOW_CALLBACK_MS` 逼出裸同步 I/O。
 
 ### 3.7 配置项
 
