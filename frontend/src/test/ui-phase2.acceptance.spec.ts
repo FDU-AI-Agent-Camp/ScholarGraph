@@ -68,7 +68,14 @@ describe('Phase 2 UI acceptance', () => {
     })
 
     it('covers all PaperStatus variants with dot + label', () => {
-      const statuses: PaperStatus[] = ['pending', 'processing', 'ready', 'failed']
+      const statuses: PaperStatus[] = [
+        'pending',
+        'processing',
+        'indexing',
+        'ready',
+        'ready_with_warnings',
+        'failed',
+      ]
       for (const status of statuses) {
         const wrapper = mount(BadgeStatus, { props: { status } })
         expect(wrapper.find('.badge-status__dot').exists()).toBe(true)

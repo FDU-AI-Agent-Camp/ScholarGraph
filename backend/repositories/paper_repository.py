@@ -116,6 +116,9 @@ class PaperRepository:
         elif status == PaperStatus.READY_WITH_WARNINGS:
             stage = PipelineStage.READY
             percent = STAGE_PERCENT[PipelineStage.READY]
+        elif status == PaperStatus.INDEXING:
+            stage = PipelineStage.INDEXING
+            percent = STAGE_PERCENT[PipelineStage.INDEXING]
         elif status == PaperStatus.FAILED:
             stage = PipelineStage.FAILED
             percent = STAGE_PERCENT[PipelineStage.FAILED]

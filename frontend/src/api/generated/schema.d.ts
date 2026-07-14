@@ -144,15 +144,17 @@ export interface components {
         /** @enum {string} */
         Paradigm: "STEM" | "HSS";
         /**
-         * @description `ready_with_warnings` means the graph is available but failed the
+         * @description `indexing` means the graph is persisted and VectorStore indexing is in
+         *     progress (P10 state gate). Poll until `ready` / `ready_with_warnings`.
+         *     `ready_with_warnings` means the graph is available but failed the
          *     confidence gate (e.g. low SUPPORTS rationale coverage, too many
          *     isolated nodes, or a high ratio of generic fallback edges such as
          *     RELATES_TO). The client should render a yellow warning border.
          * @enum {string}
          */
-        PaperStatus: "pending" | "processing" | "ready" | "ready_with_warnings" | "failed";
+        PaperStatus: "pending" | "processing" | "indexing" | "ready" | "ready_with_warnings" | "failed";
         /** @enum {string} */
-        PipelineStage: "ingesting" | "head_refining" | "classifying" | "extracting" | "storing" | "ready" | "failed";
+        PipelineStage: "ingesting" | "head_refining" | "classifying" | "extracting" | "storing" | "indexing" | "ready" | "failed";
         /**
          * @description Pipeline step active when status=failed (excludes terminal stage values).
          * @enum {string}

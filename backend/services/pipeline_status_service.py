@@ -22,6 +22,7 @@ DEFAULT_STAGE_MESSAGES: dict[PipelineStage, str] = {
     PipelineStage.CLASSIFYING: "正在识别范式与理论视角…",
     PipelineStage.EXTRACTING: "正在抽取逻辑图谱",
     PipelineStage.STORING: "正在写入图谱存储",
+    PipelineStage.INDEXING: "图谱已就绪，正在构建向量索引…",
     PipelineStage.READY: "建图完成",
     PipelineStage.FAILED: "流水线失败",
 }
@@ -51,6 +52,11 @@ def validate_status_contract(
         if percent != expected_percent:
             msg = f"stage={stage.value} 时 percent 必须为 {expected_percent}"
             raise ValueError(msg)
+        return
+
+    if status == PaperStatus.INDEXING:
+        if stage != PipelineStage.INDEXING or percent != STAGE_PERCENT[PipelineStage.INDEXING]:
+            raise ValueError("status=indexing 时 stage=indexing 且 percent=98")
         return
 
     if status == PaperStatus.READY:
@@ -127,6 +133,23 @@ class PipelineStatusService:
             stage=stage,
             percent=percent,
             message=msg,
+        )
+
+    def mark_indexing(
+        self,
+        paper_id: str,
+        *,
+        message: str | None = None,
+        append_extract_warnings: list[str] | None = None,
+    ) -> PaperStatusData:
+        """Graph is persisted; wait for RAG VectorStore before terminal ready (P10)."""
+        return self._apply(
+            paper_id,
+            status=PaperStatus.INDEXING,
+            stage=PipelineStage.INDEXING,
+            percent=STAGE_PERCENT[PipelineStage.INDEXING],
+            message=message or DEFAULT_STAGE_MESSAGES[PipelineStage.INDEXING],
+            append_extract_warnings=append_extract_warnings,
         )
 
     def mark_ready(
