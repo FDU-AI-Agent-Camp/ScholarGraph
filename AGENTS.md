@@ -432,8 +432,10 @@ ScholarGraph 是面向科研阅读的 **AI Agent** 项目：编排（如 LangGra
 #### 运行方式
 
 - 本地完整检查：`uv run pyright backend`
-- 本地一键门禁（推荐 Windows）：`uv run python scripts/check_backend.py`
-- 线上 CI / Ubuntu：`make ci`（Makefile 主要用于 CI 环境一键执行）
+- 本地一键门禁（推荐 Windows）：`uv run python scripts/check_backend.py`  
+  （顺序：ruff → pyright → `check_rag_io_timeouts.py` → `check_p13_release_gate.py` → pytest）
+- P13 孤儿线程 / Watchdog 矩阵单独跑：`make p13-release-gate` 或 `uv run python scripts/check_p13_release_gate.py`
+- 线上 CI / Ubuntu：`make ci`（同上，并含 coverage / pip-audit）
 - CI：`.github/workflows/backend.yml` 已集成，PR 必须绿。
 
 #### 配置约定

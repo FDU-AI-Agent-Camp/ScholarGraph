@@ -255,7 +255,8 @@ uv sync
 cp .env.example .env   # 默认 LLM_MODE=mock；接华为云时改为 live 并填 Key
 uv sync --group dev
 uv run python scripts/init_db.py          # 或：uv run alembic upgrade head（首次/升级 Schema）
-uv run python scripts/check_backend.py   # ruff lint + format-check + pytest（排除 red）
+uv run python scripts/check_backend.py   # ruff + pyright + RAG I/O + P13 release-gate + pytest（排除 red）
+# 可选单独：uv run python scripts/check_p13_release_gate.py  或  make p13-release-gate
 uv run python scripts/run_d_gates.py     # D-01～D-10 代码基座（含 FE npm run check，可 --skip-frontend）
 uv run python -m uvicorn backend.main:app --reload --host 127.0.0.1 --port 8000
 # 注意：Windows + Git Bash 下请使用 `python -m uvicorn`，直接 `uv run uvicorn` 可能报脚本路径解析错误

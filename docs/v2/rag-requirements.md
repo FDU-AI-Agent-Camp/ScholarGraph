@@ -1,10 +1,10 @@
-# V2 RAG 四阶段需求文档（`feature/backend/rag`）
+# V2 RAG 四阶段需求文档
 
 > **目标**：将单篇 QA 从「纯图谱检索」升级为「图谱骨架 + 原文片段向量召回」的多尺度混合 RAG；同时增强 Patrol 的混合 context 与结构化输出，并建立可自动回归的 QA 金标评估体系。
-> **范围**：新增 `backend/rag/` 模块（含 chunking/indexing/vector_store/hybrid_retriever）、改造 `backend/graph/qa.py`、改造 `backend/services/paper_service.py` / `pipeline_completion_service.py`、新增 Patrol 模式、新增 benchmark 脚本。
-> **版本**：v0.5.0.x
-> **负责人**：待定
-> **依赖**：P1 持久化基座建议先完成或并行，但 RAG 可在现有内存服务上先跑通，再迁移到 DB。
+> **范围**：`backend/rag/`（chunking / indexing / vector_store / hybrid_retriever / P13 watchdog）、`backend/graph/qa.py`、paper / pipeline 服务、四模式 Patrol、benchmark 脚本。
+> **实现状态（后端）**：Phase 1–4 与 P10 索引门禁、P13 双层 watchdog / 孤儿线程世代撤销已落地；运行时契约以 §3.6 与代码为准。前端 Patrol UI 对齐见协作跟踪（Part F）。
+> **版本**：以根目录 `pyproject.toml` 为准。
+> **依赖**：P1 持久化基座已合；Chroma / SQLite 为默认本地路径。
 
 ---
 
@@ -34,16 +34,19 @@ prompt = self._build_prompt(graph, subgraph, question, is_preview=is_preview)
 | `backend/ingest/chunking.py` | 文本切分逻辑 | ✅ 复用或增强 |
 | `backend/services/paper_service.py` | `full_text` 与 PDF 路径 | ✅ 用于 chunk 来源 |
 
-### 1.3 缺失部分
+### 1.3 能力清单（相对本文起草时的缺口；后端多数已关闭）
 
-- ChromaDB / 向量存储
-- chunk → embed → persist 流程
-- 图谱实体（Entities）与关系（Relations）的 Embedding 索引
-- 统一向量召回 Entities + Relations + Chunks 的混合检索
-- 支持 `[CITE:chunk_index]` / `[CITE:page_X]` / `[CITE:entity_id]` / `[CITE:edge_id]` 的 Prompt 与 citation 解析
-- QA 尺度路由
-- HyDE（Hypothetical Document Embeddings）扩展接口
-- 金标评估与 LLM-as-a-Judge
+| 能力 | 状态 |
+|---|---|
+| ChromaDB / 向量存储 + chunk → embed → persist | ✅ |
+| Entities / Relations Embedding 索引 | ✅ |
+| `HybridRetriever` 统一召回 | ✅ |
+| `[CITE:…]` Prompt 与 citation 解析 | ✅ |
+| QA 尺度路由 | ✅ |
+| P10 `indexing` 门禁 + P13 watchdog / 孤儿线程世代撤销 | ✅（§3.6） |
+| 四模式 Patrol + 降级契约 | ✅ API；产品 UI 仍见 Part F |
+| HyDE 扩展接口 | ⏳ 预留 / 非阻塞 |
+| 金标评估与 LLM-as-a-Judge | ✅ 脚本与 gate 已有；持续扩样 |
 
 ### 1.4 架构借鉴：轻量版 LightRAG
 
@@ -100,8 +103,8 @@ prompt = self._build_prompt(graph, subgraph, question, is_preview=is_preview)
 
 当前实现：
 - **A 尺度**：已有（基于 `GraphQuery` 关键词 + 拓扑）。
-- **B 尺度**：缺失，本分支核心目标。采用轻量版 LightRAG 思路，统一走向量召回。
-- **C 尺度**：已有 `patrol` 基础，需增强。
+- **B 尺度**：已落地（Chroma 三类 collection + `HybridRetriever` + 页码/chunk citation）。
+- **C 尺度**：四模式 Patrol API 已落地（含 `method_overlap` / `claim_evolution` + 降级契约）；产品 UI 四模式展示仍在前端对齐中。
 
 ---
 
@@ -125,12 +128,16 @@ dependencies = [
 ```text
 backend/rag/
 ├── __init__.py
-├── chunking.py          # 文本切分
-├── indexing.py          # 实体/关系/Chunk 向量化索引构建
-├── vector_store.py      # ChromaDB 统一封装（Chunks + Entities + Relations）
-├── hybrid_retriever.py  # 统一向量召回 + 可选 A 尺度图谱
-├── qa_router.py         # 问题尺度判定
-└── models.py            # RAG 相关 Pydantic schemas
+├── chunking.py               # 文本切分
+├── indexing.py               # 实体/关系/Chunk 向量化索引构建
+├── vector_store.py           # ChromaDB 统一封装（Chunks + Entities + Relations）
+├── vector_store_replace.py   # P13：run_id 快照 replace + Generation Guard 激活闸
+├── indexing_run_registry.py  # P13：进程内 run 世代 revoke / may_activate
+├── indexing_watchdog.py      # P13：独立线程 sync 扫尾 + 冷启动 reconcile
+├── handlers.py               # PipelineFinalized → wait_for 索引 + 孤儿 run 补偿
+├── hybrid_retriever.py       # 统一向量召回 + 可选 A 尺度图谱
+├── qa_router.py              # 问题尺度判定
+└── models.py                 # RAG 相关 Pydantic schemas
 ```
 
 > **设计选择**：采用 3 个独立 collection（`paper_chunks`、`paper_entities`、`paper_relations`），每个 collection 内部用 `paper_id` 过滤。这样实现简单、类型清晰，也便于未来独立调优 top-k。
@@ -235,7 +242,19 @@ class VectorStore:
     async def delete_by_paper(self, paper_id: str) -> None: ...
 
     async def exists(self, paper_id: str) -> bool: ...
+
+    # ---- P13 run-id snapshot replace（实现：vector_store_replace.ReplacePaperIndexMixin）----
+    async def replace_paper_index(
+        self,
+        paper_id: str,
+        *,
+        chunks: list[PaperChunk],
+        entities: list[PaperEntity],
+        relations: list[PaperRelation],
+    ) -> None: ...
 ```
+
+`replace_paper_index` 行为要点（详见 §3.6）：新 `run_id` upsert → 仅在 `IndexingRunRegistry.may_activate` 且 Task 未 cancelling 时 `set_active_run_id`；拒绝激活打 `[Generation Guard]` 日志并清理该 run；cancel/refuse **不清** revoke（sticky），供超时路径调度补偿。
 
 返回模型（`backend/rag/models.py`）：
 
@@ -259,7 +278,7 @@ ChromaDB 配置：
 - embedding 函数统一复用 `EmbeddingClient.embed_texts`。
 - 单篇 QA 时所有查询必须带 `paper_id` metadata 过滤，避免跨论文污染。
 
-### 3.6 写入时机与状态门禁（P10）
+### 3.6 写入时机与状态门禁（P10 索引门禁 + P13 watchdog / 孤儿线程）
 
 `pipeline_completion_service.finalize()` **不再直接 READY**：图谱落盘后先 `mark_indexing`（`PaperStatus.INDEXING`），再通过 EventBus 发布 `PipelineFinalized`。官方排他订阅者 `backend.rag.handlers.on_pipeline_finalized_for_rag` 完成索引后，再 promote 为 `ready` / `ready_with_warnings`，并发布 `RagIndexed`。
 
@@ -280,7 +299,7 @@ await _promote_terminal_status(...)  # ready | ready_with_warnings + RagIndexed
 | 状态为 `indexing` 且无 preview | `GET /papers/{id}/graph` → **409 `GRAPH_NOT_READY`**（图谱可能已落盘仍不可读） |
 | FE 上传轮询 | `indexing` **非终态**；需等到 `ready` / `ready_with_warnings` / `failed`（`isTerminalStatus` + `BadgeStatus.indexing`） |
 | EventBus 未消费 / worker 挂起 | **不再默认永久卡死**：超过 P13 macro watchdog 窗口（started 超时 + heartbeat 陈旧）或冷启动 reconcile 后强制 `ready_with_warnings` |
-| 微观 `wait_for` 超时 | 立即 promote `ready_with_warnings`（`rag_index_timeout`）；线程池内 Chroma/embedding 可能仍短暂续跑（见下方残留） |
+| 微观 `wait_for` 超时 | 立即 promote `ready_with_warnings`（`rag_index_timeout`）；线程池内 Chroma/embedding 可能仍短暂续跑，但被 **世代撤销 + Generation Guard** 禁止激活，并由延迟 `delete_run` 补偿抹除 |
 
 **超时 / 失败兜底**：
 
@@ -291,7 +310,7 @@ await _promote_terminal_status(...)  # ready | ready_with_warnings + RagIndexed
    - **宏观（out-of-loop）**：`pipeline_runs.indexing_started_at` + `indexing_heartbeat`；lifespan 在**独立 daemon 线程**启动扫尾（非主 asyncio Task），线程内 `sleep` + **sync SQLAlchemy** `scan_and_promote_stuck_indexing_sync`（禁止 `run_async` 派回 FastAPI loop——主 loop 假死时 `run_coroutine_threadsafe` 也会停搏）。仅当 **started 超时且 heartbeat 陈旧** 才强制收尾（`rag_indexing_stuck_timeout` + `RagIndexed(success=False)`）。Handler 按 `RAG_INDEXING_HEARTBEAT_INTERVAL_SECONDS` 续命。饥饿放大测例：`tests/rag/test_watchdog_main_loop_starvation.py`。生产也可改跑外部 cron/Celery Beat 读库 promote（与进程完全解耦）。  
    - **冷启动**：进程起来时 reconcile 所有遗留 `indexing`（EventBus 内存队列不跨进程；忽略心跳门闩）。  
    - **Loop 阻塞检测（研发期）**：`ASYNCIO_SLOW_CALLBACK_MS`（默认 auto：development/test=100ms）开启 `loop.set_debug` + `slow_callback_duration`，假异步超阈值会打警告栈。  
-   - **CI 防退化**：`scripts/check_rag_io_timeouts.py`（`make ci` / `check_backend`）断言 handler `wait_for` + dedicated-thread sync watchdog + 可配置超时 knobs + `httpx.*.Client` 必须带 `timeout=`；强制收尾日志带 `[P13_WATCHDOG_HEAL]`。
+   - **CI 防退化**：`scripts/check_rag_io_timeouts.py` + `scripts/check_p13_release_gate.py`（均挂入 `make ci` / `scripts/check_backend.py`）断言 handler `wait_for` + dedicated-thread **sync** watchdog（禁止 thread 内 `run_async(scan…)`）+ 可配置超时 knobs + `httpx.*.Client` 必须带 `timeout=`；强制收尾日志带 `[P13_WATCHDOG_HEAL]`。
    - **P13 Release Gate 矩阵**（`make p13-release-gate` / `scripts/check_p13_release_gate.py`，`@pytest.mark.p13_release_gate`）：
 
 | 分类 | 用例 | 防御边界 |
@@ -312,6 +331,8 @@ await _promote_terminal_status(...)  # ready | ready_with_warnings + RagIndexed
 
 ### 3.7 配置项
 
+完整 knobs 见仓库根目录 `.env.example`（P13 段）。常用项：
+
 ```env
 # ChromaDB
 CHROMADB_PATH=./data/chroma
@@ -327,6 +348,16 @@ CHUNK_OVERLAP_RATIO=0.20
 RAG_TOP_K_CHUNKS=5
 RAG_TOP_K_ENTITIES=5
 RAG_TOP_K_RELATIONS=5
+
+# P13 dual-layer indexing watchdog（实现绑定见 §3.6）
+RAG_SINGLE_INDEX_TIMEOUT_SECONDS=120
+RAG_INDEXING_WATCHDOG_SECONDS=300
+RAG_INDEXING_WATCHDOG_INTERVAL_SECONDS=60
+RAG_INDEXING_WATCHDOG_ENABLED=true
+RAG_INDEXING_HEARTBEAT_INTERVAL_SECONDS=15
+RAG_INDEXING_HEARTBEAT_STALE_SECONDS=90
+# Dev/CI：主 loop 假异步阻塞检测（-1=auto；production 默认关）
+ASYNCIO_SLOW_CALLBACK_MS=-1
 ```
 
 ---
@@ -827,6 +858,7 @@ QA_VERBOSITY_CEILING=0.15
 | P1-2 | 三类索引构建 | 上传论文 ready 后，`paper_chunks` / `paper_entities` / `paper_relations` 均有该论文数据 |
 | P1-3 | 统一向量查询 | `VectorStore().query_*` 返回 top-k chunks / entities / relations |
 | P1-4 | re-extract 重建 | 调用 `POST /papers/{id}/reextract` 后旧索引全部删除并重建 |
+| P1-5 | P13 watchdog / 孤儿世代 | `make p13-release-gate` 绿；超时/卡住不永久 `indexing`；拒绝过期 `set_active_run_id` |
 
 ### 8.2 Phase 2 验收
 
@@ -868,9 +900,15 @@ QA_VERBOSITY_CEILING=0.15
 tests/rag/
 ├── __init__.py
 ├── test_chunking.py
-├── test_indexing.py           # entity/relation 文本生成
-├── test_vector_store.py       # ChromaDB 三类 collection CRUD
-├── test_hybrid_retriever.py   # 统一召回 + HyDE hook
+├── test_indexing.py                      # entity/relation 文本生成
+├── test_vector_store.py                  # ChromaDB 三类 collection CRUD
+├── test_indexing_run_registry.py         # P13 世代 revoke / may_activate
+├── test_indexing_watchdog.py             # P13 macro + cold-boot（含 release-gate 冷启动用例）
+├── test_orphan_run_race_amplification.py # P13 孤儿线程竞态放大
+├── test_watchdog_main_loop_starvation.py # P13 主 loop 饥饿下 sync heal
+├── test_p13_release_gate_matrix.py       # P13 Release Gate 目录完整性
+├── test_p13_ci_gates.py                  # P13 静态审计脚本冒烟
+├── test_hybrid_retriever.py              # 统一召回 + HyDE hook
 ├── test_qa_router.py
 └── test_qa_citation.py
 
@@ -889,6 +927,8 @@ tests/eval/
 uv run pytest tests/rag/ -q
 uv run pytest tests/patrol/ -q
 uv run pytest tests/eval/test_qa_golden_set.py -q
+uv run python scripts/check_rag_io_timeouts.py
+uv run python scripts/check_p13_release_gate.py   # 或 make p13-release-gate
 uv run python scripts/benchmark_qa.py --dry-run
 ```
 
