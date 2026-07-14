@@ -87,17 +87,27 @@ class TestScheduleFullExtraction:
         assert task1 is task2
 
     async def test_background_task_finalizes_pipeline(self) -> None:
+        from unittest.mock import AsyncMock, patch
+
+        from tests.helpers.event_bus_testkit import drain_event_bus
+
         paper_id = "bg-003"
         _register_paper(paper_id)
         classification = ParadigmClassification(paradigm=Paradigm.HSS, confidence=0.9, reason="test")
 
-        schedule_full_extraction(paper_id, "text", Paradigm.HSS, classification)
-        # Wait for the mock-mode background task to complete.
-        for _ in range(100):
-            task = get_full_extraction_task(paper_id)
-            if task is None or task.done():
-                break
-            await asyncio.sleep(0.01)
+        with patch(
+            "backend.services.rag_index_service.RagIndexService.index_paper_for_rag_async",
+            new_callable=AsyncMock,
+            return_value=True,
+        ):
+            schedule_full_extraction(paper_id, "text", Paradigm.HSS, classification)
+            # Wait for the mock-mode background task to complete.
+            for _ in range(100):
+                task = get_full_extraction_task(paper_id)
+                if task is None or task.done():
+                    break
+                await asyncio.sleep(0.01)
+            await drain_event_bus()
 
         status = await get_paper_service().get_status(paper_id)
         assert status.status == PaperStatus.READY

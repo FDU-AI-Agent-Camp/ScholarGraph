@@ -180,7 +180,7 @@ async def test_run_paper_pipeline_extract_failure_short_circuits_store(
 async def test_run_paper_pipeline_rag_failure_still_reaches_ready(
     integration_paper: tuple[str, Path],
 ) -> None:
-    """RAG indexing failure must not block the pipeline from reaching ready."""
+    """RAG indexing failure must promote to ready_with_warnings (not stuck indexing)."""
 
     paper_id, pdf_path = integration_paper
 
@@ -190,7 +190,7 @@ async def test_run_paper_pipeline_rag_failure_still_reaches_ready(
 
     assert final.get("failed") is not True
     status = await get_paper_service().get_status(paper_id)
-    assert status.status == PaperStatus.READY
+    assert status.status == PaperStatus.READY_WITH_WARNINGS
 
 
 async def test_run_paper_pipeline_rag_index_records_warning_on_failure(
