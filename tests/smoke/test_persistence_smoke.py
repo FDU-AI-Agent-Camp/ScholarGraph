@@ -68,4 +68,6 @@ def test_smoke_init_db_script_is_runnable(tmp_path: Path, monkeypatch: pytest.Mo
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     assert module.main(["--show-revision"]) == 0
-    assert get_current_revision() == "a8f3c2d91e04"
+    from backend.db.migrations import ALEMBIC_HEAD_REVISION
+
+    assert get_current_revision() == ALEMBIC_HEAD_REVISION

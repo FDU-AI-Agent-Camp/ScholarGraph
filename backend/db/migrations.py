@@ -16,7 +16,7 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 ALEMBIC_INI = REPO_ROOT / "alembic.ini"
 
 ALEMBIC_BASELINE_REVISION = "17bad1e1a105"
-ALEMBIC_HEAD_REVISION = "a8f3c2d91e04"
+ALEMBIC_HEAD_REVISION = "d5f02c8b3a11"
 
 
 def alembic_config() -> Config:
