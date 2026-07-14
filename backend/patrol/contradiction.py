@@ -6,6 +6,7 @@ from collections.abc import Mapping
 from typing import TYPE_CHECKING
 
 from backend.llm.client import LlmClient
+from backend.patrol.exclusion import PHASE_NODE_PRECHECK, make_exclusion_logic
 from backend.patrol.llm_summary import generate_patrol_summary
 from backend.patrol.node_selection import select_primary_node
 from backend.patrol.rag_service import PatrolRAGService, attach_degradation_fields
@@ -15,6 +16,7 @@ from backend.schemas.patrol import (
     ContradictionPoint,
     NodeRef,
     PatrolDegradationProfile,
+    PatrolExclusionReason,
     PatrolInsight,
     PatrolInsightStatus,
     PatrolMode,
@@ -83,6 +85,12 @@ async def build_contradiction_insight(
             has_contradiction=False,
             paper_ids=[left_id, right_id],
             node_refs=[],
+            exclusion_logic=make_exclusion_logic(
+                PatrolExclusionReason.MISSING_REQUIRED_NODES,
+                phase=PHASE_NODE_PRECHECK,
+                description=summary,
+                metrics={"missing_node_type": "Thesis", "affected_papers": missing_paper_ids},
+            ),
         )
 
     # Gatekeeper: both papers must provide SubArgument nodes for a meaningful
@@ -112,6 +120,15 @@ async def build_contradiction_insight(
                 NodeRef(paper_id=left_id, node_id=left_thesis.id, label=left_thesis.label),
                 NodeRef(paper_id=right_id, node_id=right_thesis.id, label=right_thesis.label),
             ],
+            exclusion_logic=make_exclusion_logic(
+                PatrolExclusionReason.MISSING_REQUIRED_NODES,
+                phase=PHASE_NODE_PRECHECK,
+                description=summary,
+                metrics={
+                    "missing_node_type": "SubArgument",
+                    "affected_papers": missing_subargument_paper_ids,
+                },
+            ),
         )
 
     assert left_thesis is not None and right_thesis is not None

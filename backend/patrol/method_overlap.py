@@ -15,6 +15,12 @@ from backend.patrol.method_overlap_points import (
     dedupe_node_refs,
     derive_method_overlap_summary,
 )
+from backend.patrol.exclusion import (
+    PHASE_NODE_PRECHECK,
+    PHASE_OVERLAP_MATCH,
+    PHASE_PARADIGM_GATE,
+    make_exclusion_logic,
+)
 from backend.patrol.method_overlap_semantic import find_semantic_method_overlap
 from backend.patrol.overlap_anchor import _OverlapAnchor
 from backend.patrol.rag_service import PatrolRAGService, attach_degradation_fields
@@ -24,6 +30,7 @@ from backend.schemas.paradigm import Paradigm
 from backend.schemas.patrol import (
     OverlapType,
     PatrolDegradationProfile,
+    PatrolExclusionReason,
     PatrolInsight,
     PatrolInsightStatus,
     PatrolMode,
@@ -120,6 +127,12 @@ async def build_method_overlap_insight(
             status=PatrolInsightStatus.INSUFFICIENT_DATA,
             paper_ids=[left_id, right_id],
             node_refs=[],
+            exclusion_logic=make_exclusion_logic(
+                PatrolExclusionReason.PARADIGM_UNSUPPORTED,
+                phase=PHASE_PARADIGM_GATE,
+                description=summary,
+                metrics={"required_paradigm": "STEM", "left_paper_id": left_id, "right_paper_id": right_id},
+            ),
         )
 
     left_methods = method_nodes(left_graph)
@@ -142,6 +155,12 @@ async def build_method_overlap_insight(
             status=PatrolInsightStatus.INSUFFICIENT_DATA,
             paper_ids=[left_id, right_id],
             node_refs=[],
+            exclusion_logic=make_exclusion_logic(
+                PatrolExclusionReason.MISSING_REQUIRED_NODES,
+                phase=PHASE_NODE_PRECHECK,
+                description=summary,
+                metrics={"missing_node_type": "Method", "affected_papers": missing},
+            ),
         )
 
     left_datasets = dataset_nodes(left_graph)
@@ -187,6 +206,15 @@ async def build_method_overlap_insight(
             status=PatrolInsightStatus.INSUFFICIENT_DATA,
             paper_ids=[left_id, right_id],
             node_refs=[],
+            exclusion_logic=make_exclusion_logic(
+                PatrolExclusionReason.NO_OVERLAP,
+                phase=PHASE_OVERLAP_MATCH,
+                description=summary,
+                metrics={
+                    "method_anchor_count": 0,
+                    "dataset_anchor_count": len(dataset_anchors),
+                },
+            ),
         )
 
     algorithm_anchors = method_anchors + active_dataset_anchors

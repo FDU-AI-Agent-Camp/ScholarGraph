@@ -3,9 +3,9 @@
 from collections.abc import Sequence
 from datetime import datetime
 from enum import StrEnum
-from typing import Annotated, Any, Literal
+from typing import Annotated, Any, Literal, Self
 
-from pydantic import BaseModel, Field, computed_field
+from pydantic import BaseModel, Field, computed_field, model_validator
 
 
 class PatrolMode(StrEnum):
@@ -59,6 +59,40 @@ class PatrolDegradationProfile(BaseModel):
     timestamp: datetime = Field(
         ...,
         description="UTC timestamp when the degradation was recorded.",
+    )
+
+
+class PatrolExclusionReason(StrEnum):
+    """Machine-readable reasons for channel-B ``insufficient_data`` conclusions (P11)."""
+
+    MISSING_REQUIRED_NODES = "MISSING_REQUIRED_NODES"
+    PARADIGM_UNSUPPORTED = "PARADIGM_UNSUPPORTED"
+    NO_OVERLAP = "NO_OVERLAP"
+    RQ_GATE_FAILED = "RQ_GATE_FAILED"
+    NO_RECALLABLE_CLAIMS = "NO_RECALLABLE_CLAIMS"
+
+
+class PatrolExclusionLogic(BaseModel):
+    """Why a completed Patrol run concluded with insufficient_data (negative determination)."""
+
+    phase: str = Field(
+        ...,
+        description=(
+            "Pipeline stage where the exclusion fired "
+            "(e.g. PARADIGM_GATE, NODE_PRECHECK, OVERLAP_MATCH, RQ_ALIGNMENT)."
+        ),
+    )
+    reason_code: PatrolExclusionReason = Field(
+        ...,
+        description="Typed exclusion reason for FE warning-card copy routing.",
+    )
+    description: str = Field(
+        ...,
+        description="Human-readable explanation of the negative determination.",
+    )
+    metrics: dict[str, Any] = Field(
+        default_factory=dict,
+        description="Optional diagnostic numbers (thresholds, scores, counts).",
     )
 
 
@@ -179,8 +213,8 @@ class PatrolInsight(BaseModel):
     status: PatrolInsightStatus = Field(
         default=PatrolInsightStatus.READY,
         description=(
-            "Insight readiness status. 'insufficient_data' means the graphs lack the "
-            "required node types for a meaningful LLM analysis."
+            "Insight readiness status. 'insufficient_data' is a conclusive channel-B "
+            "negative determination (HTTP 200), not an API error — see exclusion_logic."
         ),
     )
     has_contradiction: bool | None = Field(
@@ -203,6 +237,13 @@ class PatrolInsight(BaseModel):
         default=None,
         description="Explicit RAG degradation contract when is_degraded is true.",
     )
+    exclusion_logic: PatrolExclusionLogic | None = Field(
+        default=None,
+        description=(
+            "Required when status='insufficient_data': structured reason for the "
+            "negative determination (P11 / F7)."
+        ),
+    )
     meta: dict[str, Any] = Field(
         default_factory=dict,
         description=(
@@ -210,6 +251,13 @@ class PatrolInsight(BaseModel):
             "meta.patrol_rag_context_degraded remains a compatibility mirror."
         ),
     )
+
+    @model_validator(mode="after")
+    def _require_exclusion_logic_for_insufficient_data(self) -> Self:
+        if self.status == PatrolInsightStatus.INSUFFICIENT_DATA and self.exclusion_logic is None:
+            msg = "exclusion_logic is required when status is insufficient_data"
+            raise ValueError(msg)
+        return self
 
 
 class PatrolReport(BaseModel):
