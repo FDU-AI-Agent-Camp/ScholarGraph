@@ -29,10 +29,20 @@ class IndexingRunRegistry:
             self._revoked.discard((paper_id, run_id))
 
     def revoke(self, paper_id: str, run_id: str | None = None) -> str | None:
-        """Revoke current or explicit run; return the revoked run_id if known."""
+        """Revoke current or explicit run; return the revoked run_id if known.
+
+        When ``wait_for`` cancels the replace coroutine first, inflight is already
+        cleared and the run sits in ``_revoked``. A subsequent timeout-path
+        ``revoke(paper_id)`` must still return that id so compensating cleanup can
+        be scheduled.
+        """
         with self._lock:
             target = run_id or self._inflight.get(paper_id)
             if target is None:
+                # Already revoked by CancelledError / activation-refuse path.
+                for pid, rid in self._revoked:
+                    if pid == paper_id:
+                        return rid
                 return None
             self._revoked.add((paper_id, target))
             self._trim_revoked_unlocked()

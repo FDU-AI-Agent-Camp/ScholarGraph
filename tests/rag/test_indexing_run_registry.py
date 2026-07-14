@@ -35,6 +35,16 @@ def test_registry_begin_clears_prior_revoke_for_same_run() -> None:
     assert registry.may_activate("p1", "run_a") is True
 
 
+def test_registry_revoke_returns_already_revoked_for_cleanup_schedule() -> None:
+    """After cancel path revokes, timeout-path revoke(paper_id) must still yield the id."""
+    registry = IndexingRunRegistry()
+    registry.begin("p1", "run_a")
+    assert registry.revoke("p1") == "run_a"
+    assert registry.peek_inflight("p1") is None
+    assert registry.revoke("p1") == "run_a"
+    assert registry.may_activate("p1", "run_a") is False
+
+
 @pytest.mark.asyncio
 async def test_replace_paper_index_skips_activate_when_revoked() -> None:
     """After begin+revoke, upsert may finish but must not call set_active_run_id."""
@@ -56,8 +66,10 @@ async def test_replace_paper_index_skips_activate_when_revoked() -> None:
 
     registry = get_indexing_run_registry()
     real_begin = registry.begin
+    captured_run: dict[str, str] = {}
 
     def begin_then_revoke(paper_id: str, run_id: str) -> None:
+        captured_run["run_id"] = run_id
         real_begin(paper_id, run_id)
         registry.revoke(paper_id, run_id)
 
@@ -83,6 +95,9 @@ async def test_replace_paper_index_skips_activate_when_revoked() -> None:
     set_active.assert_not_called()
     # Compensating cleanup on revoked path uses collection.delete via to_thread.
     assert chunk_collection.delete.called
+    # Revoke stays sticky until orphan compensate / successful activate clear().
+    assert captured_run["run_id"]
+    assert registry.may_activate("paper-revoked", captured_run["run_id"]) is False
 
 
 @pytest.mark.asyncio
