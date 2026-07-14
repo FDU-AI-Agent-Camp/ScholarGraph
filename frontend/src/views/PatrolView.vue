@@ -28,6 +28,8 @@ import {
 import { isInsufficientDataInsight } from '@/utils/patrolInsufficientData'
 import {
   PATROL_MODE_OPTIONS,
+  applyModeDemoPaperPrefill,
+  filterInsightNodeRefsNotCoveredByPoints,
   patrolGraphLinkForNodeRef,
   patrolInsightKey,
   patrolModeLabel,
@@ -67,6 +69,14 @@ const graphLinkForNodeRef = patrolGraphLinkForNodeRef
 onMounted(() => {
   void paperStore.fetchList().catch(() => undefined)
 })
+
+function selectPatrolMode(next: PatrolMode): void {
+  mode.value = next
+  const nextPair = applyModeDemoPaperPrefill(next, paperIdA.value, paperIdB.value)
+  if (nextPair) {
+    ;[paperIdA.value, paperIdB.value] = nextPair
+  }
+}
 
 function clearErrors(): void {
   validationError.value = null
@@ -187,7 +197,7 @@ async function run(): Promise<void> {
             class="patrol-mode-segment__item"
             :class="{ 'patrol-mode-segment__item--active': mode === option.value }"
             :aria-selected="mode === option.value ? 'true' : 'false'"
-            @click="mode = option.value"
+            @click="selectPatrolMode(option.value)"
           >
             <span class="patrol-mode-segment__label">{{ option.label }}</span>
             <span class="text-caption patrol-mode-segment__caption">{{ option.caption }}</span>
@@ -270,9 +280,12 @@ async function run(): Promise<void> {
               {{ evidencePlaceholderMessage() }}
             </div>
             <PatrolStructuredPoints v-if="item.structured_points?.length" :points="item.structured_points" />
-            <div v-if="item.node_refs.length" class="patrol-view__node-refs">
+            <div
+              v-if="filterInsightNodeRefsNotCoveredByPoints(item.node_refs, item.structured_points).length"
+              class="patrol-view__node-refs"
+            >
               <RouterLink
-                v-for="nodeRef in item.node_refs"
+                v-for="nodeRef in filterInsightNodeRefsNotCoveredByPoints(item.node_refs, item.structured_points)"
                 :key="patrolNodeRefKey(nodeRef)"
                 :to="graphLinkForNodeRef(nodeRef)"
                 class="patrol-node-ref text-body"
@@ -296,61 +309,50 @@ async function run(): Promise<void> {
   gap: var(--spacing-24);
   max-width: var(--content-max-width);
 }
-
 .patrol-view__header {
   display: flex;
   flex-direction: column;
   gap: var(--spacing-8);
 }
-
 .patrol-view__title {
   margin: 0;
   color: var(--color-text-primary);
 }
-
 .patrol-view__subtitle {
   margin: 0;
   color: var(--color-text-secondary);
 }
-
 .patrol-view__config {
   display: flex;
   flex-direction: column;
   gap: var(--spacing-24);
   padding: var(--spacing-24);
 }
-
 .patrol-view__config-title {
   margin: 0;
   color: var(--color-text-primary);
 }
-
 .patrol-view__paper-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: var(--spacing-16);
 }
-
 .patrol-view__field {
   display: flex;
   flex-direction: column;
   gap: var(--spacing-8);
 }
-
 .patrol-view__field-label {
   color: var(--color-text-secondary);
 }
-
 .patrol-view__select {
   width: 100%;
 }
-
 .patrol-view__mode {
   display: flex;
   flex-direction: column;
   gap: var(--spacing-8);
 }
-
 .patrol-mode-segment {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -360,7 +362,6 @@ async function run(): Promise<void> {
   border-radius: var(--radius-lg);
   background: var(--color-bg-subtle);
 }
-
 .patrol-mode-segment__item {
   display: flex;
   flex-direction: column;
@@ -379,35 +380,28 @@ async function run(): Promise<void> {
     background-color var(--transition-instant),
     color var(--transition-instant);
 }
-
 .patrol-mode-segment__item:hover:not(.patrol-mode-segment__item--active) {
   background: var(--color-bg-surface);
 }
-
 .patrol-mode-segment__item--active {
   background: var(--color-primary);
   color: #ffffff;
 }
-
 .patrol-mode-segment__item--active .patrol-mode-segment__caption {
   color: rgb(255 255 255 / 0.82);
 }
-
 .patrol-mode-segment__label {
   font-size: var(--text-body-size);
   font-weight: 600;
   line-height: var(--text-body-leading);
 }
-
 .patrol-mode-segment__caption {
   color: var(--color-text-secondary);
 }
-
 .patrol-view__run {
   align-self: flex-start;
   min-width: 160px;
 }
-
 .patrol-view__hint {
   margin: 0;
   padding: var(--spacing-12) var(--spacing-16);
@@ -415,44 +409,36 @@ async function run(): Promise<void> {
   border-radius: var(--radius-md);
   background: var(--color-bg-subtle);
 }
-
 .patrol-view__hint-summary {
   cursor: pointer;
   color: var(--color-text-secondary);
 }
-
 .patrol-view__hint-body {
   margin: var(--spacing-8) 0 0;
   color: var(--color-text-secondary);
 }
-
 .patrol-view__hint-code {
   display: inline-block;
   margin-top: var(--spacing-4);
   color: var(--color-text-primary);
 }
-
 .patrol-view__alert {
   margin: 0;
 }
-
 .patrol-view__error-panel {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
   gap: var(--spacing-12);
 }
-
 .patrol-view__error-cta {
   min-width: 160px;
 }
-
 .patrol-view__report {
   display: flex;
   flex-direction: column;
   gap: var(--spacing-16);
 }
-
 .patrol-view__report-summary {
   display: flex;
   flex-wrap: wrap;
@@ -463,29 +449,24 @@ async function run(): Promise<void> {
   border-radius: var(--radius-lg);
   background: var(--color-bg-surface);
 }
-
 .patrol-view__mode-badge {
   padding: var(--spacing-4) var(--spacing-8);
   border-radius: var(--radius-md);
   background: var(--color-primary-light);
   color: var(--color-primary-hover);
 }
-
 .patrol-view__report-time,
 .patrol-view__report-ids {
   color: var(--color-text-secondary);
 }
-
 .patrol-view__report-title {
   margin: 0;
   color: var(--color-text-primary);
 }
-
 .patrol-view__healing-hint {
   margin: 0;
   color: var(--color-text-secondary);
 }
-
 .patrol-view__evidence-placeholder {
   margin-bottom: var(--spacing-12);
   padding: var(--spacing-12);
@@ -494,19 +475,16 @@ async function run(): Promise<void> {
   background: color-mix(in srgb, var(--color-warning, #ca8a04) 8%, transparent);
   color: var(--color-text-secondary);
 }
-
 .patrol-view__insights {
   display: flex;
   flex-direction: column;
   gap: var(--spacing-16);
 }
-
 .patrol-view__node-refs {
   display: flex;
   flex-direction: column;
   gap: var(--spacing-8);
 }
-
 .patrol-node-ref {
   display: flex;
   flex-wrap: wrap;
@@ -522,23 +500,19 @@ async function run(): Promise<void> {
     border-color var(--transition-instant),
     background-color var(--transition-instant);
 }
-
 .patrol-node-ref:hover {
   border-color: var(--color-primary-muted);
   background: var(--color-bg-subtle);
 }
-
 .patrol-node-ref__meta {
   color: var(--color-text-secondary);
 }
-
 .patrol-node-ref__action {
   margin-left: auto;
   color: var(--color-primary);
   font-size: var(--text-caption-size);
   line-height: var(--text-caption-leading);
 }
-
 @media (max-width: 768px) {
   .patrol-view__paper-grid,
   .patrol-mode-segment {
