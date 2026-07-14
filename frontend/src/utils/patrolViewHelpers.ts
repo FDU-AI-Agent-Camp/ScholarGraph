@@ -39,11 +39,18 @@ export function patrolInsightKey(insight: PatrolInsight): string {
   return insight.insight_id
 }
 
-export function patrolNodeRefKey(ref: PatrolInsight['node_refs'][number]): string {
+export type PatrolNodeRef = PatrolInsight['node_refs'][number]
+
+export function patrolNodeRefKey(ref: PatrolNodeRef): string {
   return `${ref.paper_id}:${ref.node_id}`
 }
 
-export function patrolGraphLinkForNodeRef(ref: PatrolInsight['node_refs'][number]) {
+/** Drop empty paper_id / node_id so UI never deep-links to invalid graph targets. */
+export function isUsablePatrolNodeRef(ref: PatrolNodeRef): boolean {
+  return Boolean(ref.paper_id?.trim() && ref.node_id?.trim())
+}
+
+export function patrolGraphLinkForNodeRef(ref: PatrolNodeRef) {
   return {
     name: RouteName.PaperGraph,
     params: { paperId: ref.paper_id },

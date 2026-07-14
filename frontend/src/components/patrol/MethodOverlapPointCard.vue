@@ -1,11 +1,18 @@
 <script setup lang="ts">
+import { computed } from 'vue'
+import { RouterLink } from 'vue-router'
+
 import type { components } from '@/api/types'
+import { PATROL_BASELINE_COPY } from '@/constants/patrolCopy'
+import { isUsablePatrolNodeRef, patrolGraphLinkForNodeRef, patrolNodeRefKey } from '@/utils/patrolViewHelpers'
 
 type MethodOverlapPoint = components['schemas']['MethodOverlapPoint']
 
-defineProps<{
+const props = defineProps<{
   point: MethodOverlapPoint
 }>()
+
+const usableNodeRefs = computed(() => (props.point.node_refs ?? []).filter(isUsablePatrolNodeRef))
 </script>
 
 <template>
@@ -40,6 +47,19 @@ defineProps<{
         <dd>{{ point.evidence_summary }}</dd>
       </div>
     </dl>
+    <div v-if="usableNodeRefs.length" class="patrol-point-card__node-refs">
+      <RouterLink
+        v-for="nodeRef in usableNodeRefs"
+        :key="patrolNodeRefKey(nodeRef)"
+        :to="patrolGraphLinkForNodeRef(nodeRef)"
+        class="patrol-point-node-ref text-body"
+        data-testid="patrol-point-node-ref"
+      >
+        <span class="patrol-point-node-ref__label">{{ nodeRef.label || nodeRef.node_id }}</span>
+        <span class="text-mono patrol-point-node-ref__meta"> ({{ nodeRef.paper_id }} · {{ nodeRef.node_id }}) </span>
+        <span class="patrol-point-node-ref__action">{{ PATROL_BASELINE_COPY.nodeRefGraphLink }}</span>
+      </RouterLink>
+    </div>
   </article>
 </template>
 
@@ -96,5 +116,34 @@ defineProps<{
   margin: 0;
   color: var(--color-text-primary);
   white-space: pre-wrap;
+}
+
+.patrol-point-card__node-refs {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacing-8);
+}
+
+.patrol-point-node-ref {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--spacing-8);
+  padding: var(--spacing-8) var(--spacing-12);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-bg-canvas);
+  color: var(--color-text-primary);
+  text-decoration: none;
+}
+
+.patrol-point-node-ref__meta {
+  color: var(--color-text-secondary);
+}
+
+.patrol-point-node-ref__action {
+  margin-left: auto;
+  color: var(--color-primary);
+  font-size: var(--text-caption-size);
 }
 </style>

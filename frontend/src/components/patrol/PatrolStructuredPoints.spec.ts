@@ -30,12 +30,23 @@ async function loadPatrolStructuredPoints() {
   return mod as { default: object }
 }
 
+const mountOptions = {
+  global: {
+    stubs: {
+      RouterLink: {
+        props: ['to'],
+        template: '<a class="router-link-stub" :data-to="JSON.stringify(to)"><slot /></a>',
+      },
+    },
+  },
+}
+
 describe('PatrolStructuredPoints (F2 unit)', () => {
   it('renders MethodOverlapPoint structured fields from V2 fixture', async () => {
     const { default: PatrolStructuredPoints } = await loadPatrolStructuredPoints()
     const points = pointsFromFixture(patrolMethodOverlapFixture as DataResponse<PatrolReport>)
 
-    const wrapper = mount(PatrolStructuredPoints, { props: { points } })
+    const wrapper = mount(PatrolStructuredPoints, { props: { points }, ...mountOptions })
 
     expect(wrapper.text()).toContain('PCA')
     expect(wrapper.text()).toContain('Applied PCA to MNIST pixel vectors before k-NN classification')
@@ -50,7 +61,7 @@ describe('PatrolStructuredPoints (F2 unit)', () => {
     const { default: PatrolStructuredPoints } = await loadPatrolStructuredPoints()
     const points = pointsFromFixture(patrolClaimEvolutionFixture as DataResponse<PatrolReport>)
 
-    const wrapper = mount(PatrolStructuredPoints, { props: { points } })
+    const wrapper = mount(PatrolStructuredPoints, { props: { points }, ...mountOptions })
 
     expect(wrapper.text()).toContain('PCA 是否提升 MNIST 分类准确率？')
     expect(wrapper.text()).toContain('PCA 将 MNIST 特征压缩至 50 维后分类准确率提升 3%')
@@ -63,7 +74,7 @@ describe('PatrolStructuredPoints (F2 unit)', () => {
     const { default: PatrolStructuredPoints } = await loadPatrolStructuredPoints()
     const points = pointsFromFixture(patrolLensClashFixture as DataResponse<PatrolReport>)
 
-    const wrapper = mount(PatrolStructuredPoints, { props: { points } })
+    const wrapper = mount(PatrolStructuredPoints, { props: { points }, ...mountOptions })
 
     expect(wrapper.text()).toContain('消费社会')
     expect(wrapper.text()).toContain('公共领域')
@@ -73,7 +84,7 @@ describe('PatrolStructuredPoints (F2 unit)', () => {
   it('renders an empty points list without crashing (boundary)', async () => {
     const { default: PatrolStructuredPoints } = await loadPatrolStructuredPoints()
 
-    const wrapper = mount(PatrolStructuredPoints, { props: { points: [] } })
+    const wrapper = mount(PatrolStructuredPoints, { props: { points: [] }, ...mountOptions })
 
     expect(wrapper.exists()).toBe(true)
     expect(wrapper.text()).not.toContain('PCA')
@@ -85,6 +96,6 @@ describe('PatrolStructuredPoints (F2 unit)', () => {
       { mode: 'not_a_real_mode', overlap_label: 'SHOULD_NOT_SURFACE' },
     ] as unknown as PatrolInsight['structured_points']
 
-    expect(() => mount(PatrolStructuredPoints, { props: { points: roguePoints ?? [] } })).not.toThrow()
+    expect(() => mount(PatrolStructuredPoints, { props: { points: roguePoints ?? [] }, ...mountOptions })).not.toThrow()
   })
 })
