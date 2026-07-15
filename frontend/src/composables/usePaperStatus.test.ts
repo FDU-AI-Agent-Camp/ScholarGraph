@@ -102,6 +102,25 @@ describe('usePaperStatus', () => {
     wrapper.unmount()
   })
 
+  it('start stops polling when status is terminal (ready_with_warnings) — G1', async () => {
+    const { readyWithWarningsStatus: rwwStatus } = await import('@/test/fixtures/paperStatus')
+    vi.mocked(papersApi.getPaperStatus).mockResolvedValue(statusResponse(rwwStatus))
+    const { api, wrapper } = mountComposable('paper-rww')
+
+    api.start()
+    await flushPromises()
+
+    expect(api.status.value?.status).toBe('ready_with_warnings')
+    expect(api.polling.value).toBe(false)
+    expect(vi.getTimerCount()).toBe(0)
+
+    const calls = vi.mocked(papersApi.getPaperStatus).mock.calls.length
+    await vi.advanceTimersByTimeAsync(10_000)
+    await flushPromises()
+    expect(vi.mocked(papersApi.getPaperStatus).mock.calls.length).toBe(calls)
+    wrapper.unmount()
+  })
+
   it('keeps polling while status is processing and polls on interval', async () => {
     vi.mocked(papersApi.getPaperStatus).mockResolvedValue(statusResponse(processingStatus))
     const { api, wrapper } = mountComposable('paper-001', 1000)

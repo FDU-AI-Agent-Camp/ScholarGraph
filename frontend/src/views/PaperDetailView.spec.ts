@@ -847,6 +847,91 @@ describe('PaperDetailView', () => {
     })
   })
 
+  describe('G1 ready_with_warnings capability gates', () => {
+    it('test_detail_view_does_not_fall_to_preview — unlocks QA/graph without MVP mask', async () => {
+      paperStoreState.currentPaper = {
+        paper_id: 'rww-001',
+        title: 'RWW Paper',
+        status: 'ready_with_warnings',
+        paradigm: 'STEM',
+        preview_available: true,
+        extract_warnings: ['rag_index_timeout'],
+        created_at: '2026-05-19T10:00:00Z',
+      }
+      paperStoreState.currentGraph = {
+        paper_id: 'rww-001',
+        paradigm: 'STEM',
+        nodes: [{ id: 'n1', label: 'Method', type: 'Method', data: {} }],
+        edges: [],
+      }
+
+      const wrapper = mount(PaperDetailView, {
+        props: { paperId: 'rww-001' },
+        global: {
+          stubs: {
+            ...globalStubs,
+            BadgeStatus: false,
+          },
+        },
+      })
+      await flushPromises()
+
+      expect((wrapper.find('.qa-textarea').element as HTMLTextAreaElement).disabled).toBe(false)
+      const askButton = wrapper.findAll('button').find((button) => button.text() === '提问')
+      expect((askButton?.element as HTMLButtonElement).disabled).toBe(false)
+      expect(wrapper.find('.paper-graph-stub').exists()).toBe(true)
+
+      expect(wrapper.find('.detail-qa__alert--mvp').exists()).toBe(false)
+      expect(wrapper.find('.detail-graph__mvp-alert').exists()).toBe(false)
+      expect(wrapper.text()).not.toContain(DETAIL_BASELINE_COPY.mvpPreviewAlert.slice(0, 40))
+      expect(wrapper.find('.badge-status--ready_with_warnings').exists()).toBe(true)
+      expect(wrapper.find('.badge-status--ready_with_warnings').text()).toContain('已就绪（有警告）')
+      const extractAlert = wrapper.find('.detail-graph__extract-warning')
+      expect(extractAlert.exists()).toBe(true)
+      expect(extractAlert.attributes('data-title')).toContain('向量索引超时')
+
+      const notReadyAlert = wrapper
+        .findAll('.detail-qa__alert')
+        .find((node) => node.attributes('data-title') === DETAIL_BASELINE_COPY.notReadyAlert)
+      expect(notReadyAlert).toBeUndefined()
+    })
+
+    it('test_polling_stop_and_reload_on_rww — rehydrates detail on terminalReached', async () => {
+      paperStoreState.currentPaper = {
+        paper_id: 'rww-002',
+        title: 'Indexing then RWW',
+        status: 'indexing',
+        paradigm: 'STEM',
+        preview_available: false,
+        created_at: '2026-05-19T10:00:00Z',
+      }
+      mockFetchDetail.mockClear()
+
+      const wrapper = mount(PaperDetailView, {
+        props: { paperId: 'rww-002' },
+        global: {
+          stubs: {
+            ...globalStubs,
+            PaperStatusPanel: {
+              name: 'PaperStatusPanel',
+              emits: ['terminalReached'],
+              template:
+                '<button type="button" class="emit-terminal" @click="$emit(\'terminalReached\', \'ready_with_warnings\')">done</button>',
+            },
+          },
+        },
+      })
+      await flushPromises()
+      const callsAfterMount = mockFetchDetail.mock.calls.length
+
+      await wrapper.find('.emit-terminal').trigger('click')
+      await flushPromises()
+
+      expect(mockFetchDetail.mock.calls.length).toBeGreaterThan(callsAfterMount)
+      expect(mockFetchDetail).toHaveBeenCalledWith('rww-002')
+    })
+  })
+
   describe('robustness (API failures)', () => {
     it('renders empty shell when fetchDetail rejects without crashing', async () => {
       paperStoreState.currentPaper = null as unknown as PaperDetail
