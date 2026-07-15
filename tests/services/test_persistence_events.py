@@ -5,7 +5,12 @@ from __future__ import annotations
 import asyncio
 
 import pytest
-from backend.events.bus import EventBus, get_event_bus, stop_event_bus_worker
+from backend.events.bus import (
+    EventBus,
+    astop_event_bus_worker,
+    get_event_bus,
+    stop_event_bus_worker,
+)
 from backend.events.types import EventType, PipelineFinalized
 from backend.schemas.graph import GraphNode, UnifiedPaperGraph
 from backend.schemas.paradigm import Paradigm
@@ -43,8 +48,6 @@ async def test_stop_event_bus_worker_cancels_pending_worker_without_drain() -> N
 @pytest.mark.asyncio
 async def test_astop_worker_awaits_cancel_on_same_running_loop() -> None:
     """D17: same-loop stop must await cancel so pytest does not warn pending tasks."""
-    from backend.events.bus import astop_event_bus_worker, get_event_bus, stop_event_bus_worker
-
     bus = get_event_bus()
     bus.reset()
 
@@ -74,7 +77,6 @@ async def test_astop_worker_awaits_cancel_on_same_running_loop() -> None:
 @pytest.mark.asyncio
 async def test_stop_event_bus_worker_tears_down_singleton_worker() -> None:
     from backend.events import pipeline_finalized_handlers as handler_module
-    from backend.events.bus import astop_event_bus_worker
 
     handler_module.unregister_pipeline_finalized_handlers()
     bus = get_event_bus()

@@ -357,7 +357,7 @@ def _patrol_service_global_mock_vector_store(monkeypatch) -> None:
 
 
 def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> None:
-    """D17: final sync guard against leaking EventBus worker tasks at process exit."""
-    from backend.events.bus import stop_event_bus_worker
+    """D17: final sync stop for singleton + orphan local EventBus workers."""
+    from backend.events.bus import stop_all_event_bus_workers
 
-    stop_event_bus_worker()
+    stop_all_event_bus_workers()

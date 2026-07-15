@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import threading
+import weakref
 from collections import defaultdict
 from collections.abc import Awaitable, Callable
 from typing import Any
@@ -23,6 +24,8 @@ WORKER_CANCEL_TIMEOUT_SECONDS = 5.0
 EventHandler = Callable[[Any], Awaitable[None] | None]
 HandlerErrorCallback = Callable[[EventType, Exception, Any], Awaitable[None] | None]
 
+_ALL_BUSES: weakref.WeakSet[EventBus] = weakref.WeakSet()
+
 
 class EventBus:
     """Minimal pub/sub bus backed by an asyncio queue."""
@@ -32,6 +35,7 @@ class EventBus:
         self._queue: asyncio.Queue[Any] | None = None
         self._worker_task: asyncio.Task[None] | None = None
         self._on_handler_error = on_handler_error
+        _ALL_BUSES.add(self)
 
     def set_handler_error_callback(self, callback: HandlerErrorCallback | None) -> None:
         """Install optional hook invoked when a subscriber raises (D12 observability)."""
@@ -82,15 +86,24 @@ class EventBus:
         except RuntimeError:
             running_loop = None
         if worker_loop.is_closed():
+            worker_task._log_destroy_pending = False  # type: ignore[attr-defined]
             return
         if running_loop is worker_loop:
             await _await_cancelled_task(worker_task)
             return
         if worker_loop.is_running():
             future = asyncio.run_coroutine_threadsafe(_await_cancelled_task(worker_task), worker_loop)
-            await asyncio.to_thread(future.result, WORKER_CANCEL_TIMEOUT_SECONDS)
+            try:
+                await asyncio.to_thread(future.result, WORKER_CANCEL_TIMEOUT_SECONDS)
+            except Exception:
+                worker_task._log_destroy_pending = False  # type: ignore[attr-defined]
+                logger.debug("event_bus_worker_astop_failed", exc_info=True)
             return
-        await asyncio.to_thread(worker_loop.run_until_complete, _await_cancelled_task(worker_task))
+        try:
+            await asyncio.to_thread(worker_loop.run_until_complete, _await_cancelled_task(worker_task))
+        except Exception:
+            worker_task._log_destroy_pending = False  # type: ignore[attr-defined]
+            logger.debug("event_bus_worker_astop_failed", exc_info=True)
 
     def _stop_worker(self) -> None:
         """Tear down the background worker (tests / application shutdown).
@@ -108,6 +121,8 @@ class EventBus:
         try:
             loop = worker_task.get_loop()
             if loop.is_closed():
+                # Worker can never finish cleaning CancelledError — silence GC warn (D17).
+                worker_task._log_destroy_pending = False  # type: ignore[attr-defined]
                 return
             try:
                 running_loop = asyncio.get_running_loop()
@@ -127,6 +142,7 @@ class EventBus:
             else:
                 loop.run_until_complete(_await_cancelled_task(worker_task))
         except Exception:
+            worker_task._log_destroy_pending = False  # type: ignore[attr-defined]
             logger.debug("event_bus_worker_stop_failed", exc_info=True)
 
     async def _ensure_queue(self) -> None:
@@ -203,6 +219,16 @@ def stop_event_bus_worker() -> None:
     if _EVENT_BUS is None:
         return
     _EVENT_BUS._stop_worker()
+
+
+def stop_all_event_bus_workers() -> None:
+    """Sync-stop every live EventBus (sessionfinish safety net for orphan locals)."""
+    for bus in list(_ALL_BUSES):
+        pending = bus._worker_task
+        bus._stop_worker()
+        if pending is not None and not pending.done():
+            pending.cancel()
+            pending._log_destroy_pending = False  # type: ignore[attr-defined]
 
 
 async def astop_event_bus_worker() -> None:
