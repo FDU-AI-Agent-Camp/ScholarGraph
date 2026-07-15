@@ -54,7 +54,7 @@ def validate_demo_prod_invariants(settings: Settings) -> None:
     if not settings.reranker_model.strip():
         violations.append(
             f"当前处于 {profile_label(profile)} 模式，检测到 RERANKER_MODEL 为空。\n"
-            "修复：在 .env.{profile} 中设置 RERANKER_MODEL（如 bge-reranker-large）。"
+            "修复：在 .env.{profile} 中设置 RERANKER_MODEL（如 bge-reranker-v2-m3）。"
         )
 
     if violations:
