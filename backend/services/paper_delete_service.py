@@ -8,10 +8,15 @@ from typing import TYPE_CHECKING, Protocol, cast
 
 from backend.api.exceptions import ApiError
 from backend.config import get_settings
+from backend.db.models import PAPER_OPS_OPERATION_DELETE
 from backend.graph.head_store import HeadStore
 from backend.graph.store import GraphStore
 from backend.repositories import run_async
 from backend.schemas.paper import PaperStatus
+from backend.services.paper_ops_claim import (
+    acquire_paper_ops_claim,
+    release_paper_ops_claim,
+)
 from backend.services.pipeline_task_registry import abort_in_flight_pipeline
 
 if TYPE_CHECKING:
@@ -224,6 +229,9 @@ async def delete_paper(
       5) SQL paper row (``pipeline_runs`` CASCADE)
 
     Default blocks ``PROCESSING`` / ``INDEXING`` with 409; ``force=true`` aborts then cascades.
+
+    Concurrent wipe ops for the same ``paper_id`` (delete ∪ reextract) are rejected
+    with 409 via durable ``paper_ops_claims`` for the critical section duration.
     """
     paper = run_async(paper_service._paper_repo.get(paper_id))
     if paper is None:
@@ -236,33 +244,49 @@ async def delete_paper(
             status_code=409,
         )
 
-    # Always best-effort abort so late runners cannot ghost-write after wipe.
-    await abort_in_flight_pipeline(paper_id)
+    owner_token = await acquire_paper_ops_claim(paper_id, operation=PAPER_OPS_OPERATION_DELETE)
+    try:
+        from backend.rag.wipe_vector_sweep import (
+            extend_wipe_targets_after_abort,
+            schedule_wipe_wave2_sweep,
+            snapshot_wipe_target_run_ids,
+        )
 
-    pdf_path_str = run_async(paper_service._paper_repo.get_pdf_path(paper_id))
-    chroma_purged = await _purge_vector_index_hard(paper_id, vector_store=vector_store)
+        wipe_targets = snapshot_wipe_target_run_ids(paper_id)
+        # Abort cancels Tasks / indexing revoke only — does not drop this claim.
+        await abort_in_flight_pipeline(paper_id)
+        wipe_targets = extend_wipe_targets_after_abort(paper_id, wipe_targets)
 
-    # Prefer glob wipe (covers HeadStore + future sidecars); keep explicit deletes for clarity.
-    graph_files_removed = _purge_graph_dir_artefacts(paper_id)
-    _delete_graph_stores(paper_id)
-    paper_service.clear_ephemeral_pipeline_state(paper_id)
-    pdf_removed = _unlink_pdf(pdf_path_str)
+        pdf_path_str = run_async(paper_service._paper_repo.get_pdf_path(paper_id))
+        # Wave 1: immediate paper-wide Chroma purge (hard-fail if Chroma is down).
+        chroma_purged = await _purge_vector_index_hard(paper_id, vector_store=vector_store)
+        # Wave 2: delayed delete_run for revoked / prior active ids (late to_thread upserts).
+        schedule_wipe_wave2_sweep(paper_id, wipe_targets)
 
-    deleted = run_async(paper_service._paper_repo.delete(paper_id))
-    if not deleted:
-        raise ApiError("PAPER_NOT_FOUND", f"论文不存在: {paper_id}", status_code=404)
+        # Prefer glob wipe (covers HeadStore + future sidecars); keep explicit deletes for clarity.
+        graph_files_removed = _purge_graph_dir_artefacts(paper_id)
+        _delete_graph_stores(paper_id)
+        paper_service.clear_ephemeral_pipeline_state(paper_id)
+        pdf_removed = _unlink_pdf(pdf_path_str)
 
-    logger.info(
-        "Cascade delete completed for paper_id=%s",
-        paper_id,
-        extra={
-            "paper_id": paper_id,
-            "force": force,
-            "details": {
-                "chroma": chroma_purged,
-                "graph_files": graph_files_removed,
-                "pdf": pdf_removed,
-                "sql": True,
+        deleted = run_async(paper_service._paper_repo.delete(paper_id))
+        if not deleted:
+            raise ApiError("PAPER_NOT_FOUND", f"论文不存在: {paper_id}", status_code=404)
+
+        logger.info(
+            "Cascade delete completed for paper_id=%s",
+            paper_id,
+            extra={
+                "paper_id": paper_id,
+                "force": force,
+                "details": {
+                    "chroma": chroma_purged,
+                    "graph_files": graph_files_removed,
+                    "pdf": pdf_removed,
+                    "sql": True,
+                    "wipe_wave2_runs": sorted(wipe_targets),
+                },
             },
-        },
-    )
+        )
+    finally:
+        await release_paper_ops_claim(paper_id, owner_token)

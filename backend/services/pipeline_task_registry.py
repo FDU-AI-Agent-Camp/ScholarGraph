@@ -117,7 +117,7 @@ async def cancel_paper_tasks(paper_id: str) -> None:
 
 
 def force_cancel_paper_work_sync(paper_id: str) -> None:
-    """Cascading Kill Channel steps 1–2: inject CancelledError + evict concurrency claims.
+    """Cascading Kill Channel steps 1–2: inject CancelledError + evict wipe claims.
 
     Cancels registered tasks **without** unregistering them so a subsequent
     ``abort_in_flight_pipeline`` / ``cancel_paper_tasks`` can still ``await``
@@ -125,7 +125,7 @@ def force_cancel_paper_work_sync(paper_id: str) -> None:
     """
     from backend.rag.indexing_run_registry import get_indexing_run_registry
     from backend.services.extract_worker import get_full_extraction_task
-    from backend.services.reextract_service import release_reextract_claim_for_abort
+    from backend.services.paper_ops_claim import force_release_paper_ops_claim_sync
 
     pipeline = get_pipeline_task(paper_id)
     if pipeline is not None:
@@ -137,7 +137,7 @@ def force_cancel_paper_work_sync(paper_id: str) -> None:
     if full is not None:
         full.cancel()
     get_indexing_run_registry().revoke(paper_id)
-    release_reextract_claim_for_abort(paper_id)
+    force_release_paper_ops_claim_sync(paper_id)
     logger.info(
         "paper_work_force_cancelled_sync",
         extra={"paper_id": paper_id, "cascading_kill_channel": True},
@@ -145,13 +145,16 @@ def force_cancel_paper_work_sync(paper_id: str) -> None:
 
 
 async def abort_in_flight_pipeline(paper_id: str) -> None:
-    """Graceful termination: cancel tasks, await drain, evict indexing + reextract claims."""
+    """Graceful termination: cancel tasks, await drain, revoke indexing runs.
+
+    Does **not** release ``paper_ops_claims``: force reextract / delete hold the
+    durable wipe mutex across abort + purge. Cascading Kill uses
+    ``force_cancel_paper_work_sync`` to evict abandoned claims.
+    """
     from backend.rag.indexing_run_registry import get_indexing_run_registry
-    from backend.services.reextract_service import release_reextract_claim_for_abort
 
     await cancel_paper_tasks(paper_id)
     get_indexing_run_registry().revoke(paper_id)
-    release_reextract_claim_for_abort(paper_id)
 
 
 def reset_pipeline_task_registry() -> None:

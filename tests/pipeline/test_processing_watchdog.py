@@ -334,10 +334,14 @@ async def test_watchdog_kill_execution_order(processing_watchdog_db, monkeypatch
     await asyncio.wait_for(lock_held.wait(), timeout=1.0)
     registry.register_pipeline_task(paper_id, zombie_task)
 
-    # Simulate an abandoned reextract claim (mutex not returned after worker death).
-    from backend.services import reextract_service as rex
+    # Simulate an abandoned wipe claim (mutex not returned after worker death).
+    from backend.db.models import PAPER_OPS_OPERATION_REEXTRACT
+    from backend.repositories.paper_ops_claim_repository import get_paper_ops_claim_repository
 
-    rex._reextract_inflight.add(paper_id)
+    await get_paper_ops_claim_repository().seed_claim_for_tests(
+        paper_id,
+        operation=PAPER_OPS_OPERATION_REEXTRACT,
+    )
     assert is_reextract_inflight(paper_id)
 
     real_abort = registry.abort_in_flight_pipeline
@@ -419,10 +423,14 @@ async def test_cascade_kill_releases_reextract_claim_before_sql_fail(
     stale = now - timedelta(seconds=901)
     paper_id = "zombie-with-claim"
     await _put_paper_processing(paper_id, updated_at=stale)
-    # Simulate a stuck claim without holding the asyncio Lock across the test.
-    from backend.services import reextract_service as rex
+    # Simulate a stuck durable claim without an owning wipe coroutine.
+    from backend.db.models import PAPER_OPS_OPERATION_REEXTRACT
+    from backend.repositories.paper_ops_claim_repository import get_paper_ops_claim_repository
 
-    rex._reextract_inflight.add(paper_id)
+    await get_paper_ops_claim_repository().seed_claim_for_tests(
+        paper_id,
+        operation=PAPER_OPS_OPERATION_REEXTRACT,
+    )
     assert is_reextract_inflight(paper_id)
 
     failed_ids = await scan_and_fail_stuck_processing(
