@@ -262,6 +262,12 @@ class PaperService(PaperPipelineOpsMixin):
 
         return await force_reextract(self, paper_id, force=force)
 
+    async def delete_paper(self, paper_id: str, *, force: bool = False) -> None:
+        """Cascading physical delete (SQL + graph + Chroma + PDF)."""
+        from backend.services.paper_delete_service import delete_paper
+
+        await delete_paper(self, paper_id, force=force)
+
     def fail_pipeline(
         self,
         paper_id: str,

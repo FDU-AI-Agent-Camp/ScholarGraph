@@ -104,6 +104,33 @@ paths:
                 $ref: "#/components/schemas/PaperDetailResponse"
         "404":
           $ref: "#/components/responses/NotFound"
+    delete:
+      tags: [papers]
+      operationId: deletePaper
+      summary: 级联物理删除论文（SQL + 图谱 JSON + Chroma + PDF）
+      description: |
+        按固定顺序执行物理级联清理，避免幽灵写入：
+        1) 撤销 in-process asyncio 任务（force 或 best-effort）
+        2) VectorStore.delete_by_paper
+        3) GraphStore / HeadStore 落盘文件
+        4) 上传 PDF
+        5) papers 行（pipeline_runs CASCADE）
+
+        `status=processing` 默认返回 409；显式 `force=true` 时先 cancel 再删除。
+      parameters:
+        - $ref: "#/components/parameters/PaperId"
+        - $ref: "#/components/parameters/ForceAbort"
+      responses:
+        "204":
+          description: 已物理删除
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: PAPER_ALREADY_PROCESSING（未传 force=true）
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
 
   /papers/{paper_id}/status:
     get:

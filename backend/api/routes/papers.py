@@ -95,6 +95,19 @@ async def get_paper_graph(
     return success(graph, request_id)
 
 
+@router.delete("/{paper_id}", status_code=204)
+async def delete_paper(
+    paper_id: str,
+    force: bool = Query(
+        default=False,
+        description="When true, cancel in-flight PROCESSING work then cascade-delete",
+    ),
+    service: PaperService = Depends(get_paper_service_dep),
+) -> None:
+    """Cascading physical delete: tasks → Chroma → graph/head JSON → PDF → SQL."""
+    await service.delete_paper(paper_id, force=force)
+
+
 @router.post("/{paper_id}/reextract")
 async def force_reextract_paper(
     paper_id: str,
