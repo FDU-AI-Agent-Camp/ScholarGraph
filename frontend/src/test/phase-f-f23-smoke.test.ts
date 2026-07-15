@@ -13,16 +13,16 @@ describe('Phase F.2.3 frontend smoke', () => {
 
   it('PaperStatusPanel wires extract_warnings to warning alert and ElMessage', () => {
     const src = readFrontendSource('components/papers/PaperStatusPanel.vue')
-    expect(src).toContain('resolveExtractWarningMessages')
+    expect(src).toContain('resolveExtractWarningDisplays')
     expect(src).toContain('ElMessage.warning')
     expect(src).toContain('status-panel__extract-warning')
   })
 
   it('PaperDetailView shows persistent graph extract warning alert', () => {
     const src = readFrontendSource('views/PaperDetailView.vue')
-    expect(src).toContain('extractWarningMessages')
+    expect(src).toContain('extractWarningDisplays')
     expect(src).toContain('detail-graph__extract-warning')
-    expect(src).toContain('resolveExtractWarningMessages')
+    expect(src).toContain('resolveExtractWarningDisplays')
   })
 
   it('OpenAPI-generated PaperDetail includes extract_warnings', () => {

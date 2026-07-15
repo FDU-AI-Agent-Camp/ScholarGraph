@@ -12,7 +12,7 @@ import {
 import {
   EXTRACT_HEURISTIC_FALLBACK_MESSAGE,
   hasExtractHeuristicFallback,
-  resolveExtractWarningMessages,
+  resolveExtractWarningDisplays,
 } from '@/utils/extractWarnings'
 import { isFailedStatus, isGraphInteractiveStatus } from '@/utils/paperStatus'
 import type { PaperStatus } from '@/api/types'
@@ -51,7 +51,7 @@ const stepStates = computed((): PipelineStepVisualState[] => {
   return resolvePipelineStepStates(snapshot.stage, snapshot.status, failedSnapshot.value?.failed_during)
 })
 
-const extractWarningMessages = computed(() => resolveExtractWarningMessages(status.value?.extract_warnings))
+const extractWarningDisplays = computed(() => resolveExtractWarningDisplays(status.value?.extract_warnings))
 const classifyWarningMessages = computed(() => resolveClassifyWarningMessages(status.value?.classify_warnings))
 
 watch(
@@ -152,9 +152,12 @@ watch(
       class="status-panel__classify-warning"
     />
     <el-alert
-      v-if="extractWarningMessages.length"
+      v-if="extractWarningDisplays.length"
       type="warning"
-      :title="extractWarningMessages[0]"
+      :title="extractWarningDisplays[0]?.message"
+      :description="
+        extractWarningDisplays[0]?.technicalCode ? `技术代码: ${extractWarningDisplays[0].technicalCode}` : undefined
+      "
       show-icon
       :closable="false"
       class="status-panel__extract-warning"
