@@ -34,6 +34,8 @@ WATCHDOG_THREAD_JOIN_TIMEOUT_SECONDS = 5.0
 WATCHDOG_THREAD_NAME = "rag-indexing-watchdog"
 _MAX_TICK_TIMESTAMPS = 256
 _WATCHDOG_TICK_MONOTONIC: deque[float] = deque(maxlen=_MAX_TICK_TIMESTAMPS)
+COLD_BOOT_INDEXING_BATCH_LIMIT = 200
+COLD_BOOT_INDEXING_MAX_ROUNDS = 50
 
 
 def reset_watchdog_sync_engine() -> None:
@@ -74,7 +76,10 @@ async def scan_and_promote_stuck_indexing(
     heartbeat_stale_seconds: float | None = None,
     force_all: bool = False,
 ) -> list[str]:
-    """Promote stuck INDEXING papers (async path; cold-boot uses ``force_all``)."""
+    """Promote stuck INDEXING papers (async path; cold-boot uses ``force_all``).
+
+    When ``force_all`` (cold-boot), drain in 200-row rounds so large piles need one boot.
+    """
     from backend.services.paper_service import get_paper_service
 
     settings = get_settings()
@@ -88,17 +93,32 @@ async def scan_and_promote_stuck_indexing(
         force_all=force_all,
     )
     paper_service = get_paper_service()
-    candidates = await paper_service.list_stuck_indexing_papers(
-        older_than=older_than,
-        heartbeat_stale_before=heartbeat_stale_before,
-    )
     promoted: list[str] = []
-    for paper_id, _started, _heartbeat in candidates:
-        try:
-            if await paper_service.promote_stuck_indexing_paper(paper_id):
-                promoted.append(paper_id)
-        except Exception:
-            logger.exception("indexing_watchdog_promote_failed", extra={"paper_id": paper_id})
+    max_rounds = COLD_BOOT_INDEXING_MAX_ROUNDS if force_all else 1
+    for round_idx in range(max_rounds):
+        candidates = await paper_service.list_stuck_indexing_papers(
+            older_than=older_than,
+            heartbeat_stale_before=heartbeat_stale_before,
+            limit=COLD_BOOT_INDEXING_BATCH_LIMIT,
+        )
+        if not candidates:
+            break
+        for paper_id, _started, _heartbeat in candidates:
+            try:
+                if await paper_service.promote_stuck_indexing_paper(paper_id):
+                    promoted.append(paper_id)
+            except Exception:
+                logger.exception("indexing_watchdog_promote_failed", extra={"paper_id": paper_id})
+        if len(candidates) < COLD_BOOT_INDEXING_BATCH_LIMIT:
+            break
+        if force_all and round_idx == COLD_BOOT_INDEXING_MAX_ROUNDS - 1:
+            logger.warning(
+                "%s cold_boot indexing drain hit max_rounds=%s promoted_so_far=%s",
+                P13_WATCHDOG_HEAL_TAG,
+                COLD_BOOT_INDEXING_MAX_ROUNDS,
+                len(promoted),
+                extra={"p13_watchdog_heal": True, "promoted_count": len(promoted)},
+            )
     return promoted
 
 
