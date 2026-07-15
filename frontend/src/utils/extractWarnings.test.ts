@@ -3,6 +3,8 @@ import { describe, expect, it } from 'vitest'
 import {
   EXTRACT_HEURISTIC_FALLBACK_CODE,
   EXTRACT_HEURISTIC_FALLBACK_MESSAGE,
+  RAG_INDEX_TIMEOUT_CODE,
+  RAG_INDEX_TIMEOUT_MESSAGE,
   hasExtractHeuristicFallback,
   resolveExtractWarningMessages,
 } from '@/utils/extractWarnings'
@@ -27,6 +29,10 @@ describe('extractWarnings', () => {
   it('does not show warning UI when only unknown codes are present', () => {
     expect(resolveExtractWarningMessages(['other_code'])).toEqual(['other_code'])
     expect(hasExtractHeuristicFallback(['other_code'])).toBe(false)
+  })
+
+  it('maps rag_index_timeout to user-visible index timeout copy (G1 / P13)', () => {
+    expect(resolveExtractWarningMessages([RAG_INDEX_TIMEOUT_CODE])).toEqual([RAG_INDEX_TIMEOUT_MESSAGE])
   })
 
   it('deduplicates repeated machine codes in display messages', () => {

@@ -5,8 +5,14 @@ export const EXTRACT_HEURISTIC_FALLBACK_CODE = 'extract_heuristic_fallback' as c
 /** Frozen user-visible copy (progress.md §F.2.3). */
 export const EXTRACT_HEURISTIC_FALLBACK_MESSAGE = '触发启发式Fallback!' as const
 
+/** P13/G1 — RAG index timed out; paper remains interactive as ready_with_warnings. */
+export const RAG_INDEX_TIMEOUT_CODE = 'rag_index_timeout' as const
+
+export const RAG_INDEX_TIMEOUT_MESSAGE = '向量索引超时，图谱与问答仍可用，证据链可能不完整。' as const
+
 const EXTRACT_WARNING_MESSAGES: Readonly<Record<string, string>> = {
   [EXTRACT_HEURISTIC_FALLBACK_CODE]: EXTRACT_HEURISTIC_FALLBACK_MESSAGE,
+  [RAG_INDEX_TIMEOUT_CODE]: RAG_INDEX_TIMEOUT_MESSAGE,
 }
 
 /** Map API warning codes to display strings; unknown codes pass through. */
