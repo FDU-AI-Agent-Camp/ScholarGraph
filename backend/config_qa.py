@@ -97,7 +97,11 @@ class QaSettingsMixin:
         default=900.0,
         gt=0.0,
         validation_alias="PROCESS_WATCHDOG_SECONDS",
-        description="Fail PROCESSING papers whose updated_at is older than this (seconds).",
+        description=(
+            "Fail PROCESSING papers whose updated_at is older than this (seconds). "
+            "No mid-stage heartbeat — size above the longest expected LLM extract/classify "
+            "call to avoid false PROCESS_TIMEOUT."
+        ),
     )
     process_watchdog_interval_seconds: float = Field(
         default=60.0,
