@@ -24,6 +24,7 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 _REEXTRACT_QUEUED_MESSAGE = "已强制重新抽取，等待流水线启动…"
+_ACTIVE_PIPELINE_STATUSES = frozenset({PaperStatus.PROCESSING, PaperStatus.INDEXING})
 
 
 def _resolve_pdf_path(pdf_path_str: str | None, paper_id: str) -> Path:
@@ -88,23 +89,23 @@ async def force_reextract(
     to pending, bumps ``graph_version``, clears pipeline warnings, and
     re-schedules the pipeline from the stored PDF path.
 
-    Default blocks ``PROCESSING`` with 409. With ``force=true``, cancels
-    in-flight asyncio tasks (pipeline / head-refine / extract / indexing run)
-    before reset. Abort is also best-effort for non-PROCESSING statuses so a
-    late INDEXING worker cannot resurrect stale artefacts after wipe.
+    Default blocks ``PROCESSING`` and ``INDEXING`` with 409. With ``force=true``,
+    cancels in-flight asyncio tasks (pipeline / head-refine / extract / indexing
+    run) before reset. Best-effort abort also runs for terminal/pending paths so
+    a late worker cannot resurrect stale artefacts after wipe.
     """
     paper = run_async(paper_service._paper_repo.get(paper_id))
     if paper is None:
         raise ApiError("PAPER_NOT_FOUND", f"论文不存在: {paper_id}", status_code=404)
 
-    if paper.status == PaperStatus.PROCESSING and not force:
+    if paper.status in _ACTIVE_PIPELINE_STATUSES and not force:
         raise ApiError(
             "PAPER_ALREADY_PROCESSING",
-            f"论文 {paper_id} 正在处理中，请等待当前任务完成；卡死时可传 force=true 强行中止并重抽",
+            f"论文 {paper_id} 正在处理或构建索引中，请等待当前任务完成；卡死时可传 force=true 强行中止并重抽",
             status_code=409,
         )
 
-    # Always best-effort abort: covers force PROCESSING and open INDEXING races.
+    # Always best-effort abort after the 409 gate.
     await abort_in_flight_pipeline(paper_id)
 
     pdf_path_str = run_async(paper_service._paper_repo.get_pdf_path(paper_id))

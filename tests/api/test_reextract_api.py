@@ -153,6 +153,22 @@ async def test_force_reextract_processing_with_force_query(
 
 
 @pytest.mark.asyncio
+async def test_force_reextract_rejects_indexing_paper(
+    api_client: AsyncClient,
+    mock_pipeline_env: tuple[Path, Path],
+    sample_pdf_path: Path,
+) -> None:
+    """Re-extract is blocked while the paper is indexing vectors."""
+    paper_id = await _upload_pdf(api_client, sample_pdf_path)
+    get_pipeline_status_service().mark_indexing(paper_id)
+
+    response = await api_client.post(f"/api/v1/papers/{paper_id}/reextract")
+
+    assert response.status_code == 409
+    assert response.json()["error"]["code"] == "PAPER_ALREADY_PROCESSING"
+
+
+@pytest.mark.asyncio
 async def test_force_reextract_returns_404_for_unknown_paper(api_client: AsyncClient) -> None:
     response = await api_client.post("/api/v1/papers/nonexistent/reextract")
     assert response.status_code == 404
