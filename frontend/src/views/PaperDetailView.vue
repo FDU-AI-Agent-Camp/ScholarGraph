@@ -1,22 +1,21 @@
 <script setup lang="ts">
-import { computed, defineAsyncComponent, onMounted, ref, watch } from 'vue'
+import { computed, defineAsyncComponent, onMounted, ref, toRef, watch } from 'vue'
 import { RouterLink, useRouter } from 'vue-router'
 
-import { streamPaperQa } from '@/api/qaStream'
-import type { QaStreamCitationData } from '@/api/types'
 import PaperMetadataCard from '@/components/papers/PaperMetadataCard.vue'
 import PaperStatusPanel from '@/components/papers/PaperStatusPanel.vue'
 import BadgeParadigm from '@/components/ui/BadgeParadigm.vue'
 import BadgeStatus from '@/components/ui/BadgeStatus.vue'
 import TagCitation from '@/components/ui/TagCitation.vue'
+import { usePaperDetailQa } from '@/composables/usePaperDetailQa'
 import { DETAIL_BASELINE_COPY } from '@/constants/detailCopy'
 import { RouteName } from '@/router/meta'
 import { usePaperStore } from '@/stores/paper'
 import { resolveClassifyWarningMessages } from '@/utils/classifyWarnings'
 import { resolveExtractWarningDisplays } from '@/utils/extractWarnings'
+import { formatDetailTime } from '@/utils/formatDetailTime'
 import { confirmAndDeletePaper, PAPER_DELETE_COPY } from '@/utils/paperDelete'
 import {
-  appendUniqueCitation,
   chunkCitationPreview,
   chunkPreviewPlaceholderTooltip,
   citationDisplayId,
@@ -24,7 +23,6 @@ import {
   isChunkPreviewDegraded,
 } from '@/utils/qaCitations'
 import { isGraphInteractiveStatus, isPreviewAvailableStatus } from '@/utils/paperStatus'
-import { resolveQaStreamWarningMessage } from '@/utils/qaStreamWarnings'
 
 const PaperGraph = defineAsyncComponent(() => import('@/components/graph/PaperGraph.vue'))
 
@@ -32,15 +30,8 @@ const props = defineProps<{ paperId: string }>()
 const router = useRouter()
 const paperStore = usePaperStore()
 
-const question = ref('')
-const answer = ref('')
-const streaming = ref(false)
-const citations = ref<QaStreamCitationData[]>([])
-const qaStreamWarningMessage = ref<string | null>(null)
-const highlightNodeId = ref<string | null>(null)
 const graphLoading = ref(false)
 const deleting = ref(false)
-let abort: AbortController | null = null
 
 /** Capability gates — graph/QA use interactive+preview; Badge uses raw status. */
 const isPreview = () => {
@@ -59,33 +50,31 @@ const isInteractive = () => {
   return isGraphInteractiveStatus(status) || isPreview()
 }
 
+const {
+  question,
+  answer,
+  streaming,
+  citations,
+  qaStreamWarningMessage,
+  highlightNodeId,
+  resetQaSession,
+  ask,
+  stopStream,
+  focusCitation,
+  onGraphNodeClick,
+} = usePaperDetailQa(toRef(props, 'paperId'), isInteractive)
+
 const extractWarningDisplays = computed(() => resolveExtractWarningDisplays(paperStore.currentPaper?.extract_warnings))
 const classifyWarningMessages = computed(() =>
   resolveClassifyWarningMessages(paperStore.currentPaper?.classify_warnings),
 )
-
-function formatDetailTime(iso: string | undefined): string {
-  if (!iso) {
-    return '—'
-  }
-  return new Date(iso).toLocaleString('zh-CN', {
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-  })
-}
 
 function onPipelineTerminalReached(): void {
   void paperStore.fetchDetail(props.paperId)
 }
 
 function onPipelineReextracted(): void {
-  answer.value = ''
-  citations.value = []
-  qaStreamWarningMessage.value = null
-  highlightNodeId.value = null
+  resetQaSession()
   void paperStore.fetchDetail(props.paperId)
 }
 
@@ -136,70 +125,12 @@ watch(
   },
 )
 
-async function ask(): Promise<void> {
-  if (!question.value.trim() || !isInteractive()) {
-    return
-  }
-  answer.value = ''
-  citations.value = []
-  qaStreamWarningMessage.value = null
-  highlightNodeId.value = null
-  streaming.value = true
-  abort = new AbortController()
-  try {
-    await streamPaperQa(
-      props.paperId,
-      question.value.trim(),
-      {
-        onMessage: (data) => {
-          answer.value += data.delta
-        },
-        onCitation: (data) => {
-          citations.value = appendUniqueCitation(citations.value, data)
-          if (data.type === 'node') {
-            highlightNodeId.value = data.node_id
-          }
-        },
-        onWarning: (data) => {
-          qaStreamWarningMessage.value = resolveQaStreamWarningMessage(data)
-        },
-        onDone: (data) => {
-          if (data.answer) {
-            answer.value = data.answer
-          }
-        },
-        onError: (msg) => {
-          answer.value = `错误: ${msg}`
-        },
-      },
-      abort.signal,
-    )
-  } finally {
-    streaming.value = false
-  }
-}
-
-function stopStream(): void {
-  abort?.abort()
-  streaming.value = false
-}
-
-function focusCitation(citation: QaStreamCitationData): void {
-  if (citation.type === 'node') {
-    highlightNodeId.value = citation.node_id
-  }
-}
-
 function openFullGraph(): void {
   void router.push({
     name: RouteName.PaperGraph,
     params: { paperId: props.paperId },
     query: highlightNodeId.value ? { node: highlightNodeId.value } : {},
   })
-}
-
-function onGraphNodeClick(nodeId: string): void {
-  highlightNodeId.value = nodeId
 }
 </script>
 

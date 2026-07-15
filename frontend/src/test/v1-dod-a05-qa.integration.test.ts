@@ -49,8 +49,10 @@ describe('V1 DoD A-05 — SSE QA stream + citation graph linkage', () => {
 
   it('DetailView wires streamPaperQa, citations, and highlightNodeId to PaperGraph', () => {
     const detailSrc = readFrontendSource('views/PaperDetailView.vue')
-    expect(detailSrc).toContain('streamPaperQa')
-    expect(detailSrc).toContain('onCitation')
+    const qaComposableSrc = readFrontendSource('composables/usePaperDetailQa.ts')
+    expect(qaComposableSrc).toContain('streamPaperQa')
+    expect(qaComposableSrc).toContain('onCitation')
+    expect(detailSrc).toContain('usePaperDetailQa')
     expect(detailSrc).toContain(':highlight-node-id="highlightNodeId"')
     expect(detailSrc).toContain('TagCitation')
   })

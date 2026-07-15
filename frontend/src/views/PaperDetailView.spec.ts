@@ -484,9 +484,8 @@ describe('PaperDetailView', () => {
     })
 
     it('syncs Tag and graph highlight in the same tick on citation click (§1.4.3 checklist)', async () => {
-      const detailSrc = readFrontendSource('views/PaperDetailView.vue')
-      const script = detailSrc.match(/<script[^>]*>([\s\S]*?)<\/script>/)?.[1] ?? ''
-      expect(usesSynchronousHighlightHandlers(script)).toBe(true)
+      const qaComposableSrc = readFrontendSource('composables/usePaperDetailQa.ts')
+      expect(usesSynchronousHighlightHandlers(qaComposableSrc)).toBe(true)
 
       const wrapper = await mountWithTwoCitations()
       const tags = wrapper.findAll('.citation-tag')
