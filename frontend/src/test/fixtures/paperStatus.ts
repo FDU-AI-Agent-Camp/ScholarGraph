@@ -109,3 +109,15 @@ export const failedStatusProcessTimeout: PaperStatusData = {
   error_code: 'PROCESS_TIMEOUT',
   failed_during: 'extracting',
 }
+
+/** Pending queue wall-clock — QUEUE_TIMEOUT. */
+export const failedStatusQueueTimeout: PaperStatusData = {
+  paper_id: 'paper-queue-timeout',
+  status: 'failed',
+  percent: 0,
+  stage: 'failed',
+  message: '排队超时，服务器任务积压过久，请稍后重新上传或强制重新抽取。',
+  updated_at: '2026-05-19T10:03:00Z',
+  preview_available: false,
+  error_code: 'QUEUE_TIMEOUT',
+}

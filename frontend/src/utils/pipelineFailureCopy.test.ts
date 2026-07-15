@@ -5,13 +5,16 @@ import {
   PROCESS_ORPHANED_TITLE,
   PROCESS_TIMEOUT_CODE,
   PROCESS_TIMEOUT_TITLE,
+  QUEUE_TIMEOUT_CODE,
+  QUEUE_TIMEOUT_TITLE,
   resolvePipelineFailureTitle,
 } from '@/utils/pipelineFailureCopy'
 
 describe('pipelineFailureCopy', () => {
-  it('maps PROCESS_ORPHANED / PROCESS_TIMEOUT to Chinese titles', () => {
+  it('maps PROCESS_ORPHANED / PROCESS_TIMEOUT / QUEUE_TIMEOUT to Chinese titles', () => {
     expect(resolvePipelineFailureTitle(PROCESS_ORPHANED_CODE)).toBe(PROCESS_ORPHANED_TITLE)
     expect(resolvePipelineFailureTitle(PROCESS_TIMEOUT_CODE)).toBe(PROCESS_TIMEOUT_TITLE)
+    expect(resolvePipelineFailureTitle(QUEUE_TIMEOUT_CODE)).toBe(QUEUE_TIMEOUT_TITLE)
   })
 
   it('keeps unknown codes and defaults when absent', () => {

@@ -11,6 +11,7 @@ import {
   failedStatus,
   failedStatusProcessOrphaned,
   failedStatusProcessTimeout,
+  failedStatusQueueTimeout,
   failedStatusWithoutCode,
   processingStatus,
   readyStatus,
@@ -20,7 +21,7 @@ import {
   readyWithWarningsStatus,
   classifyingStatusWithClassifyFallback,
 } from '@/test/fixtures/paperStatus'
-import { PROCESS_ORPHANED_TITLE, PROCESS_TIMEOUT_TITLE } from '@/utils/pipelineFailureCopy'
+import { PROCESS_ORPHANED_TITLE, PROCESS_TIMEOUT_TITLE, QUEUE_TIMEOUT_TITLE } from '@/utils/pipelineFailureCopy'
 
 const mockStart = vi.fn()
 const mockStop = vi.fn()
@@ -131,6 +132,11 @@ describe('PaperStatusPanel', () => {
       name: 'PROCESS_TIMEOUT',
       status: failedStatusProcessTimeout,
       title: PROCESS_TIMEOUT_TITLE,
+    },
+    {
+      name: 'QUEUE_TIMEOUT',
+      status: failedStatusQueueTimeout,
+      title: QUEUE_TIMEOUT_TITLE,
     },
   ])('maps $name failure code to Chinese title with backend message', ({ status, title }) => {
     mockStatus.value = status
