@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -10,11 +11,17 @@ from backend.graph.head_store import HeadStore
 from backend.graph.store import GraphStore
 from backend.repositories import run_async
 from backend.schemas.paper import PaperStatus, PaperStatusData
+from backend.services.paper_delete_service import (
+    _VectorStoreDelete,
+    resolve_vector_store_for_delete,
+)
 from backend.services.paper_pipeline_scheduler import schedule_paper_pipeline
 from backend.services.pipeline_task_registry import abort_in_flight_pipeline
 
 if TYPE_CHECKING:
     from backend.services.paper_service import PaperService
+
+logger = logging.getLogger(__name__)
 
 _REEXTRACT_QUEUED_MESSAGE = "已强制重新抽取，等待流水线启动…"
 
@@ -48,20 +55,43 @@ def _clear_in_memory_state(paper_service: PaperService, paper_id: str) -> None:
     paper_service.clear_ephemeral_pipeline_state(paper_id)
 
 
+async def _purge_vector_index(
+    paper_id: str,
+    *,
+    vector_store: _VectorStoreDelete | None = None,
+) -> None:
+    """Drop Chroma rows for *paper_id* so the next pipeline cannot mix old embeddings.
+
+    Best-effort: vector-store outages must not block the reextract escape hatch.
+    """
+    try:
+        store = resolve_vector_store_for_delete(vector_store)
+        await store.delete_by_paper(paper_id)
+    except Exception:
+        logger.warning(
+            "reextract_vector_purge_failed",
+            extra={"paper_id": paper_id},
+            exc_info=True,
+        )
+
+
 async def force_reextract(
     paper_service: PaperService,
     paper_id: str,
     *,
     force: bool = False,
+    vector_store: _VectorStoreDelete | None = None,
 ) -> PaperStatusData:
     """Forcefully re-run the extraction pipeline for an existing paper.
 
-    Clears graph/head artefacts, resets DB status to pending, bumps
-    ``graph_version``, clears pipeline warnings, and re-schedules the pipeline
-    from the stored PDF path.
+    Clears graph/head artefacts, purges Chroma for this paper, resets DB status
+    to pending, bumps ``graph_version``, clears pipeline warnings, and
+    re-schedules the pipeline from the stored PDF path.
 
-    When ``force=True`` and the paper is ``PROCESSING``, in-flight asyncio tasks
-    are cancelled before reset (graceful termination for zombie / stuck runs).
+    Default blocks ``PROCESSING`` with 409. With ``force=true``, cancels
+    in-flight asyncio tasks (pipeline / head-refine / extract / indexing run)
+    before reset. Abort is also best-effort for non-PROCESSING statuses so a
+    late INDEXING worker cannot resurrect stale artefacts after wipe.
     """
     paper = run_async(paper_service._paper_repo.get(paper_id))
     if paper is None:
@@ -74,11 +104,12 @@ async def force_reextract(
             status_code=409,
         )
 
-    if paper.status == PaperStatus.PROCESSING and force:
-        await abort_in_flight_pipeline(paper_id)
+    # Always best-effort abort: covers force PROCESSING and open INDEXING races.
+    await abort_in_flight_pipeline(paper_id)
 
     pdf_path_str = run_async(paper_service._paper_repo.get_pdf_path(paper_id))
     pdf_path = _resolve_pdf_path(pdf_path_str, paper_id)
+    await _purge_vector_index(paper_id, vector_store=vector_store)
     _clear_persisted_artefacts(paper_id)
     _clear_in_memory_state(paper_service, paper_id)
 

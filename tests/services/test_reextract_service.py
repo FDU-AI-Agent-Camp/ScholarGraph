@@ -116,12 +116,23 @@ async def test_force_reextract_clears_state_and_requeues_pipeline(
     service = await restart_paper_service()
     await _seed_previous_run(service, paper_id)
 
-    with patch("backend.services.reextract_service.schedule_paper_pipeline") as scheduler:
+    vector_store = AsyncMock()
+    vector_store.delete_by_paper = AsyncMock()
+
+    with (
+        patch("backend.services.reextract_service.abort_in_flight_pipeline", AsyncMock()),
+        patch(
+            "backend.services.reextract_service.resolve_vector_store_for_delete",
+            return_value=vector_store,
+        ),
+        patch("backend.services.reextract_service.schedule_paper_pipeline") as scheduler,
+    ):
         status = await service.force_reextract(paper_id)
 
     assert status.status == PaperStatus.PENDING
     assert status.percent == 0
     assert status.extract_warnings == []
+    vector_store.delete_by_paper.assert_awaited_once_with(paper_id)
     scheduler.assert_called_once_with(paper_id, sample_pdf)
 
     paper = await service.get_paper(paper_id)
@@ -169,14 +180,21 @@ async def test_force_reextract_overrides_409_with_force_true(
     await _register_paper(paper_id, sample_pdf, status=PaperStatus.PROCESSING)
     service = await restart_paper_service()
     abort = AsyncMock()
+    vector_store = AsyncMock()
+    vector_store.delete_by_paper = AsyncMock()
 
     with (
         patch("backend.services.reextract_service.abort_in_flight_pipeline", abort),
+        patch(
+            "backend.services.reextract_service.resolve_vector_store_for_delete",
+            return_value=vector_store,
+        ),
         patch("backend.services.reextract_service.schedule_paper_pipeline") as scheduler,
     ):
         status = await service.force_reextract(paper_id, force=True)
 
     abort.assert_awaited_once_with(paper_id)
+    vector_store.delete_by_paper.assert_awaited_once_with(paper_id)
     assert status.status == PaperStatus.PENDING
     scheduler.assert_called_once_with(paper_id, sample_pdf)
 
@@ -188,7 +206,14 @@ async def test_force_reextract_rejects_missing_pdf(persistence_env) -> None:
     await _register_paper(paper_id, missing_pdf, status=PaperStatus.READY)
     service = await restart_paper_service()
 
-    with pytest.raises(ApiError) as exc_info:
+    with (
+        patch("backend.services.reextract_service.abort_in_flight_pipeline", AsyncMock()),
+        patch(
+            "backend.services.reextract_service.resolve_vector_store_for_delete",
+            return_value=AsyncMock(delete_by_paper=AsyncMock()),
+        ),
+        pytest.raises(ApiError) as exc_info,
+    ):
         await service.force_reextract(paper_id)
 
     assert exc_info.value.code == "PDF_NOT_FOUND"
@@ -204,7 +229,14 @@ async def test_force_reextract_allows_failed_paper(
     await _register_paper(paper_id, sample_pdf, status=PaperStatus.FAILED)
     service = await restart_paper_service()
 
-    with patch("backend.services.reextract_service.schedule_paper_pipeline") as scheduler:
+    with (
+        patch("backend.services.reextract_service.abort_in_flight_pipeline", AsyncMock()),
+        patch(
+            "backend.services.reextract_service.resolve_vector_store_for_delete",
+            return_value=AsyncMock(delete_by_paper=AsyncMock()),
+        ),
+        patch("backend.services.reextract_service.schedule_paper_pipeline") as scheduler,
+    ):
         status = await service.force_reextract(paper_id)
 
     assert status.status == PaperStatus.PENDING
@@ -221,7 +253,14 @@ async def test_force_reextract_is_idempotent_from_ready(
     await _register_paper(paper_id, sample_pdf, status=PaperStatus.READY)
     service = await restart_paper_service()
 
-    with patch("backend.services.reextract_service.schedule_paper_pipeline") as scheduler:
+    with (
+        patch("backend.services.reextract_service.abort_in_flight_pipeline", AsyncMock()),
+        patch(
+            "backend.services.reextract_service.resolve_vector_store_for_delete",
+            return_value=AsyncMock(delete_by_paper=AsyncMock()),
+        ),
+        patch("backend.services.reextract_service.schedule_paper_pipeline") as scheduler,
+    ):
         await service.force_reextract(paper_id)
         await service.force_reextract(paper_id)
 

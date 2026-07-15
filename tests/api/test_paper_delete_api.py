@@ -148,7 +148,14 @@ async def test_force_reextract_overrides_409(api_env) -> None:
     blocked = await client.post(f"/api/v1/papers/{paper_id}/reextract")
     assert blocked.status_code == 409
 
-    with patch("backend.services.reextract_service.schedule_paper_pipeline") as scheduler:
+    with (
+        patch("backend.services.reextract_service.abort_in_flight_pipeline", AsyncMock()),
+        patch(
+            "backend.services.reextract_service.resolve_vector_store_for_delete",
+            return_value=AsyncMock(delete_by_paper=AsyncMock()),
+        ),
+        patch("backend.services.reextract_service.schedule_paper_pipeline") as scheduler,
+    ):
         forced = await client.post(f"/api/v1/papers/{paper_id}/reextract?force=true")
 
     assert forced.status_code == 200

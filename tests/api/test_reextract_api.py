@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import asyncio
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
 import fitz
 import pytest
@@ -84,7 +84,14 @@ async def test_force_reextract_resets_status_and_clears_warnings(
     service = get_paper_service()
     service.record_extract_warnings(paper_id, [EXTRACT_HEURISTIC_FALLBACK_CODE])
 
-    with patch("backend.services.reextract_service.schedule_paper_pipeline") as scheduler:
+    with (
+        patch("backend.services.reextract_service.abort_in_flight_pipeline", AsyncMock()),
+        patch(
+            "backend.services.reextract_service.resolve_vector_store_for_delete",
+            return_value=AsyncMock(delete_by_paper=AsyncMock()),
+        ),
+        patch("backend.services.reextract_service.schedule_paper_pipeline") as scheduler,
+    ):
         response = await api_client.post(f"/api/v1/papers/{paper_id}/reextract")
 
     assert response.status_code == 200
@@ -112,6 +119,37 @@ async def test_force_reextract_rejects_processing_paper(
 
     assert response.status_code == 409
     assert response.json()["error"]["code"] == "PAPER_ALREADY_PROCESSING"
+
+
+@pytest.mark.asyncio
+async def test_force_reextract_processing_with_force_query(
+    api_client: AsyncClient,
+    mock_pipeline_env: tuple[Path, Path],
+    sample_pdf_path: Path,
+) -> None:
+    """``?force=true`` aborts PROCESSING, purges vectors, and re-queues."""
+    paper_id = await _upload_pdf(api_client, sample_pdf_path)
+    get_pipeline_status_service().start_processing(paper_id)
+
+    vector_store = AsyncMock()
+    vector_store.delete_by_paper = AsyncMock()
+    abort = AsyncMock()
+
+    with (
+        patch("backend.services.reextract_service.abort_in_flight_pipeline", abort),
+        patch(
+            "backend.services.reextract_service.resolve_vector_store_for_delete",
+            return_value=vector_store,
+        ),
+        patch("backend.services.reextract_service.schedule_paper_pipeline") as scheduler,
+    ):
+        response = await api_client.post(f"/api/v1/papers/{paper_id}/reextract?force=true")
+
+    assert response.status_code == 200
+    assert response.json()["data"]["status"] == "pending"
+    abort.assert_awaited_once_with(paper_id)
+    vector_store.delete_by_paper.assert_awaited_once_with(paper_id)
+    scheduler.assert_called_once()
 
 
 @pytest.mark.asyncio

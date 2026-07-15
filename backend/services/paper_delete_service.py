@@ -23,7 +23,10 @@ class _VectorStoreDelete(Protocol):
     async def delete_by_paper(self, paper_id: str) -> None: ...
 
 
-def _resolve_vector_store(vector_store: _VectorStoreDelete | None) -> _VectorStoreDelete:
+def resolve_vector_store_for_delete(
+    vector_store: _VectorStoreDelete | None = None,
+) -> _VectorStoreDelete:
+    """Resolve a vector store that can ``delete_by_paper`` (tests may inject)."""
     if vector_store is not None:
         return vector_store
     from backend.rag.hybrid_retriever import get_hybrid_retriever
@@ -41,6 +44,10 @@ def _resolve_vector_store(vector_store: _VectorStoreDelete | None) -> _VectorSto
     from backend.services.paper_service import get_paper_service
 
     return VectorStore(paper_service=get_paper_service())
+
+
+def _resolve_vector_store(vector_store: _VectorStoreDelete | None) -> _VectorStoreDelete:
+    return resolve_vector_store_for_delete(vector_store)
 
 
 def _unlink_pdf(pdf_path_str: str | None) -> None:
