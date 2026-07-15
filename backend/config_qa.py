@@ -105,6 +105,19 @@ class QaSettingsMixin:
         validation_alias="PROCESS_WATCHDOG_INTERVAL_SECONDS",
         description="Dedicated OS-thread sleep interval between sync processing scans.",
     )
+    process_orphan_grace_seconds: float = Field(
+        default=10.0,
+        ge=0.0,
+        validation_alias="PROCESS_ORPHAN_GRACE_SECONDS",
+        description="Cold-boot tombstone grace ε: only fail pending/processing with "
+        "updated_at older than boot_time − ε (rolling-update safety).",
+    )
+    pending_queue_timeout_seconds: float = Field(
+        default=3600.0,
+        gt=0.0,
+        validation_alias="PENDING_QUEUE_TIMEOUT_SECONDS",
+        description="Fail PENDING papers whose updated_at is older than this (queue backlog).",
+    )
 
     @property
     def qa_model_effective(self) -> str:

@@ -7,16 +7,20 @@ from pathlib import Path
 
 import pytest
 from backend.config import get_settings
-from backend.db.models import PaperRow, PipelineRunRow
 from backend.db.base import get_async_session_factory
+from backend.db.models import PaperRow, PipelineRunRow
 from backend.graph.state import STAGE_PERCENT
 from backend.pipeline.processing_watchdog import (
     PROCESS_ORPHANED_CODE,
     PROCESS_ORPHANED_MESSAGE,
     PROCESS_TIMEOUT_CODE,
     PROCESS_TIMEOUT_MESSAGE,
+    QUEUE_TIMEOUT_CODE,
+    QUEUE_TIMEOUT_MESSAGE,
     reconcile_processing_on_startup,
     reset_processing_watchdog_sync_engine,
+    scan_and_fail_orphaned_processing,
+    scan_and_fail_stuck_pending,
     scan_and_fail_stuck_processing,
     scan_and_fail_stuck_processing_sync,
     start_processing_watchdog,
@@ -27,7 +31,7 @@ from backend.repositories.pipeline_repository import get_pipeline_repository
 from backend.schemas.paper import PaperStatus, PaperStatusData, PipelineStage
 from backend.services.errors import PROCESS_ORPHANED_CODE as ERR_ORPHAN
 from backend.services.errors import PROCESS_TIMEOUT_CODE as ERR_TIMEOUT
-
+from backend.services.errors import QUEUE_TIMEOUT_CODE as ERR_QUEUE
 from tests.helpers.persistence_testkit import (
     init_isolated_database,
     register_test_paper,
@@ -43,6 +47,8 @@ def processing_watchdog_db(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setenv("PROCESS_WATCHDOG_ENABLED", "true")
     monkeypatch.setenv("PROCESS_WATCHDOG_SECONDS", "900")
     monkeypatch.setenv("PROCESS_WATCHDOG_INTERVAL_SECONDS", "60")
+    monkeypatch.setenv("PROCESS_ORPHAN_GRACE_SECONDS", "10")
+    monkeypatch.setenv("PENDING_QUEUE_TIMEOUT_SECONDS", "3600")
     get_settings.cache_clear()
     reset_persistence_singletons()
     reset_processing_watchdog_sync_engine()
@@ -96,6 +102,7 @@ async def _put_paper_pending(paper_id: str, *, updated_at: datetime) -> None:
 def test_error_codes_are_stable() -> None:
     assert PROCESS_ORPHANED_CODE == ERR_ORPHAN == "PROCESS_ORPHANED"
     assert PROCESS_TIMEOUT_CODE == ERR_TIMEOUT == "PROCESS_TIMEOUT"
+    assert QUEUE_TIMEOUT_CODE == ERR_QUEUE == "QUEUE_TIMEOUT"
 
 
 @pytest.mark.asyncio
@@ -126,7 +133,8 @@ async def test_wall_clock_fails_stale_processing(processing_watchdog_db) -> None
 
 
 @pytest.mark.asyncio
-async def test_wall_clock_does_not_fail_stale_pending(processing_watchdog_db) -> None:
+async def test_wall_clock_processing_scan_skips_pending(processing_watchdog_db) -> None:
+    """Dedicated PROCESSING timeout path must not mis-label pending as PROCESS_TIMEOUT."""
     now = datetime.now(UTC)
     stale = now - timedelta(hours=2)
     await _put_paper_pending("stale-pending", updated_at=stale)
@@ -142,10 +150,54 @@ async def test_wall_clock_does_not_fail_stale_pending(processing_watchdog_db) ->
 
 
 @pytest.mark.asyncio
-async def test_cold_boot_reconcile_fails_pending_and_processing(processing_watchdog_db) -> None:
+@pytest.mark.process_release_gate
+async def test_wall_clock_fails_stale_pending_as_queue_timeout(processing_watchdog_db) -> None:
     now = datetime.now(UTC)
-    await _put_paper_pending("orphan-pending", updated_at=now)
-    await _put_paper_processing("orphan-proc", updated_at=now)
+    stale = now - timedelta(seconds=3601)
+    fresh = now - timedelta(seconds=600)
+    await _put_paper_pending("stale-q", updated_at=stale)
+    await _put_paper_pending("fresh-q", updated_at=fresh)
+
+    failed_ids = await scan_and_fail_stuck_pending(now=now, stuck_after_seconds=3600.0)
+    assert failed_ids == ["stale-q"]
+
+    stale_row = await get_pipeline_repository().get_latest("stale-q")
+    assert stale_row is not None
+    assert stale_row.status == PaperStatus.FAILED
+    assert stale_row.error_code == QUEUE_TIMEOUT_CODE
+    assert stale_row.message == QUEUE_TIMEOUT_MESSAGE
+
+    fresh_row = await get_pipeline_repository().get_latest("fresh-q")
+    assert fresh_row is not None
+    assert fresh_row.status == PaperStatus.PENDING
+
+
+@pytest.mark.asyncio
+@pytest.mark.process_release_gate
+async def test_cold_boot_spares_fresh_pending_within_grace(processing_watchdog_db) -> None:
+    """Rolling-update safety: updated_at within ε of boot must not be force-failed."""
+    now = datetime.now(UTC)
+    within_grace = now - timedelta(seconds=3)
+    await _put_paper_pending("fresh-pending", updated_at=within_grace)
+    await _put_paper_processing("fresh-proc", updated_at=within_grace)
+
+    failed_ids = await scan_and_fail_orphaned_processing(now=now)
+    assert failed_ids == []
+
+    for pid in ("fresh-pending", "fresh-proc"):
+        latest = await get_pipeline_repository().get_latest(pid)
+        assert latest is not None
+        assert latest.status in {PaperStatus.PENDING, PaperStatus.PROCESSING}
+
+
+@pytest.mark.asyncio
+async def test_cold_boot_reconcile_fails_stale_pending_and_processing(
+    processing_watchdog_db,
+) -> None:
+    now = datetime.now(UTC)
+    stale = now - timedelta(seconds=30)
+    await _put_paper_pending("orphan-pending", updated_at=stale)
+    await _put_paper_processing("orphan-proc", updated_at=stale)
 
     failed_ids = await reconcile_processing_on_startup()
     assert set(failed_ids) == {"orphan-pending", "orphan-proc"}
@@ -192,17 +244,24 @@ async def test_cold_boot_lifespan_clears_processing_zombies(
             assert latest.error_code == PROCESS_ORPHANED_CODE
 
 
-def test_sync_scan_fails_stale_processing(processing_watchdog_db) -> None:
+def test_sync_scan_fails_stale_processing_and_pending(processing_watchdog_db) -> None:
     now = datetime.now(UTC)
-    stale = now - timedelta(seconds=1000)
-    run_async(_put_paper_processing("sync-stale", updated_at=stale))
+    stale_proc = now - timedelta(seconds=1000)
+    stale_pending = now - timedelta(seconds=4000)
+    run_async(_put_paper_processing("sync-stale", updated_at=stale_proc))
+    run_async(_put_paper_pending("sync-pending", updated_at=stale_pending))
 
-    failed = scan_and_fail_stuck_processing_sync(now=now, stuck_after_seconds=900.0)
-    assert failed == ["sync-stale"]
-    latest = run_async(get_pipeline_repository().get_latest("sync-stale"))
-    assert latest is not None
-    assert latest.status == PaperStatus.FAILED
-    assert latest.error_code == PROCESS_TIMEOUT_CODE
+    failed = scan_and_fail_stuck_processing_sync(
+        now=now,
+        stuck_after_seconds=900.0,
+        pending_stuck_after_seconds=3600.0,
+    )
+    assert set(failed) == {"sync-stale", "sync-pending"}
+
+    proc = run_async(get_pipeline_repository().get_latest("sync-stale"))
+    assert proc is not None and proc.error_code == PROCESS_TIMEOUT_CODE
+    pend = run_async(get_pipeline_repository().get_latest("sync-pending"))
+    assert pend is not None and pend.error_code == QUEUE_TIMEOUT_CODE
 
 
 def test_start_stop_processing_watchdog_thread(processing_watchdog_db, monkeypatch: pytest.MonkeyPatch) -> None:

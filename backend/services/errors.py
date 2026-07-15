@@ -10,6 +10,8 @@ PROCESS_ORPHANED_CODE = "PROCESS_ORPHANED"
 PROCESS_ORPHANED_MESSAGE = "系统重启导致解析中断，请尝试重新提取。"
 PROCESS_TIMEOUT_CODE = "PROCESS_TIMEOUT"
 PROCESS_TIMEOUT_MESSAGE = "解析超时未推进，任务已标记失败，请尝试重新提取。"
+QUEUE_TIMEOUT_CODE = "QUEUE_TIMEOUT"
+QUEUE_TIMEOUT_MESSAGE = "排队超时，服务器任务积压过久，请稍后重新上传或强制重新抽取。"
 
 
 class ServiceError(Exception):

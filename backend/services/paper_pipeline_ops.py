@@ -268,11 +268,16 @@ class PaperPipelineOpsMixin:
             limit=limit,
         )
 
-    async def list_orphan_pipeline_paper_ids(self, *, limit: int = 200) -> list[str]:
+    async def list_orphan_pipeline_paper_ids(
+        self,
+        *,
+        older_than: datetime | None = None,
+        limit: int = 200,
+    ) -> list[str]:
         """List pending/processing papers for cold-boot orphan reconcile."""
         from backend.repositories.pipeline_sync import list_orphan_pipeline_paper_ids_sync
 
-        return list_orphan_pipeline_paper_ids_sync(limit=limit)
+        return list_orphan_pipeline_paper_ids_sync(older_than=older_than, limit=limit)
 
     def list_stuck_processing_paper_ids_sync(
         self,
@@ -284,6 +289,17 @@ class PaperPipelineOpsMixin:
         from backend.repositories.pipeline_sync import list_stuck_processing_paper_ids_sync
 
         return list_stuck_processing_paper_ids_sync(older_than=older_than, limit=limit)
+
+    def list_stuck_pending_paper_ids_sync(
+        self,
+        *,
+        older_than: datetime,
+        limit: int = 200,
+    ) -> list[str]:
+        """Sync listing of wall-clock stuck PENDING papers (queue backlog)."""
+        from backend.repositories.pipeline_sync import list_stuck_pending_paper_ids_sync
+
+        return list_stuck_pending_paper_ids_sync(older_than=older_than, limit=limit)
 
     def fail_orphaned_pipeline_paper_sync(
         self,

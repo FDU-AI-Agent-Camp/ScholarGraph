@@ -1,7 +1,11 @@
 """Processing / pending orphan heal — cold-boot reconcile + wall-clock watchdog.
 
-Mirrors P13 indexing watchdog shape (dedicated daemon thread + sync SQL scans)
-but promotes to ``failed`` with ``PROCESS_ORPHANED`` / ``PROCESS_TIMEOUT``.
+Cold-boot only tombs rows with ``updated_at < boot_time − ε`` (rolling-update safety).
+Daemon dual thresholds:
+- PROCESSING → ``PROCESS_TIMEOUT`` (default 900s)
+- PENDING → ``QUEUE_TIMEOUT`` (default 3600s)
+
+Never silently requeues; failed rows stay failed until user force-reextract.
 """
 
 from __future__ import annotations
@@ -19,6 +23,8 @@ from backend.services.errors import (
     PROCESS_ORPHANED_MESSAGE,
     PROCESS_TIMEOUT_CODE,
     PROCESS_TIMEOUT_MESSAGE,
+    QUEUE_TIMEOUT_CODE,
+    QUEUE_TIMEOUT_MESSAGE,
 )
 
 logger = logging.getLogger(__name__)
@@ -49,31 +55,55 @@ def clear_processing_watchdog_tick_timestamps() -> None:
     _WATCHDOG_TICK_MONOTONIC.clear()
 
 
+def _cutoff_before(
+    *,
+    now: datetime | None = None,
+    after_seconds: float,
+) -> datetime:
+    clock = now or datetime.now(UTC)
+    return clock - timedelta(seconds=after_seconds)
+
+
 def _process_stuck_older_than(
     *,
     now: datetime | None = None,
     stuck_after_seconds: float | None = None,
 ) -> datetime:
     settings = get_settings()
-    clock = now or datetime.now(UTC)
-    stuck_s = (
-        stuck_after_seconds if stuck_after_seconds is not None else settings.process_watchdog_seconds
-    )
-    return clock - timedelta(seconds=stuck_s)
+    stuck_s = stuck_after_seconds if stuck_after_seconds is not None else settings.process_watchdog_seconds
+    return _cutoff_before(now=now, after_seconds=stuck_s)
 
 
-async def scan_and_fail_orphaned_processing(*, force_all: bool = True) -> list[str]:
-    """Fail leftover pending/processing rows (cold-boot uses ``force_all=True``)."""
+def _pending_stuck_older_than(
+    *,
+    now: datetime | None = None,
+    stuck_after_seconds: float | None = None,
+) -> datetime:
+    settings = get_settings()
+    stuck_s = stuck_after_seconds if stuck_after_seconds is not None else settings.pending_queue_timeout_seconds
+    return _cutoff_before(now=now, after_seconds=stuck_s)
+
+
+def _cold_boot_older_than(*, now: datetime | None = None) -> datetime:
+    """``t_boot − ε`` — only rows older than this grace window may be orphaned."""
+    settings = get_settings()
+    return _cutoff_before(now=now, after_seconds=float(settings.process_orphan_grace_seconds))
+
+
+async def scan_and_fail_orphaned_processing(
+    *,
+    now: datetime | None = None,
+) -> list[str]:
+    """Fail leftover pending/processing with ``updated_at < boot − ε`` (cold-boot)."""
     from backend.services.paper_service import get_paper_service
 
     settings = get_settings()
     if not settings.process_watchdog_enabled:
         return []
-    if not force_all:
-        return await scan_and_fail_stuck_processing()
 
+    older_than = _cold_boot_older_than(now=now)
     paper_service = get_paper_service()
-    candidate_ids = await paper_service.list_orphan_pipeline_paper_ids()
+    candidate_ids = await paper_service.list_orphan_pipeline_paper_ids(older_than=older_than)
     failed: list[str] = []
     for paper_id in candidate_ids:
         try:
@@ -117,12 +147,41 @@ async def scan_and_fail_stuck_processing(
     return failed
 
 
-async def reconcile_processing_on_startup() -> list[str]:
-    """Cold-boot pass: any leftover pending/processing row is orphaned."""
+async def scan_and_fail_stuck_pending(
+    *,
+    now: datetime | None = None,
+    stuck_after_seconds: float | None = None,
+) -> list[str]:
+    """Fail PENDING papers past queue wall-clock (async path) → ``QUEUE_TIMEOUT``."""
+    from backend.services.paper_service import get_paper_service
+
     settings = get_settings()
     if not settings.process_watchdog_enabled:
         return []
-    failed = await scan_and_fail_orphaned_processing(force_all=True)
+
+    older_than = _pending_stuck_older_than(now=now, stuck_after_seconds=stuck_after_seconds)
+    paper_service = get_paper_service()
+    candidate_ids = paper_service.list_stuck_pending_paper_ids_sync(older_than=older_than)
+    failed: list[str] = []
+    for paper_id in candidate_ids:
+        try:
+            if await paper_service.fail_orphaned_pipeline_paper(
+                paper_id,
+                error_code=QUEUE_TIMEOUT_CODE,
+                message=QUEUE_TIMEOUT_MESSAGE,
+            ):
+                failed.append(paper_id)
+        except Exception:
+            logger.exception("processing_watchdog_fail_failed", extra={"paper_id": paper_id})
+    return failed
+
+
+async def reconcile_processing_on_startup() -> list[str]:
+    """Cold-boot pass: tombstone only pre-grace pending/processing zombies."""
+    settings = get_settings()
+    if not settings.process_watchdog_enabled:
+        return []
+    failed = await scan_and_fail_orphaned_processing()
     if failed:
         logger.warning(
             "%s processing_watchdog_cold_boot_reconcile failed_count=%s paper_ids=%s",
@@ -133,6 +192,7 @@ async def reconcile_processing_on_startup() -> list[str]:
                 "failed_count": len(failed),
                 "paper_ids": failed,
                 "process_watchdog_heal": True,
+                "grace_seconds": settings.process_orphan_grace_seconds,
             },
         )
     return failed
@@ -142,19 +202,24 @@ def scan_and_fail_stuck_processing_sync(
     *,
     now: datetime | None = None,
     stuck_after_seconds: float | None = None,
+    pending_stuck_after_seconds: float | None = None,
 ) -> list[str]:
-    """Sync stuck-PROCESSING fail used by the dedicated monitor thread."""
+    """Sync dual-threshold fail used by the dedicated monitor thread.
+
+    Scans PROCESSING (``PROCESS_TIMEOUT``) and PENDING (``QUEUE_TIMEOUT``).
+    Returns the union of failed paper_ids (processing first, then pending).
+    """
     from backend.services.paper_service import get_paper_service
 
     settings = get_settings()
     if not settings.process_watchdog_enabled:
         return []
 
-    older_than = _process_stuck_older_than(now=now, stuck_after_seconds=stuck_after_seconds)
     paper_service = get_paper_service()
-    candidate_ids = paper_service.list_stuck_processing_paper_ids_sync(older_than=older_than)
     failed: list[str] = []
-    for paper_id in candidate_ids:
+
+    processing_cutoff = _process_stuck_older_than(now=now, stuck_after_seconds=stuck_after_seconds)
+    for paper_id in paper_service.list_stuck_processing_paper_ids_sync(older_than=processing_cutoff):
         try:
             if paper_service.fail_orphaned_pipeline_paper_sync(
                 paper_id,
@@ -164,6 +229,19 @@ def scan_and_fail_stuck_processing_sync(
                 failed.append(paper_id)
         except Exception:
             logger.exception("processing_watchdog_fail_failed", extra={"paper_id": paper_id})
+
+    pending_cutoff = _pending_stuck_older_than(now=now, stuck_after_seconds=pending_stuck_after_seconds)
+    for paper_id in paper_service.list_stuck_pending_paper_ids_sync(older_than=pending_cutoff):
+        try:
+            if paper_service.fail_orphaned_pipeline_paper_sync(
+                paper_id,
+                error_code=QUEUE_TIMEOUT_CODE,
+                message=QUEUE_TIMEOUT_MESSAGE,
+            ):
+                failed.append(paper_id)
+        except Exception:
+            logger.exception("processing_watchdog_fail_failed", extra={"paper_id": paper_id})
+
     return failed
 
 
@@ -183,7 +261,19 @@ def _watchdog_thread_main() -> None:
             },
         )
         try:
-            scan_and_fail_stuck_processing_sync()
+            healed = scan_and_fail_stuck_processing_sync()
+            if healed:
+                logger.warning(
+                    "%s processing_watchdog_wall_clock_heal failed_count=%s paper_ids=%s",
+                    PROCESS_WATCHDOG_HEAL_TAG,
+                    len(healed),
+                    healed,
+                    extra={
+                        "failed_count": len(healed),
+                        "paper_ids": healed,
+                        "process_watchdog_heal": True,
+                    },
+                )
         except Exception:
             logger.exception("processing_watchdog_scan_failed")
         if _WATCHDOG_THREAD_STOP.wait(timeout=interval):
@@ -214,6 +304,8 @@ def start_processing_watchdog() -> None:
                 "thread_name": PROCESSING_WATCHDOG_THREAD_NAME,
                 "interval_seconds": settings.process_watchdog_interval_seconds,
                 "stuck_after_seconds": settings.process_watchdog_seconds,
+                "pending_queue_timeout_seconds": settings.pending_queue_timeout_seconds,
+                "orphan_grace_seconds": settings.process_orphan_grace_seconds,
             },
         )
 
@@ -249,12 +341,15 @@ __all__ = [
     "PROCESS_TIMEOUT_MESSAGE",
     "PROCESS_WATCHDOG_HEAL_TAG",
     "PROCESSING_WATCHDOG_THREAD_NAME",
+    "QUEUE_TIMEOUT_CODE",
+    "QUEUE_TIMEOUT_MESSAGE",
     "clear_processing_watchdog_tick_timestamps",
     "processing_watchdog_thread_is_alive",
     "processing_watchdog_tick_monotonic_timestamps",
     "reconcile_processing_on_startup",
     "reset_processing_watchdog_sync_engine",
     "scan_and_fail_orphaned_processing",
+    "scan_and_fail_stuck_pending",
     "scan_and_fail_stuck_processing",
     "scan_and_fail_stuck_processing_sync",
     "start_processing_watchdog",

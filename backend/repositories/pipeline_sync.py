@@ -159,17 +159,34 @@ _ORPHAN_PIPELINE_STATUSES = frozenset(
 )
 
 
-def list_orphan_pipeline_paper_ids_sync(*, limit: int = 200) -> list[str]:
-    """Return paper_ids stuck in pending/processing (cold-boot tombstone scan)."""
+def list_orphan_pipeline_paper_ids_sync(
+    *,
+    older_than: datetime | None = None,
+    limit: int = 200,
+) -> list[str]:
+    """Return pending/processing paper_ids for cold-boot tombstone scan.
+
+    When ``older_than`` is set, only rows whose ``COALESCE(run.updated_at, paper.updated_at)``
+    is strictly before that instant are returned (boot − ε grace).
+    """
     factory = get_pipeline_sync_session_factory()
+    candidate_ids: list[str] = []
+    cutoff = _as_utc(older_than) if older_than is not None else None
     with factory() as session:
         stmt = (
-            select(PaperRow.paper_id)
+            select(PipelineRunRow, PaperRow)
+            .join(PaperRow, PaperRow.paper_id == PipelineRunRow.paper_id)
             .where(PaperRow.status.in_(tuple(_ORPHAN_PIPELINE_STATUSES)))
-            .order_by(PaperRow.updated_at.asc())
+            .order_by(PipelineRunRow.updated_at.asc())
             .limit(limit)
         )
-        return list(session.scalars(stmt).all())
+        for run, paper in session.execute(stmt).all():
+            if cutoff is not None:
+                stamp = run.updated_at or paper.updated_at
+                if stamp is not None and _as_utc(stamp) >= cutoff:
+                    continue
+            candidate_ids.append(run.paper_id)
+    return candidate_ids
 
 
 def list_stuck_processing_paper_ids_sync(
@@ -178,6 +195,32 @@ def list_stuck_processing_paper_ids_sync(
     limit: int = 200,
 ) -> list[str]:
     """Return PROCESSING paper_ids whose run/paper ``updated_at`` is older than *older_than*."""
+    return _list_stuck_status_paper_ids_sync(
+        status=PaperStatus.PROCESSING.value,
+        older_than=older_than,
+        limit=limit,
+    )
+
+
+def list_stuck_pending_paper_ids_sync(
+    *,
+    older_than: datetime,
+    limit: int = 200,
+) -> list[str]:
+    """Return PENDING paper_ids whose run/paper ``updated_at`` is older than *older_than*."""
+    return _list_stuck_status_paper_ids_sync(
+        status=PaperStatus.PENDING.value,
+        older_than=older_than,
+        limit=limit,
+    )
+
+
+def _list_stuck_status_paper_ids_sync(
+    *,
+    status: str,
+    older_than: datetime,
+    limit: int = 200,
+) -> list[str]:
     factory = get_pipeline_sync_session_factory()
     candidate_ids: list[str] = []
     cutoff = _as_utc(older_than)
@@ -185,7 +228,7 @@ def list_stuck_processing_paper_ids_sync(
         stmt = (
             select(PipelineRunRow, PaperRow)
             .join(PaperRow, PaperRow.paper_id == PipelineRunRow.paper_id)
-            .where(PaperRow.status == PaperStatus.PROCESSING.value)
+            .where(PaperRow.status == status)
             .order_by(PipelineRunRow.updated_at.asc())
             .limit(limit)
         )
