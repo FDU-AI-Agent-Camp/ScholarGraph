@@ -1,9 +1,14 @@
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
+
 import { describe, expect, it } from 'vitest'
 
 import {
   EXTRACT_HEURISTIC_FALLBACK_CODE,
   EXTRACT_HEURISTIC_FALLBACK_MESSAGE,
   EXTRACT_WARNING_UNKNOWN_MESSAGE,
+  MVP_SKELETON_PREVIEW_CODE,
+  MVP_SKELETON_PREVIEW_MESSAGE,
   RAG_INDEXING_STUCK_TIMEOUT_CODE,
   RAG_INDEXING_STUCK_TIMEOUT_MESSAGE,
   RAG_INDEX_TIMEOUT_CODE,
@@ -13,11 +18,51 @@ import {
   resolveExtractWarningMessages,
 } from '@/utils/extractWarnings'
 
+const REPO_ROOT = resolve(__dirname, '../../..')
+const EXTRACT_CONSTANTS_PY = resolve(REPO_ROOT, 'backend/agents/extract_constants.py')
+
+function loadBackendExtractWarningCatalog(): Array<{ code: string; message: string }> {
+  const text = readFileSync(EXTRACT_CONSTANTS_PY, 'utf8')
+  const codes = new Map<string, string>()
+  const messages = new Map<string, string>()
+  for (const match of text.matchAll(/^([A-Z0-9_]+_CODE)\s*=\s*"([^"]+)"/gm)) {
+    codes.set(match[1], match[2])
+  }
+  for (const match of text.matchAll(/^([A-Z0-9_]+_MESSAGE)\s*=\s*"([^"]+)"/gm)) {
+    messages.set(match[1], match[2])
+  }
+  const pairs: Array<{ code: string; message: string }> = []
+  for (const [codeName, code] of codes) {
+    const messageName = `${codeName.slice(0, -'_CODE'.length)}_MESSAGE`
+    const message = messages.get(messageName)
+    if (message) {
+      pairs.push({ code, message })
+    }
+  }
+  return pairs
+}
+
 describe('extractWarnings', () => {
   it('maps extract_heuristic_fallback to frozen user message', () => {
     expect(resolveExtractWarningMessages([EXTRACT_HEURISTIC_FALLBACK_CODE])).toEqual([
       EXTRACT_HEURISTIC_FALLBACK_MESSAGE,
     ])
+  })
+
+  it('maps mvp_skeleton_preview to frozen MVP skeleton copy', () => {
+    expect(resolveExtractWarningMessages([MVP_SKELETON_PREVIEW_CODE])).toEqual([MVP_SKELETON_PREVIEW_MESSAGE])
+    expect(resolveExtractWarningDisplays([MVP_SKELETON_PREVIEW_CODE])).toEqual([
+      { message: MVP_SKELETON_PREVIEW_MESSAGE },
+    ])
+  })
+
+  it('registers every backend extract_constants CODE/MESSAGE pair (BE ⊂ FE)', () => {
+    const catalog = loadBackendExtractWarningCatalog()
+    expect(catalog.length).toBeGreaterThan(0)
+    for (const { code, message } of catalog) {
+      expect(resolveExtractWarningMessages([code]), `missing FE mapping for ${code}`).toEqual([message])
+      expect(resolveExtractWarningDisplays([code])[0]?.technicalCode).toBeUndefined()
+    }
   })
 
   it('returns empty list when codes are absent', () => {

@@ -2,8 +2,39 @@
 
 export const EXTRACT_HEURISTIC_FALLBACK_CODE = 'extract_heuristic_fallback' as const
 
-/** Frozen user-visible copy (progress.md §F.2.3). */
+/** Frozen user-visible copy (progress.md §F.2.3 / backend extract_constants). */
 export const EXTRACT_HEURISTIC_FALLBACK_MESSAGE = '触发启发式Fallback!' as const
+
+/** MVP skeleton preview while deep nodes assemble in the background. */
+export const MVP_SKELETON_PREVIEW_CODE = 'mvp_skeleton_preview' as const
+
+export const MVP_SKELETON_PREVIEW_MESSAGE =
+  '当前为 MVP 宏观骨架图谱，深度节点仍在后台组装中。' as const
+
+export const EXTRACT_LLM_TIMEOUT_CODE = 'extract_llm_timeout' as const
+
+export const EXTRACT_LLM_TIMEOUT_MESSAGE = 'LLM 调用超时，已降级为启发式Fallback。' as const
+
+export const EXTRACT_LLM_RATE_LIMITED_CODE = 'extract_llm_rate_limited' as const
+
+export const EXTRACT_LLM_RATE_LIMITED_MESSAGE = 'LLM 触发限流，已降级为启发式Fallback。' as const
+
+export const EXTRACT_LLM_JSON_INVALID_CODE = 'extract_llm_json_invalid' as const
+
+export const EXTRACT_LLM_JSON_INVALID_MESSAGE = 'LLM 返回非合法 JSON，已降级为启发式Fallback。' as const
+
+export const EXTRACT_SCHEMA_VALIDATION_FAILED_CODE = 'extract_schema_validation_failed' as const
+
+export const EXTRACT_SCHEMA_VALIDATION_FAILED_MESSAGE = 'Schema 校验失败，已降级为启发式Fallback。' as const
+
+export const EXTRACT_CONTEXT_WINDOW_EXCEEDED_CODE = 'extract_context_window_exceeded' as const
+
+export const EXTRACT_CONTEXT_WINDOW_EXCEEDED_MESSAGE = '上下文窗口超限，已降级为启发式Fallback。' as const
+
+export const LOW_CONFIDENCE_GRAPH_CODE = 'low_confidence_graph' as const
+
+export const LOW_CONFIDENCE_GRAPH_MESSAGE =
+  '图谱质量未达置信门控，建议人工复核或重新抽取。' as const
 
 /** P13 micro wait_for — RAG index timed out; paper remains interactive. */
 export const RAG_INDEX_TIMEOUT_CODE = 'rag_index_timeout' as const
@@ -22,6 +53,13 @@ export const EXTRACT_WARNING_UNKNOWN_MESSAGE = '建图已完成，检测到局�
 
 const EXTRACT_WARNING_MESSAGES: Readonly<Record<string, string>> = {
   [EXTRACT_HEURISTIC_FALLBACK_CODE]: EXTRACT_HEURISTIC_FALLBACK_MESSAGE,
+  [MVP_SKELETON_PREVIEW_CODE]: MVP_SKELETON_PREVIEW_MESSAGE,
+  [EXTRACT_LLM_TIMEOUT_CODE]: EXTRACT_LLM_TIMEOUT_MESSAGE,
+  [EXTRACT_LLM_RATE_LIMITED_CODE]: EXTRACT_LLM_RATE_LIMITED_MESSAGE,
+  [EXTRACT_LLM_JSON_INVALID_CODE]: EXTRACT_LLM_JSON_INVALID_MESSAGE,
+  [EXTRACT_SCHEMA_VALIDATION_FAILED_CODE]: EXTRACT_SCHEMA_VALIDATION_FAILED_MESSAGE,
+  [EXTRACT_CONTEXT_WINDOW_EXCEEDED_CODE]: EXTRACT_CONTEXT_WINDOW_EXCEEDED_MESSAGE,
+  [LOW_CONFIDENCE_GRAPH_CODE]: LOW_CONFIDENCE_GRAPH_MESSAGE,
   [RAG_INDEX_TIMEOUT_CODE]: RAG_INDEX_TIMEOUT_MESSAGE,
   [RAG_INDEXING_STUCK_TIMEOUT_CODE]: RAG_INDEXING_STUCK_TIMEOUT_MESSAGE,
 }
