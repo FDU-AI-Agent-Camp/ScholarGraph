@@ -299,3 +299,42 @@ async def test_delete_processing_with_force_cascades(
     assert GraphStore().load(paper_id) is None
     assert not sample_pdf.is_file()
     vector_store.delete_by_paper.assert_awaited_once_with(paper_id)
+
+
+@pytest.mark.asyncio
+async def test_delete_hard_fails_when_pdf_unlink_leaves_residue(
+    persistence_env,
+    sample_pdf: Path,
+) -> None:
+    """Disk residue must abort before SQL wipe (zero-footprint contract)."""
+    paper_id = "delete-pdf-residue"
+    await _register_paper(paper_id, sample_pdf, status=PaperStatus.READY)
+    service = await restart_paper_service()
+    vector_store = AsyncMock()
+    vector_store.delete_by_paper = AsyncMock()
+
+    def _unlink_fails(_path: str | None) -> bool:
+        raise ApiError(
+            "DISK_ARTEFACT_DELETE_FAILED",
+            "simulated pdf residue",
+            status_code=500,
+        )
+
+    with (
+        patch(
+            "backend.services.paper_delete_service._resolve_vector_store",
+            return_value=vector_store,
+        ),
+        patch(
+            "backend.services.paper_delete_service.abort_in_flight_pipeline",
+            AsyncMock(),
+        ),
+        patch("backend.services.paper_delete_service._unlink_pdf", side_effect=_unlink_fails),
+    ):
+        with pytest.raises(ApiError) as exc_info:
+            await service.delete_paper(paper_id, force=False)
+
+    assert exc_info.value.code == "DISK_ARTEFACT_DELETE_FAILED"
+    assert exc_info.value.status_code == 500
+    assert await PaperRepository().get(paper_id) is not None
+    assert sample_pdf.is_file()

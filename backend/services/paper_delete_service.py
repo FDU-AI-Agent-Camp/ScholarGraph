@@ -20,6 +20,7 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 VECTOR_DELETE_UNAVAILABLE_CODE = "VECTOR_STORE_UNAVAILABLE"
+DISK_ARTEFACT_DELETE_FAILED_CODE = "DISK_ARTEFACT_DELETE_FAILED"
 _ACTIVE_PIPELINE_STATUSES = frozenset({PaperStatus.PROCESSING, PaperStatus.INDEXING})
 
 
@@ -55,16 +56,99 @@ def _resolve_vector_store(vector_store: _VectorStoreDelete | None) -> _VectorSto
 
 
 def _unlink_pdf(pdf_path_str: str | None) -> bool:
+    """Unlink the uploaded PDF. Raise when the file still exists after the attempt."""
     if not pdf_path_str:
         return False
     path = Path(pdf_path_str)
+    existed = path.is_file()
     try:
-        existed = path.is_file()
         path.unlink(missing_ok=True)
-        return existed
-    except OSError:
+    except OSError as exc:
+        if path.is_file():
+            raise ApiError(
+                DISK_ARTEFACT_DELETE_FAILED_CODE,
+                f"无法删除 PDF 残留文件，已中止级联以免留下半删除状态: {path}",
+                status_code=500,
+            ) from exc
         logger.warning("paper_delete_pdf_unlink_failed", extra={"path": str(path)}, exc_info=True)
         return False
+    if path.is_file():
+        raise ApiError(
+            DISK_ARTEFACT_DELETE_FAILED_CODE,
+            f"PDF 在 unlink 后仍存在，已中止级联以免留下半删除状态: {path}",
+            status_code=500,
+        )
+    return existed
+
+
+def _list_graph_dir_artefacts(paper_id: str) -> list[Path]:
+    base = Path(get_settings().graph_data_dir)
+    if not base.is_dir():
+        return []
+    owned: list[Path] = []
+    for path in base.iterdir():
+        if not path.is_file():
+            continue
+        name = path.name
+        if name == f"{paper_id}.json" or name.startswith(f"{paper_id}.") or name.startswith(f"{paper_id}_"):
+            owned.append(path)
+    return owned
+
+
+def _purge_graph_dir_artefacts(paper_id: str) -> int:
+    """Zero-footprint: unlink all GRAPH_DATA_DIR files owned by *paper_id*.
+
+    Covers ``{id}.json``, ``{id}.head.json``, and any ``{id}.*`` / ``{id}_*`` sidecars.
+    Hard-fails if any owned file remains so DELETE cannot report success with residue.
+    """
+    owned = _list_graph_dir_artefacts(paper_id)
+    removed = 0
+    leftovers: list[str] = []
+    for path in owned:
+        try:
+            path.unlink(missing_ok=True)
+            removed += 1
+        except OSError:
+            logger.warning(
+                "paper_delete_graph_artefact_unlink_failed",
+                extra={"paper_id": paper_id, "path": str(path)},
+                exc_info=True,
+            )
+        if path.is_file():
+            leftovers.append(str(path))
+    if leftovers:
+        raise ApiError(
+            DISK_ARTEFACT_DELETE_FAILED_CODE,
+            f"无法清理图谱/sidecar 残留，已中止 SQL 删除以免留下半删除状态: {', '.join(leftovers)}",
+            status_code=500,
+        )
+    return removed
+
+
+def _delete_graph_stores(paper_id: str) -> None:
+    """Explicit GraphStore / HeadStore deletes; soft-missing is ok, leftover file is not."""
+    try:
+        GraphStore().delete(paper_id)
+    except OSError as exc:
+        path = Path(get_settings().graph_data_dir) / f"{paper_id}.json"
+        if path.is_file():
+            raise ApiError(
+                DISK_ARTEFACT_DELETE_FAILED_CODE,
+                f"无法删除图谱 JSON 残留，已中止级联: {path}",
+                status_code=500,
+            ) from exc
+        logger.warning("paper_delete_graph_store_failed", extra={"paper_id": paper_id}, exc_info=True)
+    try:
+        HeadStore().delete(paper_id)
+    except OSError as exc:
+        path = Path(get_settings().graph_data_dir) / f"{paper_id}.head.json"
+        if path.is_file():
+            raise ApiError(
+                DISK_ARTEFACT_DELETE_FAILED_CODE,
+                f"无法删除 head JSON 残留，已中止级联: {path}",
+                status_code=500,
+            ) from exc
+        logger.warning("paper_delete_head_store_failed", extra={"paper_id": paper_id}, exc_info=True)
 
 
 def _is_vector_not_found_error(exc: BaseException) -> bool:
@@ -123,33 +207,6 @@ async def _purge_vector_index_hard(
         ) from exc
 
 
-def _purge_graph_dir_artefacts(paper_id: str) -> int:
-    """Zero-footprint: unlink all GRAPH_DATA_DIR files owned by *paper_id*.
-
-    Covers ``{id}.json``, ``{id}.head.json``, and any ``{id}.*`` / ``{id}_*`` sidecars
-    (skeleton/cache naming if introduced later).
-    """
-    base = Path(get_settings().graph_data_dir)
-    if not base.is_dir():
-        return 0
-    removed = 0
-    for path in base.iterdir():
-        if not path.is_file():
-            continue
-        name = path.name
-        if name == f"{paper_id}.json" or name.startswith(f"{paper_id}.") or name.startswith(f"{paper_id}_"):
-            try:
-                path.unlink(missing_ok=True)
-                removed += 1
-            except OSError:
-                logger.warning(
-                    "paper_delete_graph_artefact_unlink_failed",
-                    extra={"paper_id": paper_id, "path": str(path)},
-                    exc_info=True,
-                )
-    return removed
-
-
 async def delete_paper(
     paper_service: PaperService,
     paper_id: str,
@@ -162,8 +219,8 @@ async def delete_paper(
     Order (must not reverse):
       1) abort in-flight tasks (after 409 gate)
       2) Chroma ``delete_by_paper`` (hard-fail on unavailable; 404-class = ok)
-      3) GRAPH_DATA_DIR Zero-Footprint unlink (graph / head / sidecars)
-      4) uploaded PDF
+      3) GRAPH_DATA_DIR Zero-Footprint unlink (graph / head / sidecars) — hard-fail on residue
+      4) uploaded PDF — hard-fail on residue
       5) SQL paper row (``pipeline_runs`` CASCADE)
 
     Default blocks ``PROCESSING`` / ``INDEXING`` with 409; ``force=true`` aborts then cascades.
@@ -187,8 +244,7 @@ async def delete_paper(
 
     # Prefer glob wipe (covers HeadStore + future sidecars); keep explicit deletes for clarity.
     graph_files_removed = _purge_graph_dir_artefacts(paper_id)
-    GraphStore().delete(paper_id)
-    HeadStore().delete(paper_id)
+    _delete_graph_stores(paper_id)
     paper_service.clear_ephemeral_pipeline_state(paper_id)
     pdf_removed = _unlink_pdf(pdf_path_str)
 
