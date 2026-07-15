@@ -49,7 +49,7 @@ CHAOS_RESILIENCE_CASES: tuple[tuple[str, str, str], ...] = (
     ),
     (
         "主循环饥饿/PROCESSING Watchdog",
-        "test_processing_watchdog_loop_starvation",
+        "test_processing_watchdog_survives_loop_starvation",
         "tests/pipeline/test_processing_watchdog_loop_starvation.py",
     ),
     (

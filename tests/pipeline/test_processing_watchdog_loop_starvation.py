@@ -1,7 +1,9 @@
 """Problem 2 (processing): Watchdog commit survives main asyncio loop starvation.
 
-Injects bare ``time.sleep`` on the event-loop thread and asserts the dedicated
-OS-thread processing watchdog still fails a stale PROCESSING paper via sync SQL.
+Release-gate hard stop: inject bare ``time.sleep`` on the event-loop thread and
+assert the dedicated OS-thread processing watchdog still fails a zombie that was
+planted **during** the starvation window via sync SQL (physically isolated from
+the starved FastAPI / asyncio pump).
 """
 
 from __future__ import annotations
@@ -15,7 +17,6 @@ from pathlib import Path
 
 import pytest
 from backend.config import get_settings
-from backend.db.base import get_async_session_factory
 from backend.db.models import PaperRow, PipelineRunRow
 from backend.graph.state import STAGE_PERCENT
 from backend.pipeline.processing_watchdog import (
@@ -29,21 +30,17 @@ from backend.pipeline.processing_watchdog import (
     stop_processing_watchdog,
 )
 from backend.repositories.async_bridge import register_main_event_loop, run_async
-from backend.repositories.pipeline_repository import get_pipeline_repository
-from backend.schemas.paper import PaperStatus, PaperStatusData, PipelineStage
+from backend.schemas.paper import PaperStatus, PipelineStage
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session, sessionmaker
-from tests.helpers.persistence_testkit import (
-    init_isolated_database,
-    register_test_paper,
-    reset_persistence_singletons,
-)
+from tests.helpers.persistence_testkit import init_isolated_database, reset_persistence_singletons
 
 PAPER_P = "paper-processing-starve"
 WATCHDOG_INTERVAL_SECONDS = 1.0
 STUCK_AFTER_SECONDS = 2.0
 PENDING_QUEUE_TIMEOUT_SECONDS = 3600.0
 MAIN_LOOP_BLOCK_SECONDS = 5.0
+PLANT_AT_SECONDS = 0.5
 PROBE_AT_SECONDS = 3.0
 MIN_TICKS_DURING_BLOCK = 3
 
@@ -72,30 +69,61 @@ def processing_starvation_db(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     get_settings.cache_clear()
 
 
-async def _put_paper_processing_stale(paper_id: str, *, updated_at: datetime) -> None:
-    await register_test_paper(paper_id, status=PaperStatus.PENDING, with_status_row=True)
-    snapshot = PaperStatusData(
-        paper_id=paper_id,
-        status=PaperStatus.PROCESSING,
-        percent=STAGE_PERCENT[PipelineStage.EXTRACTING],
-        stage=PipelineStage.EXTRACTING,
-        message="processing",
-        updated_at=datetime.now(UTC),
-    )
-    await get_pipeline_repository().save_status(paper_id, snapshot)
-    async with get_async_session_factory()() as session:
-        run = await session.get(PipelineRunRow, paper_id)
-        paper = await session.get(PaperRow, paper_id)
-        assert run is not None and paper is not None
-        run.updated_at = updated_at
-        paper.updated_at = updated_at
-        paper.status = PaperStatus.PROCESSING.value
-        await session.commit()
+def _sync_session_factory(database_url: str):
+    engine = create_engine(database_url, future=True)
+    return engine, sessionmaker(bind=engine, class_=Session, expire_on_commit=False)
+
+
+def _sync_plant_stale_processing(database_url: str, paper_id: str, *, updated_at: datetime) -> None:
+    """Plant a PROCESSING zombie via sync SQL (usable while the asyncio loop is dead)."""
+    engine, factory = _sync_session_factory(database_url)
+    try:
+        with factory() as session:
+            paper = session.get(PaperRow, paper_id)
+            if paper is None:
+                paper = PaperRow(
+                    paper_id=paper_id,
+                    title="starve zombie",
+                    status=PaperStatus.PROCESSING.value,
+                    pdf_path=f"./uploads/{paper_id}.pdf",
+                    updated_at=updated_at,
+                    created_at=updated_at,
+                )
+                session.add(paper)
+            else:
+                paper.status = PaperStatus.PROCESSING.value
+                paper.updated_at = updated_at
+
+            run = session.get(PipelineRunRow, paper_id)
+            if run is None:
+                run = PipelineRunRow(
+                    paper_id=paper_id,
+                    stage=PipelineStage.EXTRACTING.value,
+                    percent=STAGE_PERCENT[PipelineStage.EXTRACTING],
+                    message="planted during loop starvation",
+                    error_code=None,
+                    failed_during=None,
+                    head_refine_warnings=[],
+                    classify_warnings=[],
+                    extract_warnings=[],
+                    updated_at=updated_at,
+                    created_at=updated_at,
+                )
+                session.add(run)
+            else:
+                run.stage = PipelineStage.EXTRACTING.value
+                run.percent = STAGE_PERCENT[PipelineStage.EXTRACTING]
+                run.message = "planted during loop starvation"
+                run.error_code = None
+                run.failed_during = None
+                run.updated_at = updated_at
+            session.commit()
+    finally:
+        engine.dispose()
 
 
 def _sync_read_paper_status_and_code(database_url: str, paper_id: str) -> tuple[str | None, str | None]:
-    engine = create_engine(database_url, future=True)
-    factory = sessionmaker(bind=engine, class_=Session, expire_on_commit=False)
+    engine, factory = _sync_session_factory(database_url)
     try:
         with factory() as session:
             paper = session.get(PaperRow, paper_id)
@@ -109,15 +137,12 @@ def _sync_read_paper_status_and_code(database_url: str, paper_id: str) -> tuple[
 
 @pytest.mark.asyncio
 @pytest.mark.process_release_gate
-async def test_processing_watchdog_loop_starvation(
+async def test_processing_watchdog_survives_loop_starvation(
     processing_starvation_db: Path,
     caplog: pytest.LogCaptureFixture,
 ) -> None:
-    """主 loop ``time.sleep`` 硬阻塞期间 processing watchdog 仍独立 tick + fail。"""
+    """Main-loop ``time.sleep(5)`` hard-deadlock must not stop OS-thread PROCESSING heal."""
     caplog.set_level(logging.INFO)
-
-    stale = datetime.now(UTC) - timedelta(seconds=STUCK_AFTER_SECONDS)
-    await _put_paper_processing_stale(PAPER_P, updated_at=stale)
 
     register_main_event_loop(asyncio.get_running_loop())
     clear_processing_watchdog_tick_timestamps()
@@ -125,30 +150,50 @@ async def test_processing_watchdog_loop_starvation(
     start_processing_watchdog()
 
     database_url = get_settings().database_url
+    plant_done = threading.Event()
     probe_state: dict[str, str | None] = {"status": None, "error_code": None}
-    probe_error: list[BaseException] = []
+    thread_errors: list[BaseException] = []
+
+    def _plant_zombie_during_starvation() -> None:
+        try:
+            time.sleep(PLANT_AT_SECONDS)
+            stale = datetime.now(UTC) - timedelta(seconds=STUCK_AFTER_SECONDS + 5.0)
+            _sync_plant_stale_processing(database_url, PAPER_P, updated_at=stale)
+            plant_done.set()
+        except BaseException as exc:  # noqa: BLE001 — surface into parent assertions
+            thread_errors.append(exc)
+            plant_done.set()
 
     def _probe_during_starvation() -> None:
         try:
-            time.sleep(PROBE_AT_SECONDS)
+            if not plant_done.wait(timeout=MAIN_LOOP_BLOCK_SECONDS):
+                thread_errors.append(TimeoutError("zombie was not planted during starvation"))
+                return
+            # Leave enough wall-clock for ≥1 dedicated-thread scan after plant.
+            time.sleep(max(0.0, PROBE_AT_SECONDS - PLANT_AT_SECONDS))
             status, code = _sync_read_paper_status_and_code(database_url, PAPER_P)
             probe_state["status"] = status
             probe_state["error_code"] = code
         except BaseException as exc:  # noqa: BLE001 — surface into parent assertions
-            probe_error.append(exc)
+            thread_errors.append(exc)
 
+    planter = threading.Thread(target=_plant_zombie_during_starvation, name="processing-starve-plant", daemon=True)
     probe = threading.Thread(target=_probe_during_starvation, name="processing-starve-probe", daemon=True)
+    planter.start()
     probe.start()
 
+    # Starve the main asyncio / FastAPI dispatch thread (false-async hard block).
     block_started = time.monotonic()
     time.sleep(MAIN_LOOP_BLOCK_SECONDS)
     block_ended = time.monotonic()
 
+    planter.join(timeout=2.0)
     probe.join(timeout=2.0)
     stop_processing_watchdog()
     register_main_event_loop(None)
 
-    assert not probe_error, f"probe failed: {probe_error!r}"
+    assert not thread_errors, f"side threads failed: {thread_errors!r}"
+    assert plant_done.is_set()
 
     ticks = [ts for ts in processing_watchdog_tick_monotonic_timestamps() if block_started <= ts <= block_ended]
     assert len(ticks) >= MIN_TICKS_DURING_BLOCK, (
@@ -162,6 +207,7 @@ async def test_processing_watchdog_loop_starvation(
     tick_logs = [r for r in caplog.records if r.getMessage() == PROCESSING_WATCHDOG_TICK_LOG]
     assert len(tick_logs) >= MIN_TICKS_DURING_BLOCK
 
+    # Macro heal completed while the event loop was still fake-dead.
     assert probe_state["status"] == PaperStatus.FAILED.value
     assert probe_state["error_code"] == PROCESS_TIMEOUT_CODE
     assert any(PROCESS_WATCHDOG_HEAL_TAG in r.getMessage() for r in caplog.records)
