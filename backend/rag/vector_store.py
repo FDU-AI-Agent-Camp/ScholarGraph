@@ -24,7 +24,11 @@ from backend.rag.models import (
 )
 from backend.rag.protocols import VectorStoreProtocol
 from backend.rag.vector_store_chunk_text import ChunkTextLookupMixin
-from backend.rag.vector_store_replace import GENERATION_GUARD_LOG_PREFIX, ReplacePaperIndexMixin
+from backend.rag.vector_store_replace import (
+    GENERATION_GUARD_LOG_PREFIX,
+    ObsoleteGenerationWarning,
+    ReplacePaperIndexMixin,
+)
 from backend.rag.vector_store_utils import (
     DEFAULT_EMBEDDING_DIMENSION,
     ChromaMetadata,
@@ -53,6 +57,7 @@ __all__ = [
     "ChromaWhere",
     "CollectionProtocol",
     "GENERATION_GUARD_LOG_PREFIX",
+    "ObsoleteGenerationWarning",
     "VectorStore",
     "clean_metadata",
 ]
