@@ -10,6 +10,9 @@ Deferred (marked ``architecture_evolution``, skipped until Redis/Worker land):
 - Multi-process Web freeze + external broker ``RagIndexed`` fan-out
 - Broker outage / Outbox drain / auto-reconnect
 - Distributed idempotency (Redlock) under duplicate paper_id events
+- Testcontainers: physical kill of Chroma/Redis mid-flight (see ``tests/chaos/``)
+
+Living chaos catalog: ``tests/chaos/test_chaos_resilience_matrix.py``.
 """
 
 from __future__ import annotations
