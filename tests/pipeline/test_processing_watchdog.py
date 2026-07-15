@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
@@ -130,6 +131,127 @@ async def test_wall_clock_fails_stale_processing(processing_watchdog_db) -> None
     fresh_row = await get_pipeline_repository().get_latest("fresh-proc")
     assert fresh_row is not None
     assert fresh_row.status == PaperStatus.PROCESSING
+
+
+@pytest.mark.asyncio
+async def test_wall_clock_renews_lease_when_pipeline_task_still_alive(
+    processing_watchdog_db,
+) -> None:
+    """Stale updated_at + live asyncio Task → renew lease, do not PROCESS_TIMEOUT."""
+    from backend.services.pipeline_task_registry import (
+        register_pipeline_task,
+        reset_pipeline_task_registry,
+        unregister_pipeline_task,
+    )
+
+    now = datetime.now(UTC)
+    stale = now - timedelta(seconds=901)
+    paper_id = "slow-alive-proc"
+    await _put_paper_processing(paper_id, updated_at=stale)
+    before = await get_pipeline_repository().get_latest(paper_id)
+    assert before is not None
+    before_updated = before.updated_at
+
+    async def _hang() -> None:
+        await asyncio.sleep(60)
+
+    task = asyncio.create_task(_hang(), name=f"pipeline-{paper_id}")
+    register_pipeline_task(paper_id, task)
+    try:
+        failed_ids = await scan_and_fail_stuck_processing(
+            now=now,
+            stuck_after_seconds=900.0,
+        )
+        assert failed_ids == []
+        after = await get_pipeline_repository().get_latest(paper_id)
+        assert after is not None
+        assert after.status == PaperStatus.PROCESSING
+        assert after.error_code is None
+        assert after.updated_at is not None
+        assert before_updated is not None
+        assert after.updated_at > before_updated
+    finally:
+        task.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await task
+        unregister_pipeline_task(paper_id, task)
+        reset_pipeline_task_registry()
+
+
+@pytest.mark.asyncio
+async def test_wall_clock_aborts_then_fails_true_zombie(
+    processing_watchdog_db,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Cascading Kill: force-cancel + await abort, then PROCESS_TIMEOUT SQL flip."""
+    from unittest.mock import AsyncMock
+
+    now = datetime.now(UTC)
+    stale = now - timedelta(seconds=901)
+    paper_id = "zombie-proc"
+    await _put_paper_processing(paper_id, updated_at=stale)
+    abort = AsyncMock()
+    called: list[str] = []
+
+    async def _abort(pid: str) -> None:
+        called.append(f"abort:{pid}")
+        await abort(pid)
+
+    def _force_cancel(pid: str) -> None:
+        called.append(f"force:{pid}")
+
+    monkeypatch.setattr(
+        "backend.services.pipeline_task_registry.abort_in_flight_pipeline",
+        _abort,
+    )
+    monkeypatch.setattr(
+        "backend.services.pipeline_task_registry.force_cancel_paper_work_sync",
+        _force_cancel,
+    )
+
+    failed_ids = await scan_and_fail_stuck_processing(
+        now=now,
+        stuck_after_seconds=900.0,
+    )
+    assert failed_ids == [paper_id]
+    assert called == [f"force:{paper_id}", f"abort:{paper_id}"]
+    abort.assert_awaited_once_with(paper_id)
+    row = await get_pipeline_repository().get_latest(paper_id)
+    assert row is not None
+    assert row.status == PaperStatus.FAILED
+    assert row.error_code == PROCESS_TIMEOUT_CODE
+
+
+@pytest.mark.asyncio
+async def test_cascade_kill_releases_reextract_claim_before_sql_fail(
+    processing_watchdog_db,
+) -> None:
+    """Lock eviction: reextract claim must be clear when SQL flips to failed."""
+    from backend.services.reextract_service import (
+        is_reextract_inflight,
+        release_reextract_claim_for_abort,
+        reset_reextract_inflight_gate,
+    )
+
+    reset_reextract_inflight_gate()
+    now = datetime.now(UTC)
+    stale = now - timedelta(seconds=901)
+    paper_id = "zombie-with-claim"
+    await _put_paper_processing(paper_id, updated_at=stale)
+    # Simulate a stuck claim without holding the asyncio Lock across the test.
+    from backend.services import reextract_service as rex
+
+    rex._reextract_inflight.add(paper_id)
+    assert is_reextract_inflight(paper_id)
+
+    failed_ids = await scan_and_fail_stuck_processing(
+        now=now,
+        stuck_after_seconds=900.0,
+    )
+    assert failed_ids == [paper_id]
+    assert not is_reextract_inflight(paper_id)
+    release_reextract_claim_for_abort(paper_id)  # idempotent
+    reset_reextract_inflight_gate()
 
 
 @pytest.mark.asyncio

@@ -299,3 +299,23 @@ def fail_orphaned_pipeline_row_sync(
         db.commit()
     return True
 
+
+def touch_processing_lease_sync(paper_id: str) -> bool:
+    """Bump ``updated_at`` for a PROCESSING paper (wall-clock lease renewal).
+
+    Used when the watchdog finds stale SQL timestamps but an in-memory Task is
+    still alive — renews the lease instead of emitting ``PROCESS_TIMEOUT``.
+    """
+    factory = get_pipeline_sync_session_factory()
+    with factory() as db:
+        paper = db.get(PaperRow, paper_id)
+        run = db.get(PipelineRunRow, paper_id)
+        if paper is None or run is None:
+            return False
+        if paper.status != PaperStatus.PROCESSING.value:
+            return False
+        now = datetime.now(UTC)
+        run.updated_at = now
+        paper.updated_at = now
+        db.commit()
+    return True

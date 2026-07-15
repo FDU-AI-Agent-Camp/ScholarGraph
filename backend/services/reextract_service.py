@@ -59,6 +59,14 @@ async def _release_reextract_slot(paper_id: str) -> None:
         _reextract_inflight.discard(paper_id)
 
 
+def release_reextract_claim_for_abort(paper_id: str) -> None:
+    """Evict the per-paper reextract claim so a later reextract is not stuck on 409.
+
+    Sync-safe for the processing watchdog Cascading Kill Channel (lock eviction step).
+    """
+    _reextract_inflight.discard(paper_id)
+
+
 def _resolve_pdf_path(pdf_path_str: str | None, paper_id: str) -> Path:
     """Return the stored PDF path or raise a 422 error if it is missing."""
     if pdf_path_str is None:

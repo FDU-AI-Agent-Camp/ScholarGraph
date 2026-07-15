@@ -98,9 +98,10 @@ class QaSettingsMixin:
         gt=0.0,
         validation_alias="PROCESS_WATCHDOG_SECONDS",
         description=(
-            "Fail PROCESSING papers whose updated_at is older than this (seconds). "
-            "No mid-stage heartbeat — size above the longest expected LLM extract/classify "
-            "call to avoid false PROCESS_TIMEOUT."
+            "PROCESSING candidate age (seconds) before vitality dual-check. "
+            "Live in-memory Task renews the lease (no false kill on long LLM); "
+            "true zombies get Cascading Kill then PROCESS_TIMEOUT. "
+            "Need not cover the longest stage wall-clock — keep ~900s."
         ),
     )
     process_watchdog_interval_seconds: float = Field(

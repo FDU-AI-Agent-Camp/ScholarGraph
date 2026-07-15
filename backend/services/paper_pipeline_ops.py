@@ -335,6 +335,11 @@ class PaperPipelineOpsMixin:
             message=message,
         )
 
+    def touch_processing_lease_sync(self, paper_id: str) -> bool:
+        """Renew PROCESSING ``updated_at`` while in-memory work remains alive."""
+        from backend.repositories.pipeline_sync import touch_processing_lease_sync
+
+        return touch_processing_lease_sync(paper_id)
 
     async def fail_orphaned_pipeline_paper(
         self,
