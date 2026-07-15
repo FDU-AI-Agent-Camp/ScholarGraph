@@ -5,7 +5,13 @@ Daemon dual thresholds:
 - PROCESSING → ``PROCESS_TIMEOUT`` (default 900s)
 - PENDING → ``QUEUE_TIMEOUT`` (default 3600s)
 
-Never silently requeues; failed rows stay failed until user force-reextract.
+Never silently requeues; failed rows stay failed until the user reextracts
+(``force`` is only required while status is still PROCESSING/INDEXING).
+
+Ops note: the wall-clock path only inspects ``updated_at`` (no processing heartbeat).
+A single legitimate LLM stage that never advances ``updated_at`` for longer than
+``PROCESS_WATCHDOG_SECONDS`` can be mislabeled ``PROCESS_TIMEOUT`` — size that knob
+above the longest expected extract/classify call, or accept rare false fails.
 """
 
 from __future__ import annotations
@@ -38,6 +44,9 @@ WATCHDOG_THREAD_JOIN_TIMEOUT_SECONDS = 5.0
 PROCESSING_WATCHDOG_THREAD_NAME = "process-pipeline-watchdog"
 _MAX_TICK_TIMESTAMPS = 256
 _WATCHDOG_TICK_MONOTONIC: deque[float] = deque(maxlen=_MAX_TICK_TIMESTAMPS)
+# Cold-boot list queries cap at 200; drain in rounds so a large zombie pile needs one boot.
+COLD_BOOT_ORPHAN_BATCH_LIMIT = 200
+COLD_BOOT_ORPHAN_MAX_ROUNDS = 50
 
 
 def reset_processing_watchdog_sync_engine() -> None:
@@ -94,7 +103,11 @@ async def scan_and_fail_orphaned_processing(
     *,
     now: datetime | None = None,
 ) -> list[str]:
-    """Fail leftover pending/processing with ``updated_at < boot − ε`` (cold-boot)."""
+    """Fail leftover pending/processing with ``updated_at < boot − ε`` (cold-boot).
+
+    Drains in batches of ``COLD_BOOT_ORPHAN_BATCH_LIMIT`` so large zombie piles do not
+    require multiple process restarts.
+    """
     from backend.services.paper_service import get_paper_service
 
     settings = get_settings()
@@ -103,18 +116,34 @@ async def scan_and_fail_orphaned_processing(
 
     older_than = _cold_boot_older_than(now=now)
     paper_service = get_paper_service()
-    candidate_ids = await paper_service.list_orphan_pipeline_paper_ids(older_than=older_than)
     failed: list[str] = []
-    for paper_id in candidate_ids:
-        try:
-            if await paper_service.fail_orphaned_pipeline_paper(
-                paper_id,
-                error_code=PROCESS_ORPHANED_CODE,
-                message=PROCESS_ORPHANED_MESSAGE,
-            ):
-                failed.append(paper_id)
-        except Exception:
-            logger.exception("processing_watchdog_fail_failed", extra={"paper_id": paper_id})
+    for round_idx in range(COLD_BOOT_ORPHAN_MAX_ROUNDS):
+        candidate_ids = await paper_service.list_orphan_pipeline_paper_ids(
+            older_than=older_than,
+            limit=COLD_BOOT_ORPHAN_BATCH_LIMIT,
+        )
+        if not candidate_ids:
+            break
+        for paper_id in candidate_ids:
+            try:
+                if await paper_service.fail_orphaned_pipeline_paper(
+                    paper_id,
+                    error_code=PROCESS_ORPHANED_CODE,
+                    message=PROCESS_ORPHANED_MESSAGE,
+                ):
+                    failed.append(paper_id)
+            except Exception:
+                logger.exception("processing_watchdog_fail_failed", extra={"paper_id": paper_id})
+        if len(candidate_ids) < COLD_BOOT_ORPHAN_BATCH_LIMIT:
+            break
+        if round_idx == COLD_BOOT_ORPHAN_MAX_ROUNDS - 1:
+            logger.warning(
+                "%s cold_boot orphan drain hit max_rounds=%s healed_so_far=%s",
+                PROCESS_WATCHDOG_HEAL_TAG,
+                COLD_BOOT_ORPHAN_MAX_ROUNDS,
+                len(failed),
+                extra={"process_watchdog_heal": True, "failed_count": len(failed)},
+            )
     return failed
 
 

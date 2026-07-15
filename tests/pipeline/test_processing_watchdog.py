@@ -294,3 +294,39 @@ def test_start_stop_processing_watchdog_thread(processing_watchdog_db, monkeypat
     stop_processing_watchdog()
     assert scan_calls["n"] >= 1
     assert not processing_watchdog_thread_is_alive()
+
+
+@pytest.mark.asyncio
+async def test_cold_boot_drains_orphan_batches_beyond_single_limit(
+    processing_watchdog_db,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Startup must loop past the 200-row list cap instead of leaving zombies for reboot #2."""
+    from backend.pipeline import processing_watchdog as pw
+    from backend.services.paper_service import get_paper_service
+
+    batch1 = [f"orphan-batch-a-{i}" for i in range(pw.COLD_BOOT_ORPHAN_BATCH_LIMIT)]
+    batch2 = [f"orphan-batch-b-{i}" for i in range(3)]
+    calls: list[int] = []
+
+    async def _paged_list(*, older_than=None, limit: int = 200):  # noqa: ANN001
+        _ = older_than
+        calls.append(limit)
+        if len(calls) == 1:
+            return list(batch1)
+        if len(calls) == 2:
+            return list(batch2)
+        return []
+
+    async def _fail(paper_id: str, **_kwargs) -> bool:
+        _ = paper_id
+        return True
+
+    service = get_paper_service()
+    monkeypatch.setattr(service, "list_orphan_pipeline_paper_ids", _paged_list)
+    monkeypatch.setattr(service, "fail_orphaned_pipeline_paper", _fail)
+
+    failed = await scan_and_fail_orphaned_processing()
+    assert len(calls) == 2
+    assert calls[0] == pw.COLD_BOOT_ORPHAN_BATCH_LIMIT
+    assert set(failed) == set(batch1) | set(batch2)
