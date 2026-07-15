@@ -134,6 +134,84 @@ async def test_wall_clock_fails_stale_processing(processing_watchdog_db) -> None
 
 
 @pytest.mark.asyncio
+@pytest.mark.process_release_gate
+async def test_watchdog_slow_but_alive_extends_lease(processing_watchdog_db) -> None:
+    """Unit/memory dual-check: stale paper + live registry Task → keep PROCESSING, bump lease."""
+    from backend.services import pipeline_task_registry as registry
+
+    registry.reset_pipeline_task_registry()
+    now = datetime.now(UTC)
+    stale = now - timedelta(seconds=950)
+    paper_id = "slow-but-alive"
+    await _put_paper_processing(paper_id, updated_at=stale)
+    before = await get_pipeline_repository().get_latest(paper_id)
+    assert before is not None
+    before_updated = before.updated_at
+    assert before_updated is not None
+    if before_updated.tzinfo is None:
+        before_updated = before_updated.replace(tzinfo=UTC)
+
+    async def _hang() -> None:
+        await asyncio.sleep(60)
+
+    # Real asyncio.Task (not MagicMock) so is_paper_work_alive / cancelling() run production paths.
+    live_task = asyncio.create_task(_hang(), name=f"pipeline-{paper_id}")
+    registry.register_pipeline_task(paper_id, live_task)
+    try:
+        assert registry.is_paper_work_alive(paper_id)
+        failed_ids = await scan_and_fail_stuck_processing(
+            now=now,
+            stuck_after_seconds=900.0,
+        )
+        assert failed_ids == []
+        after = await get_pipeline_repository().get_latest(paper_id)
+        assert after is not None
+        assert after.status == PaperStatus.PROCESSING
+        assert after.error_code is None
+        assert after.updated_at is not None
+        after_updated = after.updated_at
+        if after_updated.tzinfo is None:
+            after_updated = after_updated.replace(tzinfo=UTC)
+        # Lease renewal uses wall-clock now (not the injected scan cutoff).
+        assert after_updated > before_updated
+        assert after_updated >= now
+    finally:
+        live_task.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await live_task
+        registry.reset_pipeline_task_registry()
+
+
+@pytest.mark.asyncio
+@pytest.mark.process_release_gate
+async def test_watchdog_true_zombie_triggers_failed(processing_watchdog_db) -> None:
+    """Unit/memory dual-check: stale paper + empty registry → FAILED + PROCESS_TIMEOUT."""
+    from backend.services.pipeline_task_registry import (
+        get_pipeline_task,
+        reset_pipeline_task_registry,
+    )
+
+    reset_pipeline_task_registry()
+    now = datetime.now(UTC)
+    stale = now - timedelta(seconds=950)
+    paper_id = "true-zombie"
+    await _put_paper_processing(paper_id, updated_at=stale)
+    assert get_pipeline_task(paper_id) is None
+
+    failed_ids = await scan_and_fail_stuck_processing(
+        now=now,
+        stuck_after_seconds=900.0,
+    )
+    assert failed_ids == [paper_id]
+    row = await get_pipeline_repository().get_latest(paper_id)
+    assert row is not None
+    assert row.status == PaperStatus.FAILED
+    assert row.error_code == PROCESS_TIMEOUT_CODE
+    assert PROCESS_TIMEOUT_CODE in (row.error_code or "")
+    assert row.message == PROCESS_TIMEOUT_MESSAGE
+
+
+@pytest.mark.asyncio
 async def test_wall_clock_renews_lease_when_pipeline_task_still_alive(
     processing_watchdog_db,
 ) -> None:
@@ -183,30 +261,33 @@ async def test_wall_clock_aborts_then_fails_true_zombie(
     processing_watchdog_db,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Cascading Kill: force-cancel + await abort, then PROCESS_TIMEOUT SQL flip."""
-    from unittest.mock import AsyncMock
+    """Cascading Kill: production force-cancel + abort must run before PROCESS_TIMEOUT SQL."""
+    from backend.services import pipeline_task_registry as registry
 
     now = datetime.now(UTC)
     stale = now - timedelta(seconds=901)
     paper_id = "zombie-proc"
     await _put_paper_processing(paper_id, updated_at=stale)
-    abort = AsyncMock()
-    called: list[str] = []
+    call_order: list[str] = []
 
-    async def _abort(pid: str) -> None:
-        called.append(f"abort:{pid}")
-        await abort(pid)
+    real_force = registry.force_cancel_paper_work_sync
+    real_abort = registry.abort_in_flight_pipeline
 
-    def _force_cancel(pid: str) -> None:
-        called.append(f"force:{pid}")
+    def _spy_force(pid: str) -> None:
+        call_order.append(f"force:{pid}")
+        real_force(pid)
 
-    monkeypatch.setattr(
-        "backend.services.pipeline_task_registry.abort_in_flight_pipeline",
-        _abort,
-    )
+    async def _spy_abort(pid: str) -> None:
+        call_order.append(f"abort:{pid}")
+        await real_abort(pid)
+
     monkeypatch.setattr(
         "backend.services.pipeline_task_registry.force_cancel_paper_work_sync",
-        _force_cancel,
+        _spy_force,
+    )
+    monkeypatch.setattr(
+        "backend.services.pipeline_task_registry.abort_in_flight_pipeline",
+        _spy_abort,
     )
 
     failed_ids = await scan_and_fail_stuck_processing(
@@ -214,12 +295,112 @@ async def test_wall_clock_aborts_then_fails_true_zombie(
         stuck_after_seconds=900.0,
     )
     assert failed_ids == [paper_id]
-    assert called == [f"force:{paper_id}", f"abort:{paper_id}"]
-    abort.assert_awaited_once_with(paper_id)
+    assert call_order == [f"force:{paper_id}", f"abort:{paper_id}"]
     row = await get_pipeline_repository().get_latest(paper_id)
     assert row is not None
     assert row.status == PaperStatus.FAILED
     assert row.error_code == PROCESS_TIMEOUT_CODE
+
+
+@pytest.mark.asyncio
+@pytest.mark.process_release_gate
+async def test_watchdog_kill_execution_order(processing_watchdog_db, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Cascading Kill: abort (and lock release) must finish before SQL PROCESS_TIMEOUT."""
+    from backend.services import pipeline_task_registry as registry
+    from backend.services.paper_service import get_paper_service
+    from backend.services.reextract_service import (
+        is_reextract_inflight,
+        reset_reextract_inflight_gate,
+    )
+
+    reset_reextract_inflight_gate()
+    registry.reset_pipeline_task_registry()
+
+    now = datetime.now(UTC)
+    stale = now - timedelta(seconds=950)
+    paper_id = "kill-order-zombie"
+    await _put_paper_processing(paper_id, updated_at=stale)
+
+    paper_lock = asyncio.Lock()
+    lock_held = asyncio.Event()
+    call_order: list[str] = []
+
+    async def _zombie_holding_lock() -> None:
+        async with paper_lock:
+            lock_held.set()
+            await asyncio.sleep(3600)
+
+    zombie_task = asyncio.create_task(_zombie_holding_lock(), name=f"pipeline-{paper_id}")
+    await asyncio.wait_for(lock_held.wait(), timeout=1.0)
+    registry.register_pipeline_task(paper_id, zombie_task)
+
+    # Simulate an abandoned reextract claim (mutex not returned after worker death).
+    from backend.services import reextract_service as rex
+
+    rex._reextract_inflight.add(paper_id)
+    assert is_reextract_inflight(paper_id)
+
+    real_abort = registry.abort_in_flight_pipeline
+    paper_service = get_paper_service()
+    real_fail = paper_service.fail_orphaned_pipeline_paper_sync
+
+    async def _spy_abort(pid: str) -> None:
+        call_order.append("abort_start")
+        await real_abort(pid)
+        call_order.append("abort_done")
+
+    def _spy_fail(pid: str, *, error_code: str, message: str) -> bool:
+        call_order.append("sql_fail")
+        return real_fail(pid, error_code=error_code, message=message)
+
+    monkeypatch.setattr(
+        "backend.services.pipeline_task_registry.abort_in_flight_pipeline",
+        _spy_abort,
+    )
+    monkeypatch.setattr(
+        paper_service,
+        "fail_orphaned_pipeline_paper_sync",
+        _spy_fail,
+    )
+
+    bystander_acquired = asyncio.Event()
+
+    async def _bystander_reclaim_lock() -> None:
+        async with paper_lock:
+            bystander_acquired.set()
+
+    bystander = asyncio.create_task(_bystander_reclaim_lock(), name="bystander-lock")
+    # Schedule bystander so it blocks on paper_lock while the zombie still holds it.
+    await asyncio.sleep(0)
+    assert paper_lock.locked()
+    assert not bystander_acquired.is_set()
+
+    # Inject CancelledError so vitality dual-check treats the Task as non-live,
+    # but do not yield — finally (and lock release) must wait for abort's await.
+    zombie_task.cancel()
+    assert not registry.is_paper_work_alive(paper_id)
+
+    failed_ids = await scan_and_fail_stuck_processing(
+        now=now,
+        stuck_after_seconds=900.0,
+    )
+    assert failed_ids == [paper_id]
+    assert "abort_start" in call_order
+    assert "abort_done" in call_order
+    assert "sql_fail" in call_order
+    assert call_order.index("abort_done") < call_order.index("sql_fail")
+
+    await asyncio.wait_for(bystander_acquired.wait(), timeout=1.0)
+    await asyncio.wait_for(bystander, timeout=1.0)
+    assert not is_reextract_inflight(paper_id)
+
+    row = await get_pipeline_repository().get_latest(paper_id)
+    assert row is not None
+    assert row.status == PaperStatus.FAILED
+    assert row.error_code == PROCESS_TIMEOUT_CODE
+
+    registry.reset_pipeline_task_registry()
+    reset_reextract_inflight_gate()
 
 
 @pytest.mark.asyncio
