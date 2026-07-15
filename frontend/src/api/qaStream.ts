@@ -7,16 +7,25 @@ import type {
   QaStreamErrorData,
   QaStreamMessageData,
   QaStreamServerEvent,
+  QaStreamWarningData,
 } from './types'
 import type { ChunkPreviewState } from '@/utils/qaCitations'
 
-export type { QaStreamCitationData, QaStreamDoneData, QaStreamErrorData, QaStreamMessageData, QaStreamServerEvent }
+export type {
+  QaStreamCitationData,
+  QaStreamDoneData,
+  QaStreamErrorData,
+  QaStreamMessageData,
+  QaStreamServerEvent,
+  QaStreamWarningData,
+}
 
 export interface QaStreamHandlers {
   onMessage?: (data: QaStreamMessageData) => void
   onCitation?: (data: QaStreamCitationData) => void
   onDone?: (data: QaStreamDoneData) => void
   onError?: (message: string) => void
+  onWarning?: (data: QaStreamWarningData) => void
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -116,6 +125,15 @@ export function parseQaStreamEvent(eventName: string, rawData: string): QaStream
           message: String(payload.message ?? 'SSE error'),
         },
       }
+    case 'warning':
+      return {
+        type: 'warning',
+        data: {
+          code: payload.code != null ? String(payload.code) : undefined,
+          message: String(payload.message ?? ''),
+          source: payload.source != null ? String(payload.source) : undefined,
+        },
+      }
     default:
       return null
   }
@@ -134,6 +152,9 @@ function dispatchQaStreamEvent(event: QaStreamServerEvent, handlers: QaStreamHan
       break
     case 'error':
       handlers.onError?.(event.data.message)
+      break
+    case 'warning':
+      handlers.onWarning?.(event.data)
       break
     default: {
       const _exhaustive: never = event

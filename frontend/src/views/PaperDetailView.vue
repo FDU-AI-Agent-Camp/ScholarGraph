@@ -13,7 +13,7 @@ import { DETAIL_BASELINE_COPY } from '@/constants/detailCopy'
 import { RouteName } from '@/router/meta'
 import { usePaperStore } from '@/stores/paper'
 import { resolveClassifyWarningMessages } from '@/utils/classifyWarnings'
-import { resolveExtractWarningMessages } from '@/utils/extractWarnings'
+import { resolveExtractWarningDisplays } from '@/utils/extractWarnings'
 import {
   appendUniqueCitation,
   chunkCitationPreview,
@@ -23,6 +23,7 @@ import {
   isChunkPreviewDegraded,
 } from '@/utils/qaCitations'
 import { isGraphInteractiveStatus, isPreviewAvailableStatus } from '@/utils/paperStatus'
+import { resolveQaStreamWarningMessage } from '@/utils/qaStreamWarnings'
 
 const PaperGraph = defineAsyncComponent(() => import('@/components/graph/PaperGraph.vue'))
 
@@ -34,6 +35,7 @@ const question = ref('')
 const answer = ref('')
 const streaming = ref(false)
 const citations = ref<QaStreamCitationData[]>([])
+const qaStreamWarningMessage = ref<string | null>(null)
 const highlightNodeId = ref<string | null>(null)
 const graphLoading = ref(false)
 let abort: AbortController | null = null
@@ -55,7 +57,7 @@ const isInteractive = () => {
   return isGraphInteractiveStatus(status) || isPreview()
 }
 
-const extractWarningMessages = computed(() => resolveExtractWarningMessages(paperStore.currentPaper?.extract_warnings))
+const extractWarningDisplays = computed(() => resolveExtractWarningDisplays(paperStore.currentPaper?.extract_warnings))
 const classifyWarningMessages = computed(() =>
   resolveClassifyWarningMessages(paperStore.currentPaper?.classify_warnings),
 )
@@ -113,6 +115,7 @@ async function ask(): Promise<void> {
   }
   answer.value = ''
   citations.value = []
+  qaStreamWarningMessage.value = null
   highlightNodeId.value = null
   streaming.value = true
   abort = new AbortController()
@@ -129,6 +132,9 @@ async function ask(): Promise<void> {
           if (data.type === 'node') {
             highlightNodeId.value = data.node_id
           }
+        },
+        onWarning: (data) => {
+          qaStreamWarningMessage.value = resolveQaStreamWarningMessage(data)
         },
         onDone: (data) => {
           if (data.answer) {
@@ -238,7 +244,19 @@ function onGraphNodeClick(nodeId: string): void {
                 {{ DETAIL_BASELINE_COPY.fullGraph }}
               </el-button>
             </el-space>
-            <div v-if="(answer || streaming) && isInteractive()" class="detail-qa__answer-panel text-body-lg">
+            <div
+              v-if="(answer || streaming || qaStreamWarningMessage) && isInteractive()"
+              class="detail-qa__answer-panel text-body-lg"
+            >
+              <el-alert
+                v-if="qaStreamWarningMessage"
+                type="warning"
+                :title="qaStreamWarningMessage"
+                show-icon
+                :closable="false"
+                class="detail-qa__stream-warning"
+                data-testid="qa-stream-warning"
+              />
               <span class="detail-qa__answer-text">{{ answer }}</span>
               <span v-if="streaming" class="detail-qa__cursor" aria-hidden="true">|</span>
             </div>
@@ -273,9 +291,14 @@ function onGraphNodeClick(nodeId: string): void {
             class="detail-graph__classify-warning"
           />
           <el-alert
-            v-if="extractWarningMessages.length"
+            v-if="extractWarningDisplays.length"
             type="warning"
-            :title="extractWarningMessages[0]"
+            :title="extractWarningDisplays[0]?.message"
+            :description="
+              extractWarningDisplays[0]?.technicalCode
+                ? `技术代码: ${extractWarningDisplays[0].technicalCode}`
+                : undefined
+            "
             show-icon
             :closable="false"
             class="detail-graph__extract-warning"
@@ -406,6 +429,10 @@ function onGraphNodeClick(nodeId: string): void {
   background: var(--color-bg-subtle);
   white-space: pre-wrap;
   color: var(--color-text-primary);
+}
+
+.detail-qa__stream-warning {
+  margin-bottom: var(--spacing-12);
 }
 
 .detail-qa__cursor {

@@ -95,6 +95,25 @@ describe('parseQaStreamEvent', () => {
     })
   })
 
+  it('parses warning events (QA-D1 RAG_INDEX_NOT_READY)', () => {
+    const event = parseQaStreamEvent(
+      'warning',
+      JSON.stringify({
+        code: 'RAG_INDEX_NOT_READY',
+        message: 'index not ready',
+        source: 'vector_store',
+      }),
+    )
+    expect(event).toEqual({
+      type: 'warning',
+      data: {
+        code: 'RAG_INDEX_NOT_READY',
+        message: 'index not ready',
+        source: 'vector_store',
+      },
+    })
+  })
+
   it('returns null for unknown events or invalid JSON', () => {
     expect(parseQaStreamEvent('ping', '{}')).toBeNull()
     expect(parseQaStreamEvent('message', 'not-json')).toBeNull()

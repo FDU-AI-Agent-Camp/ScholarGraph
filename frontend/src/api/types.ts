@@ -92,11 +92,19 @@ export type QaStreamDoneData = Schema['QaStreamDoneData']
 /** SSE `event: error` payload. */
 export type QaStreamErrorData = Schema['QaStreamErrorData']
 
+/** SSE `event: warning` — retrieval degrade (timeout / store down / index not ready). */
+export type QaStreamWarningData = {
+  code?: string
+  message: string
+  source?: string
+}
+
 export type QaStreamServerEvent =
   | { type: 'message'; data: QaStreamMessageData }
   | { type: 'citation'; data: QaStreamCitationData }
   | { type: 'done'; data: QaStreamDoneData }
   | { type: 'error'; data: QaStreamErrorData }
+  | { type: 'warning'; data: QaStreamWarningData }
 
 export type RerankerStatus = 'READY' | 'DISABLED_FALLBACK_ACTIVE' | 'MISCONFIGURED' | 'MOCK_LOCAL'
 
