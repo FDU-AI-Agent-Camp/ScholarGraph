@@ -1,30 +1,13 @@
 """Processing / pending orphan heal — cold-boot reconcile + wall-clock watchdog.
 
-Cold-boot only tombs rows with ``updated_at < boot_time − ε`` (rolling-update safety).
-Daemon dual thresholds:
-- PROCESSING → ``PROCESS_TIMEOUT`` (default 900s) after dual-check (see below)
-- PENDING → ``QUEUE_TIMEOUT`` (default 3600s)
+Cold-boot tombs ``updated_at < boot − ε``. Daemon: PROCESSING → PROCESS_TIMEOUT
+(after vitality dual-check); PENDING → QUEUE_TIMEOUT. No silent requeue.
 
-Never silently requeues; failed rows stay failed until the user reextracts
-(``force`` is only required while status is still PROCESSING/INDEXING).
+Vitality: stale ``updated_at`` + live Task probe → lease renew; true zombie →
+Cascading Kill (cancel → claim eviction → SQL fail, clearing generation token).
 
-Wall-clock PROCESSING dual-check (vitality model):
-1. ``updated_at`` older than ``PROCESS_WATCHDOG_SECONDS`` → candidate
-2. Probe ``pipeline_task_registry`` / extract worker for a live asyncio Task
-3. Slow-but-alive → renew SQL lease (``touch_processing_lease_sync``), do not fail
-4. True zombie → Cascading Kill Channel then ``PROCESS_TIMEOUT``:
-   force-cancel Task → evict reextract/indexing claims → atomic SQL flip
-   (SQL flip also clears ``pipeline_generation_id`` so a cross-worker orphan
-   cannot pass the terminal write guard)
-
-Ops / defect-governance matrix (PROCESSING timeout closed loop)::
-
-    维度          重构前（缺陷）                    重构后（自愈闭环）
-    ----------    ------------------------------  --------------------------------
-    检测依据      仅依赖 updated_at → 易误杀长 LLM  纸面时间 + 内存 Task 双检；慢任务续租
-    处决力度      只改 SQL，留孤儿协程              abort 强拆 → 退锁 → 再改 SQL
-    并发防护      迟到写盘 vs reextract 竞态        pipeline_generation_id 终态熔断
-    运维建议      必须把阈值调到覆盖最长单阶段      阈值可维持 900s；活任务不会被误杀
+Ops loop: dual-check prevents LLM false kills; abort before SQL; generation
+guard blocks cross-worker orphan finalize; keep ~900s watchdog with renewals.
 """
 
 from __future__ import annotations
