@@ -89,7 +89,17 @@ class EventBus:
             worker_task._log_destroy_pending = False  # type: ignore[attr-defined]
             return
         if running_loop is worker_loop:
-            await _await_cancelled_task(worker_task)
+            try:
+                await asyncio.wait_for(
+                    _await_cancelled_task(worker_task),
+                    timeout=WORKER_CANCEL_TIMEOUT_SECONDS,
+                )
+            except TimeoutError:
+                # Background publishers/handlers can block CancelledError collection on the
+                # same loop (e.g. orphan extract tasks mid-finalize). Fail soft so pytest
+                # autouse teardown cannot hang the entire suite (D17 / FE-gate hang @82%).
+                worker_task._log_destroy_pending = False  # type: ignore[attr-defined]
+                logger.debug("event_bus_worker_astop_same_loop_timeout")
             return
         if worker_loop.is_running():
             future = asyncio.run_coroutine_threadsafe(_await_cancelled_task(worker_task), worker_loop)

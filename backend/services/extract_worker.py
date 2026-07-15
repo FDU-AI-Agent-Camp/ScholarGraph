@@ -138,8 +138,20 @@ def get_full_extraction_task(paper_id: str) -> asyncio.Task[None] | None:
 
 
 def reset_extract_worker() -> None:
-    """Clear cached task references and cancel in-flight work (used in tests)."""
+    """Cancel in-flight work and drop registry entries (sync; does not await CancelledError)."""
     for task in list(_full_extract_tasks.values()):
         if not task.done():
             task.cancel()
     _full_extract_tasks.clear()
+
+
+async def areset_extract_worker() -> None:
+    """Cancel and await background extraction tasks (preferred in async test fixtures)."""
+    tasks = list(_full_extract_tasks.values())
+    _full_extract_tasks.clear()
+    for task in tasks:
+        if not task.done():
+            task.cancel()
+    if not tasks:
+        return
+    await asyncio.gather(*tasks, return_exceptions=True)

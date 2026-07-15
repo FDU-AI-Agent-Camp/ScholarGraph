@@ -10,6 +10,7 @@ from backend.schemas.paper import PaperStatus, PaperStatusData, PipelineStage
 from backend.schemas.paradigm import Paradigm, ParadigmClassification
 from backend.services.errors import ServiceError
 from backend.services.extract_worker import (
+    areset_extract_worker,
     get_full_extraction_task,
     reset_extract_worker,
     schedule_full_extraction,
@@ -40,19 +41,19 @@ def _register_paper(paper_id: str) -> None:
 
 
 @pytest.fixture(autouse=True)
-def _fresh_state(monkeypatch: pytest.MonkeyPatch) -> None:
+async def _fresh_state(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("LLM_MODE", "mock")
     from backend.config import Settings, get_settings
     from backend.services.paper_service import get_paper_service
 
     get_settings.cache_clear()
     get_paper_service.cache_clear()
-    reset_extract_worker()
+    await areset_extract_worker()
     # Zero retry delay keeps mock-mode worker tests fast.
     _fast_settings = Settings(_env_file=None, llm_mode="mock", extract_chunk_retry_delay_s=0.0)
     monkeypatch.setattr("backend.services.extract_worker.get_settings", lambda: _fast_settings)
     yield
-    reset_extract_worker()
+    await areset_extract_worker()
     get_paper_service.cache_clear()
 
 
@@ -75,6 +76,7 @@ class TestScheduleFullExtraction:
 
         assert task is get_full_extraction_task(paper_id)
         assert not task.done()
+        await areset_extract_worker()
 
     async def test_idempotent_scheduling(self) -> None:
         paper_id = "bg-002"
@@ -85,6 +87,7 @@ class TestScheduleFullExtraction:
         task2 = schedule_full_extraction(paper_id, "text", Paradigm.HSS, classification)
 
         assert task1 is task2
+        await areset_extract_worker()
 
     async def test_background_task_finalizes_pipeline(self) -> None:
         from unittest.mock import AsyncMock, patch
