@@ -193,3 +193,7 @@ async def test_force_reextract_overrides_409(api_env) -> None:
     assert forced.status_code == 200
     assert forced.json()["data"]["status"] == "pending"
     scheduler.assert_called_once()
+
+    paper_row = await PaperRepository().get(paper_id)
+    assert paper_row is not None
+    assert paper_row.status == PaperStatus.PENDING
