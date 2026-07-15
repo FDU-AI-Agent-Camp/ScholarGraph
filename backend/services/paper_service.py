@@ -255,12 +255,12 @@ class PaperService(PaperPipelineOpsMixin):
             full_text=full_text,
         )
 
-    async def force_reextract(self, paper_id: str) -> PaperStatusData:
+    async def force_reextract(self, paper_id: str, *, force: bool = False) -> PaperStatusData:
         """Escape hatch: reset and re-schedule the pipeline for ``paper_id``."""
         self.ensure_paper_exists(paper_id)
         from backend.services.reextract_service import force_reextract
 
-        return force_reextract(self, paper_id)
+        return await force_reextract(self, paper_id, force=force)
 
     def fail_pipeline(
         self,

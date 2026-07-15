@@ -11,6 +11,7 @@ from backend.graph.store import GraphStore
 from backend.repositories import run_async
 from backend.schemas.paper import PaperStatus, PaperStatusData
 from backend.services.paper_pipeline_scheduler import schedule_paper_pipeline
+from backend.services.pipeline_task_registry import abort_in_flight_pipeline
 
 if TYPE_CHECKING:
     from backend.services.paper_service import PaperService
@@ -47,28 +48,34 @@ def _clear_in_memory_state(paper_service: PaperService, paper_id: str) -> None:
     paper_service.clear_ephemeral_pipeline_state(paper_id)
 
 
-def force_reextract(paper_service: PaperService, paper_id: str) -> PaperStatusData:
+async def force_reextract(
+    paper_service: PaperService,
+    paper_id: str,
+    *,
+    force: bool = False,
+) -> PaperStatusData:
     """Forcefully re-run the extraction pipeline for an existing paper.
 
     Clears graph/head artefacts, resets DB status to pending, bumps
     ``graph_version``, clears pipeline warnings, and re-schedules the pipeline
     from the stored PDF path.
 
-    Raises:
-        ApiError: 404 if paper does not exist (from caller).
-        ApiError: 409 if it is already running.
-        ApiError: 422 if the original PDF path is no longer available.
+    When ``force=True`` and the paper is ``PROCESSING``, in-flight asyncio tasks
+    are cancelled before reset (graceful termination for zombie / stuck runs).
     """
     paper = run_async(paper_service._paper_repo.get(paper_id))
     if paper is None:
         raise ApiError("PAPER_NOT_FOUND", f"论文不存在: {paper_id}", status_code=404)
 
-    if paper.status == PaperStatus.PROCESSING:
+    if paper.status == PaperStatus.PROCESSING and not force:
         raise ApiError(
             "PAPER_ALREADY_PROCESSING",
-            f"论文 {paper_id} 正在处理中，请等待当前任务完成",
+            f"论文 {paper_id} 正在处理中，请等待当前任务完成；卡死时可传 force=true 强行中止并重抽",
             status_code=409,
         )
+
+    if paper.status == PaperStatus.PROCESSING and force:
+        await abort_in_flight_pipeline(paper_id)
 
     pdf_path_str = run_async(paper_service._paper_repo.get_pdf_path(paper_id))
     pdf_path = _resolve_pdf_path(pdf_path_str, paper_id)

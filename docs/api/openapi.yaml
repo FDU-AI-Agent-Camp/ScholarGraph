@@ -151,8 +151,11 @@ paths:
       description: |
         当上一轮回抽取因 LLM 超时/限流等原因降级为启发式 fallback 时，
         调用此接口清空已有图谱、预览和 warnings，重置状态为 pending 并重新入队流水线。
+
+        `status=processing` 默认 409；`force=true` 时先 cancel in-flight tasks 再重置并重入队。
       parameters:
         - $ref: "#/components/parameters/PaperId"
+        - $ref: "#/components/parameters/ForceAbort"
       responses:
         "200":
           description: 已重新入队，返回当前 pending 状态
@@ -163,7 +166,7 @@ paths:
         "404":
           $ref: "#/components/responses/NotFound"
         "409":
-          description: PAPER_ALREADY_PROCESSING
+          description: PAPER_ALREADY_PROCESSING（未传 force=true）
           content:
             application/json:
               schema:
@@ -262,6 +265,17 @@ components:
       schema:
         type: string
         example: hss-001
+
+    ForceAbort:
+      name: force
+      in: query
+      required: false
+      description: |
+        When true, cancel in-flight PROCESSING asyncio tasks before reextract/delete.
+        Default false keeps PAPER_ALREADY_PROCESSING (409) for live processing papers.
+      schema:
+        type: boolean
+        default: false
 
   responses:
     NotFound:

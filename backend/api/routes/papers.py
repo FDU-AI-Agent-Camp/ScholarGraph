@@ -98,6 +98,10 @@ async def get_paper_graph(
 @router.post("/{paper_id}/reextract")
 async def force_reextract_paper(
     paper_id: str,
+    force: bool = Query(
+        default=False,
+        description="When true, cancel in-flight PROCESSING work then re-queue",
+    ),
     request_id: str = Depends(get_request_id),
     service: PaperService = Depends(get_paper_service_dep),
 ) -> dict:
@@ -107,8 +111,10 @@ async def force_reextract_paper(
     heuristic graph (e.g. ``extract_llm_timeout``). It clears the existing
     graph, preview, warnings and refined head, resets status to PENDING and
     re-enqueues the pipeline from the stored PDF.
+
+    Default blocks ``PROCESSING`` with 409; pass ``force=true`` to abort and restart.
     """
-    status_data = await service.force_reextract(paper_id)
+    status_data = await service.force_reextract(paper_id, force=force)
     return success(status_data, request_id)
 
 

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
 import fitz
 import pytest
@@ -158,6 +158,27 @@ async def test_force_reextract_rejects_processing_paper(
 
     assert exc_info.value.code == "PAPER_ALREADY_PROCESSING"
     assert exc_info.value.status_code == 409
+
+
+@pytest.mark.asyncio
+async def test_force_reextract_overrides_409_with_force_true(
+    persistence_env,
+    sample_pdf: Path,
+) -> None:
+    paper_id = "reextract-unit-force-processing"
+    await _register_paper(paper_id, sample_pdf, status=PaperStatus.PROCESSING)
+    service = await restart_paper_service()
+    abort = AsyncMock()
+
+    with (
+        patch("backend.services.reextract_service.abort_in_flight_pipeline", abort),
+        patch("backend.services.reextract_service.schedule_paper_pipeline") as scheduler,
+    ):
+        status = await service.force_reextract(paper_id, force=True)
+
+    abort.assert_awaited_once_with(paper_id)
+    assert status.status == PaperStatus.PENDING
+    scheduler.assert_called_once_with(paper_id, sample_pdf)
 
 
 @pytest.mark.asyncio
