@@ -12,6 +12,7 @@ import EmptyState from '@/components/ui/EmptyState.vue'
 import { PAPERS_BASELINE_COPY } from '@/constants/papersCopy'
 import { RouteName } from '@/router/meta'
 import { usePaperStore } from '@/stores/paper'
+import { isGraphInteractiveStatus } from '@/utils/paperStatus'
 
 const router = useRouter()
 const paperStore = usePaperStore()
@@ -102,7 +103,9 @@ async function copyPaperId(paperId: string) {
         <el-table-column label="操作" width="140">
           <template #default="{ row }: { row: PaperSummary }">
             <el-button link type="primary" @click="openDetail(row)">详情</el-button>
-            <el-button v-if="row.status === 'ready'" link type="primary" @click="openGraph(row)"> 图谱 </el-button>
+            <el-button v-if="isGraphInteractiveStatus(row.status)" link type="primary" @click="openGraph(row)">
+              图谱
+            </el-button>
           </template>
         </el-table-column>
       </el-table>

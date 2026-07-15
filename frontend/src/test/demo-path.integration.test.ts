@@ -90,7 +90,8 @@ describe('design-spec §16 Prototype 答辩路径', () => {
 
     it('Detail wires PaperStatusPanel for pipeline progress while not ready', () => {
       expect(detailViewSrc).toContain('PaperStatusPanel')
-      expect(detailViewSrc).toContain("status !== 'ready'")
+      expect(detailViewSrc).toContain('isGraphInteractiveStatus')
+      expect(detailViewSrc).toContain('terminal-reached')
       expect(statusPanelSrc).toContain('PIPELINE_STEPS')
       expect(statusPanelSrc).toContain('status-step-pulse')
     })

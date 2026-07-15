@@ -22,6 +22,7 @@ import {
   citationKey,
   isChunkPreviewDegraded,
 } from '@/utils/qaCitations'
+import { isGraphInteractiveStatus, isPreviewAvailableStatus } from '@/utils/paperStatus'
 
 const PaperGraph = defineAsyncComponent(() => import('@/components/graph/PaperGraph.vue'))
 
@@ -37,10 +38,22 @@ const highlightNodeId = ref<string | null>(null)
 const graphLoading = ref(false)
 let abort: AbortController | null = null
 
-const isReady = () => paperStore.currentPaper?.status === 'ready'
-const isPreview = () =>
-  paperStore.currentPaper?.status !== 'ready' && Boolean(paperStore.currentPaper?.preview_available)
-const isInteractive = () => isReady() || isPreview()
+/** Capability gates — graph/QA use interactive+preview; Badge uses raw status. */
+const isPreview = () => {
+  const paper = paperStore.currentPaper
+  if (!paper) {
+    return false
+  }
+  return isPreviewAvailableStatus(paper.status, Boolean(paper.preview_available))
+}
+
+const isInteractive = () => {
+  const status = paperStore.currentPaper?.status
+  if (!status) {
+    return false
+  }
+  return isGraphInteractiveStatus(status) || isPreview()
+}
 
 const extractWarningMessages = computed(() => resolveExtractWarningMessages(paperStore.currentPaper?.extract_warnings))
 const classifyWarningMessages = computed(() =>
@@ -58,6 +71,10 @@ function formatDetailTime(iso: string | undefined): string {
     hour: '2-digit',
     minute: '2-digit',
   })
+}
+
+function onPipelineTerminalReached(): void {
+  void paperStore.fetchDetail(props.paperId)
 }
 
 async function loadGraphIfReady(): Promise<void> {
@@ -180,8 +197,10 @@ function onGraphNodeClick(nodeId: string): void {
 
           <PaperStatusPanel
             :paper-id="props.paperId"
-            :auto-start="paperStore.currentPaper.status !== 'ready'"
-            @ready="paperStore.fetchDetail(props.paperId)"
+            :auto-start="
+              Boolean(paperStore.currentPaper?.status) && !isGraphInteractiveStatus(paperStore.currentPaper.status)
+            "
+            @terminal-reached="onPipelineTerminalReached"
           />
 
           <section class="detail-qa">
