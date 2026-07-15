@@ -5,13 +5,16 @@ import { statusResponse, failedStatus } from '@/test/fixtures/paperStatus'
 
 const mockGetData = vi.fn()
 const mockPostData = vi.fn()
+const mockDeleteData = vi.fn()
 
 vi.mock('./client', () => ({
   getData: (...args: unknown[]) => mockGetData(...args),
   postData: (...args: unknown[]) => mockPostData(...args),
+  deleteData: (...args: unknown[]) => mockDeleteData(...args),
 }))
 
 import {
+  deletePaper,
   forceReextractPaper,
   getPaper,
   getPaperGraph,
@@ -25,6 +28,7 @@ describe('papers API module', () => {
   beforeEach(() => {
     mockGetData.mockReset()
     mockPostData.mockReset()
+    mockDeleteData.mockReset()
   })
 
   it('listPapers returns DataResponse from getData', async () => {
@@ -106,5 +110,16 @@ describe('papers API module', () => {
       suppressErrorToast: true,
     })
     expect(result.data.status).toBe('pending')
+  })
+
+  it('deletePaper calls DELETE with optional force and suppresses toast', async () => {
+    mockDeleteData.mockResolvedValue(undefined)
+
+    await deletePaper('paper-gone', { force: true })
+
+    expect(mockDeleteData).toHaveBeenCalledWith('/papers/paper-gone', {
+      params: { force: true },
+      suppressErrorToast: true,
+    })
   })
 })

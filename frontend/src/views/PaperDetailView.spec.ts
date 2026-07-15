@@ -136,6 +136,7 @@ describe('PaperDetailView', () => {
       expect(wrapper.find('.detail-graph').exists()).toBe(true)
       expect(wrapper.find('.detail-header__back').text()).toContain(DETAIL_BASELINE_COPY.backLink)
       expect(wrapper.find('.detail-header__title').text()).toBe('测试论文')
+      expect(wrapper.find('[data-testid="detail-delete-button"]').text()).toContain('删除')
       expect(wrapper.find('.paper-metadata-stub').exists()).toBe(true)
     })
 

@@ -13,10 +13,12 @@ import { PAPERS_BASELINE_COPY } from '@/constants/papersCopy'
 import { RouteName } from '@/router/meta'
 import { usePaperStore } from '@/stores/paper'
 import { isGraphInteractiveStatus } from '@/utils/paperStatus'
+import { confirmAndDeletePaper, PAPER_DELETE_COPY } from '@/utils/paperDelete'
 
 const router = useRouter()
 const paperStore = usePaperStore()
 const uploadSectionRef = ref<HTMLElement | null>(null)
+const deletingId = ref<string | null>(null)
 
 onMounted(() => {
   void paperStore.fetchList().catch(() => undefined)
@@ -45,6 +47,21 @@ async function copyPaperId(paperId: string) {
     ElMessage.success('已复制 paper_id')
   } catch {
     ElMessage.warning('复制失败，请手动选择复制')
+  }
+}
+
+async function onDeletePaper(row: PaperSummary) {
+  if (deletingId.value) {
+    return
+  }
+  deletingId.value = row.paper_id
+  try {
+    const ok = await confirmAndDeletePaper(row.paper_id, row.status)
+    if (ok) {
+      await paperStore.fetchList().catch(() => undefined)
+    }
+  } finally {
+    deletingId.value = null
   }
 }
 </script>
@@ -100,11 +117,20 @@ async function copyPaperId(paperId: string) {
             </span>
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="140">
+        <el-table-column label="操作" width="200">
           <template #default="{ row }: { row: PaperSummary }">
             <el-button link type="primary" @click="openDetail(row)">详情</el-button>
             <el-button v-if="isGraphInteractiveStatus(row.status)" link type="primary" @click="openGraph(row)">
               图谱
+            </el-button>
+            <el-button
+              link
+              type="danger"
+              data-testid="papers-delete-button"
+              :loading="deletingId === row.paper_id"
+              @click="onDeletePaper(row)"
+            >
+              {{ PAPER_DELETE_COPY.button }}
             </el-button>
           </template>
         </el-table-column>

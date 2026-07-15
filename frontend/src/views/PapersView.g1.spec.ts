@@ -124,4 +124,15 @@ describe('PapersView G1 graph entry', () => {
     const graphButtons = wrapper.findAll('button').filter((node) => node.text().includes('图谱'))
     expect(graphButtons).toHaveLength(0)
   })
+
+  it('renders delete action for ready and processing rows', async () => {
+    const wrapper = mount(PapersView, {
+      global: { stubs: actionTableStubs },
+    })
+    await flushPromises()
+
+    const deleteButtons = wrapper.findAll('[data-testid="papers-delete-button"]')
+    expect(deleteButtons).toHaveLength(2)
+    expect(deleteButtons.every((node) => node.text().includes('删除'))).toBe(true)
+  })
 })

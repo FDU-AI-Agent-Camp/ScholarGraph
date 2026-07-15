@@ -14,6 +14,7 @@ import { RouteName } from '@/router/meta'
 import { usePaperStore } from '@/stores/paper'
 import { resolveClassifyWarningMessages } from '@/utils/classifyWarnings'
 import { resolveExtractWarningDisplays } from '@/utils/extractWarnings'
+import { confirmAndDeletePaper, PAPER_DELETE_COPY } from '@/utils/paperDelete'
 import {
   appendUniqueCitation,
   chunkCitationPreview,
@@ -38,6 +39,7 @@ const citations = ref<QaStreamCitationData[]>([])
 const qaStreamWarningMessage = ref<string | null>(null)
 const highlightNodeId = ref<string | null>(null)
 const graphLoading = ref(false)
+const deleting = ref(false)
 let abort: AbortController | null = null
 
 /** Capability gates — graph/QA use interactive+preview; Badge uses raw status. */
@@ -77,6 +79,31 @@ function formatDetailTime(iso: string | undefined): string {
 
 function onPipelineTerminalReached(): void {
   void paperStore.fetchDetail(props.paperId)
+}
+
+function onPipelineReextracted(): void {
+  answer.value = ''
+  citations.value = []
+  qaStreamWarningMessage.value = null
+  highlightNodeId.value = null
+  void paperStore.fetchDetail(props.paperId)
+}
+
+async function onDeletePaper(): Promise<void> {
+  const paper = paperStore.currentPaper
+  if (!paper || deleting.value) {
+    return
+  }
+  deleting.value = true
+  try {
+    const ok = await confirmAndDeletePaper(paper.paper_id, paper.status)
+    if (ok) {
+      paperStore.clearCurrent()
+      await router.push({ name: RouteName.Papers })
+    }
+  } finally {
+    deleting.value = false
+  }
 }
 
 async function loadGraphIfReady(): Promise<void> {
@@ -182,9 +209,21 @@ function onGraphNodeClick(nodeId: string): void {
       <header class="detail-header">
         <div class="detail-header__toolbar">
           <RouterLink to="/papers" class="detail-header__back">← {{ DETAIL_BASELINE_COPY.backLink }}</RouterLink>
-          <el-button v-if="isInteractive()" link type="primary" @click="openFullGraph">
-            {{ DETAIL_BASELINE_COPY.fullGraph }}
-          </el-button>
+          <div class="detail-header__actions">
+            <el-button
+              type="danger"
+              plain
+              size="small"
+              data-testid="detail-delete-button"
+              :loading="deleting"
+              @click="onDeletePaper"
+            >
+              {{ PAPER_DELETE_COPY.button }}
+            </el-button>
+            <el-button v-if="isInteractive()" link type="primary" @click="openFullGraph">
+              {{ DETAIL_BASELINE_COPY.fullGraph }}
+            </el-button>
+          </div>
         </div>
         <h1 class="text-h1 detail-header__title">{{ paperStore.currentPaper.title }}</h1>
         <div class="detail-header__meta">
@@ -207,6 +246,7 @@ function onGraphNodeClick(nodeId: string): void {
               Boolean(paperStore.currentPaper?.status) && !isGraphInteractiveStatus(paperStore.currentPaper.status)
             "
             @terminal-reached="onPipelineTerminalReached"
+            @reextracted="onPipelineReextracted"
           />
 
           <section class="detail-qa">
@@ -362,6 +402,14 @@ function onGraphNodeClick(nodeId: string): void {
 
 .detail-header__back:hover {
   color: var(--color-primary-hover);
+}
+
+.detail-header__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--spacing-8);
 }
 
 .detail-header__title {

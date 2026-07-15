@@ -1,4 +1,4 @@
-import { getData, postData } from './client'
+import { deleteData, getData, postData } from './client'
 import type {
   DataResponse,
   PaginatedPapers,
@@ -36,6 +36,13 @@ export async function forceReextractPaper(
   options?: { force?: boolean },
 ): Promise<DataResponse<PaperStatusData>> {
   return postData<PaperStatusData>(`/papers/${paperId}/reextract`, undefined, {
+    params: { force: options?.force === true ? true : undefined },
+    suppressErrorToast: true,
+  })
+}
+
+export async function deletePaper(paperId: string, options?: { force?: boolean }): Promise<void> {
+  await deleteData(`/papers/${paperId}`, {
     params: { force: options?.force === true ? true : undefined },
     suppressErrorToast: true,
   })
