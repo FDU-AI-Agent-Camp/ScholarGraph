@@ -8,17 +8,22 @@ persistence-core-plan.md
 persistence-core-test-design.md
 
 # ── 密钥与环境（勿提交）────────────────────────────────
+# Broad env copies (`.env`, `.env.backup`, `.env.copy`, `.env.local`, …)
 .env
-.env.backup
-.env.local
-.env.*.local
+.env.*
 API KEY.txt
 *.pem
 *.key
+*.secret
 secrets/
+credentials.json
+**/credentials.json
+**/secrets.json
 
-# 保留模板
+# 保留可提交的环境模板（必须写在 ignore 规则之后）
 !.env.example
+!.env.demo
+!.env.prod
 
 # ── Python / uv ─────────────────────────────────────────
 .venv/
@@ -71,8 +76,9 @@ chroma/
 frontend/node_modules/
 frontend/dist/
 frontend/.vite/
-frontend/.env.development
-frontend/.env.local
+frontend/.env
+frontend/.env.*
+!frontend/.env.development.example
 
 # ── 编辑器与系统 ───────────────────────────────────────
 .idea/
