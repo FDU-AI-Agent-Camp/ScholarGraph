@@ -74,6 +74,6 @@ V2（当前阶段）
 ## 状态
 
 - **实现主线**：RAG Phase 1–4 + Patrol V2 后端已合；P13 双层 indexing watchdog / 孤儿线程世代撤销见 [`rag-requirements.md` §3.6](rag-requirements.md)。
-- **当前前端焦点**：Patrol UI 对齐四模式 + `structured_points`（见本地 `problems-v2.md` Part F，勿提交）。
+- **当前前端焦点**：Part F（四模式 + `structured_points`）已合入 `develop`（PR #27）。后续以 RWW 图谱/问答 UX、文档同步等排期项为主（见本地 `problems-v2.md`，勿提交）。
 - **版本号**：以根目录 `pyproject.toml` 为准（点分式 `M.S.F.B`）。
 - **协作分工**：[`work-assignment.md`](work-assignment.md)。

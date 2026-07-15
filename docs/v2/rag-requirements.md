@@ -2,7 +2,7 @@
 
 > **目标**：将单篇 QA 从「纯图谱检索」升级为「图谱骨架 + 原文片段向量召回」的多尺度混合 RAG；同时增强 Patrol 的混合 context 与结构化输出，并建立可自动回归的 QA 金标评估体系。
 > **范围**：`backend/rag/`（chunking / indexing / vector_store / hybrid_retriever / P13 watchdog）、`backend/graph/qa.py`、paper / pipeline 服务、四模式 Patrol、benchmark 脚本。
-> **实现状态（后端）**：Phase 1–4 与 P10 索引门禁、P13 双层 watchdog / 孤儿线程世代撤销已落地；运行时契约以 §3.6 与代码为准。前端 Patrol UI 对齐见协作跟踪（Part F）。
+> **实现状态（后端）**：Phase 1–4 与 P10 索引门禁、P13 双层 watchdog / 孤儿线程世代撤销已落地；运行时契约以 §3.6 与代码为准。前端 Patrol 四模式 + `structured_points` 已合入 `develop`（PR #27）；当前 FE 焦点见本地 `problems-v2.md`（勿提交）。
 > **版本**：以根目录 `pyproject.toml` 为准。
 > **依赖**：P1 持久化基座已合；Chroma / SQLite 为默认本地路径。
 
@@ -44,7 +44,7 @@ prompt = self._build_prompt(graph, subgraph, question, is_preview=is_preview)
 | `[CITE:…]` Prompt 与 citation 解析 | ✅ |
 | QA 尺度路由 | ✅ |
 | P10 `indexing` 门禁 + P13 watchdog / 孤儿线程世代撤销 | ✅（§3.6） |
-| 四模式 Patrol + 降级契约 | ✅ API；产品 UI 仍见 Part F |
+| 四模式 Patrol + 降级契约 | ✅ API + 产品 UI（Part F / PR #27） |
 | HyDE 扩展接口 | ⏳ 预留 / 非阻塞 |
 | 金标评估与 LLM-as-a-Judge | ✅ 脚本与 gate 已有；持续扩样 |
 
@@ -104,7 +104,7 @@ prompt = self._build_prompt(graph, subgraph, question, is_preview=is_preview)
 当前实现：
 - **A 尺度**：已有（基于 `GraphQuery` 关键词 + 拓扑）。
 - **B 尺度**：已落地（Chroma 三类 collection + `HybridRetriever` + 页码/chunk citation）。
-- **C 尺度**：四模式 Patrol API 已落地（含 `method_overlap` / `claim_evolution` + 降级契约）；产品 UI 四模式展示仍在前端对齐中。
+- **C 尺度**：四模式 Patrol API 与产品 UI（`structured_points` 卡片）已合入；降级 Banner / heal 轮询见 P9/F8。
 
 ---
 
