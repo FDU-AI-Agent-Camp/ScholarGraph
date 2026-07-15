@@ -84,6 +84,7 @@ async def _fake_extract_preview_and_schedule(
     paper_id: str,
     classification: object,
     settings: object | None = None,
+    pipeline_generation_id: str | None = None,
 ) -> ExtractResult:
     """Schedule the real background worker but return a deterministic preview."""
     from backend.config import get_settings
@@ -97,6 +98,7 @@ async def _fake_extract_preview_and_schedule(
         classification,
         head_context=None,
         settings=cfg,
+        pipeline_generation_id=pipeline_generation_id,
     )
     return ExtractResult(graph=_fake_graph(paper_id, paradigm), warnings=[])
 
