@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 from pathlib import Path
-from typing import TYPE_CHECKING, Protocol
+from typing import TYPE_CHECKING, Protocol, cast
 
 from backend.api.exceptions import ApiError
 from backend.graph.head_store import HeadStore
@@ -31,8 +31,10 @@ def _resolve_vector_store(vector_store: _VectorStoreDelete | None) -> _VectorSto
     try:
         retriever = get_hybrid_retriever()
         store = retriever.vector_store
-        if store is not None:
-            return store
+        if store is not None and hasattr(store, "delete_by_paper"):
+            # HybridRetriever types vector_store as VectorStoreProtocol (no delete);
+            # runtime VectorStore / replacements implement delete_by_paper.
+            return cast(_VectorStoreDelete, store)
     except Exception:
         logger.debug("hybrid_retriever_unavailable_for_delete", exc_info=True)
     from backend.rag.vector_store import VectorStore

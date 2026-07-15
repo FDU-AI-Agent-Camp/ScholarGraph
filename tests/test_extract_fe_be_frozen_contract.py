@@ -75,6 +75,4 @@ def test_backend_extract_constants_are_registered_in_frontend_catalog() -> None:
 
 def test_mvp_skeleton_preview_message_matches_frozen_backend_copy() -> None:
     fe_catalog = _frontend_message_map()
-    assert fe_catalog[extract_constants.MVP_SKELETON_PREVIEW_CODE] == (
-        extract_constants.MVP_SKELETON_PREVIEW_MESSAGE
-    )
+    assert fe_catalog[extract_constants.MVP_SKELETON_PREVIEW_CODE] == (extract_constants.MVP_SKELETON_PREVIEW_MESSAGE)

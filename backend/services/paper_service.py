@@ -9,15 +9,12 @@ from uuid import uuid4
 
 from backend.api.exceptions import ApiError
 from backend.config import Settings, get_settings
-from backend.db.base import reset_database_caches
 from backend.repositories import run_async
 from backend.repositories.paper_repository import PaperRepository, get_paper_repository
 from backend.repositories.pipeline_repository import PipelineRepository, get_pipeline_repository
-from backend.repositories.pipeline_sync import reset_pipeline_sync_engine
 from backend.schemas.graph import UnifiedPaperGraph
 from backend.schemas.ingest_head import IngestHead, PersistedHeadRefine
 from backend.schemas.paper import (
-    FailedDuringStage,
     PaperCreateResult,
     PaperDetail,
     PaperStatus,
@@ -28,35 +25,18 @@ from backend.schemas.paper import (
 from backend.schemas.paradigm import Paradigm, ParadigmClassification
 from backend.services.paper_pipeline_ops import PaperPipelineOpsMixin
 from backend.services.paper_pipeline_scheduler import schedule_paper_pipeline
+from backend.services.persistence_reset import reset_persistence_singletons
 
 MAX_UPLOAD_BYTES = 32 * 1024 * 1024
 UPLOAD_QUEUED_MESSAGE = "已接收 PDF，正在自动解构…"
 
-
-def _to_failed_during(stage: PipelineStage | None) -> FailedDuringStage | None:
-    if stage is None:
-        return None
-    return FailedDuringStage(stage.value)
-
-
-def reset_persistence_singletons() -> None:
-    """Clear cached settings, DB engines, repositories, and service singletons."""
-    get_settings.cache_clear()
-    reset_database_caches()
-    get_paper_repository.cache_clear()
-    get_pipeline_repository.cache_clear()
-    reset_pipeline_sync_engine()
-    get_paper_service.cache_clear()
-    from backend.services.graph_persistence_service import get_graph_persistence_service
-    from backend.services.pipeline_completion_service import get_pipeline_completion_service
-    from backend.services.pipeline_status_service import get_pipeline_status_service
-
-    get_graph_persistence_service.cache_clear()
-    get_pipeline_status_service.cache_clear()
-    get_pipeline_completion_service.cache_clear()
-    from backend.events.bus import reset_event_bus_cache
-
-    reset_event_bus_cache()
+__all__ = [
+    "MAX_UPLOAD_BYTES",
+    "UPLOAD_QUEUED_MESSAGE",
+    "PaperService",
+    "get_paper_service",
+    "reset_persistence_singletons",
+]
 
 
 class PaperService(PaperPipelineOpsMixin):
