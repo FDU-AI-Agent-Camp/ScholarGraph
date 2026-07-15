@@ -177,9 +177,11 @@ paths:
       summary: 强制重新抽取图谱（逃生舱）
       description: |
         当上一轮回抽取因 LLM 超时/限流等原因降级为启发式 fallback 时，
-        调用此接口清空已有图谱、预览和 warnings，重置状态为 pending 并重新入队流水线。
+        调用此接口清空已有图谱、预览、warnings 与该论文的 Chroma 向量，
+        重置状态为 pending 并重新入队流水线。
 
-        `status=processing` 默认 409；`force=true` 时先 cancel in-flight tasks 再重置并重入队。
+        `status=processing` 默认 409；`force=true` 时先 cancel in-flight tasks 再清索引并重入队。
+        无 Celery：撤销对象为进程内 asyncio Task + indexing run registry.
       parameters:
         - $ref: "#/components/parameters/PaperId"
         - $ref: "#/components/parameters/ForceAbort"
