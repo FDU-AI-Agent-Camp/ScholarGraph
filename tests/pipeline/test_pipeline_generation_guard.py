@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from datetime import UTC, datetime
 from pathlib import Path
 from unittest.mock import MagicMock
@@ -138,6 +139,98 @@ async def test_finalize_refuses_graph_write_when_generation_obsolete(gen_guard_d
     row = await svc.get_status(paper_id)
     assert row.status == PaperStatus.FAILED
     assert row.error_code == PROCESS_TIMEOUT_CODE
+
+
+@pytest.mark.asyncio
+@pytest.mark.process_release_gate
+async def test_obsolete_run_id_write_blocked(gen_guard_db) -> None:
+    """Time-traveling chaos: frozen Run_A cannot dirty GraphStore / SQL after Run_B remints."""
+    paper_id = "paper-x-orphan-run"
+    await _put_processing(paper_id, stage=PipelineStage.EXTRACTING)
+    svc = get_paper_service()
+
+    # 1) Normal extract generation Run_A while PROCESSING.
+    run_a = svc.begin_pipeline_generation(paper_id)
+    assert svc.get_pipeline_generation_id(paper_id) == run_a
+    assert (await svc.get_status(paper_id)).status == PaperStatus.PROCESSING
+
+    # Freeze Run_A just before terminal write (zombie mid-LLM, still holding Run_A token).
+    thaw_run_a = asyncio.Event()
+
+    async def _run_a_ghost_finalize(
+        *,
+        persistence: MagicMock,
+        completion: PipelineCompletionService,
+    ) -> None:
+        await thaw_run_a.wait()
+        completion.finalize(
+            paper_id,
+            graph_data=_minimal_graph(paper_id).model_dump(mode="json"),
+            classification_data=_minimal_classification().model_dump(mode="json"),
+            pipeline_generation_id=run_a,
+        )
+
+    save = MagicMock()
+    persistence = MagicMock()
+    persistence.save = save
+    completion = PipelineCompletionService(graph_persistence=persistence)
+    ghost = asyncio.create_task(
+        _run_a_ghost_finalize(persistence=persistence, completion=completion),
+        name="ghost-run-a-finalize",
+    )
+    await asyncio.sleep(0)
+
+    # 2) Bypass in-memory Task check: watchdog SQL tombstone + generation invalidate.
+    flipped = fail_orphaned_pipeline_row_sync(
+        paper_id,
+        error_code=PROCESS_TIMEOUT_CODE,
+        message=PROCESS_TIMEOUT_MESSAGE,
+    )
+    assert flipped
+    dead = await svc.get_status(paper_id)
+    assert dead.status == PaperStatus.FAILED
+    assert dead.error_code == PROCESS_TIMEOUT_CODE
+    assert svc.get_pipeline_generation_id(paper_id) is None
+
+    # 3) Emergency reextract mint (generation SSOT path used by force reextract after reset).
+    # Full HTTP force_reextract is covered elsewhere; here we exercise the production
+    # generation + status boundary that late Run_A must not clobber.
+    svc.reset_pipeline_for_reextract(paper_id, message="强制重新抽取")
+    await get_pipeline_repository().save_status(
+        paper_id,
+        PaperStatusData(
+            paper_id=paper_id,
+            status=PaperStatus.PROCESSING,
+            percent=STAGE_PERCENT[PipelineStage.INGESTING],
+            stage=PipelineStage.INGESTING,
+            message="Run_B ingesting",
+            updated_at=datetime.now(UTC),
+        ),
+    )
+    run_b = svc.begin_pipeline_generation(paper_id)
+    assert run_b != run_a
+    assert svc.get_pipeline_generation_id(paper_id) == run_b
+    run_b_before = await svc.get_status(paper_id)
+    assert run_b_before.status == PaperStatus.PROCESSING
+    assert run_b_before.message == "Run_B ingesting"
+    assert run_b_before.error_code is None
+
+    # 4) Thaw Run_A: late GraphStore.save + promote-ready must hard-fail at generation gate.
+    thaw_run_a.set()
+    with pytest.raises(ObsoletePipelineGenerationError) as exc_info:
+        await ghost
+    assert exc_info.value.code == OBSOLETE_PIPELINE_GENERATION_CODE
+    assert exc_info.value.expected_generation_id == run_a
+    assert exc_info.value.current_generation_id == run_b
+    save.assert_not_called()
+
+    # 5) Run_B progress must be uncontaminated — no READY flip, generation stays Run_B.
+    after = await svc.get_status(paper_id)
+    assert after.status == PaperStatus.PROCESSING
+    assert after.message == "Run_B ingesting"
+    assert after.error_code is None
+    assert after.stage == PipelineStage.INGESTING
+    assert svc.get_pipeline_generation_id(paper_id) == run_b
 
 
 @pytest.mark.asyncio
