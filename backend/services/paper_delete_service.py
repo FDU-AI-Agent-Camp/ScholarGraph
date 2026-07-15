@@ -85,8 +85,7 @@ def _is_vector_unavailable_error(exc: BaseException) -> bool:
         return True
     message = str(exc).lower()
     return any(
-        token in message
-        for token in ("timeout", "timed out", "unavailable", "connection refused", "503", "502")
+        token in message for token in ("timeout", "timed out", "unavailable", "connection refused", "503", "502")
     )
 
 

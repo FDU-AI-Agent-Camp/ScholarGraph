@@ -10,8 +10,7 @@ export const DETAIL_BASELINE_COPY = {
   pauseRefresh: '暂停自动刷新',
   reextractButton: '重新提取',
   forceReextractConfirmTitle: '强行中止并重新提取？',
-  forceReextractConfirmMessage:
-    '论文正在提取或构建索引中。如果确认系统已卡死，可选择强行中止并重新提取。',
+  forceReextractConfirmMessage: '论文正在提取或构建索引中。如果确认系统已卡死，可选择强行中止并重新提取。',
   forceReextractConfirmOk: '强行中止并重新提取',
   forceReextractConfirmCancel: '取消',
   reextractSuccess: '已重新加入抽取队列',

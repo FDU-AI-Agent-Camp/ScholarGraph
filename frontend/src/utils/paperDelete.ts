@@ -13,8 +13,7 @@ export const PAPER_DELETE_COPY = {
   confirmMessage: '将物理清空图谱、向量索引与原始 PDF，此操作不可恢复。',
   confirmOk: '确认删除',
   forceConfirmTitle: '强行中止并删除？',
-  forceConfirmMessage:
-    '警告：该文件正在处理中，强行删除将打断后台算力并物理清空所有相关图谱与索引。此操作不可恢复。',
+  forceConfirmMessage: '警告：该文件正在处理中，强行删除将打断后台算力并物理清空所有相关图谱与索引。此操作不可恢复。',
   forceConfirmOk: '强行中止并删除',
   cancel: '取消',
   success: '论文已删除',

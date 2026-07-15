@@ -17,11 +17,7 @@ import {
   hasExtractHeuristicFallback,
   resolveExtractWarningDisplays,
 } from '@/utils/extractWarnings'
-import {
-  isActivePipelineStatus,
-  isFailedStatus,
-  isGraphInteractiveStatus,
-} from '@/utils/paperStatus'
+import { isActivePipelineStatus, isFailedStatus, isGraphInteractiveStatus } from '@/utils/paperStatus'
 import { resolvePipelineFailureTitle } from '@/utils/pipelineFailureCopy'
 import {
   PIPELINE_REFRESH_CAPTION,

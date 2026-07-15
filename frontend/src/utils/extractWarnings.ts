@@ -8,8 +8,7 @@ export const EXTRACT_HEURISTIC_FALLBACK_MESSAGE = '触发启发式Fallback!' as 
 /** MVP skeleton preview while deep nodes assemble in the background. */
 export const MVP_SKELETON_PREVIEW_CODE = 'mvp_skeleton_preview' as const
 
-export const MVP_SKELETON_PREVIEW_MESSAGE =
-  '当前为 MVP 宏观骨架图谱，深度节点仍在后台组装中。' as const
+export const MVP_SKELETON_PREVIEW_MESSAGE = '当前为 MVP 宏观骨架图谱，深度节点仍在后台组装中。' as const
 
 export const EXTRACT_LLM_TIMEOUT_CODE = 'extract_llm_timeout' as const
 
@@ -33,8 +32,7 @@ export const EXTRACT_CONTEXT_WINDOW_EXCEEDED_MESSAGE = '上下文窗口超限，
 
 export const LOW_CONFIDENCE_GRAPH_CODE = 'low_confidence_graph' as const
 
-export const LOW_CONFIDENCE_GRAPH_MESSAGE =
-  '图谱质量未达置信门控，建议人工复核或重新抽取。' as const
+export const LOW_CONFIDENCE_GRAPH_MESSAGE = '图谱质量未达置信门控，建议人工复核或重新抽取。' as const
 
 /** P13 micro wait_for — RAG index timed out; paper remains interactive. */
 export const RAG_INDEX_TIMEOUT_CODE = 'rag_index_timeout' as const

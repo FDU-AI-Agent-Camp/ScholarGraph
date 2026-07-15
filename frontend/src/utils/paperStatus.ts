@@ -43,10 +43,7 @@ export function isQaReadyStatus(status: PaperStatus): status is GraphInteractive
 /** In-flight pipeline work that must not be casually interrupted. */
 export type ActivePipelinePaperStatus = Extract<PaperStatus, 'processing' | 'indexing'>
 
-const ACTIVE_PIPELINE_STATUSES: ReadonlySet<ActivePipelinePaperStatus> = new Set([
-  'processing',
-  'indexing',
-])
+const ACTIVE_PIPELINE_STATUSES: ReadonlySet<ActivePipelinePaperStatus> = new Set(['processing', 'indexing'])
 
 export function isActivePipelineStatus(status: PaperStatus): status is ActivePipelinePaperStatus {
   return ACTIVE_PIPELINE_STATUSES.has(status as ActivePipelinePaperStatus)

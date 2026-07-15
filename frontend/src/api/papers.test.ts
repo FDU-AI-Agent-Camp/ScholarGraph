@@ -23,7 +23,6 @@ import {
   uploadPaper,
 } from '@/api/papers'
 
-
 describe('papers API module', () => {
   beforeEach(() => {
     mockGetData.mockReset()
