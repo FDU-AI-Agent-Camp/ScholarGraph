@@ -113,7 +113,7 @@ async def test_matrix_index_missing_returns_empty_vectors_without_error_logs(
     scale: QuestionScale,
     caplog: pytest.LogCaptureFixture,
 ) -> None:
-    """业务边界：exists() 正常返回 False → 安静空召回，图谱子图仍可用。"""
+    """业务边界：exists()→False → 空向量召回 + INDEX_NOT_READY metadata（非静默）。"""
     vector_store = AsyncMock()
     vector_store.exists = AsyncMock(return_value=False)
     retriever = HybridRetriever(vector_store=vector_store)
@@ -133,6 +133,8 @@ async def test_matrix_index_missing_returns_empty_vectors_without_error_logs(
     assert rc.relations == []
     assert rc.nodes
     assert rc.edges
+    assert rc.metadata.index_ready is False
+    assert rc.metadata.missing_reason == "INDEX_NOT_READY"
     vector_store.exists.assert_awaited_once_with("hss-001")
     vector_store.query_chunks.assert_not_called()
     vector_store.query_entities.assert_not_called()

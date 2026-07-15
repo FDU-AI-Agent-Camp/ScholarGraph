@@ -12,6 +12,7 @@ from backend.rag.exceptions import VectorStoreUnavailableError
 from backend.rag.models import (
     QuestionScale,
     RetrievalContext,
+    RetrievalMetadata,
     RetrievedChunk,
     RetrievedEntity,
     RetrievedRelation,
@@ -22,6 +23,8 @@ if TYPE_CHECKING:
     from backend.schemas.graph import UnifiedPaperGraph
 
 logger = logging.getLogger(__name__)
+
+INDEX_NOT_READY_REASON = "INDEX_NOT_READY"
 
 _hybrid_retriever_singleton: HybridRetriever | None = None
 
@@ -78,9 +81,10 @@ class HybridRetriever:
         entities: list[RetrievedEntity] = []
         relations: list[RetrievedRelation] = []
         chunks: list[RetrievedChunk] = []
+        metadata = RetrievalMetadata()
 
         if scale != QuestionScale.SUMMARY:
-            entities, relations, chunks = await self._retrieve_vectors(
+            entities, relations, chunks, metadata = await self._retrieve_vectors(
                 paper_id,
                 question,
                 query_transform=query_transform,
@@ -95,6 +99,7 @@ class HybridRetriever:
             relations=relations,
             chunks=chunks,
             scale=scale,
+            metadata=metadata,
         )
 
     def build_graph_only_context(
@@ -126,21 +131,32 @@ class HybridRetriever:
         query_transform: Callable[[str], str] | None,
         query_embedding: list[float] | None,
         top_k: int | None = None,
-    ) -> tuple[list[RetrievedEntity], list[RetrievedRelation], list[RetrievedChunk]]:
+    ) -> tuple[
+        list[RetrievedEntity],
+        list[RetrievedRelation],
+        list[RetrievedChunk],
+        RetrievalMetadata,
+    ]:
         if self._vector_store is None:
-            return [], [], []
+            # Unbound store (graph-only test / demo wiring) — not INDEX_NOT_READY.
+            return [], [], [], RetrievalMetadata()
 
         index_ready = await self._vector_store_index_ready(paper_id)
         if not index_ready:
             logger.info("hybrid_retriever skip vectors: no index for paper_id=%s", paper_id)
-            return [], [], []
+            return (
+                [],
+                [],
+                [],
+                RetrievalMetadata(index_ready=False, missing_reason=INDEX_NOT_READY_REASON),
+            )
 
         query_text = (query_transform(question) if query_transform else question).strip()
         if not query_text:
-            return [], [], []
+            return [], [], [], RetrievalMetadata()
 
         try:
-            return await asyncio.gather(
+            entities, relations, chunks = await asyncio.gather(
                 self._vector_store.query_entities(
                     query_text,
                     paper_id=paper_id,
@@ -160,6 +176,7 @@ class HybridRetriever:
                     query_embedding=query_embedding,
                 ),
             )
+            return entities, relations, chunks, RetrievalMetadata()
         except VectorStoreUnavailableError:
             raise
         except Exception as exc:

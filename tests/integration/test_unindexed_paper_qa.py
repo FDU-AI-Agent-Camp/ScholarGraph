@@ -85,6 +85,9 @@ async def test_unindexed_processing_paper_chunk_citation_emits_indexing_placehol
             body += chunk
 
     events = parse_sse_body(body)
+    warning_events = [payload for event_name, payload in events if event_name == "warning"]
+    assert len(warning_events) == 1, events
+    assert warning_events[0]["code"] == "RAG_INDEX_NOT_READY"
     cites = chunk_citations(events)
     assert len(cites) == 1, events
     cite = cites[0]
@@ -130,6 +133,9 @@ async def test_unindexed_processing_paper_qa_stream_engine_path(
     )
     assert retrieval.context is not None
     assert retrieval.context.chunks == []
+    assert retrieval.warning_event is not None
+    assert retrieval.warning_event["code"] == "RAG_INDEX_NOT_READY"
+    assert retrieval.context.metadata.index_ready is False
 
     llm_text = "依据原文[CITE:chunk:stem-002_chunk_1]。"
     events = await collect_qa_events(

@@ -25,6 +25,10 @@ VECTOR_RETRIEVAL_TIMEOUT_CODE = "vector_retrieval_timeout"
 VECTOR_RETRIEVAL_TIMEOUT_MESSAGE = "向量检索超时，正在使用纯图知识库答题"
 VECTOR_STORE_UNAVAILABLE_CODE = "vector_store_unavailable"
 VECTOR_STORE_UNAVAILABLE_MESSAGE = "向量库连接异常，已自动降级为纯图谱检索模式"
+RAG_INDEX_NOT_READY_CODE = "RAG_INDEX_NOT_READY"
+RAG_INDEX_NOT_READY_MESSAGE = (
+    "当前原文向量索引未就绪，已安全退化为纯图谱子图推理。回答可生成，但暂无法提供精确页码与高亮文本块引用。"
+)
 VECTOR_RETRIEVAL_WARNING_SOURCE = "vector_store"
 
 
@@ -102,6 +106,20 @@ async def build_retrieval_context_with_fallback(
             ),
             timeout=resolved_timeout,
         )
+        if not context.metadata.index_ready:
+            logger.info(
+                "qa_retrieval_index_not_ready paper_id=%s scale=%s reason=%s — graph-only synthesis",
+                paper_id,
+                scale.value,
+                context.metadata.missing_reason,
+            )
+            return RetrievalBuildResult(
+                context=context,
+                warning_event=_vector_retrieval_warning(
+                    code=RAG_INDEX_NOT_READY_CODE,
+                    message=RAG_INDEX_NOT_READY_MESSAGE,
+                ),
+            )
         return RetrievalBuildResult(context=context)
     except VectorStoreUnavailableError as exc:
         logger.warning(

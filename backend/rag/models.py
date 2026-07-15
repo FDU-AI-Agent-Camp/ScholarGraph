@@ -230,6 +230,20 @@ QAJudgeResult = TrackBJudgeSchema
 JudgeSchema = JudgeMicroOutput
 
 
+class RetrievalMetadata(BaseModel):
+    """Source-connectivity profile for one retrieval turn (QA-D1 honesty).
+
+    Distinguishes empty vector hits (query miss) from missing / unavailable
+    index so SSE can emit ``RAG_INDEX_NOT_READY`` instead of silent graph-only.
+    """
+
+    index_ready: bool = True
+    missing_reason: str | None = Field(
+        default=None,
+        description="e.g. INDEX_NOT_READY — aligned with PatrolDegradationReason.",
+    )
+
+
 class RetrievalContext(BaseModel):
     """Complete retrieval result — single source of truth for QA prompt context.
 
@@ -245,6 +259,8 @@ class RetrievalContext(BaseModel):
           ``{entities}`` / ``{relations}`` / ``{chunks}`` via
           ``format_retrieval_context()``.
         - ``scale``: resolved question scale for routing metrics.
+        - ``metadata``: index connectivity — empty chunks + ``index_ready=False``
+          means missing index, not a genuine miss.
 
     Fallback: when ``nodes`` and ``edges`` are both empty (or RC is ``None``),
     ``QaEngine`` lazily calls ``GraphQuery.subgraph_for_question()`` for V1 /
@@ -261,3 +277,4 @@ class RetrievalContext(BaseModel):
     relations: list[RetrievedRelation] = Field(default_factory=list)
     chunks: list[RetrievedChunk] = Field(default_factory=list)
     scale: QuestionScale
+    metadata: RetrievalMetadata = Field(default_factory=RetrievalMetadata)
