@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import backend.db.models  # noqa: F401 — register ORM tables on Base.metadata
 from backend.db.base import Base
 from sqlalchemy.ext.asyncio import AsyncEngine
 

@@ -11,6 +11,8 @@ from backend.db.base import Base
 
 DEFAULT_GRAPH_VERSION = "1"
 DEFAULT_EXTRACTOR_CONFIG_HASH = ""
+PAPER_OPS_OPERATION_REEXTRACT = "reextract"
+PAPER_OPS_OPERATION_DELETE = "delete"
 
 
 def _utc_now() -> datetime:
@@ -82,3 +84,20 @@ class PipelineRunRow(Base):
     )
 
     paper: Mapped[PaperRow] = relationship(back_populates="pipeline_run")
+
+
+class PaperOpsClaimRow(Base):
+    """Cluster-wide wipe mutex for force reextract / force delete.
+
+    Durable row (not a long-held DB transaction): covers await I/O during abort +
+    Chroma/disk purge across multiple Uvicorn workers. Stale leases are stealable
+    after ``expires_at`` so a crashed worker cannot permanently 409 a paper.
+    """
+
+    __tablename__ = "paper_ops_claims"
+
+    paper_id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    operation: Mapped[str] = mapped_column(String(20), default=PAPER_OPS_OPERATION_REEXTRACT)
+    owner_token: Mapped[str] = mapped_column(String(64))
+    acquired_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utc_now)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
