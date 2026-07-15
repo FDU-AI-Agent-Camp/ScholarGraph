@@ -14,7 +14,8 @@ import {
   hasExtractHeuristicFallback,
   resolveExtractWarningMessages,
 } from '@/utils/extractWarnings'
-import { isFailedStatus } from '@/utils/paperStatus'
+import { isFailedStatus, isGraphInteractiveStatus } from '@/utils/paperStatus'
+import type { PaperStatus } from '@/api/types'
 import {
   PIPELINE_REFRESH_CAPTION,
   PIPELINE_STEPS,
@@ -28,7 +29,9 @@ const props = defineProps<{
 }>()
 
 const emit = defineEmits<{
+  /** @deprecated Prefer terminalReached — kept for callers still listening. */
   ready: []
+  terminalReached: [status: PaperStatus]
 }>()
 
 const { status, polling, start, stop } = usePaperStatus(props.paperId)
@@ -65,7 +68,14 @@ watch(
 
 watch(
   () => status.value?.status,
-  (value) => {
+  (value, previous) => {
+    if (!value || !isGraphInteractiveStatus(value)) {
+      return
+    }
+    if (previous != null && isGraphInteractiveStatus(previous)) {
+      return
+    }
+    emit('terminalReached', value)
     if (value === 'ready') {
       emit('ready')
     }
@@ -75,10 +85,10 @@ watch(
 watch(
   () => status.value,
   (snapshot, previous) => {
-    if (!snapshot || snapshot.status !== 'ready' || extractFallbackToastShown.value) {
+    if (!snapshot || !isGraphInteractiveStatus(snapshot.status) || extractFallbackToastShown.value) {
       return
     }
-    if (previous?.status === 'ready') {
+    if (previous != null && isGraphInteractiveStatus(previous.status)) {
       return
     }
     if (!hasExtractHeuristicFallback(snapshot.extract_warnings)) {
@@ -92,10 +102,10 @@ watch(
 watch(
   () => status.value,
   (snapshot, previous) => {
-    if (!snapshot || snapshot.status !== 'ready' || classifyFallbackToastShown.value) {
+    if (!snapshot || !isGraphInteractiveStatus(snapshot.status) || classifyFallbackToastShown.value) {
       return
     }
-    if (previous?.status === 'ready') {
+    if (previous != null && isGraphInteractiveStatus(previous.status)) {
       return
     }
     if (!hasClassifierHeuristicFallback(snapshot.classify_warnings)) {

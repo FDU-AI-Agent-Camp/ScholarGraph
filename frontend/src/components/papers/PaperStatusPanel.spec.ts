@@ -15,6 +15,7 @@ import {
   readyStatusWithBothFallbacks,
   readyStatusWithClassifyFallback,
   readyStatusWithExtractFallback,
+  readyWithWarningsStatus,
   classifyingStatusWithClassifyFallback,
 } from '@/test/fixtures/paperStatus'
 
@@ -127,6 +128,20 @@ describe('PaperStatusPanel', () => {
     await flushPromises()
 
     expect(wrapper.emitted('ready')).toHaveLength(1)
+    expect(wrapper.emitted('terminalReached')).toEqual([['ready']])
+  })
+
+  it('emits terminalReached for ready_with_warnings so detail can rehydrate (G1)', async () => {
+    mockStatus.value = processingStatus
+    const wrapper = mount(PaperStatusPanel, {
+      props: { paperId: 'paper-001', autoStart: false },
+    })
+
+    mockStatus.value = readyWithWarningsStatus
+    await flushPromises()
+
+    expect(wrapper.emitted('terminalReached')).toEqual([['ready_with_warnings']])
+    expect(wrapper.emitted('ready')).toBeUndefined()
   })
 
   it('calls start on mount when autoStart is true', () => {
