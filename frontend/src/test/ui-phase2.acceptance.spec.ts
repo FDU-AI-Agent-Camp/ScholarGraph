@@ -58,6 +58,7 @@ describe('Phase 2 UI acceptance', () => {
       expect(badgeStatusSrc).toContain('var(--color-text-muted)')
       expect(badgeStatusSrc).toContain('var(--color-info)')
       expect(badgeStatusSrc).toContain('var(--color-success)')
+      expect(badgeStatusSrc).toContain('var(--color-warning)')
       expect(badgeStatusSrc).toContain('var(--color-error)')
     })
 

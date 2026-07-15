@@ -45,6 +45,20 @@ describe('BadgeStatus', () => {
     expect(wrapper.classes()).toContain('badge-status--processing')
     expect(wrapper.text()).toContain('解构中')
   })
+
+  it('uses warning token class for ready_with_warnings — not success green (G1)', () => {
+    const src = readFrontendSource('components/ui/BadgeStatus.vue')
+    const readyBlock = src.slice(src.indexOf('.badge-status--ready '), src.indexOf('.badge-status--failed'))
+    expect(readyBlock).toContain('var(--color-success)')
+    expect(readyBlock).toContain('ready_with_warnings')
+    expect(readyBlock).toContain('var(--color-warning)')
+    expect(readyBlock.indexOf('ready_with_warnings')).toBeLessThan(readyBlock.lastIndexOf('var(--color-warning)'))
+
+    const wrapper = mount(BadgeStatus, { props: { status: 'ready_with_warnings' } })
+    expect(wrapper.classes()).toContain('badge-status--ready_with_warnings')
+    expect(wrapper.text()).toContain('已就绪（有警告）')
+    expect(wrapper.classes()).not.toContain('badge-status--ready')
+  })
 })
 
 describe('TagCitation', () => {

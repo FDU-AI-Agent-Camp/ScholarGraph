@@ -56,9 +56,12 @@ const label = computed(() => STATUS_LABELS[props.status])
   animation: badge-status-pulse var(--duration-pulse) var(--ease-in-subtle) infinite;
 }
 
-.badge-status--ready .badge-status__dot,
-.badge-status--ready_with_warnings .badge-status__dot {
+.badge-status--ready .badge-status__dot {
   background: var(--color-success);
+}
+
+.badge-status--ready_with_warnings .badge-status__dot {
+  background: var(--color-warning);
 }
 
 .badge-status--failed .badge-status__dot {
