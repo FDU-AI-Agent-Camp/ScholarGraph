@@ -1,4 +1,5 @@
 import { ElMessage, ElMessageBox } from 'element-plus'
+import type { MessageBoxData } from 'element-plus'
 import { ref } from 'vue'
 import { enableAutoUnmount, flushPromises, mount } from '@vue/test-utils'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -330,7 +331,7 @@ describe('PaperStatusPanel', () => {
 
   it('force-confirms then reextracts with force=true while processing', async () => {
     mockStatus.value = processingStatus
-    vi.mocked(ElMessageBox.confirm).mockResolvedValue('confirm')
+    vi.mocked(ElMessageBox.confirm).mockResolvedValue('confirm' as MessageBoxData)
     mockForceReextract.mockResolvedValue({
       data: { ...processingStatus, status: 'pending', percent: 0, stage: null, message: 'queued' },
       meta: { request_id: 'req-re' },
@@ -350,7 +351,7 @@ describe('PaperStatusPanel', () => {
 
   it('force-confirms then reextracts with force=true while indexing', async () => {
     mockStatus.value = indexingStatus
-    vi.mocked(ElMessageBox.confirm).mockResolvedValue('confirm')
+    vi.mocked(ElMessageBox.confirm).mockResolvedValue('confirm' as MessageBoxData)
     mockForceReextract.mockResolvedValue({
       data: { ...indexingStatus, status: 'pending', percent: 0, stage: null, message: 'queued' },
       meta: { request_id: 'req-re-idx' },
@@ -368,14 +369,12 @@ describe('PaperStatusPanel', () => {
   it('retries with force=true after 409 on ready reextract race', async () => {
     mockStatus.value = readyStatus
     mockForceReextract
-      .mockRejectedValueOnce(
-        new ApiClientError({ code: 'PAPER_ALREADY_PROCESSING', message: 'busy' }, 409),
-      )
+      .mockRejectedValueOnce(new ApiClientError({ code: 'PAPER_ALREADY_PROCESSING', message: 'busy' }, 409))
       .mockResolvedValueOnce({
         data: { ...readyStatus, status: 'pending', percent: 0, stage: null, message: 'queued' },
         meta: { request_id: 'req-retry' },
       })
-    vi.mocked(ElMessageBox.confirm).mockResolvedValue('confirm')
+    vi.mocked(ElMessageBox.confirm).mockResolvedValue('confirm' as MessageBoxData)
 
     const wrapper = mount(PaperStatusPanel, {
       props: { paperId: 'paper-ready', autoStart: false },
