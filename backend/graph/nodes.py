@@ -141,6 +141,7 @@ async def extract_node(state: WorkflowState) -> WorkflowState:
                 paradigm,
                 paper_id=paper_id,
                 classification=classification,
+                pipeline_generation_id=state.get("pipeline_generation_id"),
             )
         except ServiceError as exc:
             return _failure_patch(exc, stage=PipelineStage.EXTRACTING)
@@ -186,6 +187,7 @@ async def store_node(state: WorkflowState) -> WorkflowState:
             extract_warnings=state.get("extract_warnings"),
             full_text=state["full_text"],
             page_break_offsets=state.get("page_break_offsets"),
+            pipeline_generation_id=state.get("pipeline_generation_id"),
         )
     except ServiceError as exc:
         return _failure_patch(exc, stage=PipelineStage.STORING)

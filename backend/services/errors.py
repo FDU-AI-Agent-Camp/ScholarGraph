@@ -4,6 +4,7 @@ from __future__ import annotations
 
 PIPELINE_FAILED_CODE = "PIPELINE_FAILED"
 INVALID_STATE_TRANSITION_CODE = "INVALID_STATE_TRANSITION"
+OBSOLETE_PIPELINE_GENERATION_CODE = "OBSOLETE_PIPELINE_GENERATION"
 
 # Processing / pending orphan heal (wall-clock + cold-boot watchdog).
 PROCESS_ORPHANED_CODE = "PROCESS_ORPHANED"
@@ -38,3 +39,20 @@ class InvalidStateTransitionError(ServiceError):
         self.from_status = from_status
         self.to_status = to_status
         self.paper_id = paper_id
+
+
+class ObsoletePipelineGenerationError(ServiceError):
+    """Terminal write refused: task context run_id no longer matches DB generation."""
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        paper_id: str,
+        expected_generation_id: str | None,
+        current_generation_id: str | None,
+    ) -> None:
+        super().__init__(OBSOLETE_PIPELINE_GENERATION_CODE, message)
+        self.paper_id = paper_id
+        self.expected_generation_id = expected_generation_id
+        self.current_generation_id = current_generation_id

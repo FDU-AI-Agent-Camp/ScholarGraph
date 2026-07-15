@@ -291,8 +291,11 @@ def fail_orphaned_pipeline_row_sync(
         run.message = message
         run.error_code = error_code
         run.failed_during = failed_during_value
+        # Invalidate extract-generation so a late orphan Task cannot pass the write guard.
+        run.pipeline_generation_id = None
         run.updated_at = now
         paper.status = status.value
         paper.updated_at = now
         db.commit()
     return True
+

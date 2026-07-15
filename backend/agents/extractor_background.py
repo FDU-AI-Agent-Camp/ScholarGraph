@@ -54,6 +54,7 @@ async def extract_preview_and_schedule_full(
     paper_id: str,
     classification: ParadigmClassification,
     settings: Settings | None = None,
+    pipeline_generation_id: str | None = None,
 ) -> ExtractResult:
     """Emit MVP preview synchronously, then schedule full extraction in background.
 
@@ -89,6 +90,7 @@ async def extract_preview_and_schedule_full(
         classification,
         head_context=head_context,
         settings=cfg,
+        pipeline_generation_id=pipeline_generation_id,
     )
 
     if preview_graph is not None:

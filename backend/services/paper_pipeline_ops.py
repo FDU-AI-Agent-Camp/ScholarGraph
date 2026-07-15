@@ -62,6 +62,24 @@ class PaperPipelineOpsMixin:
 
         return run_async(self._pipeline_repo.reset_for_reextract(paper_id, message=message))
 
+    def get_pipeline_generation_id(self, paper_id: str) -> str | None:
+        """Return the active extract-generation token, or ``None`` if unset."""
+        from backend.repositories import run_async
+
+        return run_async(self._pipeline_repo.get_pipeline_generation_id(paper_id))
+
+    def begin_pipeline_generation(self, paper_id: str) -> str:
+        """Mint and persist a new extract-generation token (terminal write guard)."""
+        from backend.repositories import run_async
+
+        return run_async(self._pipeline_repo.begin_pipeline_generation(paper_id))
+
+    def invalidate_pipeline_generation(self, paper_id: str) -> None:
+        """Clear the extract-generation token (orphan late-write defense)."""
+        from backend.repositories import run_async
+
+        run_async(self._pipeline_repo.set_pipeline_generation_id(paper_id, None))
+
     async def promote_paper_to_terminal_status(
         self,
         paper_id: str,
@@ -316,6 +334,7 @@ class PaperPipelineOpsMixin:
             error_code=error_code,
             message=message,
         )
+
 
     async def fail_orphaned_pipeline_paper(
         self,

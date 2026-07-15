@@ -36,12 +36,19 @@ def complete_paper_pipeline(
     extract_warnings: list[str] | None = None,
     full_text: str = "",
     page_break_offsets: list[int] | None = None,
+    pipeline_generation_id: str | None = None,
 ) -> None:
     """Mark paper ready after graph has been persisted exactly once upstream.
 
     ``graph_path`` must come from :class:`GraphPersistenceService` (or an injected
     test double); this function does not write to ``GraphStore`` directly.
+
+    ``pipeline_generation_id`` is the extract-run token captured at task start; it
+    must still match ``pipeline_runs.pipeline_generation_id`` or terminal SQL is refused.
     """
+    from backend.services.pipeline_generation_guard import assert_pipeline_generation_writable
+
+    assert_pipeline_generation_writable(paper_id, pipeline_generation_id)
     paper_service.require_paper_for_pipeline(paper_id)
 
     extract_warnings = list(extract_warnings or ())
@@ -139,8 +146,13 @@ class PipelineCompletionService:
         extract_warnings: list[str] | None = None,
         full_text: str = "",
         page_break_offsets: list[int] | None = None,
+        pipeline_generation_id: str | None = None,
     ) -> UnifiedPaperGraph:
         try:
+            from backend.services.pipeline_generation_guard import assert_pipeline_generation_writable
+
+            # Gate BEFORE GraphStore write so orphans cannot dirty disk after kill.
+            assert_pipeline_generation_writable(paper_id, pipeline_generation_id)
             graph = UnifiedPaperGraph.model_validate(graph_data)
             classification = ParadigmClassification.model_validate(classification_data)
             persistence = self._graph_persistence or get_graph_persistence_service()
@@ -156,6 +168,7 @@ class PipelineCompletionService:
                 extract_warnings=extract_warnings,
                 full_text=full_text,
                 page_break_offsets=page_break_offsets,
+                pipeline_generation_id=pipeline_generation_id,
             )
             return graph
         except ServiceError:
