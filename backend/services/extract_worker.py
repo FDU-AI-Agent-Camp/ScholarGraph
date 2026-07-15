@@ -137,6 +137,15 @@ def get_full_extraction_task(paper_id: str) -> asyncio.Task[None] | None:
     return None
 
 
+async def cancel_full_extraction(paper_id: str) -> None:
+    """Cancel and await the background full-extraction task for *paper_id*, if any."""
+    task = _full_extract_tasks.pop(paper_id, None)
+    if task is None or task.done():
+        return
+    task.cancel()
+    await asyncio.gather(task, return_exceptions=True)
+
+
 def reset_extract_worker() -> None:
     """Cancel in-flight work and drop registry entries (sync; does not await CancelledError)."""
     for task in list(_full_extract_tasks.values()):

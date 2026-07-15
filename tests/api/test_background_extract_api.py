@@ -29,20 +29,14 @@ pytestmark = pytest.mark.asyncio
 
 @pytest.fixture(autouse=True)
 def _reset_background_extract_worker() -> None:
-    from backend.services import paper_pipeline_scheduler
     from backend.services.extract_worker import reset_extract_worker
+    from backend.services.pipeline_task_registry import reset_pipeline_task_registry
 
-    for task in list(paper_pipeline_scheduler._head_refine_tasks.values()):
-        if not task.done():
-            task.cancel()
+    reset_pipeline_task_registry()
     reset_extract_worker()
-    paper_pipeline_scheduler._head_refine_tasks.clear()
     yield
-    for task in list(paper_pipeline_scheduler._head_refine_tasks.values()):
-        if not task.done():
-            task.cancel()
+    reset_pipeline_task_registry()
     reset_extract_worker()
-    paper_pipeline_scheduler._head_refine_tasks.clear()
 
 
 def _fake_graph(paper_id: str, paradigm: Paradigm) -> UnifiedPaperGraph:
