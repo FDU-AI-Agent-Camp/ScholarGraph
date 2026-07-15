@@ -123,6 +123,25 @@ class QaSettingsMixin:
         validation_alias="PENDING_QUEUE_TIMEOUT_SECONDS",
         description="Fail PENDING papers whose updated_at is older than this (queue backlog).",
     )
+    paper_ops_claim_ttl_seconds: float = Field(
+        default=600.0,
+        gt=0.0,
+        validation_alias="PAPER_OPS_CLAIM_TTL_SECONDS",
+        description=(
+            "TTL for durable paper_ops_claims rows (force delete ∪ reextract wipe mutex). "
+            "Expired leases are stealable so a crashed worker cannot permanently 409."
+        ),
+    )
+    paper_wipe_vector_sweep_delay_seconds: float = Field(
+        default=120.0,
+        gt=0.0,
+        validation_alias="PAPER_WIPE_VECTOR_SWEEP_DELAY_SECONDS",
+        description=(
+            "Wave-2 compensate delay after force wipe: delete_run for revoked / prior "
+            "active index_run_id after to_thread upsert stragglers are statistically dead. "
+            "Must cover RAG_SINGLE_INDEX_TIMEOUT_SECONDS wait_for window (≥120s)."
+        ),
+    )
 
     @property
     def qa_model_effective(self) -> str:
