@@ -10,7 +10,7 @@ os.environ.setdefault("SCHOLARGRAPH_IGNORE_DOTENV", "1")
 os.environ.setdefault("APP_ENV", "test")
 os.environ.setdefault("APP_PROFILE", "ci")
 os.environ.setdefault("STARTUP_RERANKER_PROBE", "false")
-from collections.abc import Iterator
+from collections.abc import AsyncIterator, Iterator
 from contextlib import contextmanager
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -328,12 +328,12 @@ def persistence_env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
 
 
 @pytest.fixture(autouse=True)
-def _cleanup_event_bus_worker_after_test() -> Iterator[None]:
-    """D17: stop the persistent EventBus worker so pytest does not leak pending tasks."""
+async def _cleanup_event_bus_worker_after_test() -> AsyncIterator[None]:
+    """D17: await EventBus worker cancel so pytest does not leak pending tasks."""
     yield
-    from backend.events.bus import stop_event_bus_worker
+    from backend.events.bus import astop_event_bus_worker
 
-    stop_event_bus_worker()
+    await astop_event_bus_worker()
 
 
 @pytest.fixture(autouse=True)
@@ -357,7 +357,7 @@ def _patrol_service_global_mock_vector_store(monkeypatch) -> None:
 
 
 def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> None:
-    """D17: final guard against leaking EventBus worker tasks at process exit."""
+    """D17: final sync guard against leaking EventBus worker tasks at process exit."""
     from backend.events.bus import stop_event_bus_worker
 
     stop_event_bus_worker()

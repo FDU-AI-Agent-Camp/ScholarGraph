@@ -33,14 +33,48 @@ async def test_stop_event_bus_worker_cancels_pending_worker_without_drain() -> N
     assert bus._worker_task is not None
     assert not bus._worker_task.done()
 
-    bus._stop_worker()
+    worker = bus._worker_task
+    await bus.astop_worker()
     assert bus._worker_task is None
     assert bus._queue is None
+    assert worker.done()
+
+
+@pytest.mark.asyncio
+async def test_astop_worker_awaits_cancel_on_same_running_loop() -> None:
+    """D17: same-loop stop must await cancel so pytest does not warn pending tasks."""
+    from backend.events.bus import astop_event_bus_worker, get_event_bus, stop_event_bus_worker
+
+    bus = get_event_bus()
+    bus.reset()
+
+    async def idle_handler(_event: PipelineFinalized) -> None:
+        await asyncio.sleep(60)
+
+    bus.subscribe(EventType.PIPELINE_FINALIZED, idle_handler)
+    graph = UnifiedPaperGraph(
+        paper_id="d17-same-loop",
+        paradigm=Paradigm.STEM,
+        nodes=[GraphNode(id="n1", label="M", type="Method")],
+        edges=[],
+    )
+    await bus.publish(PipelineFinalized(paper_id="d17-same-loop", full_text="body", graph=graph))
+    assert bus._worker_task is not None
+    worker = bus._worker_task
+
+    await astop_event_bus_worker()
+    assert bus._worker_task is None
+    assert worker.done()
+
+    # Sync stop after async stop is a no-op
+    stop_event_bus_worker()
+    assert bus._worker_task is None
 
 
 @pytest.mark.asyncio
 async def test_stop_event_bus_worker_tears_down_singleton_worker() -> None:
     from backend.events import pipeline_finalized_handlers as handler_module
+    from backend.events.bus import astop_event_bus_worker
 
     handler_module.unregister_pipeline_finalized_handlers()
     bus = get_event_bus()
@@ -61,9 +95,11 @@ async def test_stop_event_bus_worker_tears_down_singleton_worker() -> None:
         lambda: bus.publish_sync(PipelineFinalized(paper_id="d17-singleton", full_text="body", graph=graph))
     )
     assert bus._worker_task is not None
+    worker = bus._worker_task
 
-    stop_event_bus_worker()
+    await astop_event_bus_worker()
     assert bus._worker_task is None
+    assert worker.done()
 
     handler_module.register_pipeline_finalized_handlers(force=True)
 

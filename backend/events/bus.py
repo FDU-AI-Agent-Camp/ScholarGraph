@@ -68,8 +68,37 @@ class EventBus:
         """Block until queued events are processed (tests / scripts)."""
         run_async(self.drain())
 
+    async def astop_worker(self) -> None:
+        """Cancel the worker and await completion across loop ownership (D17)."""
+        worker_task = self._worker_task
+        self._worker_task = None
+        self._queue = None
+        if worker_task is None or worker_task.done():
+            return
+        worker_task.cancel()
+        worker_loop = worker_task.get_loop()
+        try:
+            running_loop = asyncio.get_running_loop()
+        except RuntimeError:
+            running_loop = None
+        if worker_loop.is_closed():
+            return
+        if running_loop is worker_loop:
+            await _await_cancelled_task(worker_task)
+            return
+        if worker_loop.is_running():
+            future = asyncio.run_coroutine_threadsafe(_await_cancelled_task(worker_task), worker_loop)
+            await asyncio.to_thread(future.result, WORKER_CANCEL_TIMEOUT_SECONDS)
+            return
+        await asyncio.to_thread(worker_loop.run_until_complete, _await_cancelled_task(worker_task))
+
     def _stop_worker(self) -> None:
-        """Tear down the background worker (tests / application shutdown)."""
+        """Tear down the background worker (tests / application shutdown).
+
+        Prefer ``await astop_worker()`` when called from the worker's running loop.
+        Same-loop sync stop only schedules cancel collection to avoid
+        ``run_coroutine_threadsafe`` deadlocks (D17).
+        """
         worker_task = self._worker_task
         self._worker_task = None
         self._queue = None
@@ -80,8 +109,23 @@ class EventBus:
             loop = worker_task.get_loop()
             if loop.is_closed():
                 return
-            future = asyncio.run_coroutine_threadsafe(_await_cancelled_task(worker_task), loop)
-            future.result(timeout=WORKER_CANCEL_TIMEOUT_SECONDS)
+            try:
+                running_loop = asyncio.get_running_loop()
+            except RuntimeError:
+                running_loop = None
+            if running_loop is loop:
+                # Cannot block-wait on the same loop; schedule await so CancelledError
+                # is collected on the next tick (async fixtures should prefer astop_worker).
+                loop.create_task(
+                    _await_cancelled_task(worker_task),
+                    name="event_bus_worker_cancel",
+                )
+                return
+            if loop.is_running():
+                future = asyncio.run_coroutine_threadsafe(_await_cancelled_task(worker_task), loop)
+                future.result(timeout=WORKER_CANCEL_TIMEOUT_SECONDS)
+            else:
+                loop.run_until_complete(_await_cancelled_task(worker_task))
         except Exception:
             logger.debug("event_bus_worker_stop_failed", exc_info=True)
 
@@ -159,6 +203,13 @@ def stop_event_bus_worker() -> None:
     if _EVENT_BUS is None:
         return
     _EVENT_BUS._stop_worker()
+
+
+async def astop_event_bus_worker() -> None:
+    """Async stop for the process-wide bus (safe when stopping from the worker's loop)."""
+    if _EVENT_BUS is None:
+        return
+    await _EVENT_BUS.astop_worker()
 
 
 def on_event(event_type: EventType) -> Callable[[EventHandler], EventHandler]:
