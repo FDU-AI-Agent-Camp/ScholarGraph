@@ -111,22 +111,29 @@ paths:
       description: |
         按固定顺序执行物理级联清理，避免幽灵写入：
         1) 撤销 in-process asyncio 任务（force 或 best-effort）
-        2) VectorStore.delete_by_paper
-        3) GraphStore / HeadStore 落盘文件
+        2) VectorStore.delete_by_paper（404/not-found 视为成功；503/timeout 硬失败不删 SQL）
+        3) GRAPH_DATA_DIR 零残留（`{id}.json` / `{id}.*` / `{id}_*` sidecar）
         4) 上传 PDF
         5) papers 行（pipeline_runs CASCADE）
 
-        `status=processing` 默认返回 409；显式 `force=true` 时先 cancel 再删除。
+        `status=processing` / `indexing` 默认返回 409；显式 `force=true` 时先 cancel 再删除。
+        成功仅返回 204 No Content；清理摘要写入结构化日志，不进响应体。
       parameters:
         - $ref: "#/components/parameters/PaperId"
         - $ref: "#/components/parameters/ForceAbort"
       responses:
         "204":
-          description: 已物理删除
+          description: 已物理删除（无 Content）
         "404":
           $ref: "#/components/responses/NotFound"
         "409":
-          description: PAPER_ALREADY_PROCESSING（未传 force=true）
+          description: PAPER_ALREADY_PROCESSING（processing / indexing 且未传 force=true）
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "503":
+          description: VECTOR_STORE_UNAVAILABLE（Chroma 超时/不可达；SQL 未删除）
           content:
             application/json:
               schema:
@@ -180,7 +187,7 @@ paths:
         调用此接口清空已有图谱、预览、warnings 与该论文的 Chroma 向量，
         重置状态为 pending 并重新入队流水线。
 
-        `status=processing` 默认 409；`force=true` 时先 cancel in-flight tasks 再清索引并重入队。
+        `status=processing` / `indexing` 默认 409；`force=true` 时先 cancel in-flight tasks 再清索引并重入队。
         无 Celery：撤销对象为进程内 asyncio Task + indexing run registry.
       parameters:
         - $ref: "#/components/parameters/PaperId"
@@ -195,7 +202,7 @@ paths:
         "404":
           $ref: "#/components/responses/NotFound"
         "409":
-          description: PAPER_ALREADY_PROCESSING（未传 force=true）
+          description: PAPER_ALREADY_PROCESSING（processing / indexing 且未传 force=true）
           content:
             application/json:
               schema:
@@ -300,8 +307,9 @@ components:
       in: query
       required: false
       description: |
-        When true, cancel in-flight PROCESSING asyncio tasks before reextract/delete.
-        Default false keeps PAPER_ALREADY_PROCESSING (409) for live processing papers.
+        When true, cancel in-flight PROCESSING / INDEXING asyncio tasks before
+        reextract/delete. Default false keeps PAPER_ALREADY_PROCESSING (409) for
+        live processing or indexing papers.
       schema:
         type: boolean
         default: false
