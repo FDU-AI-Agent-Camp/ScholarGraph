@@ -52,6 +52,15 @@ async def _register_paper(
             message="extracting",
             updated_at=now,
         )
+    elif status == PaperStatus.INDEXING:
+        snapshot = PaperStatusData(
+            paper_id=paper_id,
+            status=status,
+            percent=STAGE_PERCENT[PipelineStage.INDEXING],
+            stage=PipelineStage.INDEXING,
+            message="indexing",
+            updated_at=now,
+        )
     elif status == PaperStatus.READY:
         snapshot = PaperStatusData(
             paper_id=paper_id,
@@ -87,7 +96,82 @@ async def _seed_artefacts(service: PaperService, paper_id: str) -> None:
 
 
 @pytest.mark.asyncio
-async def test_cascading_delete_removes_all_traces(
+async def test_delete_vector_not_found_is_success(
+    persistence_env,
+    sample_pdf: Path,
+) -> None:
+    paper_id = "delete-chroma-404"
+    await _register_paper(paper_id, sample_pdf, status=PaperStatus.READY)
+    service = await restart_paper_service()
+
+    vector_store = AsyncMock()
+    vector_store.delete_by_paper = AsyncMock(side_effect=FileNotFoundError("collection missing"))
+
+    with patch(
+        "backend.services.paper_delete_service._resolve_vector_store",
+        return_value=vector_store,
+    ):
+        await service.delete_paper(paper_id, force=False)
+
+    assert await PaperRepository().get(paper_id) is None
+    assert not sample_pdf.is_file()
+
+
+@pytest.mark.asyncio
+async def test_delete_vector_timeout_hard_fails_without_sql_wipe(
+    persistence_env,
+    sample_pdf: Path,
+) -> None:
+    paper_id = "delete-chroma-503"
+    await _register_paper(paper_id, sample_pdf, status=PaperStatus.READY)
+    service = await restart_paper_service()
+    await _seed_artefacts(service, paper_id)
+
+    vector_store = AsyncMock()
+    vector_store.delete_by_paper = AsyncMock(side_effect=TimeoutError("chroma timeout"))
+
+    with (
+        patch(
+            "backend.services.paper_delete_service._resolve_vector_store",
+            return_value=vector_store,
+        ),
+        pytest.raises(ApiError) as exc_info,
+    ):
+        await service.delete_paper(paper_id, force=False)
+
+    assert exc_info.value.code == "VECTOR_STORE_UNAVAILABLE"
+    assert exc_info.value.status_code == 503
+    assert await PaperRepository().get(paper_id) is not None
+    assert sample_pdf.is_file()
+    assert GraphStore().load(paper_id) is not None
+
+
+@pytest.mark.asyncio
+async def test_delete_purges_graph_dir_sidecars(
+    persistence_env,
+    sample_pdf: Path,
+) -> None:
+    paper_id = "delete-sidecar-001"
+    await _register_paper(paper_id, sample_pdf, status=PaperStatus.READY)
+    service = await restart_paper_service()
+    graph_dir = Path(persistence_env["graph_dir"])
+    sidecar = graph_dir / f"{paper_id}_chunk.cache"
+    sidecar.write_text("stale", encoding="utf-8")
+
+    vector_store = AsyncMock()
+    vector_store.delete_by_paper = AsyncMock()
+    with patch(
+        "backend.services.paper_delete_service._resolve_vector_store",
+        return_value=vector_store,
+    ):
+        await service.delete_paper(paper_id, force=False)
+
+    assert not sidecar.exists()
+    assert await PaperRepository().get(paper_id) is None
+
+
+@pytest.mark.asyncio
+async def test_delete_ready_cascades_sql_graph_pdf_chroma(
     persistence_env,
     sample_pdf: Path,
 ) -> None:
@@ -131,6 +215,57 @@ async def test_delete_processing_without_force_returns_409(
     assert exc_info.value.status_code == 409
     assert await PaperRepository().get(paper_id) is not None
     assert sample_pdf.is_file()
+
+
+@pytest.mark.asyncio
+async def test_delete_indexing_without_force_returns_409(
+    persistence_env,
+    sample_pdf: Path,
+) -> None:
+    paper_id = "delete-indexing-409"
+    await _register_paper(paper_id, sample_pdf, status=PaperStatus.INDEXING)
+    service = await restart_paper_service()
+
+    with pytest.raises(ApiError) as exc_info:
+        await service.delete_paper(paper_id, force=False)
+
+    assert exc_info.value.code == "PAPER_ALREADY_PROCESSING"
+    assert exc_info.value.status_code == 409
+    assert await PaperRepository().get(paper_id) is not None
+    assert sample_pdf.is_file()
+
+
+@pytest.mark.asyncio
+async def test_delete_indexing_with_force_cascades(
+    persistence_env,
+    sample_pdf: Path,
+) -> None:
+    paper_id = "delete-indexing-force"
+    await _register_paper(paper_id, sample_pdf, status=PaperStatus.INDEXING)
+    service = await restart_paper_service()
+    await _seed_artefacts(service, paper_id)
+
+    vector_store = AsyncMock()
+    vector_store.delete_by_paper = AsyncMock()
+    abort = AsyncMock()
+
+    with (
+        patch(
+            "backend.services.paper_delete_service._resolve_vector_store",
+            return_value=vector_store,
+        ),
+        patch(
+            "backend.services.paper_delete_service.abort_in_flight_pipeline",
+            abort,
+        ),
+    ):
+        await service.delete_paper(paper_id, force=True)
+
+    abort.assert_awaited_once_with(paper_id)
+    assert await PaperRepository().get(paper_id) is None
+    assert GraphStore().load(paper_id) is None
+    assert not sample_pdf.is_file()
+    vector_store.delete_by_paper.assert_awaited_once_with(paper_id)
 
 
 @pytest.mark.asyncio

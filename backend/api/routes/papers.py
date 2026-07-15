@@ -100,11 +100,14 @@ async def delete_paper(
     paper_id: str,
     force: bool = Query(
         default=False,
-        description="When true, cancel in-flight PROCESSING work then cascade-delete",
+        description="When true, cancel in-flight PROCESSING/INDEXING work then cascade-delete",
     ),
     service: PaperService = Depends(get_paper_service_dep),
 ) -> None:
-    """Cascading physical delete: tasks → Chroma → graph/head JSON → PDF → SQL."""
+    """Cascading physical delete: tasks → Chroma → graph/head JSON → PDF → SQL.
+
+    Default blocks ``PROCESSING`` / ``INDEXING`` with 409; ``force=true`` aborts first.
+    """
     await service.delete_paper(paper_id, force=force)
 
 
@@ -125,7 +128,8 @@ async def force_reextract_paper(
     graph, preview, warnings and refined head, resets status to PENDING and
     re-enqueues the pipeline from the stored PDF.
 
-    Default blocks ``PROCESSING`` with 409; pass ``force=true`` to abort and restart.
+    Default blocks ``PROCESSING`` / ``INDEXING`` with 409; pass ``force=true``
+    to abort and restart.
     """
     status_data = await service.force_reextract(paper_id, force=force)
     return success(status_data, request_id)

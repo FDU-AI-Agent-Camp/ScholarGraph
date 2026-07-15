@@ -242,8 +242,20 @@ class PaperService(PaperPipelineOpsMixin):
 
         return await force_reextract(self, paper_id, force=force)
 
-    async def delete_paper(self, paper_id: str, *, force: bool = False) -> None:
-        """Cascading physical delete (SQL + graph + Chroma + PDF)."""
+    async def delete_paper(
+        self,
+        paper_id: str,
+        *,
+        force: bool = False,
+        auth_context: object | None = None,
+    ) -> None:
+        """Cascading physical delete (SQL + graph + Chroma + PDF).
+
+        ``auth_context`` is reserved for Phase 3 multi-tenancy; V2 is single-node.
+        """
+        # TODO: Phase 3 multi-tenancy auth guard
+        # await self._assert_ownership(paper_id, auth_context)
+        _ = auth_context
         from backend.services.paper_delete_service import delete_paper
 
         await delete_paper(self, paper_id, force=force)

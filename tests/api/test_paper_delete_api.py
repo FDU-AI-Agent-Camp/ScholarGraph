@@ -86,6 +86,26 @@ async def _seed_processing(paper_id: str, pdf_path: Path) -> None:
     )
 
 
+async def _seed_indexing(paper_id: str, pdf_path: Path) -> None:
+    await PaperRepository().create(
+        paper_id,
+        "api delete indexing",
+        str(pdf_path),
+        status=PaperStatus.INDEXING,
+    )
+    await PipelineRepository().save_status(
+        paper_id,
+        PaperStatusData(
+            paper_id=paper_id,
+            status=PaperStatus.INDEXING,
+            percent=STAGE_PERCENT[PipelineStage.INDEXING],
+            stage=PipelineStage.INDEXING,
+            message="indexing",
+            updated_at=datetime.now(UTC),
+        ),
+    )
+
+
 @pytest.mark.asyncio
 async def test_api_delete_ready_returns_204(api_env) -> None:
     client, upload_path, _graph = api_env
@@ -112,6 +132,18 @@ async def test_api_delete_processing_without_force_409(api_env) -> None:
     paper_id = "api-delete-proc-409"
     pdf = _make_pdf(upload_path, f"{paper_id}.pdf")
     await _seed_processing(paper_id, pdf)
+
+    response = await client.delete(f"/api/v1/papers/{paper_id}")
+    assert response.status_code == 409
+    assert response.json()["error"]["code"] == "PAPER_ALREADY_PROCESSING"
+
+
+@pytest.mark.asyncio
+async def test_api_delete_indexing_without_force_409(api_env) -> None:
+    client, upload_path, _graph = api_env
+    paper_id = "api-delete-idx-409"
+    pdf = _make_pdf(upload_path, f"{paper_id}.pdf")
+    await _seed_indexing(paper_id, pdf)
 
     response = await client.delete(f"/api/v1/papers/{paper_id}")
     assert response.status_code == 409
