@@ -85,6 +85,8 @@ def main(argv: list[str] | None = None) -> int:
         ("pipeline repo lod", [sys.executable, "scripts/check_pipeline_repo_lod.py"]),
         # P13: orphan-thread + watchdog debt matrix (generation / compensate / starve / cold-boot).
         ("p13 release gate", [sys.executable, "scripts/check_p13_release_gate.py"]),
+        # Parallel: processing/pending wall-clock + cold-boot grace matrix.
+        ("process release gate", [sys.executable, "scripts/check_process_release_gate.py"]),
     ]
     if not args.lint_only:
         # Use ``python -m pytest`` to avoid Windows entry-point canonicalisation issues.
