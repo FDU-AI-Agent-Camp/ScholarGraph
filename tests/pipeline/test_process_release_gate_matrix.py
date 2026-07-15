@@ -1,8 +1,12 @@
-"""Process Release Gate matrix — processing / pending wall-clock defenses.
+"""Process Release Gate matrix — PROCESSING self-heal closed loop.
 
 | 测试分类 | 测试用例命名 | 检验的防御边界 |
 | --- | --- | --- |
-| 隔离监控 | ``test_processing_watchdog_loop_starvation`` | processing Watchdog 物理线程隔离 |
+| 逻辑/内存双检 | ``test_watchdog_slow_but_alive_extends_lease`` | 慢任务续租，不误杀 |
+| 逻辑/内存双检 | ``test_watchdog_true_zombie_triggers_failed`` | 真僵尸 → PROCESS_TIMEOUT |
+| 级联处决 | ``test_watchdog_kill_execution_order`` | abort ≺ SQL + 锁回流 |
+| 世代熔断 | ``test_obsolete_run_id_write_blocked`` | Run_A 迟到写盘被弹回 |
+| 隔离监控 | ``test_processing_watchdog_survives_loop_starvation`` | 主 loop 假死仍 sync 自愈 |
 | 冷启动防误伤 | ``test_cold_boot_spares_fresh_pending_within_grace`` | boot−ε 放过极新 pending |
 | 双阈值归因 | ``test_wall_clock_fails_stale_pending_as_queue_timeout`` | pending → QUEUE_TIMEOUT |
 
@@ -20,8 +24,28 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 
 PROCESS_RELEASE_GATE_CASES: tuple[tuple[str, str, str], ...] = (
     (
+        "逻辑/内存双检",
+        "test_watchdog_slow_but_alive_extends_lease",
+        "tests/pipeline/test_processing_watchdog.py",
+    ),
+    (
+        "逻辑/内存双检",
+        "test_watchdog_true_zombie_triggers_failed",
+        "tests/pipeline/test_processing_watchdog.py",
+    ),
+    (
+        "级联处决",
+        "test_watchdog_kill_execution_order",
+        "tests/pipeline/test_processing_watchdog.py",
+    ),
+    (
+        "世代熔断",
+        "test_obsolete_run_id_write_blocked",
+        "tests/pipeline/test_pipeline_generation_guard.py",
+    ),
+    (
         "隔离监控",
-        "test_processing_watchdog_loop_starvation",
+        "test_processing_watchdog_survives_loop_starvation",
         "tests/pipeline/test_processing_watchdog_loop_starvation.py",
     ),
     (

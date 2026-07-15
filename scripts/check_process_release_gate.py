@@ -19,37 +19,46 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
 REQUIRED_TEST_NAMES: tuple[str, ...] = (
-    "test_processing_watchdog_loop_starvation",
+    "test_watchdog_slow_but_alive_extends_lease",
+    "test_watchdog_true_zombie_triggers_failed",
+    "test_watchdog_kill_execution_order",
+    "test_obsolete_run_id_write_blocked",
+    "test_processing_watchdog_survives_loop_starvation",
     "test_cold_boot_spares_fresh_pending_within_grace",
     "test_wall_clock_fails_stale_pending_as_queue_timeout",
     "test_process_release_gate_matrix_catalog_is_complete",
 )
 
-_COLLECT_ROOT = "tests/pipeline"
+_COLLECT_ROOTS = ("tests/pipeline",)
 
 
 def _collect_nodeids() -> list[str]:
-    proc = subprocess.run(
-        [
-            sys.executable,
-            "-m",
-            "pytest",
-            _COLLECT_ROOT,
-            "--collect-only",
-            "-q",
-            "-m",
-            "process_release_gate",
-        ],
-        cwd=REPO_ROOT,
-        check=False,
-        capture_output=True,
-        text=True,
-    )
-    if proc.returncode not in {0, 5}:
-        sys.stderr.write(proc.stdout)
-        sys.stderr.write(proc.stderr)
-        raise SystemExit(f"pytest --collect-only -m process_release_gate failed ({proc.returncode})")
-    return [line.strip() for line in proc.stdout.splitlines() if "::" in line]
+    nodeids: list[str] = []
+    for collect_root in _COLLECT_ROOTS:
+        proc = subprocess.run(
+            [
+                sys.executable,
+                "-m",
+                "pytest",
+                collect_root,
+                "--collect-only",
+                "-q",
+                "-m",
+                "process_release_gate",
+            ],
+            cwd=REPO_ROOT,
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        if proc.returncode not in {0, 5}:
+            sys.stderr.write(proc.stdout)
+            sys.stderr.write(proc.stderr)
+            raise SystemExit(
+                f"pytest --collect-only -m process_release_gate failed in {collect_root} ({proc.returncode})"
+            )
+        nodeids.extend(line.strip() for line in proc.stdout.splitlines() if "::" in line)
+    return nodeids
 
 
 def _assert_required_present(nodeids: list[str]) -> list[str]:
@@ -82,7 +91,7 @@ def main() -> int:
             sys.executable,
             "-m",
             "pytest",
-            _COLLECT_ROOT,
+            *_COLLECT_ROOTS,
             "-q",
             "--tb=short",
             "-m",
