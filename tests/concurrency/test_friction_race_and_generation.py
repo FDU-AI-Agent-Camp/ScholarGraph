@@ -125,6 +125,115 @@ async def test_concurrent_reextract_only_one_wins_nine_get_409(
 
 
 @pytest.mark.asyncio
+async def test_foreign_worker_claim_blocks_reextract(persistence_env) -> None:
+    """Simulate another worker's durable claim: local force_reextract must 409."""
+    from backend.db.models import PAPER_OPS_OPERATION_REEXTRACT
+    from backend.repositories.paper_ops_claim_repository import get_paper_ops_claim_repository
+
+    paper_id = "reextract-foreign-claim"
+    pdf = _make_pdf(Path(persistence_env["upload_dir"]), f"{paper_id}.pdf")
+    await _seed_ready(paper_id, pdf)
+    service = await restart_paper_service()
+
+    await get_paper_ops_claim_repository().seed_claim_for_tests(
+        paper_id,
+        operation=PAPER_OPS_OPERATION_REEXTRACT,
+        owner_token="worker-a-token",
+    )
+    assert is_reextract_inflight(paper_id)
+
+    with pytest.raises(ApiError) as exc_info:
+        await force_reextract(service, paper_id, force=False)
+    assert exc_info.value.status_code == 409
+    assert exc_info.value.code == "PAPER_ALREADY_PROCESSING"
+    assert is_reextract_inflight(paper_id)
+
+    # Foreign owner still holds the row until TTL steal / force eviction.
+    released = await get_paper_ops_claim_repository().release(paper_id, "worker-a-token")
+    assert released
+    assert not is_reextract_inflight(paper_id)
+
+
+@pytest.mark.asyncio
+async def test_delete_and_reextract_share_cluster_mutex(persistence_env) -> None:
+    """Delete and reextract must not interleave wipe critical sections for one paper."""
+    from backend.db.models import PAPER_OPS_OPERATION_DELETE
+    from backend.repositories.paper_ops_claim_repository import get_paper_ops_claim_repository
+    from backend.services.paper_delete_service import delete_paper
+
+    paper_id = "wipe-mutex-cross"
+    pdf = _make_pdf(Path(persistence_env["upload_dir"]), f"{paper_id}.pdf")
+    await _seed_ready(paper_id, pdf)
+    service = await restart_paper_service()
+
+    hold = asyncio.Event()
+    entered = asyncio.Event()
+
+    async def _slow_abort(_paper_id: str) -> None:
+        entered.set()
+        await hold.wait()
+
+    with (
+        patch("backend.services.reextract_service.abort_in_flight_pipeline", _slow_abort),
+        patch(
+            "backend.services.reextract_service.resolve_vector_store_for_delete",
+            return_value=AsyncMock(delete_by_paper=AsyncMock()),
+        ),
+        patch("backend.services.reextract_service.schedule_paper_pipeline"),
+    ):
+        rex_task = asyncio.create_task(force_reextract(service, paper_id, force=False))
+        await asyncio.wait_for(entered.wait(), timeout=1.0)
+        assert is_reextract_inflight(paper_id)
+
+        with pytest.raises(ApiError) as exc_info:
+            await delete_paper(
+                service,
+                paper_id,
+                force=True,
+                vector_store=AsyncMock(delete_by_paper=AsyncMock()),
+            )
+        assert exc_info.value.status_code == 409
+        assert exc_info.value.code == "PAPER_ALREADY_PROCESSING"
+
+        hold.set()
+        await rex_task
+
+    assert not is_reextract_inflight(paper_id)
+
+    # Symmetric: open delete claim blocks reextract.
+    await get_paper_ops_claim_repository().seed_claim_for_tests(
+        paper_id,
+        operation=PAPER_OPS_OPERATION_DELETE,
+        owner_token="delete-owner",
+    )
+    with pytest.raises(ApiError) as blocked:
+        await force_reextract(service, paper_id, force=False)
+    assert blocked.value.status_code == 409
+    await get_paper_ops_claim_repository().release(paper_id, "delete-owner")
+
+
+@pytest.mark.asyncio
+async def test_expired_cluster_claim_is_stealable(persistence_env) -> None:
+    """TTL expiry allows another worker to steal the durable wipe mutex."""
+    from backend.db.models import PAPER_OPS_OPERATION_REEXTRACT
+    from backend.repositories.paper_ops_claim_repository import get_paper_ops_claim_repository
+
+    paper_id = "claim-steal-ttl"
+    repo = get_paper_ops_claim_repository()
+    await repo.seed_claim_for_tests(
+        paper_id,
+        operation=PAPER_OPS_OPERATION_REEXTRACT,
+        owner_token="stale-owner",
+        ttl_seconds=0.01,
+    )
+    await asyncio.sleep(0.05)
+    token = await repo.try_acquire(paper_id, operation=PAPER_OPS_OPERATION_REEXTRACT)
+    assert token != "stale-owner"
+    assert await repo.is_held(paper_id)
+    await repo.release(paper_id, token)
+
+
+@pytest.mark.asyncio
 async def test_reextract_slot_releases_after_timeout_error(
     persistence_env,
 ) -> None:
