@@ -267,3 +267,50 @@ class PaperPipelineOpsMixin:
             heartbeat_stale_before=heartbeat_stale_before,
             limit=limit,
         )
+
+    async def list_orphan_pipeline_paper_ids(self, *, limit: int = 200) -> list[str]:
+        """List pending/processing papers for cold-boot orphan reconcile."""
+        from backend.repositories.pipeline_sync import list_orphan_pipeline_paper_ids_sync
+
+        return list_orphan_pipeline_paper_ids_sync(limit=limit)
+
+    def list_stuck_processing_paper_ids_sync(
+        self,
+        *,
+        older_than: datetime,
+        limit: int = 200,
+    ) -> list[str]:
+        """Sync listing of wall-clock stuck PROCESSING papers."""
+        from backend.repositories.pipeline_sync import list_stuck_processing_paper_ids_sync
+
+        return list_stuck_processing_paper_ids_sync(older_than=older_than, limit=limit)
+
+    def fail_orphaned_pipeline_paper_sync(
+        self,
+        paper_id: str,
+        *,
+        error_code: str,
+        message: str,
+    ) -> bool:
+        """Sync fail pending/processing → failed (daemon / cold-boot safe)."""
+        from backend.repositories.pipeline_sync import fail_orphaned_pipeline_row_sync
+
+        return fail_orphaned_pipeline_row_sync(
+            paper_id,
+            error_code=error_code,
+            message=message,
+        )
+
+    async def fail_orphaned_pipeline_paper(
+        self,
+        paper_id: str,
+        *,
+        error_code: str,
+        message: str,
+    ) -> bool:
+        """Async wrapper around sync fail for cold-boot reconcile."""
+        return self.fail_orphaned_pipeline_paper_sync(
+            paper_id,
+            error_code=error_code,
+            message=message,
+        )

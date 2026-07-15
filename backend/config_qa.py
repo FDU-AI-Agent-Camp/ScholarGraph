@@ -87,6 +87,24 @@ class QaSettingsMixin:
         description="Layer-2: only force-promote when indexing_heartbeat is missing "
         "or older than this (avoids killing slow-but-alive builds).",
     )
+    # Processing / pending orphan heal (cold-boot + wall-clock daemon)
+    process_watchdog_enabled: bool = Field(
+        default=True,
+        validation_alias="PROCESS_WATCHDOG_ENABLED",
+        description="Enable cold-boot pending/processing reconcile + wall-clock watchdog.",
+    )
+    process_watchdog_seconds: float = Field(
+        default=900.0,
+        gt=0.0,
+        validation_alias="PROCESS_WATCHDOG_SECONDS",
+        description="Fail PROCESSING papers whose updated_at is older than this (seconds).",
+    )
+    process_watchdog_interval_seconds: float = Field(
+        default=60.0,
+        gt=0.0,
+        validation_alias="PROCESS_WATCHDOG_INTERVAL_SECONDS",
+        description="Dedicated OS-thread sleep interval between sync processing scans.",
+    )
 
     @property
     def qa_model_effective(self) -> str:

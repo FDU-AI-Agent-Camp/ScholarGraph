@@ -39,6 +39,11 @@ async def lifespan(app: FastAPI):
     # Schema must be applied out-of-band: ``uv run python scripts/init_db.py``.
     await get_paper_service().bootstrap()
 
+    from backend.pipeline.processing_watchdog import (
+        reconcile_processing_on_startup,
+        start_processing_watchdog,
+        stop_processing_watchdog,
+    )
     from backend.rag.indexing_watchdog import (
         reconcile_indexing_on_startup,
         start_indexing_watchdog,
@@ -50,6 +55,9 @@ async def lifespan(app: FastAPI):
     # must not run_async onto the FastAPI loop — main-loop starvation would stall heal).
     await reconcile_indexing_on_startup()
     start_indexing_watchdog()
+    # Processing orphan heal: leftover pending/processing → failed, then wall-clock daemon.
+    await reconcile_processing_on_startup()
+    start_processing_watchdog()
 
     preconfigured = getattr(app.state, "hybrid_retriever", None)
     if preconfigured is not None:
@@ -65,6 +73,7 @@ async def lifespan(app: FastAPI):
     finally:
         from backend.events.bus import stop_event_bus_worker
 
+        stop_processing_watchdog()
         stop_indexing_watchdog()
         stop_event_bus_worker()
         register_main_event_loop(None)
