@@ -3,9 +3,12 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { reactive } from 'vue'
 
 import { ApiClientError } from '@/api/client'
-import type { DataResponse, PatrolReport } from '@/api/types'
+import type { DataResponse, PatrolMode, PatrolReport } from '@/api/types'
 import { PATROL_BASELINE_COPY } from '@/constants/patrolCopy'
 import { RouteName } from '@/router/meta'
+import { patrolBaselineCopyV2 } from '@/test/helpers/patrolV2Copy'
+import { PATROL_MODE_OPTIONS } from '@/utils/patrolViewHelpers'
+import patrolMethodOverlapFixture from '../../../docs/api/fixtures/patrol-method-overlap.json'
 
 const mockRunPatrol = vi.fn()
 const mockPush = vi.fn()
@@ -94,6 +97,7 @@ const globalStubs = {
     props: ['title', 'description'],
     template: '<div class="patrol-alert" :data-title="title" :data-desc="description ?? \'\'" />',
   },
+  // Slot must pass through so F10 structured_points assertions see production children.
   InsightCard: {
     props: ['variant', 'title', 'insightId', 'summary'],
     template: '<div class="patrol-insight" :data-title="title" :data-variant="variant"><slot /></div>',
@@ -111,6 +115,12 @@ async function setPaperSelection(wrapper: Awaited<ReturnType<typeof mountPatrolV
   await selects[0]?.setValue(paperA)
   await selects[1]?.setValue(paperB)
   await flushPromises()
+}
+
+async function selectModeByLabel(wrapper: Awaited<ReturnType<typeof mountPatrolView>>, label: string) {
+  const tab = wrapper.findAll('.patrol-mode-segment__item').find((node) => node.text().includes(label))
+  expect(tab, `missing mode tab for label: ${label}`).toBeTruthy()
+  await tab!.trigger('click')
 }
 
 describe('PatrolView', () => {
@@ -394,6 +404,85 @@ describe('PatrolView', () => {
 
       expect(wrapper.find('.patrol-alert').attributes('data-title')).toBe('network down')
       expect(wrapper.find('.patrol-run-stub').attributes('data-loading')).toBe('false')
+    })
+  })
+
+  describe('F10 four-mode UI', () => {
+    const v2Copy = patrolBaselineCopyV2()
+
+    const modeCases: Array<{ label: string; mode: PatrolMode; paperA: string; paperB: string }> = [
+      { label: PATROL_BASELINE_COPY.modeLensClashLabel, mode: 'lens_clash', paperA: 'hss-001', paperB: 'hss-002' },
+      {
+        label: PATROL_BASELINE_COPY.modeContradictionLabel,
+        mode: 'contradiction',
+        paperA: 'hss-001',
+        paperB: 'hss-002',
+      },
+      { label: v2Copy.modeMethodOverlapLabel, mode: 'method_overlap', paperA: 'stem-001', paperB: 'stem-002' },
+      { label: v2Copy.modeClaimEvolutionLabel, mode: 'claim_evolution', paperA: 'stem-001', paperB: 'stem-002' },
+    ]
+
+    it('renders four mode tabs with product labels and captions (functional)', async () => {
+      const wrapper = await mountPatrolView()
+      const tabs = wrapper.findAll('.patrol-mode-segment__item')
+
+      expect(tabs).toHaveLength(4)
+      expect(PATROL_MODE_OPTIONS).toHaveLength(4)
+      for (const option of PATROL_MODE_OPTIONS) {
+        expect(wrapper.text()).toContain(option.label)
+        expect(wrapper.text()).toContain(option.caption)
+      }
+    })
+
+    it.each(modeCases)(
+      'forwards selected mode $mode in runPatrol body (接口/functional)',
+      async ({ label, mode, paperA, paperB }) => {
+        mockRunPatrol.mockResolvedValue(patrolReport)
+
+        const wrapper = await mountPatrolView()
+        await setPaperSelection(wrapper, paperA, paperB)
+        await selectModeByLabel(wrapper, label)
+        await wrapper.find('.patrol-run-stub').trigger('click')
+        await flushPromises()
+
+        expect(mockRunPatrol).toHaveBeenCalledWith([paperA, paperB], { mode })
+      },
+    )
+
+    it('renders method_overlap structured_points fields from fixture (functional/snapshot-shape)', async () => {
+      mockRunPatrol.mockResolvedValue(patrolMethodOverlapFixture as DataResponse<PatrolReport>)
+
+      const wrapper = await mountPatrolView()
+      await setPaperSelection(wrapper, 'stem-001', 'stem-002')
+      await selectModeByLabel(wrapper, v2Copy.modeMethodOverlapLabel)
+      await wrapper.find('.patrol-run-stub').trigger('click')
+      await flushPromises()
+
+      const pointsRoot = wrapper.find('[data-testid="patrol-structured-points"]')
+      expect(pointsRoot.exists()).toBe(true)
+      expect(pointsRoot.text()).toContain('PCA')
+      expect(pointsRoot.text()).toContain('MNIST')
+      expect(pointsRoot.html()).toContain('patrol-point-card--method_overlap')
+    })
+
+    it('keeps default active tab at lens_clash before user interaction (boundary)', async () => {
+      const wrapper = await mountPatrolView()
+      const active = wrapper.find('.patrol-mode-segment__item--active')
+
+      expect(active.text()).toContain(PATROL_BASELINE_COPY.modeLensClashLabel)
+      expect(active.text()).not.toContain(v2Copy.modeMethodOverlapLabel)
+    })
+
+    it('keeps exactly four mode tabs after cycling every production option (越权/边界)', async () => {
+      const wrapper = await mountPatrolView()
+      for (const option of PATROL_MODE_OPTIONS) {
+        await selectModeByLabel(wrapper, option.label)
+        expect(wrapper.findAll('.patrol-mode-segment__item')).toHaveLength(4)
+        expect(wrapper.find('.patrol-mode-segment__item--active').text()).toContain(option.label)
+      }
+      expect(wrapper.findAll('.patrol-mode-segment__item').map((t) => t.text())).toEqual(
+        expect.arrayContaining(PATROL_MODE_OPTIONS.map((o) => expect.stringContaining(o.label))),
+      )
     })
   })
 })

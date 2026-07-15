@@ -31,6 +31,7 @@ const SEMANTIC_COLOR_ALLOWLIST = [
   'components/ui/BadgeStatus.vue',
   'components/papers/PaperStatusPanel.vue',
   'components/ui/InsightCard.vue',
+  'components/ui/InsufficientDataInsightCard.vue',
   'components/ui/BadgeParadigm.vue',
   'styles/tokens.css',
   'styles/element-theme.scss',

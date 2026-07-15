@@ -3,10 +3,13 @@
  */
 import { describe, expect, it } from 'vitest'
 
+import InsightCard from '@/components/ui/InsightCard.vue'
 import { PATROL_BASELINE_COPY } from '@/constants/patrolCopy'
 import { RouteName } from '@/router/meta'
 import { loadDesignTokenMap, readFrontendSource } from '@/test/helpers/designTokens'
 import { resolvePatrolApiError } from '@/utils/patrolForm'
+import { PATROL_MODE_OPTIONS } from '@/utils/patrolViewHelpers'
+import { mount } from '@vue/test-utils'
 
 const patrolViewSrc = readFrontendSource('views/PatrolView.vue')
 const patrolViewHelpersSrc = readFrontendSource('utils/patrolViewHelpers.ts')
@@ -19,7 +22,9 @@ describe('Phase 7 Patrol acceptance (7.1–7.6)', () => {
   describe('7.1 page header H1 and baseline subtitle', () => {
     it('uses PATROL_BASELINE_COPY for title and subtitle', () => {
       expect(PATROL_BASELINE_COPY.pageTitle).toBe('共同体巡检')
-      expect(PATROL_BASELINE_COPY.subtitle).toBe('跨论文探测理论视角冲突与论点矛盾 · 需 2 篇 ready 论文')
+      expect(PATROL_BASELINE_COPY.subtitle).toBe(
+        '跨论文四模式巡检（视角冲突、论点矛盾、方法重叠、观点演进）· 需 2 篇 ready 论文',
+      )
       expect(patrolViewSrc).toContain('PATROL_BASELINE_COPY.pageTitle')
       expect(patrolViewSrc).toContain('PATROL_BASELINE_COPY.subtitle')
       expect(patrolViewSrc).toContain('text-h1 patrol-view__title')
@@ -45,6 +50,23 @@ describe('Phase 7 Patrol acceptance (7.1–7.6)', () => {
       expect(patrolViewBundleSrc).toContain('PATROL_BASELINE_COPY.modeLensClashCaption')
       expect(patrolViewBundleSrc).toContain('PATROL_BASELINE_COPY.modeContradictionCaption')
     })
+
+    it('F10: production PATROL_MODE_OPTIONS expose four OpenAPI modes with copy captions', () => {
+      expect(PATROL_MODE_OPTIONS.map((o) => o.value)).toEqual([
+        'lens_clash',
+        'contradiction',
+        'method_overlap',
+        'claim_evolution',
+      ])
+      expect(PATROL_MODE_OPTIONS.find((o) => o.value === 'method_overlap')?.caption).toBe(
+        PATROL_BASELINE_COPY.modeMethodOverlapCaption,
+      )
+      expect(PATROL_MODE_OPTIONS.find((o) => o.value === 'claim_evolution')?.caption).toBe(
+        PATROL_BASELINE_COPY.modeClaimEvolutionCaption,
+      )
+      expect(PATROL_BASELINE_COPY.modeMethodOverlapCaption).toMatch(/理工|方法|数据/)
+      expect(PATROL_BASELINE_COPY.modeClaimEvolutionCaption).toMatch(/理工|观点|演进/)
+    })
   })
 
   describe('7.4 run button baseline and loading copy', () => {
@@ -63,6 +85,17 @@ describe('Phase 7 Patrol acceptance (7.1–7.6)', () => {
       expect(patrolViewBundleSrc).toContain('query: { node: ref.node_id }')
       expect(insightCardSrc).toContain('insight-card--lens_clash')
       expect(insightCardSrc).toContain('insight-card--contradiction')
+    })
+
+    it('F10: production InsightCard applies V2 variant classes at runtime', () => {
+      const methodCard = mount(InsightCard, {
+        props: { variant: 'method_overlap', title: 'mo', summary: 's' },
+      })
+      const claimCard = mount(InsightCard, {
+        props: { variant: 'claim_evolution', title: 'ce', summary: 's' },
+      })
+      expect(methodCard.classes()).toContain('insight-card--method_overlap')
+      expect(claimCard.classes()).toContain('insight-card--claim_evolution')
     })
   })
 
@@ -95,7 +128,9 @@ describe('Phase 7 Patrol acceptance (7.1–7.6)', () => {
     })
 
     it('§1.4.4: subtitle, run button, and error table align with patrolCopy baseline', () => {
-      expect(PATROL_BASELINE_COPY.subtitle).toBe('跨论文探测理论视角冲突与论点矛盾 · 需 2 篇 ready 论文')
+      expect(PATROL_BASELINE_COPY.subtitle).toBe(
+        '跨论文四模式巡检（视角冲突、论点矛盾、方法重叠、观点演进）· 需 2 篇 ready 论文',
+      )
       expect(PATROL_BASELINE_COPY.runButton).toBe('运行巡检')
       expect(PATROL_BASELINE_COPY.runButtonLoading).toBe('分析中…')
       expect(PATROL_BASELINE_COPY.validationExactTwo).toBe('请输入恰好 2 个 paper_id')

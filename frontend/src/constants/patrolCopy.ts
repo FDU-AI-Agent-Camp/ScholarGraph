@@ -1,7 +1,7 @@
 /** design-spec §11 + ui-design-progress §1.4.4 Patrol baseline copy. */
 export const PATROL_BASELINE_COPY = {
   pageTitle: '共同体巡检',
-  subtitle: '跨论文探测理论视角冲突与论点矛盾 · 需 2 篇 ready 论文',
+  subtitle: '跨论文四模式巡检（视角冲突、论点矛盾、方法重叠、观点演进）· 需 2 篇 ready 论文',
   configTitle: '巡检配置',
   paperLabelA: '论文 A',
   paperLabelB: '论文 B',
@@ -12,6 +12,10 @@ export const PATROL_BASELINE_COPY = {
   modeLensClashCaption: '分析视角冲突 · 适用人文社科',
   modeContradictionLabel: 'Contradiction',
   modeContradictionCaption: '核心论点矛盾 · 人文社科/理工科',
+  modeMethodOverlapLabel: 'Method Overlap',
+  modeMethodOverlapCaption: '方法/数据集重叠 · 适用理工科',
+  modeClaimEvolutionLabel: 'Claim Evolution',
+  modeClaimEvolutionCaption: '观点演进对比 · 适用理工科',
   modeLabel: '巡检模式',
   hintSummary: '本地联调提示',
   hintBody: '在后端 seed HSS + STEM demo 图谱后再运行巡检（V2 模式用 stem-001,stem-002）：',
@@ -31,6 +35,21 @@ export const PATROL_BASELINE_COPY = {
   insufficientInsightHint: '这是完整巡检后的确定性结论，并非请求失败。无需深入对比详情。',
   insufficientInsightPhaseLabel: '拦截阶段',
   nodeRefGraphLink: '查看图谱',
+
+  /** Structured point field labels (F-R3) — shared by *PointCard.vue. */
+  pointFieldPaperA: '论文 A',
+  pointFieldPaperB: '论文 B',
+  pointFieldDataset: '数据集',
+  pointFieldScore: '重叠分',
+  pointFieldMatch: '匹配',
+  pointFieldEvidence: '证据',
+  pointFieldFit: '问题契合',
+  pointFieldLensA: '视角 A',
+  pointFieldLensB: '视角 B',
+  pointFieldAspect: '冲突面',
+  pointFieldPointA: '论点 A',
+  pointFieldPointB: '论点 B',
+  pointFieldConflict: '冲突类型',
 
   degradationBannerTitle: '巡检结果可能不完整',
   degradationBannerHint: '您可以稍后刷新重试；若索引仍在构建，页面将自动尝试补齐证据。',

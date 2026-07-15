@@ -61,6 +61,14 @@ const phase = computed(() => formatExclusionPhase(props.exclusionLogic?.phase))
   box-shadow: var(--shadow-sm);
 }
 
+.insufficient-insight-card--method_overlap {
+  border-left: 4px solid var(--color-info);
+}
+
+.insufficient-insight-card--claim_evolution {
+  border-left: 4px solid var(--color-success);
+}
+
 .insufficient-insight-card__header {
   display: flex;
   flex-wrap: wrap;
