@@ -1,5 +1,5 @@
 import { flushPromises, mount } from '@vue/test-utils'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { reactive } from 'vue'
 
 import { ApiClientError } from '@/api/client'
@@ -91,7 +91,7 @@ const globalStubs = {
     inheritAttrs: false,
     props: ['loading'],
     template:
-      '<button type="button" class="patrol-run-stub" :data-loading="loading ? \'true\' : \'false\'" v-bind="$attrs" @click="$attrs.onClick?.()"><slot /></button>',
+      '<button type="button" class="patrol-run-stub" :data-loading="loading ? \'true\' : \'false\'" v-bind="$attrs"><slot /></button>',
   },
   'el-alert': {
     props: ['title', 'description'],
@@ -246,6 +246,155 @@ describe('PatrolView', () => {
     expect(banner.attributes('data-title')).toBe(PATROL_BASELINE_COPY.degradationBannerTitle)
     expect(banner.attributes('data-desc')).toContain('stem-001')
     expect(wrapper.text()).toContain(PATROL_BASELINE_COPY.degradationEvidencePlaceholder)
+  })
+
+  describe('FE-H1 heal wiring (FakeTimers)', () => {
+    beforeEach(() => {
+      vi.useFakeTimers()
+    })
+
+    afterEach(() => {
+      vi.useRealTimers()
+    })
+
+    it('schedules heal poll after INDEX_NOT_READY and clears banner when index heals', async () => {
+      const degradedEnvelope: DataResponse<PatrolReport> = {
+        data: {
+          mode: 'method_overlap',
+          paper_ids: ['stem-001', 'stem-002'],
+          generated_at: '2026-07-13T19:15:00Z',
+          insights: [
+            {
+              insight_id: 'ins-mo-heal',
+              title: '方法重叠',
+              summary: '图谱比对完成。',
+              status: 'ready',
+              paper_ids: ['stem-001', 'stem-002'],
+              node_refs: [],
+              is_degraded: true,
+              degradation_profile: {
+                component: 'RAG_CONTEXT',
+                reason_code: 'INDEX_NOT_READY',
+                affected_papers: ['stem-001'],
+                severity: 'WARNING',
+                timestamp: '2026-07-13T19:15:00Z',
+              },
+            },
+          ],
+        },
+        meta: { request_id: 'req-degraded-heal-1' },
+      }
+
+      const healthyEnvelope: DataResponse<PatrolReport> = {
+        data: {
+          mode: 'method_overlap',
+          paper_ids: ['stem-001', 'stem-002'],
+          generated_at: '2026-07-13T19:16:00Z',
+          insights: [
+            {
+              insight_id: 'ins-mo-heal',
+              title: '方法重叠',
+              summary: '图谱比对完成，含原文证据。',
+              status: 'ready',
+              paper_ids: ['stem-001', 'stem-002'],
+              node_refs: [{ paper_id: 'stem-001', node_id: 'n_method', label: 'ResNet-Light' }],
+              is_degraded: false,
+              degradation_profile: null,
+            },
+          ],
+        },
+        meta: { request_id: 'req-degraded-heal-2' },
+      }
+
+      mockRunPatrol.mockResolvedValueOnce(degradedEnvelope).mockResolvedValueOnce(healthyEnvelope)
+
+      const wrapper = await mountPatrolView()
+      await setPaperSelection(wrapper, 'stem-001', 'stem-002')
+      await wrapper.find('.patrol-run-stub').trigger('click')
+      await flushPromises()
+
+      expect(mockRunPatrol).toHaveBeenCalledTimes(1)
+      expect(wrapper.find('.patrol-view__degradation-banner').exists()).toBe(true)
+      expect(wrapper.find('.patrol-view__healing-hint').exists()).toBe(true)
+      expect(wrapper.find('.patrol-view__healing-hint').text()).toBe(PATROL_BASELINE_COPY.degradationHealingHint)
+      expect(wrapper.text()).toContain(PATROL_BASELINE_COPY.degradationEvidencePlaceholder)
+
+      await vi.advanceTimersByTimeAsync(10_000)
+      await flushPromises()
+
+      // Ultimate guard: View fed scheduleHealPoll → composable re-ran patrol.
+      expect(mockRunPatrol).toHaveBeenCalledTimes(2)
+      expect(wrapper.find('.patrol-view__degradation-banner').exists()).toBe(false)
+      expect(wrapper.find('.patrol-view__healing-hint').exists()).toBe(false)
+      expect(wrapper.text()).not.toContain(PATROL_BASELINE_COPY.degradationEvidencePlaceholder)
+      expect(wrapper.text()).toContain('ResNet-Light')
+
+      await vi.advanceTimersByTimeAsync(60_000)
+      await flushPromises()
+      expect(mockRunPatrol).toHaveBeenCalledTimes(2)
+
+      wrapper.unmount()
+    })
+
+    it('half-contract is_degraded without profile still banners and heals', async () => {
+      mockRunPatrol
+        .mockResolvedValueOnce({
+          data: {
+            mode: 'method_overlap',
+            paper_ids: ['stem-001', 'stem-002'],
+            generated_at: '2026-07-13T19:15:00Z',
+            insights: [
+              {
+                insight_id: 'ins-half',
+                title: '方法重叠',
+                summary: '图谱比对完成。',
+                status: 'ready',
+                paper_ids: ['stem-001', 'stem-002'],
+                node_refs: [],
+                is_degraded: true,
+              },
+            ],
+          },
+          meta: { request_id: 'req-half-1' },
+        } satisfies DataResponse<PatrolReport>)
+        .mockResolvedValueOnce({
+          data: {
+            mode: 'method_overlap',
+            paper_ids: ['stem-001', 'stem-002'],
+            generated_at: '2026-07-13T19:16:00Z',
+            insights: [
+              {
+                insight_id: 'ins-half',
+                title: '方法重叠',
+                summary: '已补齐证据。',
+                status: 'ready',
+                paper_ids: ['stem-001', 'stem-002'],
+                node_refs: [],
+                is_degraded: false,
+              },
+            ],
+          },
+          meta: { request_id: 'req-half-2' },
+        } satisfies DataResponse<PatrolReport>)
+
+      const wrapper = await mountPatrolView()
+      await setPaperSelection(wrapper, 'stem-001', 'stem-002')
+      await wrapper.find('.patrol-run-stub').trigger('click')
+      await flushPromises()
+
+      expect(wrapper.find('.patrol-view__degradation-banner').exists()).toBe(true)
+      expect(wrapper.find('.patrol-view__healing-hint').exists()).toBe(true)
+      expect(wrapper.text()).toContain(PATROL_BASELINE_COPY.degradationEvidencePlaceholder)
+
+      await vi.advanceTimersByTimeAsync(10_000)
+      await flushPromises()
+
+      expect(mockRunPatrol).toHaveBeenCalledTimes(2)
+      expect(wrapper.find('.patrol-view__degradation-banner').exists()).toBe(false)
+      expect(wrapper.find('.patrol-view__healing-hint').exists()).toBe(false)
+
+      wrapper.unmount()
+    })
   })
 
   it('maps GRAPH_NOT_READY to baseline error title and papers CTA (7.6)', async () => {

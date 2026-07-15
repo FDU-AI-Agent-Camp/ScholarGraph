@@ -18,6 +18,7 @@ import {
   degradationBannerTitle,
   evidencePlaceholderMessage,
   extractReportDegradation,
+  insightShowsDegradation,
 } from '@/utils/patrolDegradation'
 import {
   buildPatrolPaperIds,
@@ -273,10 +274,7 @@ async function run(): Promise<void> {
             :insight-id="item.insight_id"
             :summary="item.summary"
           >
-            <div
-              v-if="item.is_degraded || item.degradation_profile"
-              class="patrol-view__evidence-placeholder text-caption"
-            >
+            <div v-if="insightShowsDegradation(item)" class="patrol-view__evidence-placeholder text-caption">
               {{ evidencePlaceholderMessage() }}
             </div>
             <PatrolStructuredPoints v-if="item.structured_points?.length" :points="item.structured_points" />

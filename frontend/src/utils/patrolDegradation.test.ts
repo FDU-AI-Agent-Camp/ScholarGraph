@@ -1,7 +1,14 @@
 import { describe, expect, it } from 'vitest'
 
-import type { PatrolReport } from '@/api/types'
-import { degradationBannerDescription, extractReportDegradation, shouldHealPoll } from '@/utils/patrolDegradation'
+import type { PatrolInsight, PatrolReport } from '@/api/types'
+import {
+  degradationBannerDescription,
+  extractReportDegradation,
+  insightShowsDegradation,
+  resolveInsightDegradation,
+  shouldHealPoll,
+  SYNTHESIZED_DEGRADATION_TIMESTAMP,
+} from '@/utils/patrolDegradation'
 
 const degradedReport: PatrolReport = {
   mode: 'method_overlap',
@@ -53,5 +60,44 @@ describe('patrolDegradation', () => {
         timestamp: '2026-07-13T19:15:00Z',
       }),
     ).toBe(false)
+  })
+
+  it('FE-H1 — synthesizes INDEX_NOT_READY when is_degraded without profile (half-contract)', () => {
+    const halfContract: PatrolInsight = {
+      insight_id: 'ins-half',
+      title: '方法重叠',
+      summary: '图谱比对完成。',
+      status: 'ready',
+      paper_ids: ['stem-001', 'stem-002'],
+      node_refs: [],
+      is_degraded: true,
+    }
+
+    const profile = resolveInsightDegradation(halfContract)
+    expect(profile).not.toBeNull()
+    expect(profile).toEqual({
+      component: 'RAG_CONTEXT',
+      reason_code: 'INDEX_NOT_READY',
+      affected_papers: ['stem-001', 'stem-002'],
+      severity: 'WARNING',
+      timestamp: SYNTHESIZED_DEGRADATION_TIMESTAMP,
+    })
+    expect(insightShowsDegradation(halfContract)).toBe(true)
+    expect(shouldHealPoll(profile)).toBe(true)
+    expect(extractReportDegradation({ ...degradedReport, insights: [halfContract] })).toEqual(profile)
+  })
+
+  it('FE-H1 — returns null when neither flag nor profile present', () => {
+    const clean: PatrolInsight = {
+      insight_id: 'ins-clean',
+      title: '方法重叠',
+      summary: '图谱比对完成。',
+      status: 'ready',
+      paper_ids: ['stem-001', 'stem-002'],
+      node_refs: [],
+      is_degraded: false,
+    }
+    expect(resolveInsightDegradation(clean)).toBeNull()
+    expect(insightShowsDegradation(clean)).toBe(false)
   })
 })
