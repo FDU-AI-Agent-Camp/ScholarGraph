@@ -4,6 +4,7 @@ import type { PaperStatus, PaperStatusData } from '@/api/types'
 import failedStatusEnvelope from '../../../docs/api/fixtures/paper-status-hss-failed-001.json'
 import { failedStatus, processingStatus, readyStatus } from '@/test/fixtures/paperStatus'
 import {
+  isActivePipelineStatus,
   isFailedStatus,
   isGraphInteractiveStatus,
   isPreviewAvailableStatus,
@@ -20,6 +21,14 @@ describe('paperStatus helpers', () => {
     expect(isTerminalStatus('pending')).toBe(false)
     expect(isTerminalStatus('processing')).toBe(false)
     expect(isTerminalStatus('indexing')).toBe(false)
+  })
+
+  it('isActivePipelineStatus covers processing and indexing only', () => {
+    expect(isActivePipelineStatus('processing')).toBe(true)
+    expect(isActivePipelineStatus('indexing')).toBe(true)
+    expect(isActivePipelineStatus('pending')).toBe(false)
+    expect(isActivePipelineStatus('ready')).toBe(false)
+    expect(isActivePipelineStatus('failed')).toBe(false)
   })
 
   it('isFailedStatus narrows failed payloads with error fields', () => {

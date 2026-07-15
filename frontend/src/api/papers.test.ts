@@ -11,7 +11,15 @@ vi.mock('./client', () => ({
   postData: (...args: unknown[]) => mockPostData(...args),
 }))
 
-import { getPaper, getPaperGraph, getPaperStatus, listPapers, uploadPaper } from '@/api/papers'
+import {
+  forceReextractPaper,
+  getPaper,
+  getPaperGraph,
+  getPaperStatus,
+  listPapers,
+  uploadPaper,
+} from '@/api/papers'
+
 
 describe('papers API module', () => {
   beforeEach(() => {
@@ -77,5 +85,26 @@ describe('papers API module', () => {
     expect(body).toBeInstanceOf(FormData)
     expect(config.headers['Content-Type']).toBe('multipart/form-data')
     expect(result.data.paper_id).toBe('new-id')
+  })
+
+  it('forceReextractPaper posts force query and suppresses toast', async () => {
+    const envelope = statusResponse({
+      ...failedStatus,
+      status: 'pending' as const,
+      percent: 0,
+      stage: null,
+      message: '已强制重新抽取，等待流水线启动…',
+      error_code: undefined,
+      failed_during: undefined,
+    })
+    mockPostData.mockResolvedValue(envelope)
+
+    const result = await forceReextractPaper('paper-stuck', { force: true })
+
+    expect(mockPostData).toHaveBeenCalledWith('/papers/paper-stuck/reextract', undefined, {
+      params: { force: true },
+      suppressErrorToast: true,
+    })
+    expect(result.data.status).toBe('pending')
   })
 })

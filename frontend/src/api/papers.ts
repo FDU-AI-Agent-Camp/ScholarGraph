@@ -31,6 +31,16 @@ export async function getPaperGraph(paperId: string): Promise<DataResponse<Unifi
   return getData<UnifiedPaperGraph>(`/papers/${paperId}/graph`)
 }
 
+export async function forceReextractPaper(
+  paperId: string,
+  options?: { force?: boolean },
+): Promise<DataResponse<PaperStatusData>> {
+  return postData<PaperStatusData>(`/papers/${paperId}/reextract`, undefined, {
+    params: { force: options?.force === true ? true : undefined },
+    suppressErrorToast: true,
+  })
+}
+
 export async function uploadPaper(file: File): Promise<DataResponse<PaperCreateResult>> {
   const form = new FormData()
   form.append('file', file)

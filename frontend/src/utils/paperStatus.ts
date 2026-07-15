@@ -40,6 +40,18 @@ export function isQaReadyStatus(status: PaperStatus): status is GraphInteractive
   return isGraphInteractiveStatus(status)
 }
 
+/** In-flight pipeline work that must not be casually interrupted. */
+export type ActivePipelinePaperStatus = Extract<PaperStatus, 'processing' | 'indexing'>
+
+const ACTIVE_PIPELINE_STATUSES: ReadonlySet<ActivePipelinePaperStatus> = new Set([
+  'processing',
+  'indexing',
+])
+
+export function isActivePipelineStatus(status: PaperStatus): status is ActivePipelinePaperStatus {
+  return ACTIVE_PIPELINE_STATUSES.has(status as ActivePipelinePaperStatus)
+}
+
 /**
  * Thin MVP preview — only when not yet fully interactive and backend set preview_available.
  * RWW must not degrade into preview.
