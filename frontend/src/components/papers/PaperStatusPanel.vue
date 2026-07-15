@@ -16,6 +16,7 @@ import {
 } from '@/utils/extractWarnings'
 import { isFailedStatus, isGraphInteractiveStatus } from '@/utils/paperStatus'
 import type { PaperStatus } from '@/api/types'
+import { resolvePipelineFailureTitle } from '@/utils/pipelineFailureCopy'
 import {
   PIPELINE_REFRESH_CAPTION,
   PIPELINE_STEPS,
@@ -53,6 +54,7 @@ const stepStates = computed((): PipelineStepVisualState[] => {
 
 const extractWarningDisplays = computed(() => resolveExtractWarningDisplays(status.value?.extract_warnings))
 const classifyWarningMessages = computed(() => resolveClassifyWarningMessages(status.value?.classify_warnings))
+const failureAlertTitle = computed(() => resolvePipelineFailureTitle(failedSnapshot.value?.error_code))
 
 watch(
   () => props.paperId,
@@ -165,7 +167,7 @@ watch(
     <el-alert
       v-if="failedSnapshot"
       type="error"
-      :title="failedSnapshot.error_code ?? 'PIPELINE_FAILED'"
+      :title="failureAlertTitle"
       :description="failedSnapshot.message"
       show-icon
       :closable="false"

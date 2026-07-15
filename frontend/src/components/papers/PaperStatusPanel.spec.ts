@@ -9,6 +9,8 @@ import { EXTRACT_HEURISTIC_FALLBACK_MESSAGE, EXTRACT_HEURISTIC_FALLBACK_CODE } f
 import { CLASSIFIER_HEURISTIC_FALLBACK_MESSAGE } from '@/utils/classifyWarnings'
 import {
   failedStatus,
+  failedStatusProcessOrphaned,
+  failedStatusProcessTimeout,
   failedStatusWithoutCode,
   processingStatus,
   readyStatus,
@@ -18,6 +20,7 @@ import {
   readyWithWarningsStatus,
   classifyingStatusWithClassifyFallback,
 } from '@/test/fixtures/paperStatus'
+import { PROCESS_ORPHANED_TITLE, PROCESS_TIMEOUT_TITLE } from '@/utils/pipelineFailureCopy'
 
 const mockStart = vi.fn()
 const mockStop = vi.fn()
@@ -116,6 +119,30 @@ describe('PaperStatusPanel', () => {
 
     expect(wrapper.find('.el-alert-stub').attributes('data-title')).toBe('PIPELINE_FAILED')
     expect(wrapper.find('.el-alert-stub').attributes('data-description')).toBe(failedStatusWithoutCode.message)
+  })
+
+  it.each([
+    {
+      name: 'PROCESS_ORPHANED',
+      status: failedStatusProcessOrphaned,
+      title: PROCESS_ORPHANED_TITLE,
+    },
+    {
+      name: 'PROCESS_TIMEOUT',
+      status: failedStatusProcessTimeout,
+      title: PROCESS_TIMEOUT_TITLE,
+    },
+  ])('maps $name failure code to Chinese title with backend message', ({ status, title }) => {
+    mockStatus.value = status
+    mockPolling.value = false
+
+    const wrapper = mount(PaperStatusPanel, {
+      props: { paperId: status.paper_id, autoStart: false },
+    })
+
+    const alert = wrapper.find('.el-alert-stub')
+    expect(alert.attributes('data-title')).toBe(title)
+    expect(alert.attributes('data-description')).toBe(status.message)
   })
 
   it('emits ready when status becomes ready', async () => {
