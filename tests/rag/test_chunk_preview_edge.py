@@ -87,14 +87,18 @@ def _graph_only_preview_ctx(
 
 @pytest.mark.asyncio
 async def test_edge_scenario_1_l2_rescue_after_empty_retrieval_context() -> None:
-    """① L1 empty (RC.chunks miss) + L2 hit in 50ms → ready preview, max 120 chars."""
+    """① L1 empty (RC.chunks miss) + fast L2 hit → ready preview, max 120 chars.
+
+    Delay is zero so full-suite load cannot turn a successful rescue into L2_TIMEOUT
+    (fuse is 200ms; 50ms sleep was flaky under concurrent pytest pressure).
+    """
     paper_id = "stem-001"
     chunk_id = "stem-001:chunk:42"
     source_text = (
         "We evaluate ResNet-Light on the ImageNet validation set. "
         "The proposed model achieves a top-1 accuracy of 78.5%, outperforming the prior CNN baseline."
     )
-    store = _TimedChunkStore(texts={chunk_id: source_text}, delay_seconds=0.05)
+    store = _TimedChunkStore(texts={chunk_id: source_text}, delay_seconds=0.0)
     cache = _empty_retrieval_chunk_cache()
     ctx = _graph_only_preview_ctx(
         paper_id,
@@ -243,7 +247,7 @@ async def test_edge_scenario_4_hallucinated_chunk_id_on_indexed_paper() -> None:
                 texts={
                     "stem-001:chunk:42": "ResNet-Light top-1 accuracy 78.5% on ImageNet validation split.",
                 },
-                delay_seconds=0.05,
+                delay_seconds=0.0,
             ),
         ),
         (
