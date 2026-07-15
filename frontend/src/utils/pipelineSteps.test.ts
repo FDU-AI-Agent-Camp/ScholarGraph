@@ -8,6 +8,17 @@ describe('resolvePipelineStepStates', () => {
     expect(resolvePipelineStepStates('ready', 'ready')).toEqual(['done', 'done', 'done', 'done', 'done', 'done'])
   })
 
+  it('marks all steps done when status is ready_with_warnings (G1)', () => {
+    expect(resolvePipelineStepStates('ready', 'ready_with_warnings')).toEqual([
+      'done',
+      'done',
+      'done',
+      'done',
+      'done',
+      'done',
+    ])
+  })
+
   it('marks prior steps done and current active while processing', () => {
     expect(resolvePipelineStepStates('classifying', 'processing')).toEqual([
       'done',

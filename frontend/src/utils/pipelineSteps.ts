@@ -1,6 +1,7 @@
 import type { FailedDuringStage, PaperStatus, PipelineStage } from '@/api/types'
 
 import { DETAIL_BASELINE_COPY } from '@/constants/detailCopy'
+import { isGraphInteractiveStatus } from '@/utils/paperStatus'
 
 export interface PipelineStepDefinition {
   stage: PipelineStage
@@ -35,7 +36,7 @@ export function resolvePipelineStepStates(
   paperStatus: PaperStatus,
   failedDuring?: FailedDuringStage | null,
 ): PipelineStepVisualState[] {
-  if (paperStatus === 'ready') {
+  if (isGraphInteractiveStatus(paperStatus)) {
     return PIPELINE_STEPS.map(() => 'done')
   }
 
