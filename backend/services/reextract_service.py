@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -25,6 +26,37 @@ logger = logging.getLogger(__name__)
 
 _REEXTRACT_QUEUED_MESSAGE = "已强制重新抽取，等待流水线启动…"
 _ACTIVE_PIPELINE_STATUSES = frozenset({PaperStatus.PROCESSING, PaperStatus.INDEXING})
+
+# Process-local idempotency gate: one heavy reextract path per paper_id at a time.
+_reextract_gate = asyncio.Lock()
+_reextract_inflight: set[str] = set()
+
+
+def reset_reextract_inflight_gate() -> None:
+    """Drop in-flight markers (tests / process recycle)."""
+    _reextract_inflight.clear()
+
+
+def is_reextract_inflight(paper_id: str) -> bool:
+    """Return whether *paper_id* currently holds the reextract claim (tests / diagnostics)."""
+    return paper_id in _reextract_inflight
+
+
+async def _claim_reextract_slot(paper_id: str) -> None:
+    """Reject concurrent reextracts with 409 when another claim already holds the slot."""
+    async with _reextract_gate:
+        if paper_id in _reextract_inflight:
+            raise ApiError(
+                "PAPER_ALREADY_PROCESSING",
+                f"论文 {paper_id} 正在强制重新抽取中，请勿重复提交",
+                status_code=409,
+            )
+        _reextract_inflight.add(paper_id)
+
+
+async def _release_reextract_slot(paper_id: str) -> None:
+    async with _reextract_gate:
+        _reextract_inflight.discard(paper_id)
 
 
 def _resolve_pdf_path(pdf_path_str: str | None, paper_id: str) -> Path:
@@ -93,6 +125,9 @@ async def force_reextract(
     cancels in-flight asyncio tasks (pipeline / head-refine / extract / indexing
     run) before reset. Best-effort abort also runs for terminal/pending paths so
     a late worker cannot resurrect stale artefacts after wipe.
+
+    Concurrent duplicate reextracts for the same ``paper_id`` are idempotently
+    rejected (409) while a claim is held; the slot is always released in ``finally``.
     """
     paper = run_async(paper_service._paper_repo.get(paper_id))
     if paper is None:
@@ -105,20 +140,24 @@ async def force_reextract(
             status_code=409,
         )
 
-    # Always best-effort abort after the 409 gate.
-    await abort_in_flight_pipeline(paper_id)
+    await _claim_reextract_slot(paper_id)
+    try:
+        # Always best-effort abort after the 409 / claim gate.
+        await abort_in_flight_pipeline(paper_id)
 
-    pdf_path_str = run_async(paper_service._paper_repo.get_pdf_path(paper_id))
-    pdf_path = _resolve_pdf_path(pdf_path_str, paper_id)
-    await _purge_vector_index(paper_id, vector_store=vector_store)
-    _clear_persisted_artefacts(paper_id)
-    _clear_in_memory_state(paper_service, paper_id)
+        pdf_path_str = run_async(paper_service._paper_repo.get_pdf_path(paper_id))
+        pdf_path = _resolve_pdf_path(pdf_path_str, paper_id)
+        await _purge_vector_index(paper_id, vector_store=vector_store)
+        _clear_persisted_artefacts(paper_id)
+        _clear_in_memory_state(paper_service, paper_id)
 
-    run_async(paper_service._paper_repo.reset_for_reextract(paper_id))
-    snapshot = paper_service.reset_pipeline_for_reextract(
-        paper_id,
-        message=_REEXTRACT_QUEUED_MESSAGE,
-    )
+        run_async(paper_service._paper_repo.reset_for_reextract(paper_id))
+        snapshot = paper_service.reset_pipeline_for_reextract(
+            paper_id,
+            message=_REEXTRACT_QUEUED_MESSAGE,
+        )
 
-    schedule_paper_pipeline(paper_id, pdf_path)
-    return snapshot
+        schedule_paper_pipeline(paper_id, pdf_path)
+        return snapshot
+    finally:
+        await _release_reextract_slot(paper_id)
