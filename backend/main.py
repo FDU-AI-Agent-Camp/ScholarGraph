@@ -120,6 +120,10 @@ def create_app() -> FastAPI:
     )
     register_exception_handlers(app)
     app.include_router(api_router, prefix=settings.api_v1_prefix)
+    # After API/OpenAPI routes so SPA catch-all does not shadow them.
+    from backend.startup.spa_static import mount_frontend_spa
+
+    mount_frontend_spa(app)
     return app
 
 
