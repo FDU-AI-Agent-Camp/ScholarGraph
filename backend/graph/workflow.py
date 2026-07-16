@@ -122,8 +122,13 @@ async def run_paper_pipeline(paper_id: str, pdf_path: Path) -> WorkflowState:
     paper_service = get_paper_service()
     paper_service.ensure_paper_exists(paper_id)
     get_pipeline_status_service().start_processing(paper_id)
+    pipeline_generation_id = paper_service.begin_pipeline_generation(paper_id)
 
-    initial = initial_workflow_state(paper_id=paper_id, pdf_path=str(pdf_path))
+    initial = initial_workflow_state(
+        paper_id=paper_id,
+        pdf_path=str(pdf_path),
+        pipeline_generation_id=pipeline_generation_id,
+    )
     final_state: WorkflowState = cast(
         WorkflowState,
         await get_compiled_paper_pipeline().ainvoke(initial),

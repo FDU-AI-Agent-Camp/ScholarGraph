@@ -77,3 +77,7 @@ export async function postData<T>(
   const { data } = await http.post<DataResponse<T>>(url, body, config)
   return data
 }
+
+export async function deleteData(url: string, config?: ScholarGraphAxiosRequestConfig): Promise<void> {
+  await http.delete(url, config)
+}

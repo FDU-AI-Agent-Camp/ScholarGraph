@@ -214,12 +214,18 @@ class PipelineStatusService:
         failed_during: PipelineStage | None = None,
         append_extract_warnings: list[str] | None = None,
     ) -> PaperStatusData:
+        from backend.repositories.async_bridge import run_async
+        from backend.services.paper_status_transitions import assert_status_transition_allowed
+
         validate_status_contract(status=status, stage=stage, percent=percent)
         validate_failed_error_fields(
             status=status,
             error_code=error_code,
             failed_during=failed_during,
         )
+        existing = run_async(get_paper_service().get_pipeline_snapshot(paper_id))
+        if existing is not None:
+            assert_status_transition_allowed(existing.status, status, paper_id=paper_id)
         return get_paper_service().set_status_snapshot(
             paper_id,
             status=status,

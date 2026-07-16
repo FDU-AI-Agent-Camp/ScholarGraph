@@ -135,6 +135,7 @@ backend/rag/
 ├── indexing_run_registry.py  # P13：进程内 run 世代 revoke / may_activate
 ├── indexing_watchdog.py      # P13：独立线程编排扫尾（promote 走 PaperService）
 ├── handlers.py               # PipelineFinalized → wait_for 索引 + 孤儿 run 补偿
+├── wipe_vector_sweep.py      # Force wipe：Wave2 延迟 delete_run + 生命周期蓝图
 ├── hybrid_retriever.py       # 统一向量召回 + 可选 A 尺度图谱
 ├── qa_router.py              # 问题尺度判定
 └── models.py                 # RAG 相关 Pydantic schemas
@@ -329,6 +330,15 @@ await _promote_terminal_status(...)  # ready | ready_with_warnings + RagIndexed
 
 - 失败不导致流水线 `failed`，但可能以 `ready_with_warnings` 暴露。  
 - 重新抽取（re-extract）时先 `delete_by_paper` / `replace_paper_index` 再重建。  
+- **Force wipe 数据生命周期（已落地，INDEXING 幽灵向量闭环）**：`DELETE?force` / `POST …/reextract?force` 不具备 XA，但三层互补达到工业级韧性：
+
+  | 场景维度 | 重构前 | 重构后 |
+  | --- | --- | --- |
+  | 并发 Claim 拦截 | 进程内 set 跨 worker 失效 → 多副本混战 | 持久化 `paper_ops_claims`（可配 TTL / PG advisory 短事务）全局互斥，第二路 **409** |
+  | 迟到写入处理 | `to_thread` upsert 回写幽灵 → 污染新跑 | metadata 必带 `index_run_id`；检索硬过滤 `active_rag_run_id`；无 active **fail-closed**（逻辑失明） |
+  | 存储空间回收 | 依赖运气 / 人工清库 | Wave1 即时 `delete_by_paper` + Wave2 `PAPER_WIPE_VECTOR_SWEEP_DELAY_SECONDS`（默认 120s）`delete_run` 扫墓 → Zero Footprint |
+
+  编排契约见 `backend/rag/wipe_vector_sweep.py`；测例：`tests/rag/test_wipe_vector_sweep.py`、`tests/rag/test_wipe_lifecycle_matrix.py`、`tests/rag/test_wipe_boundary_friction.py`（`test_cluster_advisory_lock` / `test_ghost_vector_logical_isolation`）、`tests/concurrency/test_friction_race_and_generation.py`（跨 worker claim）。  
 - `index_paper_for_rag` 按 `paper_id` 加锁，upsert 幂等。  
 - **孤儿线程 hardening（已落地）**：`IndexingRunRegistry` 在 `replace_paper_index` 生成 `run_id` 时 `begin`；`wait_for` 超时立刻 `revoke`。激活前校验 `may_activate`（revoked 否 + `inflight` 世代匹配）+ Task `cancelling()`，否决则打 `[Generation Guard] … Aborting database update.`、不清 DB active、并清理该 run。**cancel/refuse 路径不得 `clear` revoke**（否则超时侧无法拿到 run_id 调度补偿，且 `may_activate` 会假阳性）；仅成功激活或补偿结束才 `clear`。超时另起 fire-and-forget 补偿清理（延迟 0/5/10s 调用 `delete_run`；若 active 仍指向该 run 则先 `set_active_run_id(None)` 写 **SQL NULL**）。线程池内 upsert 或仍会跑完，但**不得合法激活**；脏数据最终被按 run_id 抹除。竞态放大测例见 `tests/rag/test_orphan_run_race_amplification.py`。  
 - **主循环假死（知情架构残留）**：heartbeat / HTTP / `publish_sync(RagIndexed)` 仍依赖 FastAPI 主 loop（starve 时事件投递可滞后）；macro watchdog 已在独立线程用 **sync** 读库 promote，**状态轮询**仍可看到 `ready_with_warnings`。进程级完全解耦（外部 Message Broker / Web↔Worker 多进程）属演进项，见本地 `problems-v2.md` Part E · P13 残留 2。研发期用 `ASYNCIO_SLOW_CALLBACK_MS` 逼出裸同步 I/O。  
@@ -917,6 +927,9 @@ tests/rag/
 ├── test_indexing_run_registry.py         # P13 世代 revoke / may_activate
 ├── test_indexing_watchdog.py             # P13 macro + cold-boot（含 release-gate 冷启动用例）
 ├── test_orphan_run_race_amplification.py # P13 孤儿线程竞态放大
+├── test_wipe_vector_sweep.py             # Force wipe 读时失明 + Wave2
+├── test_wipe_boundary_friction.py        # 双 worker DELETE 409 + Hybrid 幽灵隔离
+├── test_wipe_lifecycle_matrix.py         # Force wipe 三维生命周期目录
 ├── test_watchdog_main_loop_starvation.py # P13 主 loop 饥饿下 sync heal
 ├── test_p13_release_gate_matrix.py       # P13 Release Gate 目录完整性
 ├── test_p13_ci_gates.py                  # P13 静态审计脚本冒烟

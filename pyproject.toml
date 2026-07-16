@@ -82,6 +82,7 @@ markers = [
     "demo_profile_check: demo 准入验收；需 APP_PROFILE=demo + RERANKER_ENABLED=true + live API；默认排除",
     "patrol_fault_injection: Patrol RAG 故障注入 / 降级契约断言（PR 默认可跑；release 门禁必跑）",
     "p13_release_gate: P13 孤儿线程/Watchdog 债务回归矩阵（PR 默认可跑；make p13-release-gate 必跑）",
+    "process_release_gate: processing/pending 墙钟 + 冷启动 grace 回归矩阵（make process-release-gate 必跑）",
     "architecture_evolution: 主 loop/外部 broker 多进程解耦演进验收（默认 skip；未落地前仅占位）",
     "integration: 跨节点 / 编译后工作流集成测试",
     "three_branch: FE + platform + ingest 三分支联调（语料缺失时 skip）",

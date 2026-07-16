@@ -71,6 +71,7 @@ class PipelineRepository:
                     classify_warnings=list(data.classify_warnings),
                     extract_warnings=list(data.extract_warnings),
                     active_rag_run_id=None,
+                    pipeline_generation_id=None,
                     preview_graph=None,
                     indexing_started_at=indexing_started_at,
                     indexing_heartbeat=indexing_heartbeat,
@@ -192,8 +193,38 @@ class PipelineRepository:
             run.updated_at = datetime.now(UTC)
             await session.commit()
 
+    async def get_pipeline_generation_id(self, paper_id: str) -> str | None:
+        async with get_async_session_factory()() as session:
+            run = await session.get(PipelineRunRow, paper_id)
+            if run is None:
+                return None
+            value = run.pipeline_generation_id
+            if value is None or value == "":
+                return None
+            return value
+
+    async def set_pipeline_generation_id(self, paper_id: str, generation_id: str | None) -> None:
+        """Set or clear the extract-generation token used by the terminal write guard."""
+        async with get_async_session_factory()() as session:
+            await self._begin_immediate(session)
+            run = await session.get(PipelineRunRow, paper_id)
+            if run is None:
+                msg = f"pipeline run not found: {paper_id}"
+                raise KeyError(msg)
+            run.pipeline_generation_id = generation_id if generation_id else None
+            run.updated_at = datetime.now(UTC)
+            await session.commit()
+
+    async def begin_pipeline_generation(self, paper_id: str) -> str:
+        """Mint and persist a new extract-generation token for *paper_id*."""
+        from backend.services.pipeline_generation_guard import generate_pipeline_generation_id
+
+        generation_id = generate_pipeline_generation_id()
+        await self.set_pipeline_generation_id(paper_id, generation_id)
+        return generation_id
+
     async def clear_ephemeral_pipeline_state(self, paper_id: str) -> None:
-        """Clear preview graph and RAG run tracking for re-extract or finalize."""
+        """Clear preview graph, RAG run tracking, and extract-generation for re-extract."""
         async with get_async_session_factory()() as session:
             await self._begin_immediate(session)
             run = await session.get(PipelineRunRow, paper_id)
@@ -201,6 +232,7 @@ class PipelineRepository:
                 return
             run.preview_graph = None
             run.active_rag_run_id = None
+            run.pipeline_generation_id = None
             run.updated_at = datetime.now(UTC)
             await session.commit()
 

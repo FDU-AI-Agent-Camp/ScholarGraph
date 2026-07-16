@@ -136,6 +136,7 @@ describe('PaperDetailView', () => {
       expect(wrapper.find('.detail-graph').exists()).toBe(true)
       expect(wrapper.find('.detail-header__back').text()).toContain(DETAIL_BASELINE_COPY.backLink)
       expect(wrapper.find('.detail-header__title').text()).toBe('测试论文')
+      expect(wrapper.find('[data-testid="detail-delete-button"]').text()).toContain('删除')
       expect(wrapper.find('.paper-metadata-stub').exists()).toBe(true)
     })
 
@@ -483,9 +484,8 @@ describe('PaperDetailView', () => {
     })
 
     it('syncs Tag and graph highlight in the same tick on citation click (§1.4.3 checklist)', async () => {
-      const detailSrc = readFrontendSource('views/PaperDetailView.vue')
-      const script = detailSrc.match(/<script[^>]*>([\s\S]*?)<\/script>/)?.[1] ?? ''
-      expect(usesSynchronousHighlightHandlers(script)).toBe(true)
+      const qaComposableSrc = readFrontendSource('composables/usePaperDetailQa.ts')
+      expect(usesSynchronousHighlightHandlers(qaComposableSrc)).toBe(true)
 
       const wrapper = await mountWithTwoCitations()
       const tags = wrapper.findAll('.citation-tag')

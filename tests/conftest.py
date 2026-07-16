@@ -357,7 +357,22 @@ def _patrol_service_global_mock_vector_store(monkeypatch) -> None:
 
 
 def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> None:
-    """D17: final sync stop for singleton + orphan local EventBus workers."""
+    """Stop background workers so pytest can exit without hanging on non-daemon threads."""
+    try:
+        from backend.rag.wipe_vector_sweep import reset_wipe_sweep_tasks_for_tests, stop_vector_cleanup_poller
+
+        stop_vector_cleanup_poller()
+        reset_wipe_sweep_tasks_for_tests()
+    except Exception:
+        pass
+    try:
+        from backend.pipeline.processing_watchdog import stop_processing_watchdog
+        from backend.rag.indexing_watchdog import stop_indexing_watchdog
+
+        stop_processing_watchdog(join_timeout_seconds=1.0)
+        stop_indexing_watchdog(join_timeout_seconds=1.0)
+    except Exception:
+        pass
     from backend.events.bus import stop_all_event_bus_workers
 
     stop_all_event_bus_workers()

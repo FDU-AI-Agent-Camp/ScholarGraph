@@ -433,9 +433,10 @@ ScholarGraph 是面向科研阅读的 **AI Agent** 项目：编排（如 LangGra
 
 - 本地完整检查：`uv run pyright backend`
 - 本地一键门禁（推荐 Windows）：`uv run python scripts/check_backend.py`  
-  （顺序：ruff → pyright → `check_rag_io_timeouts.py` → `check_pipeline_repo_lod.py` → `check_p13_release_gate.py` → pytest）
+  （顺序：ruff → pyright → `check_rag_io_timeouts.py` → `check_pipeline_repo_lod.py` → `check_p13_release_gate.py` → `check_process_release_gate.py` → pytest）
 - PaperService 封装 AST：`make pipeline-repo-lod`（禁止其他模块触碰 `._pipeline_repo`）
 - P13 孤儿线程 / Watchdog 矩阵单独跑：`make p13-release-gate` 或 `uv run python scripts/check_p13_release_gate.py`
+- processing / pending 墙钟 + 冷启动 grace 矩阵：`make process-release-gate` 或 `uv run python scripts/check_process_release_gate.py`
 - 线上 CI / Ubuntu：`make ci`（同上，并含 coverage / pip-audit）
 - CI：`.github/workflows/backend.yml` 已集成，PR 必须绿。
 

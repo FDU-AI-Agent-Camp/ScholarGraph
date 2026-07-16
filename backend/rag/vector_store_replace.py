@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import warnings
 from typing import TYPE_CHECKING
 
 from backend.rag.vector_store_utils import _generate_run_id, _validate_evidence_paper_ids
@@ -24,6 +25,14 @@ logger = logging.getLogger(__name__)
 
 # Structured marker for ELK / race-amplification tests (P13 orphan-thread gate).
 GENERATION_GUARD_LOG_PREFIX = "[Generation Guard]"
+
+
+class ObsoleteGenerationWarning(UserWarning):
+    """Raised when a superseded index run_id attempts to activate after a newer generation.
+
+    Emitted via ``warnings.warn`` on the refuse-activate path so concurrency tests
+    can assert generation-guard behavior with ``pytest.warns``.
+    """
 
 
 class ReplacePaperIndexMixin:
@@ -149,11 +158,12 @@ class ReplacePaperIndexMixin:
             except Exception:
                 active = None
         current = active if active else "<none>"
+        message = (
+            f"{GENERATION_GUARD_LOG_PREFIX} {run_id} is obsolete "
+            f"(current active is {current}). Aborting database update."
+        )
         logger.warning(
-            "%s %s is obsolete (current active is %s). Aborting database update.",
-            GENERATION_GUARD_LOG_PREFIX,
-            run_id,
-            current,
+            message,
             extra={
                 "paper_id": paper_id,
                 "run_id": run_id,
@@ -161,3 +171,4 @@ class ReplacePaperIndexMixin:
                 "generation_guard": True,
             },
         )
+        warnings.warn(message, ObsoleteGenerationWarning, stacklevel=2)

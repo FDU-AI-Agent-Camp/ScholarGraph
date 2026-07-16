@@ -36,6 +36,7 @@ async def _run_full_extraction(
     *,
     head_context: str | None,
     settings: Settings,
+    pipeline_generation_id: str | None,
 ) -> None:
     """Run full extraction and finalize the pipeline."""
     status_service = get_pipeline_status_service()
@@ -68,6 +69,7 @@ async def _run_full_extraction(
             graph_data=graph.model_dump(mode="json"),
             classification_data=classification.model_dump(mode="json"),
             full_text=full_text,
+            pipeline_generation_id=pipeline_generation_id,
         )
         logger.info(
             "background_full_extraction_complete",
@@ -101,6 +103,7 @@ def schedule_full_extraction(
     *,
     head_context: str | None = None,
     settings: Settings | None = None,
+    pipeline_generation_id: str | None = None,
 ) -> asyncio.Task[None]:
     """Start (or return) the background full-extraction task for *paper_id*.
 
@@ -121,6 +124,7 @@ def schedule_full_extraction(
             classification,
             head_context=head_context,
             settings=cfg,
+            pipeline_generation_id=pipeline_generation_id,
         ),
         name=f"full-extract-{paper_id}",
     )
@@ -135,6 +139,27 @@ def get_full_extraction_task(paper_id: str) -> asyncio.Task[None] | None:
     if task is not None and not task.done():
         return task
     return None
+
+
+async def cancel_full_extraction(paper_id: str) -> None:
+    """Cancel and await the background full-extraction task for *paper_id*, if any."""
+    task = _full_extract_tasks.pop(paper_id, None)
+    if task is None or task.done():
+        return
+    task.cancel()
+    await asyncio.gather(task, return_exceptions=True)
+
+
+def request_cancel_full_extraction_sync(paper_id: str) -> None:
+    """Inject CancelledError into a background extract task without awaiting (watchdog).
+
+    Leaves the registry entry in place so ``cancel_full_extraction`` can still
+    await ``finally`` drain after a Cascading Kill Channel force-cancel.
+    """
+    task = _full_extract_tasks.get(paper_id)
+    if task is None or task.done():
+        return
+    task.cancel()
 
 
 def reset_extract_worker() -> None:

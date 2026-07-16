@@ -4,9 +4,15 @@ import { resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
 
 import {
+  EXTRACT_CONTEXT_WINDOW_EXCEEDED_CODE,
   EXTRACT_HEURISTIC_FALLBACK_CODE,
   EXTRACT_HEURISTIC_FALLBACK_MESSAGE,
+  EXTRACT_LLM_JSON_INVALID_CODE,
+  EXTRACT_LLM_RATE_LIMITED_CODE,
+  EXTRACT_LLM_TIMEOUT_CODE,
+  EXTRACT_SCHEMA_VALIDATION_FAILED_CODE,
   EXTRACT_WARNING_UNKNOWN_MESSAGE,
+  LOW_CONFIDENCE_GRAPH_CODE,
   MVP_SKELETON_PREVIEW_CODE,
   MVP_SKELETON_PREVIEW_MESSAGE,
   RAG_INDEXING_STUCK_TIMEOUT_CODE,
@@ -43,6 +49,24 @@ function loadBackendExtractWarningCatalog(): Array<{ code: string; message: stri
 }
 
 describe('extractWarnings', () => {
+  it('exports machine codes used by the FE/BE frozen catalog', () => {
+    expect([
+      EXTRACT_LLM_TIMEOUT_CODE,
+      EXTRACT_LLM_RATE_LIMITED_CODE,
+      EXTRACT_LLM_JSON_INVALID_CODE,
+      EXTRACT_SCHEMA_VALIDATION_FAILED_CODE,
+      EXTRACT_CONTEXT_WINDOW_EXCEEDED_CODE,
+      LOW_CONFIDENCE_GRAPH_CODE,
+    ]).toEqual([
+      'extract_llm_timeout',
+      'extract_llm_rate_limited',
+      'extract_llm_json_invalid',
+      'extract_schema_validation_failed',
+      'extract_context_window_exceeded',
+      'low_confidence_graph',
+    ])
+  })
+
   it('maps extract_heuristic_fallback to frozen user message', () => {
     expect(resolveExtractWarningMessages([EXTRACT_HEURISTIC_FALLBACK_CODE])).toEqual([
       EXTRACT_HEURISTIC_FALLBACK_MESSAGE,

@@ -111,7 +111,9 @@ describe('design-spec §16 Prototype 答辩路径', () => {
 
   describe('Detail → QA-Citation-Active', () => {
     it('ready Detail exposes SSE QA, citation tags, and compact graph preview', () => {
-      expect(detailViewSrc).toContain('streamPaperQa')
+      const qaComposableSrc = readFrontendSource('composables/usePaperDetailQa.ts')
+      expect(qaComposableSrc).toContain('streamPaperQa')
+      expect(detailViewSrc).toContain('usePaperDetailQa')
       expect(detailViewSrc).toContain('TagCitation')
       expect(detailViewSrc).toContain('PaperGraph')
       expect(detailViewSrc).toContain('highlightNodeId')

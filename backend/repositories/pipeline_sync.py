@@ -152,3 +152,170 @@ def stuck_bounds_from_settings(
         else settings.rag_indexing_heartbeat_stale_seconds
     )
     return clock - timedelta(seconds=stuck_s), clock - timedelta(seconds=hb_s)
+
+
+_ORPHAN_PIPELINE_STATUSES = frozenset(
+    {PaperStatus.PENDING.value, PaperStatus.PROCESSING.value},
+)
+
+
+def list_orphan_pipeline_paper_ids_sync(
+    *,
+    older_than: datetime | None = None,
+    limit: int = 200,
+) -> list[str]:
+    """Return pending/processing paper_ids for cold-boot tombstone scan.
+
+    When ``older_than`` is set, only rows whose ``COALESCE(run.updated_at, paper.updated_at)``
+    is strictly before that instant are returned (boot − ε grace).
+    """
+    factory = get_pipeline_sync_session_factory()
+    candidate_ids: list[str] = []
+    cutoff = _as_utc(older_than) if older_than is not None else None
+    with factory() as session:
+        stmt = (
+            select(PipelineRunRow, PaperRow)
+            .join(PaperRow, PaperRow.paper_id == PipelineRunRow.paper_id)
+            .where(PaperRow.status.in_(tuple(_ORPHAN_PIPELINE_STATUSES)))
+            .order_by(PipelineRunRow.updated_at.asc())
+            .limit(limit)
+        )
+        for run, paper in session.execute(stmt).all():
+            if cutoff is not None:
+                stamp = run.updated_at or paper.updated_at
+                if stamp is not None and _as_utc(stamp) >= cutoff:
+                    continue
+            candidate_ids.append(run.paper_id)
+    return candidate_ids
+
+
+def list_stuck_processing_paper_ids_sync(
+    *,
+    older_than: datetime,
+    limit: int = 200,
+) -> list[str]:
+    """Return PROCESSING paper_ids whose run/paper ``updated_at`` is older than *older_than*."""
+    return _list_stuck_status_paper_ids_sync(
+        status=PaperStatus.PROCESSING.value,
+        older_than=older_than,
+        limit=limit,
+    )
+
+
+def list_stuck_pending_paper_ids_sync(
+    *,
+    older_than: datetime,
+    limit: int = 200,
+) -> list[str]:
+    """Return PENDING paper_ids whose run/paper ``updated_at`` is older than *older_than*."""
+    return _list_stuck_status_paper_ids_sync(
+        status=PaperStatus.PENDING.value,
+        older_than=older_than,
+        limit=limit,
+    )
+
+
+def _list_stuck_status_paper_ids_sync(
+    *,
+    status: str,
+    older_than: datetime,
+    limit: int = 200,
+) -> list[str]:
+    factory = get_pipeline_sync_session_factory()
+    candidate_ids: list[str] = []
+    cutoff = _as_utc(older_than)
+    with factory() as session:
+        stmt = (
+            select(PipelineRunRow, PaperRow)
+            .join(PaperRow, PaperRow.paper_id == PipelineRunRow.paper_id)
+            .where(PaperRow.status == status)
+            .order_by(PipelineRunRow.updated_at.asc())
+            .limit(limit)
+        )
+        for run, paper in session.execute(stmt).all():
+            stamp = run.updated_at or paper.updated_at
+            if stamp is None:
+                candidate_ids.append(run.paper_id)
+                continue
+            if _as_utc(stamp) < cutoff:
+                candidate_ids.append(run.paper_id)
+    return candidate_ids
+
+
+def fail_orphaned_pipeline_row_sync(
+    paper_id: str,
+    *,
+    error_code: str,
+    message: str,
+) -> bool:
+    """Force pending/processing → failed via sync SQL. Returns whether status changed."""
+    from backend.graph.state import STAGE_PERCENT
+    from backend.schemas.paper import PipelineStage
+    from backend.services.pipeline_status_service import (
+        PROCESSING_STAGES,
+        validate_failed_error_fields,
+        validate_status_contract,
+    )
+
+    factory = get_pipeline_sync_session_factory()
+    with factory() as db:
+        paper = db.get(PaperRow, paper_id)
+        run = db.get(PipelineRunRow, paper_id)
+        if paper is None or run is None:
+            return False
+        if paper.status not in _ORPHAN_PIPELINE_STATUSES:
+            return False
+
+        failed_during_value: str | None = None
+        if run.stage:
+            try:
+                stage_enum = PipelineStage(run.stage)
+            except ValueError:
+                stage_enum = None
+            if stage_enum is not None and stage_enum in PROCESSING_STAGES:
+                failed_during_value = stage_enum.value
+
+        stage = PipelineStage.FAILED
+        percent = STAGE_PERCENT[PipelineStage.FAILED]
+        status = PaperStatus.FAILED
+        validate_status_contract(status=status, stage=stage, percent=percent)
+        validate_failed_error_fields(
+            status=status,
+            error_code=error_code,
+            failed_during=PipelineStage(failed_during_value) if failed_during_value else None,
+        )
+
+        now = datetime.now(UTC)
+        run.stage = stage.value
+        run.percent = percent
+        run.message = message
+        run.error_code = error_code
+        run.failed_during = failed_during_value
+        # Invalidate extract-generation so a late orphan Task cannot pass the write guard.
+        run.pipeline_generation_id = None
+        run.updated_at = now
+        paper.status = status.value
+        paper.updated_at = now
+        db.commit()
+    return True
+
+
+def touch_processing_lease_sync(paper_id: str) -> bool:
+    """Bump ``updated_at`` for a PROCESSING paper (wall-clock lease renewal).
+
+    Used when the watchdog finds stale SQL timestamps but an in-memory Task is
+    still alive — renews the lease instead of emitting ``PROCESS_TIMEOUT``.
+    """
+    factory = get_pipeline_sync_session_factory()
+    with factory() as db:
+        paper = db.get(PaperRow, paper_id)
+        run = db.get(PipelineRunRow, paper_id)
+        if paper is None or run is None:
+            return False
+        if paper.status != PaperStatus.PROCESSING.value:
+            return False
+        now = datetime.now(UTC)
+        run.updated_at = now
+        paper.updated_at = now
+        db.commit()
+    return True

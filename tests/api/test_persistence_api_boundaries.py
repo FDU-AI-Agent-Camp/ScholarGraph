@@ -35,3 +35,12 @@ async def test_list_papers_negative_offset_rejected(
 ) -> None:
     response = await api_client.get("/api/v1/papers", params={"offset": -1})
     assert response.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_list_papers_limit_0_rejected(
+    api_client: AsyncClient,
+    persistence_env,
+) -> None:
+    response = await api_client.get("/api/v1/papers", params={"limit": 0})
+    assert response.status_code == 422

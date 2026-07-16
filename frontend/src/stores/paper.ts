@@ -12,6 +12,10 @@ export interface PaperListQuery {
   limit?: number
 }
 
+export interface FetchListOptions {
+  silent?: boolean
+}
+
 export interface PaperStoreState {
   items: Ref<PaperSummary[]>
   total: Ref<number>
@@ -24,7 +28,7 @@ export interface PaperStoreState {
 export const usePaperStore = defineStore(
   'paper',
   (): PaperStoreState & {
-    fetchList: (params?: PaperListQuery) => Promise<void>
+    fetchList: (params?: PaperListQuery, options?: FetchListOptions) => Promise<void>
     fetchDetail: (paperId: string) => Promise<void>
     fetchGraph: (paperId: string) => Promise<UnifiedPaperGraph>
     clearCurrent: () => void
@@ -36,8 +40,11 @@ export const usePaperStore = defineStore(
     const currentPaper = ref<PaperDetail | null>(null)
     const currentGraph = ref<UnifiedPaperGraph | null>(null)
 
-    async function fetchList(params?: PaperListQuery): Promise<void> {
-      loading.value = true
+    async function fetchList(params?: PaperListQuery, options?: FetchListOptions): Promise<void> {
+      const silent = options?.silent === true
+      if (!silent) {
+        loading.value = true
+      }
       lastError.value = null
       try {
         const res = await papersApi.listPapers(params)
@@ -48,7 +55,9 @@ export const usePaperStore = defineStore(
         lastError.value = getUnknownErrorMessage(error)
         throw error
       } finally {
-        loading.value = false
+        if (!silent) {
+          loading.value = false
+        }
       }
     }
 

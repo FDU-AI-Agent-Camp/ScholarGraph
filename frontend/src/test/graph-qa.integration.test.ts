@@ -98,12 +98,14 @@ describe('graph + QA SSE integration (fixtures)', () => {
 
   it('wires Detail view citation click and graph node-click to shared highlightNodeId', () => {
     const detailSrc = readFrontendSource('views/PaperDetailView.vue')
+    const qaComposableSrc = readFrontendSource('composables/usePaperDetailQa.ts')
 
-    expect(detailSrc).toContain('const highlightNodeId = ref')
+    expect(qaComposableSrc).toContain('const highlightNodeId = ref')
     expect(detailSrc).toContain("item.type === 'node' && item.node_id === highlightNodeId")
     expect(detailSrc).toContain('@click="focusCitation(item)"')
     expect(detailSrc).toContain(':highlight-node-id="highlightNodeId"')
-    expect(detailSrc).toContain('function onGraphNodeClick')
+    expect(qaComposableSrc).toContain('function onGraphNodeClick')
+    expect(detailSrc).toContain('onGraphNodeClick')
   })
 
   it('shares citation active tokens between TagCitation and full Graph theme helpers', () => {

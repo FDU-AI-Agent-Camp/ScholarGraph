@@ -5,18 +5,29 @@ import { statusResponse, failedStatus } from '@/test/fixtures/paperStatus'
 
 const mockGetData = vi.fn()
 const mockPostData = vi.fn()
+const mockDeleteData = vi.fn()
 
 vi.mock('./client', () => ({
   getData: (...args: unknown[]) => mockGetData(...args),
   postData: (...args: unknown[]) => mockPostData(...args),
+  deleteData: (...args: unknown[]) => mockDeleteData(...args),
 }))
 
-import { getPaper, getPaperGraph, getPaperStatus, listPapers, uploadPaper } from '@/api/papers'
+import {
+  deletePaper,
+  forceReextractPaper,
+  getPaper,
+  getPaperGraph,
+  getPaperStatus,
+  listPapers,
+  uploadPaper,
+} from '@/api/papers'
 
 describe('papers API module', () => {
   beforeEach(() => {
     mockGetData.mockReset()
     mockPostData.mockReset()
+    mockDeleteData.mockReset()
   })
 
   it('listPapers returns DataResponse from getData', async () => {
@@ -77,5 +88,37 @@ describe('papers API module', () => {
     expect(body).toBeInstanceOf(FormData)
     expect(config.headers['Content-Type']).toBe('multipart/form-data')
     expect(result.data.paper_id).toBe('new-id')
+  })
+
+  it('forceReextractPaper posts force query and suppresses toast', async () => {
+    const envelope = statusResponse({
+      ...failedStatus,
+      status: 'pending' as const,
+      percent: 0,
+      stage: null,
+      message: '已强制重新抽取，等待流水线启动…',
+      error_code: undefined,
+      failed_during: undefined,
+    })
+    mockPostData.mockResolvedValue(envelope)
+
+    const result = await forceReextractPaper('paper-stuck', { force: true })
+
+    expect(mockPostData).toHaveBeenCalledWith('/papers/paper-stuck/reextract', undefined, {
+      params: { force: true },
+      suppressErrorToast: true,
+    })
+    expect(result.data.status).toBe('pending')
+  })
+
+  it('deletePaper calls DELETE with optional force and suppresses toast', async () => {
+    mockDeleteData.mockResolvedValue(undefined)
+
+    await deletePaper('paper-gone', { force: true })
+
+    expect(mockDeleteData).toHaveBeenCalledWith('/papers/paper-gone', {
+      params: { force: true },
+      suppressErrorToast: true,
+    })
   })
 })

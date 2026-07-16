@@ -24,7 +24,11 @@ from backend.rag.models import (
 )
 from backend.rag.protocols import VectorStoreProtocol
 from backend.rag.vector_store_chunk_text import ChunkTextLookupMixin
-from backend.rag.vector_store_replace import GENERATION_GUARD_LOG_PREFIX, ReplacePaperIndexMixin
+from backend.rag.vector_store_replace import (
+    GENERATION_GUARD_LOG_PREFIX,
+    ObsoleteGenerationWarning,
+    ReplacePaperIndexMixin,
+)
 from backend.rag.vector_store_utils import (
     DEFAULT_EMBEDDING_DIMENSION,
     ChromaMetadata,
@@ -53,6 +57,7 @@ __all__ = [
     "ChromaWhere",
     "CollectionProtocol",
     "GENERATION_GUARD_LOG_PREFIX",
+    "ObsoleteGenerationWarning",
     "VectorStore",
     "clean_metadata",
 ]
@@ -121,6 +126,12 @@ class VectorStore(ChunkTextLookupMixin, ReplacePaperIndexMixin):
     async def _index_chunks(self, chunks: list[PaperChunk], *, run_id: str | None) -> None:
         if not chunks:
             return
+        if self._paper_service is not None and not run_id:
+            logger.warning(
+                "index_chunks_skipped_missing_run_id",
+                extra={"paper_id": chunks[0].paper_id, "chunk_count": len(chunks)},
+            )
+            return
         documents = [chunk.text for chunk in chunks]
         ids = [_chunk_chroma_id(chunk.paper_id, chunk.chunk_id, run_id) for chunk in chunks]
         metadatas = [
@@ -154,6 +165,12 @@ class VectorStore(ChunkTextLookupMixin, ReplacePaperIndexMixin):
     async def _index_entities(self, entities: list[PaperEntity], *, run_id: str | None) -> None:
         if not entities:
             return
+        if self._paper_service is not None and not run_id:
+            logger.warning(
+                "index_entities_skipped_missing_run_id",
+                extra={"paper_id": entities[0].paper_id, "entity_count": len(entities)},
+            )
+            return
         documents = [entity.description for entity in entities]
         ids = [_entity_chroma_id(entity.paper_id, entity.entity_id, run_id) for entity in entities]
         metadatas = [
@@ -182,6 +199,12 @@ class VectorStore(ChunkTextLookupMixin, ReplacePaperIndexMixin):
 
     async def _index_relations(self, relations: list[PaperRelation], *, run_id: str | None) -> None:
         if not relations:
+            return
+        if self._paper_service is not None and not run_id:
+            logger.warning(
+                "index_relations_skipped_missing_run_id",
+                extra={"paper_id": relations[0].paper_id, "relation_count": len(relations)},
+            )
             return
         documents = [relation.description for relation in relations]
         ids = [_relation_chroma_id(relation.paper_id, relation.relation_id, run_id) for relation in relations]
@@ -341,8 +364,11 @@ class VectorStore(ChunkTextLookupMixin, ReplacePaperIndexMixin):
         *,
         run_id: str | None,
     ) -> ChromaWhere:
-        """Build a ChromaDB where clause that optionally filters by active run id."""
+        """Build Chroma where for *paper_id*, optionally constrained to ``index_run_id``.
 
+        Run-aware read callers must pass a non-empty *run_id*; when no active run
+        is set they fail-closed before querying so orphan ghosts stay invisible.
+        """
         paper_clause: ChromaWhere = {"paper_id": paper_id}
         if self._paper_service is None or run_id is None:
             return paper_clause
@@ -358,6 +384,10 @@ class VectorStore(ChunkTextLookupMixin, ReplacePaperIndexMixin):
     async def delete_run(self, paper_id: str, run_id: str) -> None:
         """Public best-effort deletion of one index_run_id snapshot (compensating cleanup)."""
         await self._cleanup_run(paper_id, run_id)
+
+    async def delete_by_run_id(self, paper_id: str, run_id: str) -> None:
+        """Alias for ``delete_run`` — Wave-2 wipe / orphan compensate API."""
+        await self.delete_run(paper_id, run_id)
 
     async def _cleanup_run_safely(self, paper_id: str, run_id: str) -> None:
         """Best-effort deletion of a partially-written run; logs but never raises."""
@@ -424,8 +454,14 @@ class VectorStore(ChunkTextLookupMixin, ReplacePaperIndexMixin):
         query_embedding: list[float] | None = None,
     ) -> list[RetrievedChunk | RetrievedEntity | RetrievedRelation]:
         resolved_top_k = top_k if top_k is not None else self._default_top_k(evidence_type)
-        active_run_id = self._paper_service.get_active_run_id(paper_id) if self._paper_service else None
-        where: ChromaWhere = self._build_where(paper_id, run_id=active_run_id)
+        # Soft isolation: without an active run, late orphan upserts must not surface.
+        if self._paper_service is not None:
+            active_run_id = self._paper_service.get_active_run_id(paper_id)
+            if not active_run_id:
+                return []
+            where: ChromaWhere = self._build_where(paper_id, run_id=active_run_id)
+        else:
+            where = self._build_where(paper_id, run_id=None)
         expected_dimension = int(getattr(self._settings, "embedding_dimension", DEFAULT_EMBEDDING_DIMENSION))
         return await query_evidence_collection(
             collection,
