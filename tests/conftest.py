@@ -359,8 +359,9 @@ def _patrol_service_global_mock_vector_store(monkeypatch) -> None:
 def pytest_sessionfinish(session: pytest.Session, exitstatus: int) -> None:
     """Stop background workers so pytest can exit without hanging on non-daemon threads."""
     try:
-        from backend.rag.wipe_vector_sweep import reset_wipe_sweep_tasks_for_tests
+        from backend.rag.wipe_vector_sweep import reset_wipe_sweep_tasks_for_tests, stop_vector_cleanup_poller
 
+        stop_vector_cleanup_poller()
         reset_wipe_sweep_tasks_for_tests()
     except Exception:
         pass
