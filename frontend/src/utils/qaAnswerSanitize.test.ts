@@ -14,4 +14,16 @@ describe('qaAnswerSanitize', () => {
   it('strips bold markers in final pass', () => {
     expect(sanitizeQaAnswer('这是**重点**')).toBe('这是重点')
   })
+
+  it('trims space before CJK punctuation', () => {
+    expect(sanitizeQaAnswer('RAG-Token 。')).toBe('RAG-Token。')
+  })
+
+  it('cleans user sample regression fragments', () => {
+    const dirty = '核心研究问题``。RAG-Token`` ``。多样性`` ``。'
+    const cleaned = sanitizeQaAnswer(dirty)
+    expect(cleaned).not.toContain('`')
+    expect(cleaned).not.toContain('**')
+    expect(cleaned).not.toContain(' 。')
+  })
 })

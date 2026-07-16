@@ -53,7 +53,7 @@ _CITE_BACKTICK_WRAP_RE = re.compile(r"`(\[CITE:[^\]]+\])`")
 # Injected into the QA prompt when the user queries an MVP skeleton graph.
 _MVP_PREVIEW_PREFIX = (
     "\n\n## 系统提示（SYSTEM NOTIFICATION）\n\n"
-    "当前加载的是论文的 **MVP 宏观骨架图谱**：仅包含核心研究问题、主要理论视角/方法、"
+    "当前加载的是论文的 MVP 宏观骨架图谱：仅包含核心研究问题、主要理论视角/方法、"
     "以及核心结论等高层节点。深度论证链、实验细节与细分材料仍在后台全量解构中。"
     "请仅在宏观摘要尺度下回答问题，避免对细节证据做过度推断。"
 )

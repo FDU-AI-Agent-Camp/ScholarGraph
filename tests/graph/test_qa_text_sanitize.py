@@ -37,6 +37,25 @@ class TestSanitizeQaAnswerFinal:
     def test_collapses_trailing_backtick_runs(self) -> None:
         assert sanitize_qa_answer_final("方案 `` 完成") == "方案 完成"
 
+    def test_trims_space_before_cjk_punctuation(self) -> None:
+        assert sanitize_qa_answer_final("RAG-Token 。") == "RAG-Token。"
+
+
+@pytest.mark.parametrize(
+    "dirty",
+    [
+        "核心研究问题``。",
+        "RAG-Token`` ``。",
+        "多样性`` ``。",
+        "核心研究问题``。RAG-Token`` ``。多样性`` ``。",
+    ],
+)
+def test_user_sample_regression_cases(dirty: str) -> None:
+    cleaned = sanitize_qa_answer_final(dirty)
+    assert "`" not in cleaned
+    assert "**" not in cleaned
+    assert " 。" not in cleaned
+
 
 class TestQaTextSanitizerStreaming:
     def test_cross_chunk_backtick_truncation_does_not_leak_orphan_marker(self) -> None:

@@ -10,11 +10,7 @@ const HEADER_RE = /^#{1,6}\s+/gm
 const EXCESS_BACKTICKS_RE = /`{3,}/g
 const ORPHAN_BACKTICK_RUN_RE = /[ \t]*`+[ \t]*/g
 const MULTI_SPACE_RE = / {2,}/g
-const MEANINGFUL_CHAR_RE = /[\w\u4e00-\u9fff]/
-
-function innerHasMeaningfulContent(inner: string): boolean {
-  return MEANINGFUL_CHAR_RE.test(inner)
-}
+const SPACE_BEFORE_CJK_PUNCT_RE = / +([。，、；：！？""''（）【】《》…])/g
 
 function sanitizeChunk(text: string): string {
   if (!text) {
@@ -22,9 +18,7 @@ function sanitizeChunk(text: string): string {
   }
   return text
     .replace(EMPTY_BACKTICK_PAIR_RE, '')
-    .replace(INLINE_CODE_RE, (_match, inner: string) =>
-      innerHasMeaningfulContent(inner) ? inner : inner,
-    )
+    .replace(INLINE_CODE_RE, (_match, inner: string) => inner)
     .replace(BOLD_RE, '$1')
     .replace(HEADER_RE, '')
     .replace(EXCESS_BACKTICKS_RE, '')
@@ -40,6 +34,7 @@ export function sanitizeQaAnswer(text: string): string {
     .replace(/\*\*/g, '')
     .replace(ORPHAN_BACKTICK_RUN_RE, ' ')
     .replace(MULTI_SPACE_RE, ' ')
+    .replace(SPACE_BEFORE_CJK_PUNCT_RE, '$1')
 }
 
 /** Sanitize one streaming delta before appending to the answer buffer. */

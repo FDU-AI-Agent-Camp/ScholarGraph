@@ -11,6 +11,8 @@ import re
 
 _MULTI_SPACE_RE = re.compile(r" {2,}")
 _STAR_RUN_RE = re.compile(r"\*{1,}")
+# Trim stray spaces left when empty backtick pairs are removed before CJK punctuation.
+_SPACE_BEFORE_CJK_PUNCT_RE = re.compile(r" +([。，、；：！？""''（）【】《》…])")
 
 
 def sanitize_qa_text_chunk(text: str) -> str:
@@ -29,6 +31,7 @@ def sanitize_qa_answer_final(text: str) -> str:
     result = result.replace("`", "")
     result = _STAR_RUN_RE.sub("", result)
     result = _MULTI_SPACE_RE.sub(" ", result)
+    result = _SPACE_BEFORE_CJK_PUNCT_RE.sub(r"\1", result)
     return result
 
 
