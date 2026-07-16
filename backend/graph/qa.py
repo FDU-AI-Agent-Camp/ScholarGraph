@@ -27,6 +27,7 @@ if TYPE_CHECKING:
     from backend.rag.chunk_preview import ChunkPreviewContext
     from backend.rag.models import RetrievalContext
 
+from backend.graph.qa_text_sanitize import QaTextSanitizer, sanitize_qa_answer_final
 from backend.graph.qa_v2 import (
     build_chunk_text_cache,
     dispatch_citation_async,
@@ -47,6 +48,7 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 _CITE_RE = re.compile(r"\[CITE:(edge:|chunk:|page:)?(\S+?)\]")
 _CITE_DELIM = "[CITE:"
+_CITE_BACKTICK_WRAP_RE = re.compile(r"`(\[CITE:[^\]]+\])`")
 
 # Injected into the QA prompt when the user queries an MVP skeleton graph.
 _MVP_PREVIEW_PREFIX = (
@@ -55,6 +57,11 @@ _MVP_PREVIEW_PREFIX = (
     "以及核心结论等高层节点。深度论证链、实验细节与细分材料仍在后台全量解构中。"
     "请仅在宏观摘要尺度下回答问题，避免对细节证据做过度推断。"
 )
+
+
+def _unwrap_cite_backticks(text: str) -> str:
+    """Strip backticks wrapped around complete ``[CITE:…]`` markers."""
+    return _CITE_BACKTICK_WRAP_RE.sub(r"\1", text)
 
 
 def _split_incomplete_cite(buffer: str) -> tuple[str, str] | None:
@@ -118,11 +125,12 @@ _FALLBACK_QA_PROMPT = """\
 {chunks}
 
 ## 引用要求
-- 引用图谱节点时使用格式 [CITE:节点ID]
+- 引用图谱节点时使用格式 [CITE:节点ID]（不要用反引号包裹）
 - 引用图谱关系时使用格式 [CITE:edge:边ID]
 - 引用原文片段时使用格式 [CITE:chunk:片段ID] 或 [CITE:page:页码]
 
 ## 回答要求
+- 回答正文禁止使用 Markdown（反引号、加粗、标题等）；术语直接写明文。
 - 根据图谱上下文回答问题，引用具体来源作为依据。
 - 细节/数值问题优先用原文片段回答。
 - 若上下文不足，明确说明"根据已有信息无法判断"。
@@ -301,6 +309,7 @@ class _GraphQaEngine:
         chunks_list = retrieval_context.chunks if retrieval_context else None
 
         answer_id = f"ans-{paper_id}"
+        answer_parts: list[str] = []
         try:
             async for evt in self._stream_llm(
                 prompt,
@@ -308,13 +317,15 @@ class _GraphQaEngine:
                 paper_id,
                 chunks=chunks_list,
                 preview_ctx=preview_ctx,
+                answer_parts=answer_parts,
             ):
                 yield evt
         except Exception as exc:
             logger.exception("qa_stream failed for paper_id=%s", paper_id)
             yield QaEvent("error", {"code": "QA_STREAM_ERROR", "message": str(exc)})
         finally:
-            yield QaEvent("done", {"answer_id": answer_id})
+            final_answer = sanitize_qa_answer_final("".join(answer_parts))
+            yield QaEvent("done", {"answer_id": answer_id, "answer": final_answer})
 
     # ── internal ─────────────────────────────────────────────────────
 
@@ -326,12 +337,22 @@ class _GraphQaEngine:
         *,
         chunks: list | None = None,
         preview_ctx: "ChunkPreviewContext | None" = None,
+        answer_parts: list[str] | None = None,
     ) -> AsyncIterator[QaEvent]:
         """Stream LLM response, splitting on [CITE:...] markers of all four types."""
         buffer = ""
+        sanitizer = QaTextSanitizer()
         node_label_cache: dict[str, str] = {n.id: n.label for n in graph.nodes}
         edge_label_cache: dict[str, str] = _build_edge_label_cache(graph)
         chunk_text_cache: dict[str, str] = build_chunk_text_cache(chunks)
+
+        def _emit_message_delta(raw: str) -> QaEvent | None:
+            cleaned = sanitizer.feed(raw)
+            if not cleaned:
+                return None
+            if answer_parts is not None:
+                answer_parts.append(cleaned)
+            return QaEvent("message", {"delta": cleaned})
 
         async for chunk in self._llm.chat.astream(prompt):
             delta: str = ""
@@ -347,13 +368,16 @@ class _GraphQaEngine:
                 continue
 
             buffer += delta
+            buffer = _unwrap_cite_backticks(buffer)
 
             while buffer:
                 match = _CITE_RE.search(buffer)
                 if match:
                     text_before = buffer[: match.start()]
                     if text_before:
-                        yield QaEvent("message", {"delta": text_before})
+                        evt = _emit_message_delta(text_before)
+                        if evt is not None:
+                            yield evt
 
                     prefix = match.group(1) or ""
                     cite_value = match.group(2)
@@ -374,25 +398,34 @@ class _GraphQaEngine:
                 if incomplete is not None:
                     safe, held = incomplete
                     if safe:
-                        yield QaEvent("message", {"delta": safe})
+                        evt = _emit_message_delta(safe)
+                        if evt is not None:
+                            yield evt
                     buffer = held
                 else:
-                    yield QaEvent("message", {"delta": buffer})
+                    evt = _emit_message_delta(buffer)
+                    if evt is not None:
+                        yield evt
                     buffer = ""
 
                 break
 
         # Drain remaining buffer (process any complete trailing cites first).
+        buffer = _unwrap_cite_backticks(buffer)
         while buffer:
             match = _CITE_RE.search(buffer)
             if not match:
                 if buffer.strip():
-                    yield QaEvent("message", {"delta": buffer})
+                    evt = _emit_message_delta(buffer)
+                    if evt is not None:
+                        yield evt
                 break
 
             text_before = buffer[: match.start()]
             if text_before:
-                yield QaEvent("message", {"delta": text_before})
+                evt = _emit_message_delta(text_before)
+                if evt is not None:
+                    yield evt
 
             prefix = match.group(1) or ""
             cite_value = match.group(2)
@@ -406,6 +439,12 @@ class _GraphQaEngine:
                 preview_ctx=preview_ctx,
             )
             buffer = buffer[match.end() :]
+
+        tail = sanitizer.flush()
+        if tail:
+            if answer_parts is not None:
+                answer_parts.append(tail)
+            yield QaEvent("message", {"delta": tail})
 
     def _build_prompt(
         self,

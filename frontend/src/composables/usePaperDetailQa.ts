@@ -3,6 +3,7 @@ import { ref, type Ref } from 'vue'
 import { streamPaperQa } from '@/api/qaStream'
 import type { QaStreamCitationData } from '@/api/types'
 import { appendUniqueCitation } from '@/utils/qaCitations'
+import { sanitizeQaAnswer, sanitizeQaAnswerDelta } from '@/utils/qaAnswerSanitize'
 import { resolveQaStreamWarningMessage } from '@/utils/qaStreamWarnings'
 
 /**
@@ -37,7 +38,7 @@ export function usePaperDetailQa(paperId: Ref<string>, isInteractive: () => bool
         question.value.trim(),
         {
           onMessage: (data) => {
-            answer.value += data.delta
+            answer.value += sanitizeQaAnswerDelta(data.delta)
           },
           onCitation: (data) => {
             citations.value = appendUniqueCitation(citations.value, data)
@@ -50,7 +51,9 @@ export function usePaperDetailQa(paperId: Ref<string>, isInteractive: () => bool
           },
           onDone: (data) => {
             if (data.answer) {
-              answer.value = data.answer
+              answer.value = sanitizeQaAnswer(data.answer)
+            } else {
+              answer.value = sanitizeQaAnswer(answer.value)
             }
           },
           onError: (msg) => {

@@ -189,3 +189,32 @@ async def test_m2_http_citation_survives_chunked_mock_stream(
     citation = next((payload for name, payload in events if name == "citation"), None)
     assert citation is not None
     assert citation["node_id"] == "n_lens"
+
+
+@pytest.mark.asyncio
+async def test_m2_http_strips_markdown_backticks_from_stream_deltas(
+    api_client: AsyncClient,
+    m2_http_env,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Regression: empty backtick pairs must not leak into SSE message deltas."""
+    from backend.graph.qa import _GraphQaEngine
+    from tests.helpers.qa_stream_mock import qa_stream_from_engine
+
+    llm_text = "问题``。"
+    engine = _GraphQaEngine(
+        store=GraphStore(base_dir=m2_http_env),
+        llm=_fake_llm(llm_text, chunk_size=2),
+    )
+    monkeypatch.setattr("backend.graph.qa.qa_stream", qa_stream_from_engine(engine))
+
+    response = await api_client.post(
+        f"/api/v1/papers/{M2_DEMO_PAPER_ID}/qa/stream",
+        json={"question": M2_HSS_QUESTIONS[0].question},
+    )
+    events = _parse_sse(response.text)
+    messages = "".join(payload["delta"] for name, payload in events if name == "message")
+    done = next(payload for name, payload in events if name == "done")
+    assert "`" not in messages
+    assert messages == "问题。"
+    assert done.get("answer") == "问题。"

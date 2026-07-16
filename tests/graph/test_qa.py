@@ -142,6 +142,57 @@ class TestQaStreamEvents:
 
 
 # ---------------------------------------------------------------------------
+# Markdown artifact sanitization
+# ---------------------------------------------------------------------------
+
+
+class TestQaStreamMarkdownSanitization:
+    async def test_strips_empty_backticks_from_message(self, store_with_graph: GraphStore) -> None:
+        llm = _fake_llm("问题``。")
+        engine = _GraphQaEngine(store=store_with_graph, llm=llm)
+
+        events = [evt async for evt in engine.stream("hss-001", "问题？")]
+        messages = "".join(evt.data["delta"] for evt in events if evt.event == "message")
+        assert "`" not in messages
+        assert messages == "问题。"
+
+    async def test_strips_inline_code_span(self, store_with_graph: GraphStore) -> None:
+        llm = _fake_llm("方法`RAG-Sequence`有效。")
+        engine = _GraphQaEngine(store=store_with_graph, llm=llm)
+
+        events = [evt async for evt in engine.stream("hss-001", "方法？")]
+        messages = "".join(evt.data["delta"] for evt in events if evt.event == "message")
+        assert "`" not in messages
+        assert "RAG-Sequence" in messages
+
+    async def test_citation_inside_backticks_still_emits_citation(
+        self,
+        store_with_graph: GraphStore,
+    ) -> None:
+        llm = _fake_llm("方案`[CITE:n1]`说明。")
+        engine = _GraphQaEngine(store=store_with_graph, llm=llm)
+
+        events = [evt async for evt in engine.stream("hss-001", "方案？")]
+        citation_events = [e for e in events if e.event == "citation"]
+        messages = "".join(evt.data["delta"] for evt in events if evt.event == "message")
+        assert len(citation_events) == 1
+        assert citation_events[0].data["node_id"] == "n1"
+        assert "`" not in messages
+        assert "方案" in messages
+
+    async def test_empty_backticks_survive_chunked_stream(self, store_with_graph: GraphStore) -> None:
+        llm = _fake_llm("问题``。", chunk_size=2)
+        engine = _GraphQaEngine(store=store_with_graph, llm=llm)
+
+        events = [evt async for evt in engine.stream("hss-001", "问题？")]
+        messages = "".join(evt.data["delta"] for evt in events if evt.event == "message")
+        done = next(evt for evt in events if evt.event == "done")
+        assert "`" not in messages
+        assert messages == "问题。"
+        assert done.data.get("answer") == "问题。"
+
+
+# ---------------------------------------------------------------------------
 # V2 citation types (rag-qa-evaluation)
 # ---------------------------------------------------------------------------
 
