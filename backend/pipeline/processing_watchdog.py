@@ -373,8 +373,9 @@ def scan_and_fail_stuck_processing_sync(
     return failed
 
 
-# Ops / product alias: dedicated-thread periodic heal entrypoint.
-scan_and_heal_processing_sync = scan_and_fail_stuck_processing_sync
+def scan_and_heal_processing_sync(*args, **kwargs):
+    """Ops alias; looks up ``scan_and_fail_stuck_processing_sync`` at call time."""
+    return scan_and_fail_stuck_processing_sync(*args, **kwargs)
 
 
 def _watchdog_thread_main() -> None:
@@ -485,6 +486,7 @@ __all__ = [
     "scan_and_fail_stuck_pending",
     "scan_and_fail_stuck_processing",
     "scan_and_fail_stuck_processing_sync",
+    "scan_and_heal_processing_sync",
     "start_processing_watchdog",
     "stop_processing_watchdog",
 ]
