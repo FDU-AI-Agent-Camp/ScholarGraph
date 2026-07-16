@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { DocumentCopy } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
@@ -9,6 +9,7 @@ import PaperUpload from '@/components/papers/PaperUpload.vue'
 import BadgeParadigm from '@/components/ui/BadgeParadigm.vue'
 import BadgeStatus from '@/components/ui/BadgeStatus.vue'
 import EmptyState from '@/components/ui/EmptyState.vue'
+import { usePapersListActivePolling } from '@/composables/usePapersListActivePolling'
 import { PAPERS_BASELINE_COPY } from '@/constants/papersCopy'
 import { RouteName } from '@/router/meta'
 import { usePaperStore } from '@/stores/paper'
@@ -17,11 +18,37 @@ import { confirmAndDeletePaper, PAPER_DELETE_COPY } from '@/utils/paperDelete'
 
 const router = useRouter()
 const paperStore = usePaperStore()
+const listItems = computed(() => paperStore.items)
 const uploadSectionRef = ref<HTMLElement | null>(null)
-const deletingId = ref<string | null>(null)
+const deletingIds = ref<Set<string>>(new Set())
 
-onMounted(() => {
-  void paperStore.fetchList().catch(() => undefined)
+async function refreshListSilent(): Promise<void> {
+  await paperStore.fetchList(undefined, { silent: true })
+}
+
+const { sync: syncListActivePolling } = usePapersListActivePolling(listItems, refreshListSilent)
+
+function setRowDeleting(paperId: string, inFlight: boolean): void {
+  const next = new Set(deletingIds.value)
+  if (inFlight) {
+    next.add(paperId)
+  } else {
+    next.delete(paperId)
+  }
+  deletingIds.value = next
+}
+
+function isRowDeleting(paperId: string): boolean {
+  return deletingIds.value.has(paperId)
+}
+
+function papersRowClassName({ row }: { row: PaperSummary }): string {
+  return isRowDeleting(row.paper_id) ? 'papers-table__row--deleting' : ''
+}
+
+onMounted(async () => {
+  await paperStore.fetchList().catch(() => undefined)
+  syncListActivePolling()
 })
 
 function onUploaded(paperId: string) {
@@ -51,17 +78,15 @@ async function copyPaperId(paperId: string) {
 }
 
 async function onDeletePaper(row: PaperSummary) {
-  if (deletingId.value) {
+  if (isRowDeleting(row.paper_id)) {
     return
   }
-  deletingId.value = row.paper_id
-  try {
-    const ok = await confirmAndDeletePaper(row.paper_id, row.status)
-    if (ok) {
-      await paperStore.fetchList().catch(() => undefined)
-    }
-  } finally {
-    deletingId.value = null
+  const ok = await confirmAndDeletePaper(row.paper_id, {
+    onDeleteInFlight: (inFlight) => setRowDeleting(row.paper_id, inFlight),
+  })
+  if (ok) {
+    await paperStore.fetchList().catch(() => undefined)
+    syncListActivePolling()
   }
 }
 </script>
@@ -86,6 +111,7 @@ async function onDeletePaper(row: PaperSummary) {
         :data="paperStore.items"
         class="papers-table"
         stripe
+        :row-class-name="papersRowClassName"
       >
         <el-table-column prop="title" label="标题" min-width="240">
           <template #default="{ row }: { row: PaperSummary }">
@@ -127,7 +153,9 @@ async function onDeletePaper(row: PaperSummary) {
               link
               type="danger"
               data-testid="papers-delete-button"
-              :loading="deletingId === row.paper_id"
+              :data-paper-id="row.paper_id"
+              :loading="isRowDeleting(row.paper_id)"
+              :disabled="isRowDeleting(row.paper_id)"
               @click="onDeletePaper(row)"
             >
               {{ PAPER_DELETE_COPY.button }}
@@ -174,6 +202,11 @@ async function onDeletePaper(row: PaperSummary) {
 
 .papers-table {
   width: 100%;
+}
+
+.papers-table :deep(.papers-table__row--deleting) {
+  opacity: 0.5;
+  pointer-events: none;
 }
 
 .papers-table :deep(.el-table__header-wrapper th.el-table__cell) {

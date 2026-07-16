@@ -33,6 +33,10 @@ const paperStoreState = {
   fetchList,
 }
 
+vi.mock('@/composables/usePapersListActivePolling', () => ({
+  usePapersListActivePolling: () => ({ sync: vi.fn(), stop: vi.fn() }),
+}))
+
 vi.mock('vue-router', () => ({
   useRouter: () => ({ push }),
 }))

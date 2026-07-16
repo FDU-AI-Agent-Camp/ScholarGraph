@@ -83,15 +83,14 @@ async function onDeletePaper(): Promise<void> {
   if (!paper || deleting.value) {
     return
   }
-  deleting.value = true
-  try {
-    const ok = await confirmAndDeletePaper(paper.paper_id, paper.status)
-    if (ok) {
-      paperStore.clearCurrent()
-      await router.push({ name: RouteName.Papers })
-    }
-  } finally {
-    deleting.value = false
+  const ok = await confirmAndDeletePaper(paper.paper_id, {
+    onDeleteInFlight: (inFlight) => {
+      deleting.value = inFlight
+    },
+  })
+  if (ok) {
+    paperStore.clearCurrent()
+    await router.push({ name: RouteName.Papers })
   }
 }
 
