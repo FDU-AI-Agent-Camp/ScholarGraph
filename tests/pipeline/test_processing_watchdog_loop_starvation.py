@@ -1,9 +1,9 @@
 """Problem 2 (processing): Watchdog commit survives main asyncio loop starvation.
 
-Release-gate hard stop: inject bare ``time.sleep`` on the event-loop thread and
-assert the dedicated OS-thread processing watchdog still fails a zombie that was
-planted **during** the starvation window via sync SQL (physically isolated from
-the starved FastAPI / asyncio pump).
+Release-gate hard stop (``make process-release-gate`` / ``make ci-patrol-release``):
+inject bare ``time.sleep`` on the event-loop thread and assert the dedicated OS-thread
+processing watchdog still fails a zombie that was planted **during** the starvation
+window via sync SQL (physically isolated from the starved FastAPI / asyncio pump).
 """
 
 from __future__ import annotations
@@ -22,8 +22,10 @@ from backend.graph.state import STAGE_PERCENT
 from backend.pipeline.processing_watchdog import (
     PROCESS_TIMEOUT_CODE,
     PROCESS_WATCHDOG_HEAL_TAG,
+    PROCESSING_WATCHDOG_THREAD_NAME,
     PROCESSING_WATCHDOG_TICK_LOG,
     clear_processing_watchdog_tick_timestamps,
+    processing_watchdog_thread_is_alive,
     processing_watchdog_tick_monotonic_timestamps,
     reset_processing_watchdog_sync_engine,
     start_processing_watchdog,
@@ -122,7 +124,11 @@ def _sync_plant_stale_processing(database_url: str, paper_id: str, *, updated_at
         engine.dispose()
 
 
-def _sync_read_paper_status_and_code(database_url: str, paper_id: str) -> tuple[str | None, str | None]:
+def _sync_read_heal_snapshot(
+    database_url: str,
+    paper_id: str,
+) -> tuple[str | None, str | None, str | None, datetime | None]:
+    """Fresh sync session read — proves durable COMMIT, not an in-memory dirty row."""
     engine, factory = _sync_session_factory(database_url)
     try:
         with factory() as session:
@@ -130,7 +136,9 @@ def _sync_read_paper_status_and_code(database_url: str, paper_id: str) -> tuple[
             run = session.get(PipelineRunRow, paper_id)
             status = None if paper is None else paper.status
             code = None if run is None else run.error_code
-            return status, code
+            stage = None if run is None else run.stage
+            updated = None if run is None else run.updated_at
+            return status, code, stage, updated
     finally:
         engine.dispose()
 
@@ -141,17 +149,35 @@ async def test_processing_watchdog_survives_loop_starvation(
     processing_starvation_db: Path,
     caplog: pytest.LogCaptureFixture,
 ) -> None:
-    """Main-loop ``time.sleep(5)`` hard-deadlock must not stop OS-thread PROCESSING heal."""
+    """系统级解耦：主 loop ``time.sleep(5)`` 假死视窗内，OS 线程看门狗仍 sync 捞库并 Commit。
+
+    Deterministic proofs
+    --------------------
+    - Dedicated ``process-pipeline-watchdog`` thread keeps ticking while FastAPI's
+      event-loop thread is hard-blocked (no asyncio Task progress).
+    - Orphan planted mid-window is flipped to FAILED + ``PROCESS_TIMEOUT`` and the
+      change is visible to a **new** sync SQL session before the main loop wakes —
+      durable commit under physical thread decoupling.
+    """
     caplog.set_level(logging.INFO)
 
+    main_thread = threading.current_thread()
     register_main_event_loop(asyncio.get_running_loop())
     clear_processing_watchdog_tick_timestamps()
     stop_processing_watchdog()
     start_processing_watchdog()
+    assert processing_watchdog_thread_is_alive()
 
     database_url = get_settings().database_url
     plant_done = threading.Event()
-    probe_state: dict[str, str | None] = {"status": None, "error_code": None}
+    probe_state: dict[str, object] = {
+        "status": None,
+        "error_code": None,
+        "stage": None,
+        "updated_at": None,
+        "probe_mono": None,
+        "watchdog_alive_at_probe": False,
+    }
     thread_errors: list[BaseException] = []
 
     def _plant_zombie_during_starvation() -> None:
@@ -171,9 +197,13 @@ async def test_processing_watchdog_survives_loop_starvation(
                 return
             # Leave enough wall-clock for ≥1 dedicated-thread scan after plant.
             time.sleep(max(0.0, PROBE_AT_SECONDS - PLANT_AT_SECONDS))
-            status, code = _sync_read_paper_status_and_code(database_url, PAPER_P)
+            probe_state["watchdog_alive_at_probe"] = processing_watchdog_thread_is_alive()
+            status, code, stage, updated = _sync_read_heal_snapshot(database_url, PAPER_P)
             probe_state["status"] = status
             probe_state["error_code"] = code
+            probe_state["stage"] = stage
+            probe_state["updated_at"] = updated
+            probe_state["probe_mono"] = time.monotonic()
         except BaseException as exc:  # noqa: BLE001 — surface into parent assertions
             thread_errors.append(exc)
 
@@ -183,9 +213,12 @@ async def test_processing_watchdog_survives_loop_starvation(
     probe.start()
 
     # Starve the main asyncio / FastAPI dispatch thread (false-async hard block).
+    # No await / no cooperative yield — routes and all main-loop Tasks are frozen.
     block_started = time.monotonic()
+    assert threading.current_thread() is main_thread
     time.sleep(MAIN_LOOP_BLOCK_SECONDS)
     block_ended = time.monotonic()
+    assert block_ended - block_started >= MAIN_LOOP_BLOCK_SECONDS - 0.05
 
     planter.join(timeout=2.0)
     probe.join(timeout=2.0)
@@ -206,12 +239,30 @@ async def test_processing_watchdog_survives_loop_starvation(
 
     tick_logs = [r for r in caplog.records if r.getMessage() == PROCESSING_WATCHDOG_TICK_LOG]
     assert len(tick_logs) >= MIN_TICKS_DURING_BLOCK
+    dedicated_ticks = [
+        r
+        for r in tick_logs
+        if getattr(r, "mode", None) == "dedicated_thread"
+        or getattr(r, "thread_name", None) == PROCESSING_WATCHDOG_THREAD_NAME
+    ]
+    assert len(dedicated_ticks) >= 1, "watchdog ticks must advertise dedicated_thread mode"
 
     # Macro heal completed while the event loop was still fake-dead.
+    probe_mono = probe_state["probe_mono"]
+    assert isinstance(probe_mono, float)
+    assert block_started < probe_mono < block_ended, (
+        f"heal probe must land inside the {MAIN_LOOP_BLOCK_SECONDS}s starvation window "
+        f"(started={block_started}, probe={probe_mono}, ended={block_ended})"
+    )
+    assert probe_state["watchdog_alive_at_probe"] is True
     assert probe_state["status"] == PaperStatus.FAILED.value
     assert probe_state["error_code"] == PROCESS_TIMEOUT_CODE
+    assert probe_state["stage"] == PipelineStage.FAILED.value
+    assert probe_state["updated_at"] is not None
     assert any(PROCESS_WATCHDOG_HEAL_TAG in r.getMessage() for r in caplog.records)
 
-    final_status, final_code = _sync_read_paper_status_and_code(database_url, PAPER_P)
+    # Post-wake re-read via yet another sync engine: durable COMMIT survived.
+    final_status, final_code, final_stage, _ = _sync_read_heal_snapshot(database_url, PAPER_P)
     assert final_status == PaperStatus.FAILED.value
     assert final_code == PROCESS_TIMEOUT_CODE
+    assert final_stage == PipelineStage.FAILED.value
