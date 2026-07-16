@@ -30,7 +30,20 @@ from backend.repositories.pipeline_sync import get_pipeline_sync_session_factory
 
 logger = logging.getLogger(__name__)
 
-_PROCESS_ACQUIRE_GATE = asyncio.Lock()
+# Lazy per-running-loop gate: a module-level ``asyncio.Lock()`` binds to the first
+# loop that touches it and breaks under pytest's fresh loops ("bound to a different
+# event loop"). Recreate when the running loop identity changes.
+_PROCESS_ACQUIRE_GATE: asyncio.Lock | None = None
+_PROCESS_ACQUIRE_GATE_LOOP: asyncio.AbstractEventLoop | None = None
+
+
+def _get_process_acquire_gate() -> asyncio.Lock:
+    global _PROCESS_ACQUIRE_GATE, _PROCESS_ACQUIRE_GATE_LOOP
+    loop = asyncio.get_running_loop()
+    if _PROCESS_ACQUIRE_GATE is None or _PROCESS_ACQUIRE_GATE_LOOP is not loop:
+        _PROCESS_ACQUIRE_GATE = asyncio.Lock()
+        _PROCESS_ACQUIRE_GATE_LOOP = loop
+    return _PROCESS_ACQUIRE_GATE
 
 
 def _utc_now() -> datetime:
@@ -61,7 +74,7 @@ class PaperOpsClaimRepository:
 
     async def try_acquire(self, paper_id: str, *, operation: str) -> str:
         """Insert or steal an expired claim. Returns owner_token or raises conflict."""
-        async with _PROCESS_ACQUIRE_GATE:
+        async with _get_process_acquire_gate():
             return await self._try_acquire_unlocked(paper_id, operation=operation)
 
     async def _try_acquire_unlocked(self, paper_id: str, *, operation: str) -> str:
@@ -109,7 +122,7 @@ class PaperOpsClaimRepository:
 
     async def release(self, paper_id: str, owner_token: str) -> bool:
         """Delete claim only when *owner_token* matches. Returns whether a row was removed."""
-        async with _PROCESS_ACQUIRE_GATE:
+        async with _get_process_acquire_gate():
             async with get_async_session_factory()() as session:
                 result = await session.execute(
                     delete(PaperOpsClaimRow).where(
@@ -122,7 +135,7 @@ class PaperOpsClaimRepository:
 
     async def force_release(self, paper_id: str) -> bool:
         """Evict any claim for *paper_id* (Cascading Kill / crash recovery)."""
-        async with _PROCESS_ACQUIRE_GATE:
+        async with _get_process_acquire_gate():
             async with get_async_session_factory()() as session:
                 result = await session.execute(delete(PaperOpsClaimRow).where(PaperOpsClaimRow.paper_id == paper_id))
                 await session.commit()
@@ -158,7 +171,7 @@ class PaperOpsClaimRepository:
 
     async def clear_all(self) -> None:
         """Test helper: drop every claim row (no-op if table missing)."""
-        async with _PROCESS_ACQUIRE_GATE:
+        async with _get_process_acquire_gate():
             async with get_async_session_factory()() as session:
                 try:
                     await session.execute(delete(PaperOpsClaimRow))
@@ -188,7 +201,7 @@ class PaperOpsClaimRepository:
         """Insert a claim without race checks (test / chaos planting)."""
         token = owner_token or uuid.uuid4().hex
         now = _utc_now()
-        async with _PROCESS_ACQUIRE_GATE:
+        async with _get_process_acquire_gate():
             async with get_async_session_factory()() as session:
                 session.add(
                     PaperOpsClaimRow(
@@ -216,4 +229,7 @@ def get_paper_ops_claim_repository() -> PaperOpsClaimRepository:
 
 def reset_paper_ops_claim_repository() -> None:
     """Drop cached repository singleton (tests that swap DATABASE_URL)."""
+    global _PROCESS_ACQUIRE_GATE, _PROCESS_ACQUIRE_GATE_LOOP
+    _PROCESS_ACQUIRE_GATE = None
+    _PROCESS_ACQUIRE_GATE_LOOP = None
     get_paper_ops_claim_repository.cache_clear()
