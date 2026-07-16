@@ -2,10 +2,9 @@
 
 from pathlib import Path
 
+from backend.startup.spa_static import mount_frontend_spa, resolve_frontend_dist_dir
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
-
-from backend.startup.spa_static import mount_frontend_spa, resolve_frontend_dist_dir
 
 
 def test_mount_frontend_spa_noop_without_index(tmp_path: Path) -> None:
