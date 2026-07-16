@@ -1,3 +1,4 @@
+import { isVNode, type VNode } from 'vue'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { ApiClientError } from '@/api/client'
@@ -23,6 +24,42 @@ vi.mock('@/api/papers', () => ({
 }))
 
 import { confirmAndDeletePaper, PAPER_DELETE_COPY } from '@/utils/paperDelete'
+
+function vnodePlainText(node: unknown): string {
+  if (node == null) {
+    return ''
+  }
+  if (typeof node === 'string' || typeof node === 'number') {
+    return String(node)
+  }
+  if (!isVNode(node)) {
+    return ''
+  }
+  const children = node.children
+  if (typeof children === 'string') {
+    return children
+  }
+  if (Array.isArray(children)) {
+    return children.map((child) => vnodePlainText(child)).join('')
+  }
+  return ''
+}
+
+function expectForceConfirmCall(call: unknown[]): void {
+  const [message, title, options] = call as [VNode, string, Record<string, unknown>]
+  expect(isVNode(message)).toBe(true)
+  const text = vnodePlainText(message)
+  expect(text).toContain(PAPER_DELETE_COPY.forceConfirmLead)
+  expect(text).toContain(PAPER_DELETE_COPY.forceConfirmBody)
+  expect(title).toBe(PAPER_DELETE_COPY.forceConfirmTitle)
+  expect(options).toEqual(
+    expect.objectContaining({
+      confirmButtonText: PAPER_DELETE_COPY.forceConfirmOk,
+      confirmButtonClass: 'el-button--danger',
+    }),
+  )
+  expect(options.dangerouslyUseHTMLString).toBeUndefined()
+}
 
 describe('confirmAndDeletePaper', () => {
   beforeEach(() => {
@@ -58,15 +95,7 @@ describe('confirmAndDeletePaper', () => {
 
     await expect(confirmAndDeletePaper('p-busy')).resolves.toBe(true)
 
-    expect(confirm).toHaveBeenCalledWith(
-      PAPER_DELETE_COPY.forceConfirmMessage,
-      PAPER_DELETE_COPY.forceConfirmTitle,
-      expect.objectContaining({
-        confirmButtonText: PAPER_DELETE_COPY.forceConfirmOk,
-        confirmButtonClass: 'el-button--danger',
-      }),
-    )
-    expect(PAPER_DELETE_COPY.forceConfirmMessage).toContain('提取内容或构建语义索引')
+    expectForceConfirmCall(confirm.mock.calls[0] as unknown[])
     expect(deletePaper).toHaveBeenCalledWith('p-busy', { force: true })
   })
 
@@ -76,11 +105,7 @@ describe('confirmAndDeletePaper', () => {
     deletePaper.mockResolvedValue(undefined)
 
     await expect(confirmAndDeletePaper('p-idx')).resolves.toBe(true)
-    expect(confirm).toHaveBeenCalledWith(
-      PAPER_DELETE_COPY.forceConfirmMessage,
-      PAPER_DELETE_COPY.forceConfirmTitle,
-      expect.any(Object),
-    )
+    expectForceConfirmCall(confirm.mock.calls[0] as unknown[])
     expect(deletePaper).toHaveBeenCalledWith('p-idx', { force: true })
   })
 
@@ -118,15 +143,7 @@ describe('confirmAndDeletePaper', () => {
       PAPER_DELETE_COPY.confirmTitle,
       expect.any(Object),
     )
-    expect(confirm).toHaveBeenNthCalledWith(
-      2,
-      PAPER_DELETE_COPY.forceConfirmMessage,
-      PAPER_DELETE_COPY.forceConfirmTitle,
-      expect.objectContaining({
-        confirmButtonText: PAPER_DELETE_COPY.forceConfirmOk,
-        confirmButtonClass: 'el-button--danger',
-      }),
-    )
+    expectForceConfirmCall(confirm.mock.calls[1] as unknown[])
     expect(deletePaper).toHaveBeenNthCalledWith(1, 'p-race', { force: false })
     expect(deletePaper).toHaveBeenNthCalledWith(2, 'p-race', { force: true })
     expect(success).toHaveBeenCalledWith(PAPER_DELETE_COPY.success)
@@ -143,7 +160,7 @@ describe('confirmAndDeletePaper', () => {
     expect(deletePaper).toHaveBeenCalledWith('p-race', { force: false })
   })
 
-  it('maps VECTOR_STORE_UNAVAILABLE to safety-block alert (not raw error code toast)', async () => {
+  it('maps VECTOR_STORE_UNAVAILABLE to productized safety alert (not raw error code toast)', async () => {
     getPaperStatus.mockResolvedValue({ data: { status: 'ready' } })
     confirm.mockResolvedValue(undefined)
     alert.mockResolvedValue(undefined)
@@ -158,6 +175,9 @@ describe('confirmAndDeletePaper', () => {
       PAPER_DELETE_COPY.vectorStoreUnavailableTitle,
       expect.objectContaining({ type: 'warning' }),
     )
+    expect(PAPER_DELETE_COPY.vectorStoreUnavailableTitle).toBe('系统保护提示')
+    expect(PAPER_DELETE_COPY.vectorStoreUnavailable).toContain('数据完整性')
+    expect(PAPER_DELETE_COPY.vectorStoreUnavailable).not.toMatch(/Chroma|系统泄露/i)
     expect(error).not.toHaveBeenCalled()
   })
 

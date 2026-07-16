@@ -1,6 +1,7 @@
 /** Shared delete confirm + API call for Papers list / Paper detail. */
 
 import { ElMessage, ElMessageBox } from 'element-plus'
+import { h, type VNode } from 'vue'
 
 import { isApiClientError } from '@/api/client'
 import * as papersApi from '@/api/papers'
@@ -13,15 +14,15 @@ export const PAPER_DELETE_COPY = {
   confirmMessage: '将物理清空图谱、向量索引与原始 PDF，此操作不可恢复。',
   confirmOk: '确认删除',
   forceConfirmTitle: '强制删除确认',
-  forceConfirmMessage:
-    '该论文当前正在提取内容或构建语义索引。<br/><br/>强行删除将中断后台计算，并物理清空所有已生成的图谱和问答数据。此操作不可恢复，是否确认删除？',
-  forceConfirmOk: '确认删除',
+  forceConfirmLead: '该论文当前正在提取内容或构建语义索引。',
+  forceConfirmBody: '强行删除将中断后台计算，并物理清空所有已生成的图谱和问答数据。此操作不可恢复，是否确认删除？',
+  forceConfirmOk: '强行中止并删除',
   cancel: '取消',
   success: '论文已删除',
   failed: '删除失败',
-  vectorStoreUnavailableTitle: '安全保护阻断',
+  vectorStoreUnavailableTitle: '系统保护提示',
   vectorStoreUnavailable:
-    '底层向量数据库暂时不可用。为防止数据残留与系统泄露，已安全拦截本次物理删除。请稍后再试，或联系管理员检查 Chroma 服务。',
+    '底层数据库服务正在维护或暂时不可用。为保证您的数据完整性，系统已安全暂停本次物理清理。请稍后再试。',
 } as const
 
 export type DeletePaperHooks = {
@@ -29,17 +30,27 @@ export type DeletePaperHooks = {
   onDeleteInFlight?: (inFlight: boolean) => void
 }
 
+/**
+ * Force-delete body as a VNode so ElMessageBox never needs ``dangerouslyUseHTMLString``.
+ * Plain-text children stay XSS-safe even if a future caller interpolates dynamic strings.
+ */
+export function buildForceDeleteConfirmMessage(): VNode {
+  return h('div', { class: 'paper-delete-force-confirm' }, [
+    h('p', { class: 'paper-delete-force-confirm__lead' }, PAPER_DELETE_COPY.forceConfirmLead),
+    h('p', { class: 'paper-delete-force-confirm__body' }, PAPER_DELETE_COPY.forceConfirmBody),
+  ])
+}
+
 async function confirmDeleteDialog(force: boolean): Promise<boolean> {
   try {
     await ElMessageBox.confirm(
-      force ? PAPER_DELETE_COPY.forceConfirmMessage : PAPER_DELETE_COPY.confirmMessage,
+      force ? buildForceDeleteConfirmMessage() : PAPER_DELETE_COPY.confirmMessage,
       force ? PAPER_DELETE_COPY.forceConfirmTitle : PAPER_DELETE_COPY.confirmTitle,
       {
         type: 'warning',
         confirmButtonText: force ? PAPER_DELETE_COPY.forceConfirmOk : PAPER_DELETE_COPY.confirmOk,
         cancelButtonText: PAPER_DELETE_COPY.cancel,
         confirmButtonClass: force ? 'el-button--danger' : undefined,
-        dangerouslyUseHTMLString: force,
       },
     )
     return true

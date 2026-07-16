@@ -3,6 +3,7 @@
  *
  * Guards against stale store snapshots and missing 409 retry (symmetric with reextract).
  */
+import { isVNode, type VNode } from 'vue'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { ApiClientError } from '@/api/client'
@@ -27,6 +28,23 @@ vi.mock('@/api/papers', () => ({
   getPaperStatus: (...args: unknown[]) => getPaperStatus(...args),
 }))
 
+function vnodePlainText(node: unknown): string {
+  if (typeof node === 'string' || typeof node === 'number') {
+    return String(node)
+  }
+  if (!isVNode(node)) {
+    return ''
+  }
+  const children = node.children
+  if (typeof children === 'string') {
+    return children
+  }
+  if (Array.isArray(children)) {
+    return children.map((child) => vnodePlainText(child)).join('')
+  }
+  return ''
+}
+
 describe('paperDelete regression gate', () => {
   beforeEach(() => {
     confirm.mockReset()
@@ -48,15 +66,17 @@ describe('paperDelete regression gate', () => {
     expect(deletePaper).toHaveBeenNthCalledWith(1, 'p-409-escape', { force: false })
     expect(error).not.toHaveBeenCalled()
     expect(confirm).toHaveBeenCalledTimes(2)
-    expect(confirm).toHaveBeenNthCalledWith(
-      2,
-      PAPER_DELETE_COPY.forceConfirmMessage,
-      PAPER_DELETE_COPY.forceConfirmTitle,
+    const [message, title, options] = confirm.mock.calls[1] as [VNode, string, Record<string, unknown>]
+    expect(isVNode(message)).toBe(true)
+    expect(vnodePlainText(message)).toContain(PAPER_DELETE_COPY.forceConfirmLead)
+    expect(title).toBe(PAPER_DELETE_COPY.forceConfirmTitle)
+    expect(options).toEqual(
       expect.objectContaining({
         confirmButtonText: PAPER_DELETE_COPY.forceConfirmOk,
         confirmButtonClass: 'el-button--danger',
       }),
     )
+    expect(options.dangerouslyUseHTMLString).toBeUndefined()
     expect(deletePaper).toHaveBeenNthCalledWith(2, 'p-409-escape', { force: true })
     expect(success).toHaveBeenCalledWith(PAPER_DELETE_COPY.success)
   })

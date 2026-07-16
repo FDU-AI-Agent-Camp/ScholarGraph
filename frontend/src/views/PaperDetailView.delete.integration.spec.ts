@@ -2,7 +2,7 @@
  * Detail delete chaos — stale store snapshot vs live pre-flight status.
  */
 import { flushPromises, mount } from '@vue/test-utils'
-import { reactive } from 'vue'
+import { isVNode, reactive, type VNode } from 'vue'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import type { PaperDetail } from '@/api/types'
@@ -119,9 +119,26 @@ describe('PaperDetailView delete integration', () => {
 
     expect(getPaperStatus).toHaveBeenCalledWith('hss-failed-001')
     expect(confirm).toHaveBeenCalledTimes(1)
-    const [message, title, options] = confirm.mock.calls[0] as [string, string, { confirmButtonText: string }]
-    expect(message).toContain('提取内容或构建语义索引')
-    expect(message).toContain('强行删除')
+    const [message, title, options] = confirm.mock.calls[0] as [VNode, string, { confirmButtonText: string }]
+    expect(isVNode(message)).toBe(true)
+    const text =
+      typeof message.children === 'string'
+        ? message.children
+        : Array.isArray(message.children)
+          ? message.children
+              .map((child) => {
+                if (typeof child === 'string') {
+                  return child
+                }
+                if (isVNode(child) && typeof child.children === 'string') {
+                  return child.children
+                }
+                return ''
+              })
+              .join('')
+          : ''
+    expect(text).toContain('提取内容或构建语义索引')
+    expect(text).toContain('强行删除')
     expect(title).toBe(PAPER_DELETE_COPY.forceConfirmTitle)
     expect(options.confirmButtonText).toBe(PAPER_DELETE_COPY.forceConfirmOk)
     expect(confirm).not.toHaveBeenCalledWith(

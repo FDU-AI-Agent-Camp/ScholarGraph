@@ -164,7 +164,7 @@ describe('PapersView delete UX boundary', () => {
     await flushPromises()
   })
 
-  it('503 VECTOR_STORE_UNAVAILABLE shows 安全保护阻断 alert, not raw-code toast', async () => {
+  it('503 VECTOR_STORE_UNAVAILABLE shows 系统保护提示 alert, not raw-code toast', async () => {
     getPaperStatus.mockResolvedValue({ data: { status: 'ready' } })
     deletePaper.mockRejectedValue(
       new ApiClientError({ code: 'VECTOR_STORE_UNAVAILABLE', message: 'VECTOR_STORE_UNAVAILABLE' }, 503),
@@ -183,7 +183,8 @@ describe('PapersView delete UX boundary', () => {
       PAPER_DELETE_COPY.vectorStoreUnavailableTitle,
       expect.objectContaining({ type: 'warning' }),
     )
-    expect(PAPER_DELETE_COPY.vectorStoreUnavailableTitle).toBe('安全保护阻断')
+    expect(PAPER_DELETE_COPY.vectorStoreUnavailableTitle).toBe('系统保护提示')
+    expect(PAPER_DELETE_COPY.vectorStoreUnavailable).not.toMatch(/Chroma/i)
     expect(errorToast).not.toHaveBeenCalled()
     expect(errorToast).not.toHaveBeenCalledWith(expect.stringContaining('VECTOR_STORE_UNAVAILABLE'))
   })
