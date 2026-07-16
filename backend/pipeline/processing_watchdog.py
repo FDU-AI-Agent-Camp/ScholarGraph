@@ -373,6 +373,10 @@ def scan_and_fail_stuck_processing_sync(
     return failed
 
 
+# Ops / product alias: dedicated-thread periodic heal entrypoint.
+scan_and_heal_processing_sync = scan_and_fail_stuck_processing_sync
+
+
 def _watchdog_thread_main() -> None:
     settings = get_settings()
     interval = max(0.05, float(settings.process_watchdog_interval_seconds))
@@ -389,7 +393,7 @@ def _watchdog_thread_main() -> None:
             },
         )
         try:
-            healed = scan_and_fail_stuck_processing_sync()
+            healed = scan_and_heal_processing_sync()
             if healed:
                 logger.warning(
                     "%s processing_watchdog_wall_clock_heal failed_count=%s paper_ids=%s",
