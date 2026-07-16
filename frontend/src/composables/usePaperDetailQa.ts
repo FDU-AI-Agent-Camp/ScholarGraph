@@ -3,6 +3,7 @@ import { ref, type Ref } from 'vue'
 import { streamPaperQa } from '@/api/qaStream'
 import type { QaStreamCitationData } from '@/api/types'
 import { appendUniqueCitation } from '@/utils/qaCitations'
+import { sanitizeQaAnswer, QaAnswerDeltaSanitizer } from '@/utils/qaAnswerSanitize'
 import { resolveQaStreamWarningMessage } from '@/utils/qaStreamWarnings'
 
 /**
@@ -31,13 +32,17 @@ export function usePaperDetailQa(paperId: Ref<string>, isInteractive: () => bool
     resetQaSession()
     streaming.value = true
     abort = new AbortController()
+    const deltaSanitizer = new QaAnswerDeltaSanitizer()
     try {
       await streamPaperQa(
         paperId.value,
         question.value.trim(),
         {
           onMessage: (data) => {
-            answer.value += data.delta
+            const cleaned = deltaSanitizer.feed(data.delta)
+            if (cleaned) {
+              answer.value += cleaned
+            }
           },
           onCitation: (data) => {
             citations.value = appendUniqueCitation(citations.value, data)
@@ -49,8 +54,14 @@ export function usePaperDetailQa(paperId: Ref<string>, isInteractive: () => bool
             qaStreamWarningMessage.value = resolveQaStreamWarningMessage(data)
           },
           onDone: (data) => {
+            const tail = deltaSanitizer.flush()
+            if (tail) {
+              answer.value += tail
+            }
             if (data.answer) {
-              answer.value = data.answer
+              answer.value = sanitizeQaAnswer(data.answer)
+            } else {
+              answer.value = sanitizeQaAnswer(answer.value)
             }
           },
           onError: (msg) => {
