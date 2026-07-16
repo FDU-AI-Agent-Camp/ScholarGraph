@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { sanitizeQaAnswer, sanitizeQaAnswerDelta } from './qaAnswerSanitize'
+import { QaAnswerDeltaSanitizer, sanitizeQaAnswer, sanitizeQaAnswerDelta } from './qaAnswerSanitize'
 
 describe('qaAnswerSanitize', () => {
   it('removes empty backtick pairs', () => {
@@ -25,5 +25,13 @@ describe('qaAnswerSanitize', () => {
     expect(cleaned).not.toContain('`')
     expect(cleaned).not.toContain('**')
     expect(cleaned).not.toContain(' 。')
+  })
+
+  it('streaming sanitizer trims space before CJK punctuation across deltas', () => {
+    const sanitizer = new QaAnswerDeltaSanitizer()
+    const parts = [sanitizer.feed('RAG-Token`` ``'), sanitizer.feed('。'), sanitizer.flush()]
+    const combined = parts.filter(Boolean).join('')
+    expect(combined).toBe('RAG-Token。')
+    expect(combined).not.toContain(' 。')
   })
 })

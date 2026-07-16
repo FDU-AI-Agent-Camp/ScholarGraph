@@ -11,8 +11,9 @@ import re
 
 _MULTI_SPACE_RE = re.compile(r" {2,}")
 _STAR_RUN_RE = re.compile(r"\*{1,}")
-# Trim stray spaces left when empty backtick pairs are removed before CJK punctuation.
-_SPACE_BEFORE_CJK_PUNCT_RE = re.compile(r" +([。，、；：！？""''（）【】《》…])")
+_CJK_PUNCT = "。，、；：！？''（）【】《》…"
+_SPACE_BEFORE_CJK_PUNCT_RE = re.compile(rf" +([{re.escape(_CJK_PUNCT)}])")
+_CJK_PUNCT_CHARS = frozenset(_CJK_PUNCT)
 
 
 def sanitize_qa_text_chunk(text: str) -> str:
@@ -44,6 +45,7 @@ class QaTextSanitizer:
         "_in_backtick_span",
         "_in_bold_span",
         "_pending_star",
+        "_pending_trailing_space",
     )
 
     def __init__(self) -> None:
@@ -52,6 +54,7 @@ class QaTextSanitizer:
         self._in_bold_span = False
         self._pending_star = False
         self._at_line_start = True
+        self._pending_trailing_space = ""
 
     def feed(self, delta: str) -> str:
         if not delta:
@@ -122,7 +125,7 @@ class QaTextSanitizer:
             self._at_line_start = char in {"\n", "\r"}
             index += 1
 
-        return "".join(released)
+        return self._polish_stream_release("".join(released))
 
     def flush(self) -> str:
         remaining = self._held_text
@@ -130,9 +133,34 @@ class QaTextSanitizer:
         self._in_backtick_span = False
         self._in_bold_span = False
         self._pending_star = False
-        if not remaining:
+        if remaining:
+            remaining = _MULTI_SPACE_RE.sub(" ", remaining)
+        return self._polish_stream_release(remaining, flush=True)
+
+    def _polish_stream_release(self, text: str, *, flush: bool = False) -> str:
+        if self._pending_trailing_space:
+            if text and text[0] in _CJK_PUNCT_CHARS:
+                self._pending_trailing_space = ""
+            elif text:
+                text = f"{self._pending_trailing_space}{text}"
+                self._pending_trailing_space = ""
+            elif flush:
+                text = self._pending_trailing_space
+                self._pending_trailing_space = ""
+
+        if not text:
             return ""
-        return _MULTI_SPACE_RE.sub(" ", remaining)
+
+        text = _SPACE_BEFORE_CJK_PUNCT_RE.sub(r"\1", text)
+
+        if flush:
+            return text
+
+        stripped_len = len(text.rstrip(" \t"))
+        if stripped_len < len(text):
+            self._pending_trailing_space = text[stripped_len:]
+            text = text[:stripped_len]
+        return text
 
     def _consume_pending_star(self, delta: str, released: list[str]) -> int:
         self._pending_star = False

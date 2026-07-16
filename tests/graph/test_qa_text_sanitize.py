@@ -40,6 +40,17 @@ class TestSanitizeQaAnswerFinal:
     def test_trims_space_before_cjk_punctuation(self) -> None:
         assert sanitize_qa_answer_final("RAG-Token 。") == "RAG-Token。"
 
+    def test_streaming_trims_space_before_cjk_punct_across_chunks(self) -> None:
+        sanitizer = QaTextSanitizer()
+        parts = [
+            sanitizer.feed("RAG-Token`` ``"),
+            sanitizer.feed("。"),
+            sanitizer.flush(),
+        ]
+        combined = "".join(part for part in parts if part)
+        assert combined == "RAG-Token。"
+        assert " 。" not in combined
+
 
 @pytest.mark.parametrize(
     "dirty",
