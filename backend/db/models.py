@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
-from sqlalchemy import JSON, Boolean, DateTime, ForeignKey, Integer, String
+from sqlalchemy import JSON, Boolean, DateTime, ForeignKey, Integer, String, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from backend.db.base import Base
@@ -101,3 +101,20 @@ class PaperOpsClaimRow(Base):
     owner_token: Mapped[str] = mapped_column(String(64))
     acquired_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utc_now)
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+
+
+class VectorCleanupQueueRow(Base):
+    """Transactional outbox for Wave-2 delayed Chroma ``delete_run`` (survives restart).
+
+    No FK to ``papers``: force DELETE removes the paper row before Wave-2 fires; the
+    tombstone must outlive that cascade so cold-boot drain can still scrub vectors.
+    """
+
+    __tablename__ = "vector_cleanup_queue"
+    __table_args__ = (UniqueConstraint("paper_id", "run_id", name="uq_vector_cleanup_paper_run"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    paper_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
+    run_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    create_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utc_now)
+    execute_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)

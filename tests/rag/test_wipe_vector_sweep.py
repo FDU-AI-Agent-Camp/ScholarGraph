@@ -24,11 +24,26 @@ from tests.rag.test_vector_store import FakeCollection, FakeEmbeddingClient
 
 @pytest.fixture(autouse=True)
 def _reset_wipe_tasks() -> None:
+    from backend.repositories.vector_cleanup_queue_repository import (
+        get_vector_cleanup_queue_repository,
+        reset_vector_cleanup_queue_repository,
+    )
+
     reset_wipe_sweep_tasks_for_tests()
     get_indexing_run_registry().reset()
+    reset_vector_cleanup_queue_repository()
+    try:
+        get_vector_cleanup_queue_repository().clear_all_sync()
+    except Exception:
+        pass
     yield
     reset_wipe_sweep_tasks_for_tests()
     get_indexing_run_registry().reset()
+    try:
+        get_vector_cleanup_queue_repository().clear_all_sync()
+    except Exception:
+        pass
+    reset_vector_cleanup_queue_repository()
 
 
 def _chunk(paper_id: str, text: str, *, chunk_id: str = "c0") -> PaperChunk:

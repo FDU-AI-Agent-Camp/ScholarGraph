@@ -16,9 +16,9 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 ALEMBIC_INI = REPO_ROOT / "alembic.ini"
 
 ALEMBIC_BASELINE_REVISION = "17bad1e1a105"
-ALEMBIC_HEAD_REVISION = "f7b24e8d5c33"
+ALEMBIC_HEAD_REVISION = "a8c91f2e4d10"
 # Tables required by the current Alembic head (create_all may materialise these early).
-_HEAD_SCHEMA_TABLES = frozenset({"papers", "pipeline_runs", "paper_ops_claims"})
+_HEAD_SCHEMA_TABLES = frozenset({"papers", "pipeline_runs", "paper_ops_claims", "vector_cleanup_queue"})
 
 
 def alembic_config() -> Config:

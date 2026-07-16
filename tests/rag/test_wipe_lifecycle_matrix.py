@@ -9,6 +9,8 @@
 | 读时失明 | ``test_ghost_vector_logical_isolation`` | HybridRetriever 不见 Run_A |
 | Wave2 | ``test_wipe_wave2_delete_run_after_short_delay`` | 延迟 ``delete_run`` |
 | Wave2 | ``test_force_delete_schedules_wave2_after_wave1`` | wipe 接线 |
+| Wave2 Outbox | ``test_schedule_wave2_persists_outbox_before_task`` | 落盘防重启蒸发 |
+| Wave2 Outbox | ``test_startup_reconcile_drains_due_outbox_rows`` | 冷启动补刀 |
 """
 
 from __future__ import annotations
@@ -54,6 +56,16 @@ WIPE_LIFECYCLE_CASES: tuple[tuple[str, str, str], ...] = (
         "存储扫墓 Wave2",
         "test_force_delete_schedules_wave2_after_wave1",
         "tests/rag/test_wipe_vector_sweep.py",
+    ),
+    (
+        "Wave2 Outbox 防重启",
+        "test_schedule_wave2_persists_outbox_before_task",
+        "tests/rag/test_vector_cleanup_outbox.py",
+    ),
+    (
+        "Wave2 Outbox 防重启",
+        "test_startup_reconcile_drains_due_outbox_rows",
+        "tests/rag/test_vector_cleanup_outbox.py",
     ),
 )
 

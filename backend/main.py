@@ -49,6 +49,7 @@ async def lifespan(app: FastAPI):
         start_indexing_watchdog,
         stop_indexing_watchdog,
     )
+    from backend.rag.wipe_vector_sweep import reconcile_vector_cleanup_on_startup
 
     # P13: promote orphaned INDEXING rows left by a previous process, then start
     # the out-of-loop macro watchdog (dedicated OS thread + sync SQLAlchemy scans;
@@ -58,6 +59,8 @@ async def lifespan(app: FastAPI):
     # Processing orphan heal: leftover pending/processing → failed, then wall-clock daemon.
     await reconcile_processing_on_startup()
     start_processing_watchdog()
+    # Wave-2 outbox: re-arm / immediately scrub vector_cleanup_queue after restart.
+    await reconcile_vector_cleanup_on_startup()
 
     preconfigured = getattr(app.state, "hybrid_retriever", None)
     if preconfigured is not None:
