@@ -336,8 +336,6 @@ async def test_watchdog_kill_execution_order(processing_watchdog_db, monkeypatch
     """
     import time
 
-    from sqlalchemy.orm import Session
-
     from backend.db.models import PAPER_OPS_OPERATION_REEXTRACT
     from backend.pipeline.processing_watchdog import _cascade_kill_true_zombie_async
     from backend.repositories import pipeline_sync as pipeline_sync_mod
@@ -348,6 +346,7 @@ async def test_watchdog_kill_execution_order(processing_watchdog_db, monkeypatch
         is_reextract_inflight,
         reset_reextract_inflight_gate,
     )
+    from sqlalchemy.orm import Session
 
     reset_reextract_inflight_gate()
     registry.reset_pipeline_task_registry()
@@ -562,11 +561,7 @@ async def test_watchdog_kill_lock_reflux_allows_bystander_reextract(
             if asyncio.get_running_loop().time() > deadline:
                 raise TimeoutError("watchdog never flipped zombie to FAILED")
             row = await get_pipeline_repository().get_latest(paper_id)
-            if (
-                row is not None
-                and row.status == PaperStatus.FAILED
-                and not is_reextract_inflight(paper_id)
-            ):
+            if row is not None and row.status == PaperStatus.FAILED and not is_reextract_inflight(paper_id):
                 break
             await asyncio.sleep(0.01)
         t0 = time.monotonic()
