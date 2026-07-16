@@ -70,10 +70,10 @@ RUN chmod +x /app/scripts/docker-entrypoint.sh \
         /app/data/graphs \
         /app/data/uploads \
         /app/data/chroma \
-        /app/data/models/huggingface \
-        /app/data/models/modelscope
+        /app/models/huggingface \
+        /app/models/modelscope
 
-# Defaults for Zeabur single Volume at /app/data (overridable via env)
+# Defaults: business data under /app/data; MinerU weights under /app/models
 ENV APP_PROFILE=prod \
     APP_ENV=production \
     DEBUG=false \
@@ -81,8 +81,9 @@ ENV APP_PROFILE=prod \
     GRAPH_DATA_DIR=/app/data/graphs \
     UPLOAD_DIR=/app/data/uploads \
     CHROMADB_PATH=/app/data/chroma \
-    HF_HOME=/app/data/models/huggingface \
-    MODELSCOPE_CACHE=/app/data/models/modelscope \
+    HF_HOME=/app/models/huggingface \
+    HUGGINGFACE_HUB_CACHE=/app/models/huggingface/hub \
+    MODELSCOPE_CACHE=/app/models/modelscope \
     INGEST_MINERU_MODEL_SOURCE=modelscope \
     INGEST_MINERU_ENABLED=true \
     INGEST_ROUTE=auto \
