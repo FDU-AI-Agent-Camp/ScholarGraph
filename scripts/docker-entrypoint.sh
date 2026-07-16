@@ -1,4 +1,4 @@
-﻿#!/bin/sh
+#!/bin/sh
 # ScholarGraph container entrypoint: prepare persistent dirs, migrate DB, start API.
 set -eu
 

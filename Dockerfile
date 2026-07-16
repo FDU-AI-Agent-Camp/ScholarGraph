@@ -92,4 +92,4 @@ ENV APP_PROFILE=prod \
 
 EXPOSE 8080
 
-ENTRYPOINT ["/app/scripts/docker-entrypoint.sh"]
+ENTRYPOINT ["/bin/sh", "/app/scripts/docker-entrypoint.sh"]
