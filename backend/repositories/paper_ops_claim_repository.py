@@ -124,9 +124,7 @@ class PaperOpsClaimRepository:
         """Evict any claim for *paper_id* (Cascading Kill / crash recovery)."""
         async with _PROCESS_ACQUIRE_GATE:
             async with get_async_session_factory()() as session:
-                result = await session.execute(
-                    delete(PaperOpsClaimRow).where(PaperOpsClaimRow.paper_id == paper_id)
-                )
+                result = await session.execute(delete(PaperOpsClaimRow).where(PaperOpsClaimRow.paper_id == paper_id))
                 await session.commit()
                 return int(getattr(result, "rowcount", 0) or 0) > 0
 
