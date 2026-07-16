@@ -67,6 +67,16 @@ WIPE_LIFECYCLE_CASES: tuple[tuple[str, str, str], ...] = (
         "test_startup_reconcile_drains_due_outbox_rows",
         "tests/rag/test_vector_cleanup_outbox.py",
     ),
+    (
+        "Wave2 Outbox 去重 / 进程内重试",
+        "test_duplicate_enqueue_does_not_spawn_second_task",
+        "tests/rag/test_vector_cleanup_outbox.py",
+    ),
+    (
+        "Wave2 Outbox 去重 / 进程内重试",
+        "test_drain_due_retries_after_failed_compensate",
+        "tests/rag/test_vector_cleanup_outbox.py",
+    ),
 )
 
 

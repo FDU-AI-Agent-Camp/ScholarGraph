@@ -91,3 +91,56 @@ async def test_wave2_ack_removes_outbox_after_success(persistence_env) -> None:
         await asyncio.gather(*tasks)
 
     assert get_vector_cleanup_queue_repository().list_pending_sync() == []
+
+
+@pytest.mark.asyncio
+async def test_duplicate_enqueue_does_not_spawn_second_task(persistence_env) -> None:
+    """Same (paper_id, run_id) must not create_task twice while outbox row exists."""
+    paper_id = "outbox-dedupe"
+    run_id = "run_dup"
+
+    async def _slow_compensate(pid: str, rid: str, *, delays_seconds: tuple[float, ...] = ()) -> None:
+        _ = (pid, rid)
+        await asyncio.sleep(0.2)
+
+    with patch("backend.rag.handlers._compensate_revoked_index_run", _slow_compensate):
+        first = schedule_wipe_wave2_sweep(paper_id, {run_id}, delays_seconds=(0.05,))
+        second = schedule_wipe_wave2_sweep(paper_id, {run_id}, delays_seconds=(0.05,))
+        assert len(first) == 1
+        assert second == []
+        await asyncio.gather(*first)
+
+
+@pytest.mark.asyncio
+async def test_drain_due_retries_after_failed_compensate(persistence_env) -> None:
+    """Process-alive path: failed scrub leaves outbox; poller drain retries without reboot."""
+    from backend.rag.wipe_vector_sweep import drain_due_vector_cleanup_jobs
+
+    paper_id = "outbox-retry"
+    run_id = "run_fail_then_ok"
+    repo = get_vector_cleanup_queue_repository()
+    past = datetime.now(UTC) - timedelta(seconds=1)
+    assert repo.enqueue_sync(paper_id, run_id, execute_at=past, create_at=past)
+
+    calls = {"n": 0}
+
+    async def _flaky(pid: str, rid: str, *, delays_seconds: tuple[float, ...] = ()) -> None:
+        _ = (pid, rid, delays_seconds)
+        calls["n"] += 1
+        if calls["n"] == 1:
+            raise RuntimeError("chroma blip")
+
+    with patch("backend.rag.handlers._compensate_revoked_index_run", _flaky):
+        spawned = await drain_due_vector_cleanup_jobs()
+        assert spawned == 1
+        from backend.rag.wipe_vector_sweep import _WIPE_SWEEP_TASKS
+
+        await asyncio.gather(*list(_WIPE_SWEEP_TASKS), return_exceptions=True)
+        assert repo.list_pending_sync()  # still due after failure
+
+        spawned2 = await drain_due_vector_cleanup_jobs()
+        assert spawned2 == 1
+        await asyncio.gather(*list(_WIPE_SWEEP_TASKS), return_exceptions=True)
+
+    assert calls["n"] == 2
+    assert repo.list_pending_sync() == []
