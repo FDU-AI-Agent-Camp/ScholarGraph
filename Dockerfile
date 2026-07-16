@@ -3,12 +3,17 @@
 # ── Stage 1: Vue 3 frontend ──────────────────────────────────────────
 FROM node:22-bookworm-slim AS frontend-builder
 
-WORKDIR /frontend
+# Keep repo-relative layout so vue-tsc can resolve
+# frontend/src/** → ../../../docs/api/fixtures/*.json
+WORKDIR /src
 
-COPY frontend/package.json frontend/package-lock.json ./
-RUN npm ci
+COPY frontend/package.json frontend/package-lock.json ./frontend/
+RUN npm ci --prefix frontend
 
-COPY frontend/ ./
+COPY frontend/ ./frontend/
+COPY docs/api/fixtures ./docs/api/fixtures
+
+WORKDIR /src/frontend
 # Same-origin API via FastAPI reverse path (/api/v1)
 ENV VITE_API_BASE_URL=
 ENV VITE_USE_MOCK=false
@@ -57,7 +62,7 @@ COPY .env.prod ./.env.prod
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --frozen --no-dev --extra mineru
 
-COPY --from=frontend-builder /frontend/dist ./frontend/dist
+COPY --from=frontend-builder /src/frontend/dist ./frontend/dist
 
 COPY scripts/docker-entrypoint.sh /app/scripts/docker-entrypoint.sh
 RUN chmod +x /app/scripts/docker-entrypoint.sh \
