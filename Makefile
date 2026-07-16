@@ -42,8 +42,9 @@ p13-release-gate:
 process-release-gate:
 	uv run python scripts/check_process_release_gate.py
 
-# Nightly / Release 门禁：config_snapshot + live_patrol_logic + demo 准入 + 四模式 live benchmark
+# Nightly / Release 门禁：processing 假死自愈硬卡 + patrol golden + live_patrol + demo + live benchmark
 ci-patrol-release:
+	uv run python scripts/check_process_release_gate.py
 	uv run python scripts/validate_patrol_golden.py --strict --json
 	uv run python -m pytest -q --tb=short tests/patrol/ -m "not live_patrol_logic"
 	uv run python -m pytest -q --tb=short -m patrol_fault_injection

@@ -1,12 +1,16 @@
 #!/usr/bin/env python3
-"""Process Release Gate — processing/pending watchdog debt matrix.
+"""Process Release Gate — PROCESSING 全链路自愈矩阵（CI 硬阻断）。
 
-Ensures wall-clock + cold-boot grace regressions remain discoverable under
-``@pytest.mark.process_release_gate`` and pass.
+五层核心场景（详见 ``tests/pipeline/test_process_release_gate_matrix.py``）：
+弹性续租 / 硬杀清洗 / 资源扫尾 / 分布式熔断 / 物理解耦。
+
+确保墙钟 + 冷启动 grace + 级联处决 + 世代熔断 + 主 loop 假死回归保持在
+``@pytest.mark.process_release_gate`` 下可发现且通过。
 
 Usage (repo root)::
 
     uv run python scripts/check_process_release_gate.py
+    make process-release-gate
 """
 
 from __future__ import annotations
@@ -22,6 +26,7 @@ REQUIRED_TEST_NAMES: tuple[str, ...] = (
     "test_watchdog_slow_but_alive_extends_lease",
     "test_watchdog_true_zombie_triggers_failed",
     "test_watchdog_kill_execution_order",
+    "test_watchdog_kill_lock_reflux_allows_bystander_reextract",
     "test_obsolete_run_id_write_blocked",
     "test_processing_watchdog_survives_loop_starvation",
     "test_cold_boot_spares_fresh_pending_within_grace",
