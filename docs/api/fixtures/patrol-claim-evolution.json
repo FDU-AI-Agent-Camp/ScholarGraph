@@ -1,0 +1,36 @@
+{
+  "data": {
+    "mode": "claim_evolution",
+    "paper_ids": ["stem-001", "stem-002"],
+    "insights": [
+      {
+        "insight_id": "ins-claim-evolution-001",
+        "title": "观点演进（Claim Evolution）",
+        "summary": "两篇论文围绕同一研究问题对 PCA 在 MNIST 上的效果给出不同结论。",
+        "status": "ready",
+        "has_contradiction": null,
+        "paper_ids": ["stem-001", "stem-002"],
+        "node_refs": [
+          { "paper_id": "stem-001", "node_id": "n_question", "label": "PCA 是否提升 MNIST 分类准确率？" },
+          { "paper_id": "stem-002", "node_id": "n_question", "label": "PCA 是否提升 MNIST 分类准确率？" }
+        ],
+        "structured_points": [
+          {
+            "mode": "claim_evolution",
+            "research_question": "PCA 是否提升 MNIST 分类准确率？",
+            "paper_a_claim": "PCA 将 MNIST 特征压缩至 50 维后分类准确率提升 3%",
+            "paper_b_claim": "主成分分析在 MNIST 上保留 95% 方差，分类性能与基线相当",
+            "evolution_type": "refined",
+            "problem_fit_score": 82,
+            "evidence_summary": "同一 RQ 下结论从「提升」演进为「与基线相当」。"
+          }
+        ],
+        "is_degraded": false,
+        "degradation_profile": null,
+        "meta": {}
+      }
+    ],
+    "generated_at": "2026-07-14T00:00:00Z"
+  },
+  "meta": { "request_id": "mock-patrol-claim-evolution-001" }
+}

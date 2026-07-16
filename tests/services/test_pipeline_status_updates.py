@@ -27,9 +27,10 @@ def test_full_processing_sequence_matches_contract_percents(registered_paper: st
 
 
 def test_start_processing_syncs_paper_detail_status(registered_paper: str) -> None:
-    paper_svc = get_paper_service()
+    import asyncio
+
     PipelineStatusService().start_processing(registered_paper)
-    paper = paper_svc._papers[registered_paper]
+    paper = asyncio.run(get_paper_service().get_paper(registered_paper))
     assert paper.status == PaperStatus.PROCESSING
 
 
@@ -60,13 +61,13 @@ def test_advance_stage_rejects_terminal_stages(
         PipelineStatusService().advance_stage(registered_paper, terminal_stage)
 
 
-def test_mark_ready_and_failed_snapshots_match_contract(registered_paper: str) -> None:
+async def test_mark_ready_and_failed_snapshots_match_contract(registered_paper: str) -> None:
     svc = PipelineStatusService()
     ready = svc.mark_ready(registered_paper)
     assert_snapshot_matches_contract(ready)
 
     svc.mark_failed(registered_paper, message="重试失败", error_code="PIPELINE_FAILED")
-    failed = get_paper_service()._status[registered_paper]
+    failed = await get_paper_service().get_status(registered_paper)
     assert_snapshot_matches_contract(failed)
 
 

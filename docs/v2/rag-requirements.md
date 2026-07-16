@@ -1,10 +1,10 @@
-# V2 RAG 四阶段需求文档（`feature/backend/rag`）
+# V2 RAG 四阶段需求文档
 
 > **目标**：将单篇 QA 从「纯图谱检索」升级为「图谱骨架 + 原文片段向量召回」的多尺度混合 RAG；同时增强 Patrol 的混合 context 与结构化输出，并建立可自动回归的 QA 金标评估体系。
-> **范围**：新增 `backend/rag/` 模块（含 chunking/indexing/vector_store/hybrid_retriever）、改造 `backend/graph/qa.py`、改造 `backend/services/paper_service.py` / `pipeline_completion_service.py`、新增 Patrol 模式、新增 benchmark 脚本。
-> **版本**：v0.5.0.x
-> **负责人**：待定
-> **依赖**：P1 持久化基座建议先完成或并行，但 RAG 可在现有内存服务上先跑通，再迁移到 DB。
+> **范围**：`backend/rag/`（chunking / indexing / vector_store / hybrid_retriever / P13 watchdog）、`backend/graph/qa.py`、paper / pipeline 服务、四模式 Patrol、benchmark 脚本。
+> **实现状态（后端）**：Phase 1–4 与 P10 索引门禁、P13 双层 watchdog / 孤儿线程世代撤销已落地；运行时契约以 §3.6 与代码为准。前端 Patrol 四模式 + `structured_points` 已合入 `develop`（PR #27）；当前 FE 焦点见本地 `problems-v2.md`（勿提交）。
+> **版本**：以根目录 `pyproject.toml` 为准。
+> **依赖**：P1 持久化基座已合；Chroma / SQLite 为默认本地路径。
 
 ---
 
@@ -34,16 +34,19 @@ prompt = self._build_prompt(graph, subgraph, question, is_preview=is_preview)
 | `backend/ingest/chunking.py` | 文本切分逻辑 | ✅ 复用或增强 |
 | `backend/services/paper_service.py` | `full_text` 与 PDF 路径 | ✅ 用于 chunk 来源 |
 
-### 1.3 缺失部分
+### 1.3 能力清单（相对本文起草时的缺口；后端多数已关闭）
 
-- ChromaDB / 向量存储
-- chunk → embed → persist 流程
-- 图谱实体（Entities）与关系（Relations）的 Embedding 索引
-- 统一向量召回 Entities + Relations + Chunks 的混合检索
-- 支持 `[CITE:chunk_index]` / `[CITE:page_X]` / `[CITE:entity_id]` / `[CITE:edge_id]` 的 Prompt 与 citation 解析
-- QA 尺度路由
-- HyDE（Hypothetical Document Embeddings）扩展接口
-- 金标评估与 LLM-as-a-Judge
+| 能力 | 状态 |
+|---|---|
+| ChromaDB / 向量存储 + chunk → embed → persist | ✅ |
+| Entities / Relations Embedding 索引 | ✅ |
+| `HybridRetriever` 统一召回 | ✅ |
+| `[CITE:…]` Prompt 与 citation 解析 | ✅ |
+| QA 尺度路由 | ✅ |
+| P10 `indexing` 门禁 + P13 watchdog / 孤儿线程世代撤销 | ✅（§3.6） |
+| 四模式 Patrol + 降级契约 | ✅ API + 产品 UI（Part F / PR #27） |
+| HyDE 扩展接口 | ⏳ 预留 / 非阻塞 |
+| 金标评估与 LLM-as-a-Judge | ✅ 脚本与 gate 已有；持续扩样 |
 
 ### 1.4 架构借鉴：轻量版 LightRAG
 
@@ -100,8 +103,8 @@ prompt = self._build_prompt(graph, subgraph, question, is_preview=is_preview)
 
 当前实现：
 - **A 尺度**：已有（基于 `GraphQuery` 关键词 + 拓扑）。
-- **B 尺度**：缺失，本分支核心目标。采用轻量版 LightRAG 思路，统一走向量召回。
-- **C 尺度**：已有 `patrol` 基础，需增强。
+- **B 尺度**：已落地（Chroma 三类 collection + `HybridRetriever` + 页码/chunk citation）。
+- **C 尺度**：四模式 Patrol API 与产品 UI（`structured_points` 卡片）已合入；降级 Banner / heal 轮询见 P9/F8。
 
 ---
 
@@ -125,12 +128,21 @@ dependencies = [
 ```text
 backend/rag/
 ├── __init__.py
-├── chunking.py          # 文本切分
-├── indexing.py          # 实体/关系/Chunk 向量化索引构建
-├── vector_store.py      # ChromaDB 统一封装（Chunks + Entities + Relations）
-├── hybrid_retriever.py  # 统一向量召回 + 可选 A 尺度图谱
-├── qa_router.py         # 问题尺度判定
-└── models.py            # RAG 相关 Pydantic schemas
+├── chunking.py               # 文本切分
+├── indexing.py               # 实体/关系/Chunk 向量化索引构建
+├── vector_store.py           # ChromaDB 统一封装（Chunks + Entities + Relations）
+├── vector_store_replace.py   # P13：run_id 快照 replace + Generation Guard 激活闸
+├── indexing_run_registry.py  # P13：进程内 run 世代 revoke / may_activate
+├── indexing_watchdog.py      # P13：独立线程编排扫尾（promote 走 PaperService）
+├── handlers.py               # PipelineFinalized → wait_for 索引 + 孤儿 run 补偿
+├── wipe_vector_sweep.py      # Force wipe：Wave2 延迟 delete_run + 生命周期蓝图
+├── hybrid_retriever.py       # 统一向量召回 + 可选 A 尺度图谱
+├── qa_router.py              # 问题尺度判定
+└── models.py                 # RAG 相关 Pydantic schemas
+
+# 状态机外观（勿再直触 PaperService._pipeline_repo）
+backend/services/paper_pipeline_ops.py   # promote / heartbeat / snapshot 公开 API
+backend/repositories/pipeline_sync.py    # 独立线程 sync SQL 物理写
 ```
 
 > **设计选择**：采用 3 个独立 collection（`paper_chunks`、`paper_entities`、`paper_relations`），每个 collection 内部用 `paper_id` 过滤。这样实现简单、类型清晰，也便于未来独立调优 top-k。
@@ -235,7 +247,19 @@ class VectorStore:
     async def delete_by_paper(self, paper_id: str) -> None: ...
 
     async def exists(self, paper_id: str) -> bool: ...
+
+    # ---- P13 run-id snapshot replace（实现：vector_store_replace.ReplacePaperIndexMixin）----
+    async def replace_paper_index(
+        self,
+        paper_id: str,
+        *,
+        chunks: list[PaperChunk],
+        entities: list[PaperEntity],
+        relations: list[PaperRelation],
+    ) -> None: ...
 ```
+
+`replace_paper_index` 行为要点（详见 §3.6）：新 `run_id` upsert → 仅在 `IndexingRunRegistry.may_activate`（**未 revoke** 且 `inflight == run_id`）且 Task 未 cancelling 时 `set_active_run_id`；拒绝激活打 `[Generation Guard]` 日志并清理该 run；cancel/refuse **不清** revoke（sticky；同 paper 多条时返回最近 revoke 的 id），供超时路径调度补偿。
 
 返回模型（`backend/rag/models.py`）：
 
@@ -259,35 +283,77 @@ ChromaDB 配置：
 - embedding 函数统一复用 `EmbeddingClient.embed_texts`。
 - 单篇 QA 时所有查询必须带 `paper_id` metadata 过滤，避免跨论文污染。
 
-### 3.6 写入时机
+### 3.6 写入时机与状态门禁（P10 索引门禁 + P13 watchdog / 孤儿线程）
 
-在 `pipeline_completion_service.finalize()` 成功后，异步触发索引构建：
+`pipeline_completion_service.finalize()` **不再直接 READY**：图谱落盘后先 `mark_indexing`（`PaperStatus.INDEXING`），再通过 EventBus 发布 `PipelineFinalized`。官方排他订阅者 `backend.rag.handlers.on_pipeline_finalized_for_rag` 完成索引后，再 promote 为 `ready` / `ready_with_warnings`，并发布 `RagIndexed`。
 
 ```python
-async def _index_paper_for_rag(
-    paper_id: str,
-    *,
-    full_text: str,
-    graph: UnifiedPaperGraph,
-) -> None:
-    store = VectorStore()
-    await store.delete_by_paper(paper_id)  # 幂等：先清旧索引
+# finalize (sync path)
+status_service.mark_indexing(paper_id)  # graph on disk; vector index pending
+event_bus.publish(PipelineFinalized(...))
 
-    chunks = chunk_text(paper_id, full_text)
-    entities = graph_to_entities(paper_id, graph)
-    relations = graph_to_relations(paper_id, graph)
-
-    await store.index_chunks(chunks)
-    await store.index_entities(entities)
-    await store.index_relations(relations)
+# EventBus worker → on_pipeline_finalized_for_rag
+await rag_index_service.index_paper_for_rag_async(...)  # delete_by_paper + upsert
+await _promote_terminal_status(...)  # ready | ready_with_warnings + RagIndexed
 ```
 
+**产品面行为（相对「finalize 即 READY」的变更）**：
+
+| 场景 | 行为 |
+|------|------|
+| 状态为 `indexing` 且无 preview | `GET /papers/{id}/graph` → **409 `GRAPH_NOT_READY`**（图谱可能已落盘仍不可读） |
+| FE 上传轮询 | `indexing` **非终态**；需等到 `ready` / `ready_with_warnings` / `failed`（`isTerminalStatus` + `BadgeStatus.indexing`） |
+| EventBus 未消费 / worker 挂起 | **不再默认永久卡死**：超过 P13 macro watchdog 窗口（started 超时 + heartbeat 陈旧）或冷启动 reconcile 后强制 `ready_with_warnings` |
+| 微观 `wait_for` 超时 | 立即 promote `ready_with_warnings`（`rag_index_timeout`）；线程池内 Chroma/embedding 可能仍短暂续跑，但被 **世代撤销 + Generation Guard** 禁止激活，并由延迟 `delete_run` 补偿抹除 |
+
+**超时 / 失败兜底**：
+
+1. **Handler 内失败**：契约校验失败或索引异常 → promote `ready_with_warnings`（不长期卡在 `indexing`），写 `extract_warnings` / 日志，并发布 `RagIndexed(success=False)`。  
+2. **进程级**：EventBus fire-and-forget；生命周期应 `register_pipeline_finalized_handlers`；拓扑测 `tests/events/test_event_bus_topology.py` 断言排他订阅。  
+3. **P13 双层 indexing watchdog（已落地）**：  
+   - **微观**：`on_pipeline_finalized_for_rag` 对 `index_paper_for_rag_async` 包 `asyncio.wait_for`（`RAG_SINGLE_INDEX_TIMEOUT_SECONDS`，默认 120s）；超时写入 `rag_index_timeout` 并 promote `ready_with_warnings`。  
+   - **宏观（out-of-loop）**：`pipeline_runs.indexing_started_at` + `indexing_heartbeat`；lifespan 在**独立 daemon 线程**启动扫尾（非主 asyncio Task），线程内 `sleep` + **sync SQLAlchemy** `scan_and_promote_stuck_indexing_sync`（禁止 `run_async` 派回 FastAPI loop——主 loop 假死时 `run_coroutine_threadsafe` 也会停搏）。仅当 **started 超时且 heartbeat 陈旧** 才强制收尾（`rag_indexing_stuck_timeout` + `RagIndexed(success=False)`）。Handler 按 `RAG_INDEXING_HEARTBEAT_INTERVAL_SECONDS` 续命。饥饿放大测例：`tests/rag/test_watchdog_main_loop_starvation.py`。生产也可改跑外部 cron/Celery Beat 读库 promote（与进程完全解耦）。  
+   - **冷启动**：进程起来时 reconcile 所有遗留 `indexing`（EventBus 内存队列不跨进程；忽略心跳门闩）。  
+   - **Loop 阻塞检测（研发期）**：`ASYNCIO_SLOW_CALLBACK_MS`（默认 auto：development/test=100ms）开启 `loop.set_debug` + `slow_callback_duration`，假异步超阈值会打警告栈。  
+   - **CI 防退化**：`scripts/check_rag_io_timeouts.py` + `scripts/check_p13_release_gate.py`（均挂入 `make ci` / `scripts/check_backend.py`）断言 handler `wait_for` + dedicated-thread **sync** watchdog（禁止 thread 内 `run_async(scan…)`）+ 可配置超时 knobs + `httpx.*.Client` 必须带 `timeout=`；强制收尾日志带 `[P13_WATCHDOG_HEAL]`。
+   - **P13 Release Gate 矩阵**（`make p13-release-gate` / `scripts/check_p13_release_gate.py`，`@pytest.mark.p13_release_gate`）：
+
+| 分类 | 用例 | 防御边界 |
+| --- | --- | --- |
+| 并发/时域 | `test_orphan_thread_cannot_override_new_generation` | Run ID 世代双检 |
+| 自愈/补偿 | `test_cleanup_task_removes_delayed_orphan_data` | Chroma 后置补偿扫尾 |
+| 隔离监控 | `test_watchdog_works_during_event_loop_starvation` | Watchdog 线程隔离主 loop 假死 |
+| 临界自愈 | `test_cold_boot_reconciliation_clears_zombie_states` | 冷启动僵尸清洗 |  
+4. **Patrol**：索引未就绪时 insight 带 `is_degraded` + `INDEX_NOT_READY`；降级结果**不入**服务端进程 cache，HTTP `Cache-Control: private, no-store`，FE 10s/30s/60s 自愈轮询可拿到新鲜结果。健康报告 24h cache 键含 `graph_version` + `active index_run_id`，re-extract / 重索引后自动失效。Watchdog 强制终态后 Patrol 仍走 P9 降级闭环。
+
 注意：
-- 不阻塞 `store_node` 返回 ready。
-- 失败不导致流水线 failed，但写入 `extract_warnings: ["rag_index_failed"]` 并记录日志。
-- 重新抽取（re-extract）时先 `delete_by_paper` 再重建。
+
+- 失败不导致流水线 `failed`，但可能以 `ready_with_warnings` 暴露。  
+- 重新抽取（re-extract）时先 `delete_by_paper` / `replace_paper_index` 再重建。  
+- **Force wipe 数据生命周期（已落地，INDEXING 幽灵向量闭环）**：`DELETE?force` / `POST …/reextract?force` 不具备 XA，但三层互补达到工业级韧性：
+
+  | 场景维度 | 重构前 | 重构后 |
+  | --- | --- | --- |
+  | 并发 Claim 拦截 | 进程内 set 跨 worker 失效 → 多副本混战 | 持久化 `paper_ops_claims`（可配 TTL / PG advisory 短事务）全局互斥，第二路 **409** |
+  | 迟到写入处理 | `to_thread` upsert 回写幽灵 → 污染新跑 | metadata 必带 `index_run_id`；检索硬过滤 `active_rag_run_id`；无 active **fail-closed**（逻辑失明） |
+  | 存储空间回收 | 依赖运气 / 人工清库 | Wave1 即时 `delete_by_paper` + Wave2 `PAPER_WIPE_VECTOR_SWEEP_DELAY_SECONDS`（默认 120s）`delete_run` 扫墓 → Zero Footprint |
+
+  编排契约见 `backend/rag/wipe_vector_sweep.py`；测例：`tests/rag/test_wipe_vector_sweep.py`、`tests/rag/test_wipe_lifecycle_matrix.py`、`tests/rag/test_wipe_boundary_friction.py`（`test_cluster_advisory_lock` / `test_ghost_vector_logical_isolation`）、`tests/concurrency/test_friction_race_and_generation.py`（跨 worker claim）。  
+- `index_paper_for_rag` 按 `paper_id` 加锁，upsert 幂等。  
+- **孤儿线程 hardening（已落地）**：`IndexingRunRegistry` 在 `replace_paper_index` 生成 `run_id` 时 `begin`；`wait_for` 超时立刻 `revoke`。激活前校验 `may_activate`（revoked 否 + `inflight` 世代匹配）+ Task `cancelling()`，否决则打 `[Generation Guard] … Aborting database update.`、不清 DB active、并清理该 run。**cancel/refuse 路径不得 `clear` revoke**（否则超时侧无法拿到 run_id 调度补偿，且 `may_activate` 会假阳性）；仅成功激活或补偿结束才 `clear`。超时另起 fire-and-forget 补偿清理（延迟 0/5/10s 调用 `delete_run`；若 active 仍指向该 run 则先 `set_active_run_id(None)` 写 **SQL NULL**）。线程池内 upsert 或仍会跑完，但**不得合法激活**；脏数据最终被按 run_id 抹除。竞态放大测例见 `tests/rag/test_orphan_run_race_amplification.py`。  
+- **主循环假死（知情架构残留）**：heartbeat / HTTP / `publish_sync(RagIndexed)` 仍依赖 FastAPI 主 loop（starve 时事件投递可滞后）；macro watchdog 已在独立线程用 **sync** 读库 promote，**状态轮询**仍可看到 `ready_with_warnings`。进程级完全解耦（外部 Message Broker / Web↔Worker 多进程）属演进项，见本地 `problems-v2.md` Part E · P13 残留 2。研发期用 `ASYNCIO_SLOW_CALLBACK_MS` 逼出裸同步 I/O。  
+- **状态写入封装（已收拢）**：RAG handler / indexing watchdog / status guard / re-extract **不得**直触 `PaperService._pipeline_repo`；经 `PaperPipelineOpsMixin` 公开方法（`promote_paper_to_terminal_status` / `promote_stuck_indexing_paper[_sync]` / `touch_indexing_heartbeat` / `save_pipeline_snapshot` 等）。sync 扫库物理写在 `backend/repositories/pipeline_sync.py`，由 `PaperService.promote_stuck_indexing_paper_sync` 编排 + 发 `RagIndexed`。  
+  - **状态机闸**：`promote_paper_to_terminal_status` 仅允许 `INDEXING→ready*`；其它来源抛 `InvalidStateTransitionError`。`save_pipeline_snapshot` 仍是公开旁路（不经 promote 闸），供合法编排写入——LoD AST 只锁 `_pipeline_repo` 穿透，不是完整状态机防火墙。  
+  - **Handler 幂等**：`on_pipeline_finalized_for_rag` → `_promote_terminal_status` 若发现已是 `ready` / `ready_with_warnings`（如 macro watchdog 先治），吞掉 `InvalidStateTransitionError` 并 `info` 跳过，避免 EventBus 写入 `event_handler_failed` 噪音。测例：`test_handler_promote_idempotent_after_watchdog_already_terminal`。  
+- **验证矩阵**：  
+  - 静态：`scripts/check_pipeline_repo_lod.py`（AST；挂入 `make ci` / `check_backend`）拒绝任何非 facade 文件访问 `._pipeline_repo`。  
+  - 领域：`tests/services/test_paper_domain_service.py` — `indexing→ready*` + 自动 `RagIndexed`；对已终态/非 INDEXING 调用抛 `InvalidStateTransitionError` 且不改库。  
+  - 进程内隔离：`test_watchdog_works_during_event_loop_starvation`（P13 release-gate）。  
+  - 多进程 / 外部 broker 混沌：`tests/architecture/test_architecture_chaos_resilience.py`（`@pytest.mark.architecture_evolution`，默认 skip，待演进落地）。
 
 ### 3.7 配置项
+
+完整 knobs 见仓库根目录 `.env.example`（P13 段）。常用项：
 
 ```env
 # ChromaDB
@@ -304,6 +370,16 @@ CHUNK_OVERLAP_RATIO=0.20
 RAG_TOP_K_CHUNKS=5
 RAG_TOP_K_ENTITIES=5
 RAG_TOP_K_RELATIONS=5
+
+# P13 dual-layer indexing watchdog（实现绑定见 §3.6）
+RAG_SINGLE_INDEX_TIMEOUT_SECONDS=120
+RAG_INDEXING_WATCHDOG_SECONDS=300
+RAG_INDEXING_WATCHDOG_INTERVAL_SECONDS=60
+RAG_INDEXING_WATCHDOG_ENABLED=true
+RAG_INDEXING_HEARTBEAT_INTERVAL_SECONDS=15
+RAG_INDEXING_HEARTBEAT_STALE_SECONDS=90
+# Dev/CI：主 loop 假异步阻塞检测（-1=auto；production 默认关）
+ASYNCIO_SLOW_CALLBACK_MS=-1
 ```
 
 ---
@@ -312,24 +388,29 @@ RAG_TOP_K_RELATIONS=5
 
 ### 4.1 尺度路由
 
-`backend/rag/qa_router.py`：
+`backend/rag/qa_router.py`（实现：`backend/llm/qa_scale.py`）：
 
 ```python
 class QuestionScale(StrEnum):
-    SKELETON = "skeleton"    # 摘要 / 整体结构
-    DETAIL = "detail"        # 方法 / 数据 / 实验数值
-    CROSS_PAPER = "cross"    # 多篇对比（未来）
+    SUMMARY = "summary"          # 摘要 / 整体结构
+    DETAIL = "detail"            # 方法 / 论证关系 / 结构细节
+    VERIFICATION = "verification"  # 证据 / 材料 / 实验与指标
 
 def detect_question_scale(question: str) -> QuestionScale: ...
 ```
+
+与 `data/qa_golden_set.json` 的 ``scale`` 字段及 ``RetrievalContext.scale`` 使用同一套取值。
+
+**遗留别名**（早期草案 ``skeleton`` / ``cross``）：``skeleton`` → ``summary``；``cross``（多篇对比）保留给 Patrol，**不是** ``QuestionScale`` 成员。
 
 判定规则（V1 硬规则，后续可升级 LLM）：
 
 | 关键词/模式 | 尺度 |
 |---|---|
-| "核心论点" / "做了什么" / "摘要" / "整体" / "主要结论" | SKELETON |
-| "方法" / "数据集" / "实验" / "指标" / "数值" / "具体" / "第几页" / "多少" | DETAIL |
-| "对比" / "矛盾" / "两篇" / "差异" | CROSS_PAPER（暂不支持，返回 400 或引导 Patrol） |
+| "核心论点" / "做了什么" / "摘要" / "整体" / "主要结论" | SUMMARY |
+| "方法" / "具体" / "关系" / "分论点" / "采用了" | DETAIL |
+| "材料" / "证据" / "实验" / "数据集" / "哪些节点" / "如何论证" | VERIFICATION |
+| "对比" / "矛盾" / "两篇" / "差异" | 多篇对比（Patrol，非 QuestionScale） |
 
 ### 4.2 Hybrid Retriever
 
@@ -379,9 +460,58 @@ class RetrievalContext(BaseModel):
     scale: QuestionScale
 ```
 
+**Single Source of Truth（B7 统一可信源）**
+
+``HybridRetriever.retrieve()`` 每轮只查询一次图谱与向量，组装完整 ``RetrievalContext``。
+``QaEngine`` 为纯消费组件，不再在 Prompt 拼装阶段重复调用 ``GraphQuery``：
+
+```text
+HTTP / Benchmark → qa_retrieval._load_graph_for_retrieval (scale 判定)
+                → HybridRetriever.compute_subgraph (一次 GraphQuery)
+                → HybridRetriever.retrieve(subgraph=…) → RetrievalContext
+  ├─ nodes/edges     → Prompt {nodes}/{edges}   （RC 非空时唯一来源）
+  └─ entities/relations/chunks → Prompt 向量段   （format_retrieval_context）
+       ↓
+qa_stream(..., retrieval_context=RC) → QaEngine._build_prompt()
+```
+
+**尺度与路由（与 develop 一致）**：
+
+- 枚举为 ``QuestionScale.SUMMARY | DETAIL | VERIFICATION``；字符串 ``skeleton`` 仅作兼容别名。
+- ``scale`` 由 ``qa_retrieval`` 在调用 retriever **之前**判定并必填传入；retriever **不**做自动推断。
+- ``QuestionScale.CROSS_PAPER`` 在 HTTP 层 ``verify_question_scale`` 拦截（400），不进入 retriever。
+
+**向量命中与图谱子图**：
+
+- 图谱子图 → ``RC.nodes`` / ``RC.edges``（A 尺度 / 全尺度 Prompt 图段）。
+- 向量 Top-K → ``RC.entities`` / ``RC.relations`` / ``RC.chunks``（B 尺度独立 Prompt 段）。
+- **禁止**将向量命中 merge 进 ``nodes/edges``；格式化职责在 ``qa_v2.format_retrieval_context``。
+
+**降级（Fallback）**：
+
+- **全量降级**：当 ``retrieval_context is None``，或 ``nodes`` 与 ``edges`` 均为空
+  （V1 单测 / 未走 HybridRetriever 的路径）时，``QaEngine`` 惰性调用
+  ``GraphQuery.subgraph_for_question()``，保持 M2 / A-09 向后兼容。
+- **局部降级（半挂空挡）**：当 RC 仅含 ``nodes`` 或仅含 ``edges`` 时（例如分布式检索
+  抖动导致边丢失），复用已有切片，**仅对缺失的一半**触发一次 ``GraphQuery`` 回填，
+  避免 Prompt 关系链空白或重复全量查图。
+- **不可变快照**：``QaEngine.stream()`` 入口对 RC 执行 ``model_copy(deep=True)``
+  （``freeze_retrieval_context``），防止 SSE 并发消费者 ``.clear()`` / 原地改 dict
+  污染 Prompt 拼装。
+- **编排层子图复用**：``build_retrieval_context_with_fallback`` 在调用
+  ``retrieve()`` 前 ``compute_subgraph`` 一次；超时或 ``VectorStoreUnavailableError``
+  降级时将该 subgraph 传入 ``build_graph_only_context``，避免重复 GraphQuery。
+- **离线 Replay**：``RetrievalContextReplayBundle``（``backend/rag/retrieval_context_io.py``）
+  将 RC + 问题 + golden Prompt 固化为 JSON；CI 在阻断 ``GraphQuery`` / ``HybridRetriever``
+  后反序列化 RC 直喂 ``qa_stream``，验证 Prompt 字节级一致，支撑 Prompt Tuning 流水线。
+- **影子 Diff（M2 回归）**：同一问题分别走 V1（``retrieval_context=None`` → GraphQuery）
+  与 V2（RC SSOT），对 Prompt 的 ``### 节点`` / ``### 关系`` 切片做排序 + 去空白后
+  字符级比对（``subgraph_sections_shadow_fingerprint``），``Diff == 0``。
+
 混合策略：
-- `SKELETON`：只用 A 尺度（图谱拓扑子图）。
+- `SUMMARY`：只用 A 尺度（图谱拓扑子图）。
 - `DETAIL`：统一向量召回 Entities + Relations + Chunks，再与 A 尺度子图合并去重。
+- `VERIFICATION`：偏重 B 尺度（实体 / 关系 / 原文 chunk）。
 
 检索流程：
 1. 根据 `query_transform`（如有）转换问题；否则使用原始问题。
@@ -472,77 +602,111 @@ SSE `citation` 事件字段：
 
 触发：两篇 STEM 论文的 `Method` / `Dataset` 高度重合。
 
-输出结构：
+> **契约以 OpenAPI 为准**：[`docs/api/openapi.yaml`](../../api/openapi.yaml) 中 `MethodOverlapPoint`；示例 fixture 见 [`patrol-method-overlap.json`](../../api/fixtures/patrol-method-overlap.json)。
+
+输出结构（`structured_points[]` 元素）：
 
 ```json
 {
   "mode": "method_overlap",
-  "method": "PCA",
-  "paper_a_usage": "用于降维",
-  "paper_b_usage": "用于特征选择",
-  "dataset_a": "Dataset A",
-  "dataset_b": "Dataset B"
+  "overlap_type": "method",
+  "overlap_label": "PCA",
+  "overlap_score": 0.99,
+  "match_type": "semantic",
+  "paper_a_usage": "Applied PCA to MNIST pixel vectors before k-NN classification",
+  "paper_b_usage": "Principal Component Analysis compressed MNIST features to 50 dimensions",
+  "dataset_a": "MNIST",
+  "dataset_b": "MNIST",
+  "evidence_summary": "同义词方法标签在共享 MNIST 数据集上共振。",
+  "node_refs": [
+    { "paper_id": "stem-001", "node_id": "n_method_pca", "label": "PCA" },
+    { "paper_id": "stem-002", "node_id": "n_method_pca_full", "label": "Principal Component Analysis" }
+  ]
 }
 ```
+
+`method` 字段为 `@computed_field` 兼容别名，等价于 `overlap_label`（旧客户端可读，新实现请用 `overlap_label`）。
 
 #### `claim_evolution`
 
 触发：两篇论文 `ResearchQuestion` 或 `Thesis` 相似，但结论不同。
 
-输出结构：
+**部署配置（live / 演示）**：RQ 对齐采用 TD-4 两阶段漏斗——双塔粗筛（`PATROL_CLAIM_RQ_COARSE_THRESHOLD`，默认 0.42）→ Cross-Encoder 精排（`PATROL_RERANK_THRESHOLD`，默认 0.60）。**需 `RERANKER_ENABLED=true` 且配置 `RERANKER_MODEL`**；默认 `.env.example` 中 `RERANKER_ENABLED=false` 会回退严格双塔阈值（中文 0.75 / 英文 0.55），与 CI 金标门禁行为不一致，易导致大量 `INSUFFICIENT_DATA`。启动后见 `GET /api/v1/health` 的 `patrol_note`。
+
+> **契约以 OpenAPI 为准**：`ClaimEvolutionPoint`；示例 fixture 见 [`patrol-claim-evolution.json`](../../api/fixtures/patrol-claim-evolution.json)。
+
+输出结构（`structured_points[]` 元素）：
 
 ```json
 {
   "mode": "claim_evolution",
-  "research_question": "...",
-  "paper_a_claim": "...",
-  "paper_b_claim": "...",
-  "evidence_summary": "..."
+  "research_question": "PCA 是否提升 MNIST 分类准确率？",
+  "paper_a_claim": "PCA 将 MNIST 特征压缩至 50 维后分类准确率提升 3%",
+  "paper_b_claim": "主成分分析在 MNIST 上保留 95% 方差，分类性能与基线相当",
+  "evolution_type": "refined",
+  "problem_fit_score": 82,
+  "evidence_summary": "同一 RQ 下结论从「提升」演进为「与基线相当」。"
 }
 ```
 
-### 5.3 强类型子 Schema
+### 5.3 强类型子 Schema（已实现）
 
-`backend/schemas/patrol.py` 当前 `PatrolInsight.structured_points` 为 `list[dict]`，需改为：
+`backend/schemas/patrol.py` 中 `PatrolInsight.structured_points` 已使用 **discriminated union**（`mode` 字段区分四类 `PatrolPoint`）。前端类型以 `frontend/src/api/generated/schema.d.ts` 的 `PatrolPoint` 联合类型为准。
 
 ```python
 class PatrolPoint(BaseModel):
     mode: Literal["contradiction", "lens_clash", "method_overlap", "claim_evolution"]
 
-class ContradictionPoint(PatrolPoint):
-    mode: Literal["contradiction"]
-    point_a: str
-    point_b: str
-    conflict_type: str
-
-class LensClashPoint(PatrolPoint):
-    mode: Literal["lens_clash"]
-    lens_a: str
-    lens_b: str
-    clash_aspect: str
-
 class MethodOverlapPoint(PatrolPoint):
     mode: Literal["method_overlap"]
-    method: str
+    overlap_type: OverlapType
+    overlap_label: str
+    overlap_score: float | None
+    match_type: Literal["literal", "semantic"] | None
+    node_refs: list[NodeRef]
     paper_a_usage: str
     paper_b_usage: str
+    dataset_a: str | None
+    dataset_b: str | None
+    evidence_summary: str | None
+    # method: computed alias → overlap_label
 
 class ClaimEvolutionPoint(PatrolPoint):
     mode: Literal["claim_evolution"]
     research_question: str
-    paper_a_claim: str
-    paper_b_claim: str
+    paper_a_claim: str | None
+    paper_b_claim: str | None
+    evolution_type: EvolutionType | None  # inherit | contradict | refined
+    problem_fit_score: int | None         # 0-100
+    evidence_summary: str | None
 
 class PatrolInsight(BaseModel):
     ...
-    structured_points: list[
-        Union[ContradictionPoint, LensClashPoint, MethodOverlapPoint, ClaimEvolutionPoint]
-    ] = Field(..., discriminator="mode")
+    structured_points: Sequence[
+        Annotated[
+            ContradictionPoint | LensClashPoint | MethodOverlapPoint | ClaimEvolutionPoint,
+            Field(discriminator="mode"),
+        ]
+    ]
 ```
 
 ### 5.4 Patrol 混合 Context
 
 Patrol 在构造 context 时，除了图谱节点，还应召回两篇论文的关键 chunks（如 Thesis / Method / Dataset 相关段落），提升 LLM 判断的事实依据。
+
+
+### 5.4.1 RAG 降级契约（P9 / F8）
+
+PatrolInsight 对外暴露一等公民降级字段（不以 summary 文本拼接为准）：
+
+| 字段 | 说明 |
+|------|------|
+| is_degraded | RAG context 变薄时为 	rue |
+| degradation_profile.reason_code | INDEX_NOT_READY / QUERY_FAILED / VECTOR_STORE_UNAVAILABLE |
+| degradation_profile.affected_papers | 受影响 paper_id 列表 |
+| meta.patrol_rag_context_degraded | **兼容镜像**（遗留消费方） |
+
+PatrolRAGService.enrich_context 先做 VectorStore.exists 探针：索引缺失则跳过 query_chunks；连通性异常映射为 VECTOR_STORE_UNAVAILABLE。降级结果不入服务端进程 cache；HTTP Cache-Control: private, no-store。前端根据 is_degraded 展示 Warning Banner，并对 INDEX_NOT_READY 退避自愈轮询（10s/30s/60s）。
 
 ---
 
@@ -630,9 +794,44 @@ Judge 输出 JSON：
 ### 6.5 金标维护
 
 新增 `scripts/validate_golden_qa.py`：
-- 遍历金标中的 `node_id` / `edge_id`
-- 校验是否仍存在于 `data/graphs/` 样本中
-- 发现过期引用时抛出 Error，提示重刷
+- 遍历金标中的 `node_id` / `edge_id` / chunk ID
+- 校验是否仍存在于 `data/graphs/` 样本、chunk manifest 与 mock 向量索引中
+- 发现过期引用时 **exit 1**
+
+**图谱 bootstrap（B8）** — 默认 **strict=True** + 内置样本静默 auto-seed：
+
+```text
+validate (strict) → paper 图谱存在? → 强校验 gold IDs
+                  → 缺失且 hss-001/stem-001 → 静默 seed → 重试
+                  → 缺失且未知 paper → exit 2
+                  → --no-strict / --allow-skip（仅本地，CI 强制 strict）
+```
+
+| 标志 | 默认 | 说明 |
+|------|------|------|
+| `--strict` / `--no-strict` | strict | 未知 paper 图谱缺失是否阻断 (exit 2) |
+| `--allow-skip` | off | `--no-strict` 别名；**CI 中无效** |
+| `--no-auto-seed` | off | 禁用 hss-001/stem-001 静默自举 |
+| `--verbose` | off | 打印 auto-seed 日志 |
+
+```bash
+# CI / 门禁（默认 strict + auto-seed）
+uv run python scripts/validate_golden_qa.py --graph-dir ./data/graphs
+
+# 本地：允许跳过尚未 ingest 的 paper
+uv run python scripts/validate_golden_qa.py --no-strict
+```
+
+**Exit codes（CI 分层捕获）**：
+
+| Code | 场景 | 含义 |
+|------|------|------|
+| 0 | 全部通过，或 `--no-strict` 下无损 SKIP | Success |
+| 1 | 图谱已加载，金标 node/edge/chunk ID 缺失/过期 | Data Drift（金标过期） |
+| 2 | 图谱/金标文件缺失且无法 auto-seed | Infrastructure（环境不健壮） |
+
+**退出码优先级（混合失效矩阵）**：全量扫描金标后聚合判定 —
+`Infrastructure (2) > Data Drift (1) > Success (0)`；同时存在 drift 与 infra 时返回 **2**。
 
 ---
 
@@ -681,6 +880,7 @@ QA_VERBOSITY_CEILING=0.15
 | P1-2 | 三类索引构建 | 上传论文 ready 后，`paper_chunks` / `paper_entities` / `paper_relations` 均有该论文数据 |
 | P1-3 | 统一向量查询 | `VectorStore().query_*` 返回 top-k chunks / entities / relations |
 | P1-4 | re-extract 重建 | 调用 `POST /papers/{id}/reextract` 后旧索引全部删除并重建 |
+| P1-5 | P13 watchdog / 孤儿世代 | `make p13-release-gate` 绿；超时/卡住不永久 `indexing`；拒绝过期 `set_active_run_id` |
 
 ### 8.2 Phase 2 验收
 
@@ -722,9 +922,18 @@ QA_VERBOSITY_CEILING=0.15
 tests/rag/
 ├── __init__.py
 ├── test_chunking.py
-├── test_indexing.py           # entity/relation 文本生成
-├── test_vector_store.py       # ChromaDB 三类 collection CRUD
-├── test_hybrid_retriever.py   # 统一召回 + HyDE hook
+├── test_indexing.py                      # entity/relation 文本生成
+├── test_vector_store.py                  # ChromaDB 三类 collection CRUD
+├── test_indexing_run_registry.py         # P13 世代 revoke / may_activate
+├── test_indexing_watchdog.py             # P13 macro + cold-boot（含 release-gate 冷启动用例）
+├── test_orphan_run_race_amplification.py # P13 孤儿线程竞态放大
+├── test_wipe_vector_sweep.py             # Force wipe 读时失明 + Wave2
+├── test_wipe_boundary_friction.py        # 双 worker DELETE 409 + Hybrid 幽灵隔离
+├── test_wipe_lifecycle_matrix.py         # Force wipe 三维生命周期目录
+├── test_watchdog_main_loop_starvation.py # P13 主 loop 饥饿下 sync heal
+├── test_p13_release_gate_matrix.py       # P13 Release Gate 目录完整性
+├── test_p13_ci_gates.py                  # P13 静态审计脚本冒烟
+├── test_hybrid_retriever.py              # 统一召回 + HyDE hook
 ├── test_qa_router.py
 └── test_qa_citation.py
 
@@ -743,6 +952,8 @@ tests/eval/
 uv run pytest tests/rag/ -q
 uv run pytest tests/patrol/ -q
 uv run pytest tests/eval/test_qa_golden_set.py -q
+uv run python scripts/check_rag_io_timeouts.py
+uv run python scripts/check_p13_release_gate.py   # 或 make p13-release-gate
 uv run python scripts/benchmark_qa.py --dry-run
 ```
 

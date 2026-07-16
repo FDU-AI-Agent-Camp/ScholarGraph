@@ -13,7 +13,7 @@ from pathlib import Path
 import httpx
 import pytest
 from backend.config import get_settings
-from backend.graph.qa import QaEvent, _GraphQaEngine, qa_stream
+from backend.graph.qa import _GraphQaEngine, qa_stream
 from backend.graph.store import GraphStore
 from backend.llm.client import LlmClient, reset_llm_client_cache
 from httpx import AsyncClient
@@ -56,6 +56,7 @@ def live_invalid_key_env(monkeypatch: pytest.MonkeyPatch) -> None:
     reset_llm_client_cache()
 
 
+@pytest.mark.live_e10
 def test_e10_live_maas_invalid_key_returns_401() -> None:
     """无效 Key：直连 MaaS 返回 401 / ModelArts.81003."""
     response = httpx.post(
@@ -147,12 +148,9 @@ async def test_e10_qa_timeout_emits_qa_stream_error(
             self.chat = _TimeoutChat()
 
     engine = _GraphQaEngine(store=GraphStore(base_dir=mock_llm_env), llm=_TimeoutLlm())
+    from tests.helpers.qa_stream_mock import qa_stream_from_engine
 
-    async def _timeout_stream(paper_id: str, question: str) -> AsyncIterator[QaEvent]:
-        async for evt in engine.stream(paper_id, question):
-            yield evt
-
-    monkeypatch.setattr("backend.graph.qa.qa_stream", _timeout_stream)
+    monkeypatch.setattr("backend.graph.qa.qa_stream", qa_stream_from_engine(engine))
 
     response = await api_client.post(
         "/api/v1/papers/hss-001/qa/stream",

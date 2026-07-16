@@ -3,16 +3,17 @@
 from __future__ import annotations
 
 from collections.abc import AsyncIterator
-from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
 from backend.graph.qa import _MVP_PREVIEW_PREFIX, _GraphQaEngine
 from backend.graph.store import GraphStore
 from backend.schemas.graph import GraphNode, UnifiedPaperGraph
-from backend.schemas.paper import PaperDetail, PaperStatus
+from backend.schemas.paper import PaperStatus
 from backend.schemas.paradigm import Paradigm
 from backend.services.paper_service import get_paper_service
+
+from tests.helpers.persistence_testkit import register_test_paper
 
 
 class _FakeChunk:
@@ -36,27 +37,6 @@ def _fake_llm(text: str, chunk_size: int = 5) -> object:
     return obj
 
 
-def _make_paper(
-    paper_id: str,
-    status: PaperStatus = PaperStatus.PROCESSING,
-    preview_available: bool = False,
-) -> PaperDetail:
-    service = get_paper_service()
-    now = datetime.now(UTC)
-    paper = PaperDetail(
-        paper_id=paper_id,
-        title="preview qa test",
-        status=status,
-        preview_available=preview_available,
-        created_at=now,
-        updated_at=now,
-    )
-    service._papers[paper_id] = paper
-    if preview_available:
-        service.mark_preview_available(paper_id)
-    return paper
-
-
 @pytest.fixture
 def preview_graph() -> UnifiedPaperGraph:
     return UnifiedPaperGraph(
@@ -77,10 +57,15 @@ def _fresh_service() -> None:
 
 
 class TestQaStreamPreview:
-    async def test_preview_paper_with_flag_allows_qa(self, preview_graph: UnifiedPaperGraph) -> None:
+    async def test_preview_paper_with_flag_allows_qa(
+        self,
+        preview_graph: UnifiedPaperGraph,
+        persistence_env,
+    ) -> None:
         paper_id = "preview-qa-001"
+        await register_test_paper(paper_id, status=PaperStatus.PROCESSING)
         service = get_paper_service()
-        service._papers[paper_id] = _make_paper(paper_id, preview_available=True)
+        service.mark_preview_available(paper_id)
         service.save_preview_graph(paper_id, preview_graph)
 
         llm = _fake_llm("答案")
@@ -94,10 +79,15 @@ class TestQaStreamPreview:
         assert len(messages) >= 1
         assert "".join(m.data["delta"] for m in messages) == "答案"
 
-    async def test_prompt_includes_mvp_prefix_for_preview(self, preview_graph: UnifiedPaperGraph) -> None:
+    async def test_prompt_includes_mvp_prefix_for_preview(
+        self,
+        preview_graph: UnifiedPaperGraph,
+        persistence_env,
+    ) -> None:
         paper_id = "preview-qa-002"
+        await register_test_paper(paper_id, status=PaperStatus.PROCESSING)
         service = get_paper_service()
-        service._papers[paper_id] = _make_paper(paper_id, preview_available=True)
+        service.mark_preview_available(paper_id)
         service.save_preview_graph(paper_id, preview_graph)
 
         captured: list[str] = []
@@ -123,10 +113,10 @@ class TestQaStreamPreview:
         prompt = captured[0]
         assert _MVP_PREVIEW_PREFIX in prompt
 
-    async def test_processing_paper_without_preview_is_rejected(self) -> None:
+    async def test_processing_paper_without_preview_is_rejected(self, persistence_env) -> None:
         paper_id = "preview-qa-003"
+        await register_test_paper(paper_id, status=PaperStatus.PROCESSING)
         service = get_paper_service()
-        service._papers[paper_id] = _make_paper(paper_id, preview_available=False)
 
         engine = _GraphQaEngine(paper_service=service)
         events = [evt async for evt in engine.stream(paper_id, "问题")]
@@ -147,10 +137,11 @@ class TestQaStreamPreview:
         assert errors[0].data["code"] == "GRAPH_NOT_FOUND"
         assert events[-1].event == "done"
 
-    async def test_ready_paper_does_not_inject_mvp_prefix(self, tmp_path: Path) -> None:
+    async def test_ready_paper_does_not_inject_mvp_prefix(self, tmp_path: Path, persistence_env) -> None:
         paper_id = "preview-qa-ready-001"
+        await register_test_paper(paper_id, status=PaperStatus.READY)
         service = get_paper_service()
-        service._papers[paper_id] = _make_paper(paper_id, status=PaperStatus.READY, preview_available=True)
+        service.mark_preview_available(paper_id)
         full_graph = UnifiedPaperGraph(
             paper_id=paper_id,
             paradigm=Paradigm.STEM,

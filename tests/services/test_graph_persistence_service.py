@@ -11,9 +11,11 @@ from backend.services.graph_persistence_service import GraphPersistenceService
 
 def test_save_delegates_to_store(sample_graph: UnifiedPaperGraph) -> None:
     store = MagicMock()
+    store._path.return_value = "/data/graphs/g1.json"
     service = GraphPersistenceService(store=store)
-    service.save(sample_graph)
+    graph_path = service.save(sample_graph)
     store.save.assert_called_once_with(sample_graph)
+    assert graph_path == "/data/graphs/g1.json"
 
 
 def test_save_wraps_store_exception(sample_graph: UnifiedPaperGraph) -> None:

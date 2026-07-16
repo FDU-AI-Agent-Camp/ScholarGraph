@@ -55,6 +55,7 @@ class AgentService:
         *,
         paper_id: str,
         classification: ParadigmClassification,
+        pipeline_generation_id: str | None = None,
     ) -> ExtractResult:
         try:
             return await extract_preview_and_schedule_full(
@@ -62,6 +63,7 @@ class AgentService:
                 paradigm,
                 paper_id=paper_id,
                 classification=classification,
+                pipeline_generation_id=pipeline_generation_id,
             )
         except ServiceError:
             raise

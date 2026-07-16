@@ -1,0 +1,79 @@
+# Git / IDE
+.git
+.github
+.cursor
+.vscode
+.idea
+agent-transcripts
+
+# Python local env & caches
+.venv
+venv
+__pycache__
+**/__pycache__
+*.py[cod]
+.pytest_cache
+.mypy_cache
+.ruff_cache
+.coverage
+.coverage.*
+htmlcov
+pip-audit-report.json
+*.egg-info
+.eggs
+dist
+build
+
+# Tests (not needed at runtime)
+tests
+
+# Frontend local artifacts (built in Docker stage)
+frontend/node_modules
+frontend/dist
+frontend/.vite
+frontend/coverage
+
+# Runtime data (persist via Zeabur Volume at /app/data)
+data/*
+!data/.gitkeep
+uploads/*
+!uploads/.gitkeep
+*.db
+*.sqlite3
+*.db-shm
+*.db-wal
+logs
+*.log
+.cache
+chroma
+.qdrant
+output
+
+# Secrets — inject via Zeabur Variables
+.env
+.env.local
+.env.development
+.env.*.local
+API KEY.txt
+*.pem
+*.key
+*.secret
+secrets
+credentials.json
+
+# Docs noise (keep api fixtures + deploy guide)
+docs/superpowers
+docs/v1
+docs/v2
+*.md
+!README.md
+!docs/deploy/**
+!docs/api/**
+
+# Misc
+Makefile
+docker-compose*.yml
+progress.md
+progress-v2.md
+problems.md
+problems-v2.md

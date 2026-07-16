@@ -7,7 +7,6 @@ from pathlib import Path
 
 import pytest
 from backend.agents.extract_constants import LOW_CONFIDENCE_GRAPH_CODE
-from backend.config import get_settings
 from backend.main import app
 from backend.schemas.graph import GraphEdge, GraphNode, UnifiedPaperGraph
 from backend.schemas.paper import PaperDetail, PaperStatus
@@ -31,11 +30,11 @@ def mock_env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     graph_path.mkdir(parents=True, exist_ok=True)
     monkeypatch.setenv("GRAPH_DATA_DIR", str(graph_path))
     monkeypatch.setenv("LLM_MODE", "mock")
-    get_settings.cache_clear()
-    get_paper_service.cache_clear()
+    from backend.services.paper_service import reset_persistence_singletons
+
+    reset_persistence_singletons()
     yield graph_path
-    get_settings.cache_clear()
-    get_paper_service.cache_clear()
+    reset_persistence_singletons()
 
 
 def _make_graph(paper_id: str, *, supports_with_rationale: int, supports_without_rationale: int) -> UnifiedPaperGraph:
@@ -109,6 +108,9 @@ async def test_api_ready_with_warnings_for_low_quality_graph(
         classification=ParadigmClassification(paradigm=Paradigm.HSS, confidence=0.9, reason="test"),
         graph=graph,
     )
+    from tests.helpers.event_bus_testkit import drain_event_bus
+
+    await drain_event_bus()
 
     status_resp = await api_client.get(f"/api/v1/papers/{paper_id}/status")
     assert status_resp.status_code == 200
@@ -137,6 +139,9 @@ async def test_api_ready_for_high_quality_graph(
         classification=ParadigmClassification(paradigm=Paradigm.HSS, confidence=0.9, reason="test"),
         graph=graph,
     )
+    from tests.helpers.event_bus_testkit import drain_event_bus
+
+    await drain_event_bus()
 
     status_resp = await api_client.get(f"/api/v1/papers/{paper_id}/status")
     assert status_resp.status_code == 200

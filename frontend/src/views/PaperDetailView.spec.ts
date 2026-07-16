@@ -5,7 +5,13 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { PaperDetail, QaStreamCitationData, UnifiedPaperGraph } from '@/api/types'
 import { ApiClientError } from '@/api/client'
 import { DETAIL_BASELINE_COPY } from '@/constants/detailCopy'
-import { EXTRACT_HEURISTIC_FALLBACK_MESSAGE } from '@/utils/extractWarnings'
+import {
+  EXTRACT_HEURISTIC_FALLBACK_MESSAGE,
+  RAG_INDEXING_STUCK_TIMEOUT_CODE,
+  RAG_INDEXING_STUCK_TIMEOUT_MESSAGE,
+  RAG_INDEX_TIMEOUT_MESSAGE,
+} from '@/utils/extractWarnings'
+import { RAG_INDEX_NOT_READY_CODE, RAG_INDEX_NOT_READY_MESSAGE } from '@/utils/qaStreamWarnings'
 import { CLASSIFIER_HEURISTIC_FALLBACK_MESSAGE } from '@/utils/classifyWarnings'
 import { RouteName } from '@/router/meta'
 import { loadDesignTokenMap, readFrontendSource } from '@/test/helpers/designTokens'
@@ -94,8 +100,8 @@ const globalStubs = {
       '<button class="citation-tag tag-citation" :class="{ \'tag-citation--active\': active }" @click="$emit(\'click\')">{{ label }} ({{ nodeId }})</button>',
   },
   'el-alert': {
-    props: ['title', 'type'],
-    template: '<div class="el-alert-stub" :data-type="type" :data-title="title" />',
+    props: ['title', 'type', 'description'],
+    template: '<div class="el-alert-stub" :data-type="type" :data-title="title" :data-description="description" />',
   },
 }
 
@@ -130,6 +136,7 @@ describe('PaperDetailView', () => {
       expect(wrapper.find('.detail-graph').exists()).toBe(true)
       expect(wrapper.find('.detail-header__back').text()).toContain(DETAIL_BASELINE_COPY.backLink)
       expect(wrapper.find('.detail-header__title').text()).toBe('测试论文')
+      expect(wrapper.find('[data-testid="detail-delete-button"]').text()).toContain('删除')
       expect(wrapper.find('.paper-metadata-stub').exists()).toBe(true)
     })
 
@@ -376,6 +383,49 @@ describe('PaperDetailView', () => {
       expect(wrapper.find('.detail-qa__answer-text').classes()).not.toContain('text-mono')
     })
 
+    it('QA-D1 — shows bubble warning for RAG_INDEX_NOT_READY without blocking answer stream', async () => {
+      mockStreamPaperQa.mockImplementation(
+        async (
+          _paperId: string,
+          _question: string,
+          handlers: {
+            onWarning?: (data: { code?: string; message: string }) => void
+            onMessage?: (data: { delta: string }) => void
+            onDone?: (data: { answer_id: string; answer?: string }) => void
+          },
+        ) => {
+          handlers.onWarning?.({
+            code: RAG_INDEX_NOT_READY_CODE,
+            message: 'server message should be remapped',
+          })
+          handlers.onMessage?.({ delta: '图谱子图结论。' })
+          handlers.onDone?.({ answer_id: 'ans-degraded', answer: '图谱子图结论。' })
+        },
+      )
+
+      const wrapper = mount(PaperDetailView, {
+        props: { paperId: 'hss-001' },
+        global: { stubs: globalStubs },
+      })
+      await flushPromises()
+      await wrapper.find('.qa-textarea').setValue('方法细节？')
+      await wrapper
+        .findAll('button')
+        .find((button) => button.text() === '提问')
+        ?.trigger('click')
+      await flushPromises()
+
+      const warning = wrapper.find('[data-testid="qa-stream-warning"]')
+      expect(warning.exists()).toBe(true)
+      const title = warning.attributes('data-title') ?? warning.text()
+      expect(title).toContain('纯图谱子图')
+      expect(title).not.toContain('_')
+      expect(title).toBe(RAG_INDEX_NOT_READY_MESSAGE)
+      expect(wrapper.find('.detail-qa__answer-text').text()).toContain('图谱子图结论')
+
+      wrapper.unmount()
+    })
+
     it('citation tags expose label + (node_id) mono mix for SSE path', async () => {
       expect(citationTagMixedLayout(readFrontendSource('components/ui/TagCitation.vue'))).toBe(true)
     })
@@ -392,8 +442,8 @@ describe('PaperDetailView', () => {
             onDone?: (data: { answer_id: string }) => void
           },
         ) => {
-          handlers.onCitation?.({ paper_id: 'hss-001', node_id: 'n1', label: '核心论点' })
-          handlers.onCitation?.({ paper_id: 'hss-001', node_id: 'n2', label: '分论点' })
+          handlers.onCitation?.({ type: 'node', paper_id: 'hss-001', node_id: 'n1', label: '核心论点' })
+          handlers.onCitation?.({ type: 'node', paper_id: 'hss-001', node_id: 'n2', label: '分论点' })
           handlers.onDone?.({ answer_id: 'ans-1' })
         },
       )
@@ -434,9 +484,8 @@ describe('PaperDetailView', () => {
     })
 
     it('syncs Tag and graph highlight in the same tick on citation click (§1.4.3 checklist)', async () => {
-      const detailSrc = readFrontendSource('views/PaperDetailView.vue')
-      const script = detailSrc.match(/<script[^>]*>([\s\S]*?)<\/script>/)?.[1] ?? ''
-      expect(usesSynchronousHighlightHandlers(script)).toBe(true)
+      const qaComposableSrc = readFrontendSource('composables/usePaperDetailQa.ts')
+      expect(usesSynchronousHighlightHandlers(qaComposableSrc)).toBe(true)
 
       const wrapper = await mountWithTwoCitations()
       const tags = wrapper.findAll('.citation-tag')
@@ -757,7 +806,7 @@ describe('PaperDetailView', () => {
           },
         ) => {
           handlers.onMessage?.({ delta: '片段' })
-          handlers.onCitation?.({ paper_id: 'hss-001', node_id: 'n1', label: '核心论点' })
+          handlers.onCitation?.({ type: 'node', paper_id: 'hss-001', node_id: 'n1', label: '核心论点' })
           handlers.onDone?.({ answer_id: 'ans-1', answer: '完整答案' })
         },
       )
@@ -791,7 +840,7 @@ describe('PaperDetailView', () => {
             onDone?: (data: { answer_id: string }) => void
           },
         ) => {
-          handlers.onCitation?.({ paper_id: 'hss-001', node_id: 'n1', label: '核心论点' })
+          handlers.onCitation?.({ type: 'node', paper_id: 'hss-001', node_id: 'n1', label: '核心论点' })
           handlers.onDone?.({ answer_id: 'ans-1' })
         },
       )
@@ -844,6 +893,131 @@ describe('PaperDetailView', () => {
       await flushPromises()
 
       expect(wrapper.find('.detail-qa__answer-text').text()).toBe('错误: 图谱未就绪')
+    })
+  })
+
+  describe('G1 ready_with_warnings capability gates', () => {
+    it('test_detail_view_does_not_fall_to_preview — unlocks QA/graph without MVP mask', async () => {
+      paperStoreState.currentPaper = {
+        paper_id: 'rww-001',
+        title: 'RWW Paper',
+        status: 'ready_with_warnings',
+        paradigm: 'STEM',
+        preview_available: true,
+        extract_warnings: ['rag_index_timeout'],
+        created_at: '2026-05-19T10:00:00Z',
+      }
+      paperStoreState.currentGraph = {
+        paper_id: 'rww-001',
+        paradigm: 'STEM',
+        nodes: [{ id: 'n1', label: 'Method', type: 'Method', data: {} }],
+        edges: [],
+      }
+
+      const wrapper = mount(PaperDetailView, {
+        props: { paperId: 'rww-001' },
+        global: {
+          stubs: {
+            ...globalStubs,
+            BadgeStatus: false,
+          },
+        },
+      })
+      await flushPromises()
+
+      expect((wrapper.find('.qa-textarea').element as HTMLTextAreaElement).disabled).toBe(false)
+      const askButton = wrapper.findAll('button').find((button) => button.text() === '提问')
+      expect((askButton?.element as HTMLButtonElement).disabled).toBe(false)
+      expect(wrapper.find('.paper-graph-stub').exists()).toBe(true)
+
+      expect(wrapper.find('.detail-qa__alert--mvp').exists()).toBe(false)
+      expect(wrapper.find('.detail-graph__mvp-alert').exists()).toBe(false)
+      expect(wrapper.text()).not.toContain(DETAIL_BASELINE_COPY.mvpPreviewAlert.slice(0, 40))
+      expect(wrapper.find('.badge-status--ready_with_warnings').exists()).toBe(true)
+      expect(wrapper.find('.badge-status--ready_with_warnings').text()).toContain('已就绪（有警告）')
+      const extractAlert = wrapper.find('.detail-graph__extract-warning')
+      expect(extractAlert.exists()).toBe(true)
+      expect(extractAlert.attributes('data-title')).toBe(RAG_INDEX_TIMEOUT_MESSAGE)
+
+      const notReadyAlert = wrapper
+        .findAll('.detail-qa__alert')
+        .find((node) => node.attributes('data-title') === DETAIL_BASELINE_COPY.notReadyAlert)
+      expect(notReadyAlert).toBeUndefined()
+    })
+
+    it('UX-W1 — maps rag_indexing_stuck_timeout without leaking machine-code underscores', async () => {
+      paperStoreState.currentPaper = {
+        paper_id: 'rww-stuck-001',
+        title: 'RWW Stuck Watchdog',
+        status: 'ready_with_warnings',
+        paradigm: 'STEM',
+        preview_available: true,
+        extract_warnings: [RAG_INDEXING_STUCK_TIMEOUT_CODE],
+        created_at: '2026-05-19T10:00:00Z',
+      }
+      paperStoreState.currentGraph = {
+        paper_id: 'rww-stuck-001',
+        paradigm: 'STEM',
+        nodes: [{ id: 'n1', label: 'Method', type: 'Method', data: {} }],
+        edges: [],
+      }
+
+      const wrapper = mount(PaperDetailView, {
+        props: { paperId: 'rww-stuck-001' },
+        global: {
+          stubs: {
+            ...globalStubs,
+            BadgeStatus: false,
+          },
+        },
+      })
+      await flushPromises()
+
+      const extractAlert = wrapper.find('.detail-graph__extract-warning')
+      expect(extractAlert.exists()).toBe(true)
+      const title = extractAlert.attributes('data-title') ?? ''
+      expect(title).toBe(RAG_INDEXING_STUCK_TIMEOUT_MESSAGE)
+      expect(title).toContain('自动终止卡死')
+      expect(title).not.toContain('_')
+      expect(title).not.toBe(RAG_INDEXING_STUCK_TIMEOUT_CODE)
+      expect(extractAlert.attributes('data-description') ?? '').toBe('')
+
+      wrapper.unmount()
+    })
+
+    it('test_polling_stop_and_reload_on_rww — rehydrates detail on terminalReached', async () => {
+      paperStoreState.currentPaper = {
+        paper_id: 'rww-002',
+        title: 'Indexing then RWW',
+        status: 'indexing',
+        paradigm: 'STEM',
+        preview_available: false,
+        created_at: '2026-05-19T10:00:00Z',
+      }
+      mockFetchDetail.mockClear()
+
+      const wrapper = mount(PaperDetailView, {
+        props: { paperId: 'rww-002' },
+        global: {
+          stubs: {
+            ...globalStubs,
+            PaperStatusPanel: {
+              name: 'PaperStatusPanel',
+              emits: ['terminalReached'],
+              template:
+                '<button type="button" class="emit-terminal" @click="$emit(\'terminalReached\', \'ready_with_warnings\')">done</button>',
+            },
+          },
+        },
+      })
+      await flushPromises()
+      const callsAfterMount = mockFetchDetail.mock.calls.length
+
+      await wrapper.find('.emit-terminal').trigger('click')
+      await flushPromises()
+
+      expect(mockFetchDetail.mock.calls.length).toBeGreaterThan(callsAfterMount)
+      expect(mockFetchDetail).toHaveBeenCalledWith('rww-002')
     })
   })
 

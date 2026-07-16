@@ -43,6 +43,14 @@ defineProps<{
   border-left: 4px solid var(--color-error);
 }
 
+.insight-card--method_overlap {
+  border-left: 4px solid var(--color-info);
+}
+
+.insight-card--claim_evolution {
+  border-left: 4px solid var(--color-success);
+}
+
 .insight-card__header {
   display: flex;
   flex-wrap: wrap;

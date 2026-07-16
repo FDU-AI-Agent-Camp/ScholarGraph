@@ -361,16 +361,47 @@ export function buildHighlightStateMap(
   return states
 }
 
+export function citationDisplayId(citation: QaStreamCitationData): string {
+  switch (citation.type) {
+    case 'node':
+      return citation.node_id
+    case 'edge':
+      return citation.edge_id
+    case 'chunk':
+      return citation.chunk_id
+    case 'page':
+      return String(citation.page)
+    default: {
+      const _exhaustive: never = citation
+      return _exhaustive
+    }
+  }
+}
+
 export function appendUniqueCitation(
   citations: QaStreamCitationData[],
   incoming: QaStreamCitationData,
 ): QaStreamCitationData[] {
-  if (citations.some((item) => item.node_id === incoming.node_id && item.paper_id === incoming.paper_id)) {
+  const incomingKey = citationKey(incoming)
+  if (citations.some((item) => citationKey(item) === incomingKey)) {
     return citations
   }
   return [...citations, incoming]
 }
 
 export function citationKey(citation: QaStreamCitationData): string {
-  return `${citation.paper_id}:${citation.node_id}`
+  switch (citation.type) {
+    case 'node':
+      return `${citation.paper_id}:node:${citation.node_id}`
+    case 'edge':
+      return `${citation.paper_id}:edge:${citation.edge_id}`
+    case 'chunk':
+      return `${citation.paper_id}:chunk:${citation.chunk_id}`
+    case 'page':
+      return `${citation.paper_id}:page:${citation.page}`
+    default: {
+      const _exhaustive: never = citation
+      return _exhaustive
+    }
+  }
 }

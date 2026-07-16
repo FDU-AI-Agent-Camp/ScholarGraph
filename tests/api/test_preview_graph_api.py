@@ -3,11 +3,10 @@
 from __future__ import annotations
 
 import json
-from collections.abc import AsyncIterator
 from datetime import UTC, datetime
 
 import pytest
-from backend.graph.qa import QaEvent, _GraphQaEngine
+from backend.graph.qa import _GraphQaEngine
 from backend.schemas.graph import GraphNode, UnifiedPaperGraph
 from backend.schemas.paper import PaperDetail, PaperStatus, PaperStatusData, PipelineStage
 from backend.schemas.paradigm import Paradigm
@@ -155,12 +154,9 @@ class TestPreviewQaStreamApi:
         service.mark_preview_available(paper_id)
 
         engine = _GraphQaEngine(paper_service=service, llm=_fake_llm("宏观答案"))
+        from tests.helpers.qa_stream_mock import qa_stream_from_engine
 
-        async def _fake_qa_stream(_paper_id: str, question: str) -> AsyncIterator[QaEvent]:
-            async for evt in engine.stream(_paper_id, question):
-                yield evt
-
-        monkeypatch.setattr("backend.graph.qa.qa_stream", _fake_qa_stream)
+        monkeypatch.setattr("backend.graph.qa.qa_stream", qa_stream_from_engine(engine))
 
         response = await api_client.post(
             f"/api/v1/papers/{paper_id}/qa/stream",
@@ -192,12 +188,9 @@ class TestPreviewQaStreamApi:
         service._status[paper_id] = _make_status(paper_id)
 
         engine = _GraphQaEngine(paper_service=service)
+        from tests.helpers.qa_stream_mock import qa_stream_from_engine
 
-        async def _fake_qa_stream(_paper_id: str, question: str) -> AsyncIterator[QaEvent]:
-            async for evt in engine.stream(_paper_id, question):
-                yield evt
-
-        monkeypatch.setattr("backend.graph.qa.qa_stream", _fake_qa_stream)
+        monkeypatch.setattr("backend.graph.qa.qa_stream", qa_stream_from_engine(engine))
 
         response = await api_client.post(
             f"/api/v1/papers/{paper_id}/qa/stream",

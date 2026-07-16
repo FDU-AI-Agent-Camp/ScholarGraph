@@ -342,15 +342,45 @@ V1 同步接口，建议超时 60s。
 
 ---
 
+## 10b. `DELETE /api/v1/papers/{paper_id}`
+
+**用途**：物理级联删除一篇论文及其全部 RAG 产物（SQL、图谱 JSON、Head、旁路 sidecar、Chroma 向量、上传 PDF）。
+
+**级联顺序**（不可颠倒）：
+
+1. 撤销 in-process asyncio 任务（`force` 或 best-effort）
+2. `VectorStore.delete_by_paper`（硬失败策略，见下）
+3. `GRAPH_DATA_DIR` 零残留：`{paper_id}.json` / `{paper_id}.*` / `{paper_id}_*`（含 Graph / Head / 未来 skeleton·chunk-cache）
+4. 上传 PDF
+5. `papers` 行（`pipeline_runs` CASCADE）
+
+**向量库（与 reextract 非对称）**：
+
+- Chroma **404 / not found**：视为成功，继续删 SQL（避免「无索引就永远删不掉」）。
+- Chroma **503 / timeout / 不可达**：返回 **503**（`VECTOR_STORE_UNAVAILABLE`），**不删 SQL**，防止幽灵向量失去宿主 ID。
+- `reextract` 对 Chroma 仍为 best-effort（warn 后继续）；`DELETE` 是终点站，必须硬失败阻断。
+
+**约束**：
+
+- 找不到论文返回 404。
+- `status=processing` 或 `indexing` **默认** 409（`PAPER_ALREADY_PROCESSING`）。
+- 逃生舱：`?force=true` 时先 cancel 再级联删除。
+- 成功返回 **204 No Content**（无 body；清理摘要仅写结构化 INFO 日志）。
+- V2 单机无 ACL；Service 层预留 `auth_context` 多租户桩（Phase 3）。
+
+---
+
 ## 11. `POST /api/v1/papers/{paper_id}/reextract`
 
-**用途**：当论文出现 `extract_heuristic_fallback` / `extract_llm_timeout` 等降级，或用户希望重新抽取时，强制清空旧图谱、精炼头、预览与 warnings，从已保存的 PDF 重新调度整条流水线。
+**用途**：当论文出现 `extract_heuristic_fallback` / `extract_llm_timeout` 等降级，或用户希望重新抽取时，强制清空旧图谱、精炼头、预览、Chroma 索引与 warnings，从已保存的 PDF 重新调度整条流水线。
 
 **约束**：
 
 - 仅对已有 PDF 的论文有效；找不到论文返回 404。
-- 若论文当前 `status=processing`，返回 409，避免并发冲突。
-- 成功返回最新的 `PaperStatusData`（`status=pending` 或 `processing`，取决于调度时机）。
+- 若论文当前 `status=processing` 或 `indexing`，**默认**返回 409（`PAPER_ALREADY_PROCESSING`），避免算力占用冲突。
+- 逃生舱：查询参数 `force=true` 时先撤销 in-process asyncio 任务（pipeline / head-refine / extract / indexing run），再清索引并重置为 `pending` 重入队。无 Celery。
+- 找不到已存 PDF 返回 422（`PDF_NOT_FOUND`）。
+- 成功返回最新的 `PaperStatusData`（`status=pending`，随后由调度进入 `processing`）。
 
 **200 示例**：
 
@@ -360,7 +390,7 @@ V1 同步接口，建议超时 60s。
     "paper_id": "hss-001",
     "status": "pending",
     "percent": 0,
-    "message": "已重新加入抽取队列",
+    "message": "已强制重新抽取，等待流水线启动…",
     "updated_at": "2026-05-19T11:05:00Z"
   },
   "meta": { "request_id": "…" }

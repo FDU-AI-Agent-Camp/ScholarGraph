@@ -1,5 +1,6 @@
 """LangGraph node handlers — orchestration only; all domain work in services."""
 
+import logging
 from pathlib import Path
 
 from backend.graph.state import STAGE_PERCENT, WorkflowState
@@ -13,6 +14,8 @@ from backend.services.paper_pipeline_scheduler import ensure_head_refine_schedul
 from backend.services.paper_service import get_paper_service
 from backend.services.pipeline_completion_service import get_pipeline_completion_service
 from backend.services.pipeline_status_service import get_pipeline_status_service
+
+logger = logging.getLogger(__name__)
 
 
 def _mark_progress(
@@ -73,6 +76,7 @@ async def ingest_node(state: WorkflowState) -> WorkflowState:
         message="PDF 解析完成",
         full_text=result["full_text"],
         classifier_input=result["classifier_input"],
+        page_break_offsets=result.get("page_break_offsets", []),
     )
 
 
@@ -137,6 +141,7 @@ async def extract_node(state: WorkflowState) -> WorkflowState:
                 paradigm,
                 paper_id=paper_id,
                 classification=classification,
+                pipeline_generation_id=state.get("pipeline_generation_id"),
             )
         except ServiceError as exc:
             return _failure_patch(exc, stage=PipelineStage.EXTRACTING)
@@ -175,20 +180,24 @@ async def extract_node(state: WorkflowState) -> WorkflowState:
 async def store_node(state: WorkflowState) -> WorkflowState:
     _mark_progress(state, stage=PipelineStage.STORING, message="正在写入图谱存储")
     try:
-        get_pipeline_completion_service().finalize(
+        _ = get_pipeline_completion_service().finalize(
             state["paper_id"],
             graph_data=state["graph"],
             classification_data=state["classification"],
             extract_warnings=state.get("extract_warnings"),
+            full_text=state["full_text"],
+            page_break_offsets=state.get("page_break_offsets"),
+            pipeline_generation_id=state.get("pipeline_generation_id"),
         )
     except ServiceError as exc:
         return _failure_patch(exc, stage=PipelineStage.STORING)
 
+    # Graph persist done; VectorStore indexing is async (P10). Poll DB until READY.
     return WorkflowState(
-        status=PaperStatus.READY,
-        stage=PipelineStage.READY,
-        percent=STAGE_PERCENT[PipelineStage.READY],
-        message="建图完成",
+        status=PaperStatus.INDEXING,
+        stage=PipelineStage.INDEXING,
+        percent=STAGE_PERCENT[PipelineStage.INDEXING],
+        message="图谱已就绪，正在构建向量索引…",
         failed=False,
     )
 

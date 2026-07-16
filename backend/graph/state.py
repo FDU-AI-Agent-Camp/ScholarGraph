@@ -27,6 +27,7 @@ STAGE_PERCENT: dict[PipelineStage, int] = {
     PipelineStage.CLASSIFYING: 50,
     PipelineStage.EXTRACTING: 80,
     PipelineStage.STORING: 95,
+    PipelineStage.INDEXING: 98,
     PipelineStage.READY: 100,
     PipelineStage.FAILED: 0,
 }
@@ -49,6 +50,7 @@ class WorkflowState(TypedDict, total=False):
 
     full_text: str
     classifier_input: str
+    page_break_offsets: list[int]
 
     classification: dict[str, Any]
     paradigm: str
@@ -62,11 +64,19 @@ class WorkflowState(TypedDict, total=False):
     # Slice 2: long papers schedule full extraction in the background.
     background_extraction_scheduled: bool
 
+    # Extract-generation token for terminal write guard (see pipeline_generation_guard).
+    pipeline_generation_id: str
+
     failed: bool
 
 
-def initial_workflow_state(*, paper_id: str, pdf_path: str) -> WorkflowState:
-    return WorkflowState(
+def initial_workflow_state(
+    *,
+    paper_id: str,
+    pdf_path: str,
+    pipeline_generation_id: str | None = None,
+) -> WorkflowState:
+    state = WorkflowState(
         paper_id=paper_id,
         pdf_path=pdf_path,
         status=PaperStatus.PROCESSING,
@@ -75,3 +85,6 @@ def initial_workflow_state(*, paper_id: str, pdf_path: str) -> WorkflowState:
         message="流水线已启动，正在解析 PDF",
         failed=False,
     )
+    if pipeline_generation_id is not None:
+        state["pipeline_generation_id"] = pipeline_generation_id
+    return state

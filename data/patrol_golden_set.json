@@ -1,0 +1,128 @@
+{
+  "schema_version": 1,
+  "dataset_id": "patrol-claim-evolution-rq-golden",
+  "description": "Claim-evolution ResearchQuestion alignment golden set: 10 pairs (STEM×5, HSS×5) with positive/negative labels for two-stage bi-encoder + cross-encoder gate regression.",
+  "owner": "组员 D / patrol QA",
+  "pairs": [
+    {
+      "id": "stem-pos-01",
+      "paradigm": "STEM",
+      "expectation": "positive",
+      "label_a": "How does deep learning improve image recognition accuracy?",
+      "label_b": "Evaluating convolutional neural networks for enhanced computer vision performance.",
+      "rationale": "同义改写：深度学习图像识别 ↔ CNN 计算机视觉性能，应放行。",
+      "mock": {
+        "coarse_similarity": 0.78,
+        "rerank_score": 0.84
+      }
+    },
+    {
+      "id": "stem-pos-02",
+      "paradigm": "STEM",
+      "expectation": "positive",
+      "label_a": "PCA 是否提升分类准确率？",
+      "label_b": "分类准确率是否可以通过 PCA 提升？",
+      "rationale": "中文同领域 paraphrase，粗筛与精排均应通过。",
+      "mock": {
+        "coarse_similarity": 0.82,
+        "rerank_score": 0.79
+      }
+    },
+    {
+      "id": "stem-pos-03",
+      "paradigm": "STEM",
+      "expectation": "positive",
+      "label_a": "Can transformer models improve machine translation quality?",
+      "label_b": "Evaluating attention-based neural networks for cross-lingual text generation.",
+      "rationale": "Transformer 机器翻译 ↔ 跨语言文本生成，语义等价演进命题。",
+      "mock": {
+        "coarse_similarity": 0.71,
+        "rerank_score": 0.68
+      }
+    },
+    {
+      "id": "stem-neg-01",
+      "paradigm": "STEM",
+      "expectation": "negative",
+      "label_a": "How does artificial intelligence transform scientific research?",
+      "label_b": "Does BERT-based NER improve biomedical entity extraction from PubMed abstracts?",
+      "rationale": "宏微观错位：AI 变革科研（宏观）vs 生物医学 NER 微观任务，必须拦截。",
+      "mock": {
+        "coarse_similarity": 0.58,
+        "rerank_score": 0.41
+      }
+    },
+    {
+      "id": "stem-neg-02",
+      "paradigm": "STEM",
+      "expectation": "negative",
+      "label_a": "Does random forest improve credit risk prediction?",
+      "label_b": "Does logistic regression improve customer churn prediction?",
+      "rationale": "同领域不同命题：信用风险 vs 客户流失，不应视为等价研究问题。",
+      "mock": {
+        "coarse_similarity": 0.66,
+        "rerank_score": 0.52
+      }
+    },
+    {
+      "id": "hss-pos-01",
+      "paradigm": "HSS",
+      "expectation": "positive",
+      "label_a": "社交媒体使用是否促进青年政治参与？",
+      "label_b": "社交媒体对青年政治参与有何影响？",
+      "rationale": "中文 HSS 同主题 paraphrase，应放行进入观点演进。",
+      "mock": {
+        "coarse_similarity": 0.88,
+        "rerank_score": 0.82
+      }
+    },
+    {
+      "id": "hss-pos-02",
+      "paradigm": "HSS",
+      "expectation": "positive",
+      "label_a": "How does deliberative democracy theory inform civic engagement?",
+      "label_b": "What role does public deliberation play in democratic participation?",
+      "rationale": "审议民主 ↔ 公共审议与政治参与，英文同构问题。",
+      "mock": {
+        "coarse_similarity": 0.74,
+        "rerank_score": 0.71
+      }
+    },
+    {
+      "id": "hss-neg-01",
+      "paradigm": "HSS",
+      "expectation": "negative",
+      "label_a": "The impact of social media on political participation.",
+      "label_b": "Does Weibo usage increase voter turnout in local elections?",
+      "rationale": "宏微观错位：社交媒体与政治参与（宏观）vs 微博投票率微观实证，必须拦截。",
+      "mock": {
+        "coarse_similarity": 0.78,
+        "rerank_score": 0.35
+      }
+    },
+    {
+      "id": "hss-neg-02",
+      "paradigm": "HSS",
+      "expectation": "negative",
+      "label_a": "Globalization and national cultural identity.",
+      "label_b": "Does TikTok usage affect teenagers' aesthetic preferences in Shanghai?",
+      "rationale": "全球化文化认同（宏观）vs 上海青少年 TikTok 审美偏好（微观），必须拦截。",
+      "mock": {
+        "coarse_similarity": 0.49,
+        "rerank_score": 0.38
+      }
+    },
+    {
+      "id": "hss-neg-03",
+      "paradigm": "HSS",
+      "expectation": "negative",
+      "label_a": "数字治理如何重塑国家治理能力？",
+      "label_b": "某市政务 App 下载量是否提升行政审批效率？",
+      "rationale": "国家数字治理（宏观）vs 单一城市政务 App 效率（微观案例），必须拦截。",
+      "mock": {
+        "coarse_similarity": 0.55,
+        "rerank_score": 0.47
+      }
+    }
+  ]
+}

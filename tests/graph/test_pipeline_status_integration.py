@@ -26,8 +26,21 @@ def record_status_writes() -> list[PaperStatusData]:
         stage: PipelineStage | None,
         percent: int,
         message: str,
+        error_code: str | None = None,
+        failed_during: PipelineStage | None = None,
+        append_extract_warnings: list[str] | None = None,
     ) -> PaperStatusData:
-        snapshot = original_apply(self, paper_id, status=status, stage=stage, percent=percent, message=message)
+        snapshot = original_apply(
+            self,
+            paper_id,
+            status=status,
+            stage=stage,
+            percent=percent,
+            message=message,
+            error_code=error_code,
+            failed_during=failed_during,
+            append_extract_warnings=append_extract_warnings,
+        )
         writes.append(snapshot)
         return snapshot
 

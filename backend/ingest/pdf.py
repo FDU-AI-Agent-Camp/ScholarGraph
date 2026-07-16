@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import asyncio
 from pathlib import Path
-from typing import TypedDict
+from typing import NotRequired, TypedDict
 
 import fitz
 
@@ -18,6 +18,7 @@ class IngestResult(TypedDict):
     paper_id: str
     full_text: str
     classifier_input: str
+    page_break_offsets: NotRequired[list[int]]
 
 
 def resolve_paper_id(file_path: Path, paper_id: str | None) -> str:
@@ -34,6 +35,27 @@ def extract_pdf_text(file_path: Path, *, max_pages: int | None = None) -> str:
     Args:
         file_path: Path to an existing PDF file.
         max_pages: When set, only read the first N pages (for classifier head extraction).
+
+    Raises:
+        FileNotFoundError: PDF path does not exist.
+        ValueError: PDF has no extractable text.
+    """
+    return extract_pdf_text_with_page_breaks(file_path, max_pages=max_pages)[0]
+
+
+def extract_pdf_text_with_page_breaks(
+    file_path: Path,
+    *,
+    max_pages: int | None = None,
+) -> tuple[str, list[int]]:
+    """
+    Extract plain text from a PDF and record normalized page-boundary offsets.
+
+    Returns:
+        A tuple of (normalized full text, page-break offsets). Each offset is the
+        character position immediately after the end of the corresponding page in
+        the normalized text. Offsets are 1-based page indices: page N occupies
+        the half-open interval [offset_{N-1}, offset_N) where offset_0 is 0.
 
     Raises:
         FileNotFoundError: PDF path does not exist.
@@ -56,11 +78,24 @@ def extract_pdf_text(file_path: Path, *, max_pages: int | None = None) -> str:
             raw_text = document.load_page(page_index).get_text()
             page_texts.append(raw_text if isinstance(raw_text, str) else str(raw_text))
 
-    combined = normalize_whitespace("\n\n".join(page_texts))
+    normalized_page_texts = [normalize_whitespace(text) for text in page_texts]
+    combined = normalize_whitespace("\n\n".join(normalized_page_texts))
     if not combined:
         msg = f"PDF 未提取到文本: {resolved}"
         raise ValueError(msg)
-    return combined
+
+    page_break_offsets: list[int] = []
+    cumulative = 0
+    for page_text in normalized_page_texts:
+        # normalize_whitespace joins pages with a blank line when we combine them,
+        # so each boundary is offset by the separator length (2 newlines = 2 chars)
+        # except for the first page.
+        if page_break_offsets:
+            cumulative += 2
+        cumulative += len(page_text)
+        page_break_offsets.append(cumulative)
+
+    return combined, page_break_offsets
 
 
 async def ingest_pdf(file_path: Path, paper_id: str | None = None) -> IngestResult:
@@ -68,7 +103,7 @@ async def ingest_pdf(file_path: Path, paper_id: str | None = None) -> IngestResu
     resolved = file_path.resolve()
     resolved_id = resolve_paper_id(resolved, paper_id)
 
-    full_text = await asyncio.to_thread(extract_pdf_text, resolved)
+    full_text, page_break_offsets = await asyncio.to_thread(extract_pdf_text_with_page_breaks, resolved)
     head_text = await asyncio.to_thread(
         extract_pdf_text,
         resolved,
@@ -82,4 +117,5 @@ async def ingest_pdf(file_path: Path, paper_id: str | None = None) -> IngestResu
         paper_id=resolved_id,
         full_text=full_text,
         classifier_input=classifier_input,
+        page_break_offsets=page_break_offsets,
     )

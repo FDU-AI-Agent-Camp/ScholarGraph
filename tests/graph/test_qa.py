@@ -15,6 +15,8 @@ from backend.graph.store import GraphStore
 from backend.schemas.graph import GraphEdge, GraphNode, UnifiedPaperGraph
 from backend.schemas.paradigm import Paradigm
 
+from tests.helpers.persistence_testkit import seed_qa_graph_with_db
+
 # ---------------------------------------------------------------------------
 # fake LLM harness — real async generators, not mocks
 # ---------------------------------------------------------------------------
@@ -58,11 +60,6 @@ def _bad_llm() -> object:
     return obj
 
 
-# ---------------------------------------------------------------------------
-# fixtures
-# ---------------------------------------------------------------------------
-
-
 @pytest.fixture
 def hss_graph() -> UnifiedPaperGraph:
     return UnifiedPaperGraph(
@@ -79,11 +76,9 @@ def hss_graph() -> UnifiedPaperGraph:
 
 
 @pytest.fixture
-def store_with_graph(tmp_path: Path, hss_graph: UnifiedPaperGraph) -> GraphStore:
-    """GraphStore that already contains *hss_graph*."""
-    s = GraphStore(base_dir=tmp_path)
-    s.save(hss_graph)
-    return s
+def store_with_graph(tmp_path: Path, hss_graph: UnifiedPaperGraph, monkeypatch: pytest.MonkeyPatch) -> GraphStore:
+    """GraphStore that already contains *hss_graph* and a matching READY paper row."""
+    return seed_qa_graph_with_db(tmp_path, monkeypatch, hss_graph)
 
 
 @pytest.fixture
@@ -144,6 +139,168 @@ class TestQaStreamEvents:
 
         events = [evt async for evt in engine.stream("hss-001", "question")]
         assert events[-1].event == "done"
+
+
+# ---------------------------------------------------------------------------
+# Markdown artifact sanitization
+# ---------------------------------------------------------------------------
+
+
+class TestQaStreamMarkdownSanitization:
+    async def test_strips_empty_backticks_from_message(self, store_with_graph: GraphStore) -> None:
+        llm = _fake_llm("问题``。")
+        engine = _GraphQaEngine(store=store_with_graph, llm=llm)
+
+        events = [evt async for evt in engine.stream("hss-001", "问题？")]
+        messages = "".join(evt.data["delta"] for evt in events if evt.event == "message")
+        assert "`" not in messages
+        assert messages == "问题。"
+
+    async def test_strips_inline_code_span(self, store_with_graph: GraphStore) -> None:
+        llm = _fake_llm("方法`RAG-Sequence`有效。")
+        engine = _GraphQaEngine(store=store_with_graph, llm=llm)
+
+        events = [evt async for evt in engine.stream("hss-001", "方法？")]
+        messages = "".join(evt.data["delta"] for evt in events if evt.event == "message")
+        assert "`" not in messages
+        assert "RAG-Sequence" in messages
+
+    async def test_citation_inside_backticks_still_emits_citation(
+        self,
+        store_with_graph: GraphStore,
+    ) -> None:
+        llm = _fake_llm("方案`[CITE:n1]`说明。")
+        engine = _GraphQaEngine(store=store_with_graph, llm=llm)
+
+        events = [evt async for evt in engine.stream("hss-001", "方案？")]
+        citation_events = [e for e in events if e.event == "citation"]
+        messages = "".join(evt.data["delta"] for evt in events if evt.event == "message")
+        assert len(citation_events) == 1
+        assert citation_events[0].data["node_id"] == "n1"
+        assert "`" not in messages
+        assert "方案" in messages
+
+    async def test_empty_backticks_survive_chunked_stream(self, store_with_graph: GraphStore) -> None:
+        llm = _fake_llm("问题``。", chunk_size=2)
+        engine = _GraphQaEngine(store=store_with_graph, llm=llm)
+
+        events = [evt async for evt in engine.stream("hss-001", "问题？")]
+        messages = "".join(evt.data["delta"] for evt in events if evt.event == "message")
+        done = next(evt for evt in events if evt.event == "done")
+        assert "`" not in messages
+        assert messages == "问题。"
+        assert done.data.get("answer") == "问题。"
+
+
+# ---------------------------------------------------------------------------
+# V2 citation types (rag-qa-evaluation)
+# ---------------------------------------------------------------------------
+
+
+class TestQaStreamV2Citations:
+    """Cover edge, chunk, and page citation SSE events."""
+
+    async def test_yields_edge_citation_with_joined_label(
+        self,
+        store_with_graph: GraphStore,
+    ) -> None:
+        llm = _fake_llm("关系[CITE:edge:e1]连接了两个节点。")
+        engine = _GraphQaEngine(store=store_with_graph, llm=llm)
+
+        events = [evt async for evt in engine.stream("hss-001", "关系是什么？")]
+        citation_events = [e for e in events if e.event == "citation"]
+        assert len(citation_events) >= 1
+        cite = citation_events[0]
+        assert cite.data["type"] == "edge"
+        assert cite.data["edge_id"] == "e1"
+        assert cite.data["paper_id"] == "hss-001"
+        # label should be auto-joined from source -> target
+        assert "→" in cite.data["label"]
+
+    async def test_yields_chunk_citation_with_text_preview(
+        self,
+        store_with_graph: GraphStore,
+    ) -> None:
+        llm = _fake_llm("原文[CITE:chunk:c1]中有详细描述。")
+        engine = _GraphQaEngine(store=store_with_graph, llm=llm)
+
+        events = [evt async for evt in engine.stream("hss-001", "原文内容？")]
+        citation_events = [e for e in events if e.event == "citation"]
+        assert len(citation_events) >= 1
+        cite = citation_events[0]
+        assert cite.data["type"] == "chunk"
+        assert cite.data["chunk_id"] == "c1"
+        assert cite.data["paper_id"] == "hss-001"
+
+    async def test_yields_page_citation_with_page_number(
+        self,
+        store_with_graph: GraphStore,
+    ) -> None:
+        llm = _fake_llm("参看[CITE:page:12]的论述。")
+        engine = _GraphQaEngine(store=store_with_graph, llm=llm)
+
+        events = [evt async for evt in engine.stream("hss-001", "第几页？")]
+        citation_events = [e for e in events if e.event == "citation"]
+        assert len(citation_events) >= 1
+        cite = citation_events[0]
+        assert cite.data["type"] == "page"
+        assert cite.data["page"] == 12
+        assert cite.data["paper_id"] == "hss-001"
+
+    async def test_node_citation_has_type_node_attached(self, store_with_graph: GraphStore) -> None:
+        """V1 backward-compat: bare [CITE:n1] gets type=node with node_id."""
+        llm = _fake_llm("核心论点[CITE:n1]是关键。")
+        engine = _GraphQaEngine(store=store_with_graph, llm=llm)
+
+        events = [evt async for evt in engine.stream("hss-001", "test")]
+        citation_events = [e for e in events if e.event == "citation"]
+        assert len(citation_events) >= 1
+        cite = citation_events[0]
+        assert cite.data["type"] == "node"
+        assert cite.data["node_id"] == "n1"
+
+    async def test_mixed_citations_in_one_stream(self, store_with_graph: GraphStore) -> None:
+        llm = _fake_llm("论点[CITE:n1]由关系[CITE:edge:e1]连接，原文[CITE:chunk:c1]有详述，见[CITE:page:5]。")
+        engine = _GraphQaEngine(store=store_with_graph, llm=llm)
+
+        events = [evt async for evt in engine.stream("hss-001", "test")]
+        citation_events = [e for e in events if e.event == "citation"]
+        types = {c.data["type"] for c in citation_events}
+        assert "node" in types
+        assert "edge" in types
+        assert "chunk" in types
+        assert "page" in types
+
+
+# ---------------------------------------------------------------------------
+# boundary handling (§4 checklist)
+# ---------------------------------------------------------------------------
+
+
+class TestQaStreamBoundaryHandling:
+    async def test_empty_retrieval_context_completes_without_error(
+        self,
+        store_with_graph: GraphStore,
+    ) -> None:
+        """Blank vector index: RC.chunks=[] must not raise IndexError; graph citations still work."""
+        from backend.rag.models import QuestionScale, RetrievalContext
+
+        rc = RetrievalContext(scale=QuestionScale.DETAIL)
+        llm = _fake_llm("依据图谱，核心论点[CITE:n1]说明问题。")
+        engine = _GraphQaEngine(store=store_with_graph, llm=llm)
+
+        events = [
+            evt
+            async for evt in engine.stream(
+                "hss-001",
+                "分论点如何支撑核心论点？",
+                retrieval_context=rc,
+            )
+        ]
+        assert not any(evt.event == "error" for evt in events)
+        assert events[-1].event == "done"
+        node_citations = [evt for evt in events if evt.event == "citation" and evt.data.get("type") == "node"]
+        assert len(node_citations) >= 1
 
 
 # ---------------------------------------------------------------------------

@@ -17,6 +17,7 @@ import { PATROL_BASELINE_COPY } from '@/constants/patrolCopy'
 import { routes } from '@/router/index'
 import { RouteName } from '@/router/meta'
 import { appendUniqueCitation, buildHighlightStateMap } from '@/utils/paperGraph'
+import { citationNodeId } from '@/utils/qaCitations'
 import { resolvePatrolApiError } from '@/utils/patrolForm'
 import { readFrontendSource } from '@/test/helpers/designTokens'
 import { routerViewShell } from '@/test/helpers/routerViewShell'
@@ -49,8 +50,8 @@ const M2_SCALE_EXPECTATIONS = [
 
 /** Mirrors ``CORPUS_PATROL_LENSES`` from backend.patrol.samples (C-04 CLI seed). */
 const PATROL_CORPUS_NODE_REFS = [
-  { paper_id: 'hss-001', node_id: 'n_lens_molecular_history', label: '分子考古与民族史视角' },
-  { paper_id: 'hss-002', node_id: 'n_lens_political_film', label: '政治传播与电影叙事' },
+  { type: 'node', paper_id: 'hss-001', node_id: 'n_lens_molecular_history', label: '分子考古与民族史视角' },
+  { type: 'node', paper_id: 'hss-002', node_id: 'n_lens_political_film', label: '政治传播与电影叙事' },
 ] as const
 
 function buildM2MockSseFrames(nodeId: string, label: string) {
@@ -278,11 +279,11 @@ describe('V1 DoD C-03 — M2 QA CLI ↔ graph-hss ↔ FE', () => {
       if (parsed?.type !== 'citation') {
         continue
       }
-      expect(parsed.data.node_id).toBe(sample.nodeId)
+      expect(citationNodeId(parsed.data)).toBe(sample.nodeId)
       expect(parsed.data.label).toBe(node?.label)
       const states = buildHighlightStateMap(
         graph.nodes.map((item) => item.id),
-        parsed.data.node_id,
+        citationNodeId(parsed.data),
       )
       expect(states[sample.nodeId]).toBe('active')
     }
@@ -330,6 +331,7 @@ describe('V1 DoD C-03 — M2 QA CLI ↔ graph-hss ↔ FE', () => {
     for (const sample of M2_SCALE_EXPECTATIONS) {
       const node = graph.nodes.find((item) => item.id === sample.nodeId)
       citations = appendUniqueCitation(citations, {
+        type: 'node',
         paper_id: 'hss-001',
         node_id: sample.nodeId,
         label: node?.label ?? '',
@@ -396,9 +398,12 @@ describe('V1 DoD C-04 — Patrol CLI ↔ HTTP ↔ PatrolView', () => {
   it('patrol corpus node_refs align with backend seed ids (static parity)', () => {
     expect(PATROL_CORPUS_NODE_REFS[0].node_id).toBe('n_lens_molecular_history')
     expect(PATROL_CORPUS_NODE_REFS[1].node_id).toBe('n_lens_political_film')
-    const patrolViewSrc = readFrontendSource('views/PatrolView.vue')
-    expect(patrolViewSrc).toContain('query: { node: ref.node_id }')
-    expect(patrolViewSrc).toContain('RouteName.PaperGraph')
+    const patrolBundle = [
+      readFrontendSource('views/PatrolView.vue'),
+      readFrontendSource('utils/patrolViewHelpers.ts'),
+    ].join('\n')
+    expect(patrolBundle).toContain('query: { node: ref.node_id }')
+    expect(patrolBundle).toContain('RouteName.PaperGraph')
   })
 
   it('runPatrol renders corpus insight with lens_clash variant (functional)', async () => {

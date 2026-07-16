@@ -9,7 +9,7 @@ from backend.patrol.contradiction import (
     sub_argument_nodes,
     thesis_nodes,
 )
-from backend.schemas.patrol import PatrolInsightStatus, PatrolMode
+from backend.schemas.patrol import ContradictionPoint, PatrolInsightStatus, PatrolMode
 from tests.helpers.patrol_graphs import (
     build_hss_graph_with_thesis,
     build_hss_graph_without_thesis,
@@ -47,6 +47,13 @@ async def test_build_contradiction_insight_with_different_theses() -> None:
     assert insight.status == PatrolInsightStatus.READY
     assert "夏尔巴" in insight.summary or "电影" in insight.summary
     assert [ref.node_id for ref in insight.node_refs] == ["n_t_a", "n_t_b"]
+    assert len(insight.structured_points) == 1
+    point = insight.structured_points[0]
+    assert isinstance(point, ContradictionPoint)
+    assert point.mode == "contradiction"
+    assert point.point_a == "夏尔巴父系源流具有多元融合特征"
+    assert point.point_b == "电影政治传播强化主流意识形态建构"
+    assert point.conflict_type == "potential"
 
 
 async def test_build_contradiction_insight_uses_llm_summary() -> None:
@@ -73,7 +80,7 @@ async def test_build_contradiction_insight_uses_llm_summary() -> None:
         insight = await build_contradiction_insight(graphs, ["hss-001", "hss-002"])
     assert insight is not None
     assert insight.status == PatrolInsightStatus.READY
-    assert insight.summary == llm_text
+    assert insight.summary.startswith(llm_text)
 
 
 def test_sub_argument_nodes_collected() -> None:
@@ -118,6 +125,9 @@ async def test_build_contradiction_insight_same_thesis_uses_fallback() -> None:
     assert insight is not None
     assert insight.status == PatrolInsightStatus.READY
     assert "未检出显著论证矛盾" in insight.summary
+    point = insight.structured_points[0]
+    assert isinstance(point, ContradictionPoint)
+    assert point.conflict_type == "none"
 
 
 async def test_build_contradiction_insight_returns_none_for_wrong_paper_count() -> None:
@@ -221,7 +231,7 @@ async def test_build_contradiction_insight_does_not_block_compliant_requests() -
         insight = await build_contradiction_insight(graphs, ["hss-001", "hss-002"])
     assert insight is not None
     assert insight.status == PatrolInsightStatus.READY
-    assert insight.summary == llm_text
+    assert insight.summary.startswith(llm_text)
     mock_gen.assert_awaited_once()
 
 

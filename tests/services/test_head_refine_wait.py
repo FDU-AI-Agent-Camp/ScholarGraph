@@ -33,10 +33,14 @@ def test_resolve_head_refine_timeout_pymupdf_only_is_brief() -> None:
 
 
 @pytest.mark.asyncio
-async def test_wait_returns_refined_input_when_ready(tmp_path: Path) -> None:
+async def test_wait_returns_refined_input_when_ready(persistence_env, tmp_path: Path) -> None:
+    from backend.schemas.paper import PaperStatus
+    from tests.helpers.persistence_testkit import register_test_paper
+
     pdf_path = tmp_path / "sample.pdf"
     pdf_path.write_bytes(b"%PDF-1.4\n% mock content")
     paper_id = "wait-ready"
+    await register_test_paper(paper_id, status=PaperStatus.PROCESSING)
 
     async def _apply_refined() -> None:
         await asyncio.sleep(0.05)
@@ -81,10 +85,17 @@ async def test_wait_timeout_falls_back_to_snippets(tmp_path: Path) -> None:
 
 
 @pytest.mark.asyncio
-async def test_wait_returns_path_b_warnings_from_paper_service(tmp_path: Path) -> None:
+async def test_wait_returns_path_b_warnings_from_paper_service(
+    persistence_env,
+    tmp_path: Path,
+) -> None:
+    from backend.schemas.paper import PaperStatus
+    from tests.helpers.persistence_testkit import register_test_paper
+
     pdf_path = tmp_path / "sample.pdf"
     pdf_path.write_bytes(b"%PDF-1.4\n% mock content")
     paper_id = "wait-warnings"
+    await register_test_paper(paper_id, status=PaperStatus.PROCESSING)
 
     get_paper_service().apply_head_refine(
         paper_id,

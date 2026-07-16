@@ -4,8 +4,9 @@ V1 对外接口已冻结，以本目录与协作文档为准。
 
 | 资源 | 说明 |
 |------|------|
-| [openapi.yaml](./openapi.yaml) | OpenAPI 3.1，含 `classify_warnings` / `extract_warnings` / `head_refine_warnings` |
-| [fixtures/](./fixtures/) | 标准 Mock JSON；含 `paper-*-classify-fallback.json`、`paper-*-ready-fallback.json` |
+| [openapi.yaml](./openapi.yaml) | OpenAPI 3.1，含 `classify_warnings` / `extract_warnings` / `head_refine_warnings` / `QaStream*` SSE 载荷 |
+| [sse-qa.md](./sse-qa.md) | QA SSE 帧格式与 V2 多类型 `citation` 契约 |
+| [fixtures/](./fixtures/) | 标准 Mock JSON；含 `paper-*-classify-fallback.json`、`paper-*-ready-fallback.json`、`qa-stream-v2-frames.json` |
 | 运行时文档 | 实现后 `http://localhost:8000/docs`（须与 `openapi.yaml` 同步） |
 
 人文档：

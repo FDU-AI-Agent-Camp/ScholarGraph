@@ -25,9 +25,14 @@ uv run python scripts/run_frontend_demo.py
 # 仅打印 URL，不 seed
 uv run python scripts/run_frontend_demo.py --skip-seed
 
-# seed 后额外跑 CLI 巡检冒烟
-uv run python scripts/run_frontend_demo.py --smoke-patrol --mode lens_clash
+# seed 后额外跑 CLI 巡检冒烟（单模式）
+uv run python scripts/run_frontend_demo.py --smoke-patrol --mode method_overlap
+
+# seed 后四模式依次冒烟
+uv run python scripts/run_frontend_demo.py --smoke-all-patrol
 ```
+
+默认 seed 会写入 **HSS + STEM** 图谱（`hss-001/002` + `stem-001/002`），开箱即可试 V2 `method_overlap` / `claim_evolution`。
 
 等价手动 seed：
 
@@ -37,11 +42,21 @@ uv run python scripts/run_patrol.py --seed-demo-graphs
 
 ## 启动命令
 
-**终端 1 — 后端（仓库根目录）**
+**终端 1 — 后端（仓库根目录，Demo Profile 必开）**
 
 ```bash
+export APP_PROFILE=demo
 uv run uvicorn backend.main:app --reload --host 127.0.0.1 --port 8000
 ```
+
+Windows PowerShell：
+
+```powershell
+$env:APP_PROFILE='demo'
+uv run uvicorn backend.main:app --reload --host 127.0.0.1 --port 8000
+```
+
+`APP_PROFILE=demo` 会叠加加载 `.env.demo`，其中 **硬性开启** `RERANKER_ENABLED=true` 与 `RERANKER_MODEL=bge-reranker-v2-m3`。若 Reranker 未配置或握手失败，应用将在启动期 Fail-Fast 阻断。
 
 **终端 2 — 前端**
 
@@ -75,6 +90,7 @@ npm run dev
 |------|-----|------|
 | ready | `/papers/hss-001` | 元数据展示；状态面板为 ready |
 | ready_with_warnings | 使用质量门控触发的论文 | 元数据展示；状态面板为 ready_with_warnings，画布带黄色警示边框 |
+| indexing | 真上传流水线（finalize 后） | `BadgeStatus` 显示「索引中」；**非终态**，继续轮询至 `ready` / `ready_with_warnings`；此阶段无 preview 时开图谱页可能 409 |
 | processing | `/papers/hss-002` | 进度条 / stage 轮询 |
 | failed | `/papers/hss-failed-001` | 红色告警：`LLM_JSON_INVALID`、`failed_during: classifying` |
 
@@ -100,19 +116,23 @@ npm run dev
 - URL：`http://localhost:5173/patrol`
 - 操作：
   1. `paper_ids` 输入：`hss-001,hss-002`（恰好 2 篇）
-  2. `mode` 选择 `lens_clash` 或 `contradiction`
-  3. 点击「运行巡检」
+  2. `mode` 选择四模式之一（`lens_clash` / `contradiction` / `method_overlap` / `claim_evolution`）
+  3. V2 模式使用 `stem-001,stem-002`（默认 seed 已包含 STEM 语料）
+  4. 点击「运行巡检」
 - 验收：
   - 展示 `mode`、`generated_at`、`paper_ids`；
-  - 每条 insight 含 `title`、`summary`、`node_refs` 表格（paper_id / node_id / label）。
+  - 每条 insight 含 `title`、`summary`、`structured_points`（V2）与 `node_refs` 表格。
 - 错误态：
   - `409 GRAPH_NOT_READY`：先执行 `run_patrol.py --seed-demo-graphs`
   - `422 PATROL_INSUFFICIENT_DATA`：切换 mode 或检查图谱节点类型
+- **`claim_evolution` 演示（live 模式）**：确认 `GET /api/v1/health` 中 `patrol_claim_rq_funnel_enabled=true`；否则需在 `.env` 设置 `RERANKER_ENABLED=true` 与 `RERANKER_MODEL`（见 [onboarding §3](../onboarding.md)）
 
 CLI 对照（可选）：
 
 ```bash
 uv run python scripts/run_patrol.py --paper-ids hss-001,hss-002 --mode lens_clash
+uv run python scripts/run_patrol.py --seed-stem-demo
+uv run python scripts/run_patrol.py --paper-ids stem-001,stem-002 --mode method_overlap
 ```
 
 ## 自动化门禁（开发侧）

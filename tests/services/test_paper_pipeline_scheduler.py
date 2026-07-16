@@ -7,15 +7,15 @@ from pathlib import Path
 from unittest.mock import AsyncMock, patch
 
 import pytest
-from backend.services import paper_pipeline_scheduler as scheduler_mod
 from backend.services.paper_pipeline_scheduler import ensure_head_refine_scheduled, schedule_paper_pipeline
+from backend.services.pipeline_task_registry import reset_pipeline_task_registry
 
 
 @pytest.fixture(autouse=True)
 def _clear_head_refine_task_registry() -> None:
-    scheduler_mod._head_refine_tasks.clear()
+    reset_pipeline_task_registry()
     yield
-    scheduler_mod._head_refine_tasks.clear()
+    reset_pipeline_task_registry()
 
 
 @pytest.mark.asyncio
@@ -45,7 +45,7 @@ async def test_ensure_head_refine_scheduled_can_restart_after_done(tmp_path: Pat
     ) as mock_refine:
         ensure_head_refine_scheduled("paper-restart", pdf_path)
         await asyncio.sleep(0)
-        scheduler_mod._head_refine_tasks.clear()
+        reset_pipeline_task_registry()
         ensure_head_refine_scheduled("paper-restart", pdf_path)
         await asyncio.sleep(0)
 

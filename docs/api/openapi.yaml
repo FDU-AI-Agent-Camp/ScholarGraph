@@ -4,7 +4,7 @@ info:
   version: 1.0.0
   description: |
     V1 冻结契约。人文档见 docs/v1/api-contract.md。
-    SSE 仅 POST /papers/{paper_id}/qa/stream。
+    SSE 仅 POST /papers/{paper_id}/qa/stream；V2 多类型 citation 见 docs/api/sse-qa.md。
 
 servers:
   - url: http://localhost:8000/api/v1
@@ -104,6 +104,40 @@ paths:
                 $ref: "#/components/schemas/PaperDetailResponse"
         "404":
           $ref: "#/components/responses/NotFound"
+    delete:
+      tags: [papers]
+      operationId: deletePaper
+      summary: 级联物理删除论文（SQL + 图谱 JSON + Chroma + PDF）
+      description: |
+        按固定顺序执行物理级联清理，避免幽灵写入：
+        1) 撤销 in-process asyncio 任务（force 或 best-effort）
+        2) VectorStore.delete_by_paper（404/not-found 视为成功；503/timeout 硬失败不删 SQL）
+        3) GRAPH_DATA_DIR 零残留（`{id}.json` / `{id}.*` / `{id}_*` sidecar）
+        4) 上传 PDF
+        5) papers 行（pipeline_runs CASCADE）
+
+        `status=processing` / `indexing` 默认返回 409；显式 `force=true` 时先 cancel 再删除。
+        成功仅返回 204 No Content；清理摘要写入结构化日志，不进响应体。
+      parameters:
+        - $ref: "#/components/parameters/PaperId"
+        - $ref: "#/components/parameters/ForceAbort"
+      responses:
+        "204":
+          description: 已物理删除（无 Content）
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "409":
+          description: PAPER_ALREADY_PROCESSING（processing / indexing 且未传 force=true）
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "503":
+          description: VECTOR_STORE_UNAVAILABLE（Chroma 超时/不可达；SQL 未删除）
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
 
   /papers/{paper_id}/status:
     get:
@@ -150,9 +184,14 @@ paths:
       summary: 强制重新抽取图谱（逃生舱）
       description: |
         当上一轮回抽取因 LLM 超时/限流等原因降级为启发式 fallback 时，
-        调用此接口清空已有图谱、预览和 warnings，重置状态为 pending 并重新入队流水线。
+        调用此接口清空已有图谱、预览、warnings 与该论文的 Chroma 向量，
+        重置状态为 pending 并重新入队流水线。
+
+        `status=processing` / `indexing` 默认 409；`force=true` 时先 cancel in-flight tasks 再清索引并重入队。
+        无 Celery：撤销对象为进程内 asyncio Task + indexing run registry.
       parameters:
         - $ref: "#/components/parameters/PaperId"
+        - $ref: "#/components/parameters/ForceAbort"
       responses:
         "200":
           description: 已重新入队，返回当前 pending 状态
@@ -163,7 +202,7 @@ paths:
         "404":
           $ref: "#/components/responses/NotFound"
         "409":
-          description: PAPER_ALREADY_PROCESSING
+          description: PAPER_ALREADY_PROCESSING（processing / indexing 且未传 force=true）
           content:
             application/json:
               schema:
@@ -189,11 +228,43 @@ paths:
               $ref: "#/components/schemas/QaStreamRequest"
       responses:
         "200":
-          description: SSE stream
+          description: |
+            `text/event-stream; charset=utf-8`。帧格式见 docs/api/sse-qa.md。
+            Wire 为 SSE 文本；`components/schemas/QaStream*` 描述各 `event:` 的 JSON data 载荷。
           content:
             text/event-stream:
               schema:
                 type: string
+                description: |
+                  SSE 帧序列。每帧 `event:` + `data:`（单行 JSON）。
+                  citation 载荷 schema 见 `#/components/schemas/QaStreamCitation`。
+              examples:
+                v2MultiTypeCitation:
+                  summary: V2 多类型 citation 示例
+                  value: |
+                    event: message
+                    data: {"delta":"根据检索上下文，"}
+
+                    event: citation
+                    data: {"type":"node","paper_id":"hss-001","node_id":"n1","label":"核心论点"}
+
+                    event: citation
+                    data: {"type":"edge","paper_id":"hss-001","edge_id":"e1","label":"分论点 → 核心论点"}
+
+                    event: citation
+                    data: {"type":"chunk","paper_id":"hss-001","chunk_id":"hss-001-00001","label":"片段 hss-001-00001","text_preview":"制度一旦形成便会产生路径依赖。"}
+
+                    event: citation
+                    data: {"type":"page","paper_id":"hss-001","page":12,"label":"第12页"}
+
+                    event: done
+                    data: {"answer_id":"ans-550e8400"}
+        "400":
+          description: CROSS_PAPER — 跨论文问题，引导使用 Patrol
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
         "404":
           $ref: "#/components/responses/NotFound"
         "409":
@@ -231,6 +302,18 @@ components:
         type: string
         example: hss-001
 
+    ForceAbort:
+      name: force
+      in: query
+      required: false
+      description: |
+        When true, cancel in-flight PROCESSING / INDEXING asyncio tasks before
+        reextract/delete. Default false keeps PAPER_ALREADY_PROCESSING (409) for
+        live processing or indexing papers.
+      schema:
+        type: boolean
+        default: false
+
   responses:
     NotFound:
       description: PAPER_NOT_FOUND
@@ -246,8 +329,10 @@ components:
 
     PaperStatus:
       type: string
-      enum: [pending, processing, ready, ready_with_warnings, failed]
+      enum: [pending, processing, indexing, ready, ready_with_warnings, failed]
       description: |
+        `indexing` means the graph is persisted and VectorStore indexing is in
+        progress (P10 state gate). Poll until `ready` / `ready_with_warnings`.
         `ready_with_warnings` means the graph is available but failed the
         confidence gate (e.g. low SUPPORTS rationale coverage, too many
         isolated nodes, or a high ratio of generic fallback edges such as
@@ -255,7 +340,7 @@ components:
 
     PipelineStage:
       type: string
-      enum: [ingesting, head_refining, classifying, extracting, storing, ready, failed]
+      enum: [ingesting, head_refining, classifying, extracting, storing, indexing, ready, failed]
 
     FailedDuringStage:
       type: string
@@ -327,14 +412,26 @@ components:
       properties:
         data:
           type: object
-          required: [status, version, llm_mode, llm_connected, llm_note]
+          required: [status, version, llm_mode, llm_connected, llm_note, components]
           properties:
             status:
               type: string
-              example: ok
+              enum: [healthy, degraded]
+              description: Aggregate health — degraded when Patrol claim_evolution funnel is incomplete in live mode.
+              example: healthy
             version:
               type: string
               example: 1.0.0
+            app_profile:
+              type: string
+              nullable: true
+              enum: [ci, demo, prod]
+            components:
+              type: object
+              required: [patrol_service]
+              properties:
+                patrol_service:
+                  $ref: "#/components/schemas/PatrolServiceHealth"
             llm_mode:
               type: string
               enum: [mock, live]
@@ -345,8 +442,43 @@ components:
             llm_note:
               type: string
               example: Mock 模式：LLM 云服务尚未接入，问答/巡检返回本地模板。
+            grobid_url:
+              type: string
+            grobid_connected:
+              type: boolean
+            grobid_note:
+              type: string
+            patrol_claim_rq_funnel_enabled:
+              type: boolean
+            patrol_config_warnings:
+              type: array
+              items:
+                type: string
+            patrol_note:
+              type: string
         meta:
           $ref: "#/components/schemas/Meta"
+
+    PatrolServiceHealth:
+      type: object
+      required: [status, claim_rq_funnel_enabled, reranker_status, active_profile]
+      properties:
+        status:
+          type: string
+          enum: [fully_functional, degraded]
+        claim_rq_funnel_enabled:
+          type: boolean
+        reranker_status:
+          type: string
+          enum: [READY, DISABLED_FALLBACK_ACTIVE, MISCONFIGURED, MOCK_LOCAL]
+        active_profile:
+          type: string
+          nullable: true
+          enum: [ci, demo, prod]
+        warnings:
+          type: array
+          items:
+            type: string
 
     PaperSummary:
       type: object
@@ -585,9 +717,267 @@ components:
           type: string
           minLength: 1
 
+    QaStreamMessageData:
+      type: object
+      required: [delta]
+      properties:
+        delta:
+          type: string
+          description: LLM 增量文本片段
+
+    QaStreamCitationType:
+      type: string
+      enum: [node, edge, chunk, page]
+      description: |
+        V2 citation 判别字段，与 backend.graph.qa_v2.dispatch_citation 一致。
+        缺省 `type` 时 FE 应视为 `node`（V1 兼容）。
+
+    QaStreamCitationNode:
+      type: object
+      required: [type, paper_id, node_id, label]
+      properties:
+        type:
+          type: string
+          enum: [node]
+        paper_id:
+          type: string
+        node_id:
+          type: string
+        label:
+          type: string
+          description: 图谱节点展示名
+
+    QaStreamCitationEdge:
+      type: object
+      required: [type, paper_id, edge_id, label]
+      properties:
+        type:
+          type: string
+          enum: [edge]
+        paper_id:
+          type: string
+        edge_id:
+          type: string
+        label:
+          type: string
+          description: 通常为 `"{source_label} → {target_label}"`
+
+    QaStreamCitationChunk:
+      type: object
+      required: [type, paper_id, chunk_id, label, text_preview, preview_state]
+      properties:
+        type:
+          type: string
+          enum: [chunk]
+        paper_id:
+          type: string
+        chunk_id:
+          type: string
+        label:
+          type: string
+          description: 通常为 `"片段 {chunk_id}"`
+        text_preview:
+          type: string
+          maxLength: 120
+          description: 原文片段预览（最多 120 字符）；降级时为 canonical 占位文案
+        preview_state:
+          $ref: "#/components/schemas/ChunkPreviewState"
+
+    ChunkPreviewState:
+      type: string
+      enum: [ready, indexing, retrieval_timeout, l2_timeout, hallucinated_id]
+      description: |
+        Chunk 引用预览解析状态（B10）。
+        - `ready` — 正常原文预览
+        - `indexing` — 向量索引尚未就绪
+        - `retrieval_timeout` — 混合检索阶段超时降级
+        - `l2_timeout` — 引用点 L2 惰性追溯超时（200ms）
+        - `hallucinated_id` — 无法验证的 chunk_id
+
+    QaStreamCitationPage:
+      type: object
+      required: [type, paper_id, page, label]
+      properties:
+        type:
+          type: string
+          enum: [page]
+        paper_id:
+          type: string
+        page:
+          oneOf:
+            - type: integer
+            - type: string
+          description: 页码；非整数引用（如 appendix）时为 string
+        label:
+          type: string
+          description: 通常为 `"第{page}页"`
+
+    QaStreamCitation:
+      description: |
+        SSE `event: citation` 的 JSON data。由 LLM 输出 `[CITE:...]` 经 dispatch_citation 解析。
+      oneOf:
+        - $ref: "#/components/schemas/QaStreamCitationNode"
+        - $ref: "#/components/schemas/QaStreamCitationEdge"
+        - $ref: "#/components/schemas/QaStreamCitationChunk"
+        - $ref: "#/components/schemas/QaStreamCitationPage"
+      discriminator:
+        propertyName: type
+        mapping:
+          node: "#/components/schemas/QaStreamCitationNode"
+          edge: "#/components/schemas/QaStreamCitationEdge"
+          chunk: "#/components/schemas/QaStreamCitationChunk"
+          page: "#/components/schemas/QaStreamCitationPage"
+
+    QaStreamDoneData:
+      type: object
+      required: [answer_id]
+      properties:
+        answer_id:
+          type: string
+        answer:
+          type: string
+          description: 可选；完整答案快照
+
+    QaStreamErrorData:
+      type: object
+      required: [message]
+      properties:
+        code:
+          type: string
+          description: 流内异常常见 `QA_STREAM_ERROR`
+        message:
+          type: string
+
     PatrolMode:
       type: string
-      enum: [lens_clash, contradiction]
+      enum: [lens_clash, contradiction, method_overlap, claim_evolution]
+
+    PatrolPoint:
+      type: object
+      required: [mode]
+      discriminator:
+        propertyName: mode
+        mapping:
+          contradiction: "#/components/schemas/ContradictionPoint"
+          lens_clash: "#/components/schemas/LensClashPoint"
+          method_overlap: "#/components/schemas/MethodOverlapPoint"
+          claim_evolution: "#/components/schemas/ClaimEvolutionPoint"
+      oneOf:
+        - $ref: "#/components/schemas/ContradictionPoint"
+        - $ref: "#/components/schemas/LensClashPoint"
+        - $ref: "#/components/schemas/MethodOverlapPoint"
+        - $ref: "#/components/schemas/ClaimEvolutionPoint"
+
+    ContradictionPoint:
+      type: object
+      required: [mode, point_a, point_b, conflict_type]
+      properties:
+        mode:
+          type: string
+          enum: [contradiction]
+        point_a:
+          type: string
+        point_b:
+          type: string
+        conflict_type:
+          type: string
+
+    LensClashPoint:
+      type: object
+      required: [mode, lens_a, lens_b, clash_aspect]
+      properties:
+        mode:
+          type: string
+          enum: [lens_clash]
+        lens_a:
+          type: string
+        lens_b:
+          type: string
+        clash_aspect:
+          type: string
+
+    MethodOverlapPoint:
+      type: object
+      required: [mode, overlap_type, overlap_label, paper_a_usage, paper_b_usage]
+      properties:
+        mode:
+          type: string
+          enum: [method_overlap]
+        overlap_type:
+          type: string
+          enum: [method, dataset, mixed]
+          description: Whether the point compares methods or datasets. Dual overlap emits two points (method + dataset); mixed is deprecated.
+        overlap_label:
+          type: string
+          description: The representative label of the overlapping item (method or dataset name).
+        overlap_score:
+          type: number
+          nullable: true
+          minimum: 0.0
+          maximum: 1.0
+          description: Significance score of the overlap. 1.0 for literal label match; 0.0-1.0 for semantic soft match.
+        match_type:
+          type: string
+          nullable: true
+          enum: [literal, semantic]
+          description: How the overlap was determined.
+        node_refs:
+          type: array
+          items:
+            $ref: "#/components/schemas/NodeRef"
+          description: Graph nodes anchored by this point; supports many-to-many literal overlaps.
+        method:
+          type: string
+          description: Backwards-compatible alias for overlap_label.
+        paper_a_usage:
+          type: string
+          description: How paper A uses the overlapping item.
+        paper_b_usage:
+          type: string
+          description: How paper B uses the overlapping item.
+        dataset_a:
+          type: string
+          nullable: true
+        dataset_b:
+          type: string
+          nullable: true
+        evidence_summary:
+          type: string
+          nullable: true
+          description: Evidence-chain summary; may be null when the LLM does not produce one.
+
+    ClaimEvolutionPoint:
+      type: object
+      required: [mode, research_question]
+      properties:
+        mode:
+          type: string
+          enum: [claim_evolution]
+        research_question:
+          type: string
+        paper_a_claim:
+          type: string
+          nullable: true
+          description: Paper A's core claim; may be backfilled from VectorStore chunks when no Claim node exists.
+        paper_b_claim:
+          type: string
+          nullable: true
+          description: Paper B's core claim; may be backfilled from VectorStore chunks when no Claim node exists.
+        evolution_type:
+          type: string
+          nullable: true
+          enum: [inherit, contradict, refined]
+          description: Relationship between the two claims.
+        problem_fit_score:
+          type: integer
+          nullable: true
+          minimum: 0
+          maximum: 100
+          description: Research-question fit score; higher means the two papers address more similar problems.
+        evidence_summary:
+          type: string
+          nullable: true
+          description: Evidence-chain summary; may be null when the LLM does not produce one.
 
     PatrolRequest:
       type: object
@@ -619,8 +1009,83 @@ components:
       description: |
         Insight readiness status.
         `ready` means the insight was produced from a full LLM analysis.
-        `insufficient_data` means the graphs lacked required node types (Thesis/SubArgument)
-        and a deterministic template response was returned instead.
+        `insufficient_data` is a conclusive channel-B negative determination (HTTP 200),
+        not an API error. Read `exclusion_logic` for the structured reason. Examples:
+        - contradiction: missing Thesis or SubArgument nodes.
+        - method_overlap: HSS paradigm unsupported, missing Method, or no overlap.
+        - claim_evolution: ResearchQuestion/Thesis too dissimilar, or no claims.
+        Channel A (HTTP 422 PATROL_INSUFFICIENT_DATA) is reserved for hard preflight
+        barriers such as lens_clash with no AnalyticalLens nodes.
+
+    PatrolExclusionReason:
+      type: string
+      enum:
+        - MISSING_REQUIRED_NODES
+        - PARADIGM_UNSUPPORTED
+        - NO_OVERLAP
+        - RQ_GATE_FAILED
+        - NO_RECALLABLE_CLAIMS
+      description: |
+        Typed channel-B exclusion reasons for insufficient_data insights (P11/F7):
+        - MISSING_REQUIRED_NODES: required graph node types absent.
+        - PARADIGM_UNSUPPORTED: mode not applicable for paper paradigm (e.g. HSS + method_overlap).
+        - NO_OVERLAP: analyzers finished; no significant method/dataset overlap.
+        - RQ_GATE_FAILED: claim_evolution RQ/Thesis alignment funnel rejected the pair.
+        - NO_RECALLABLE_CLAIMS: no Claim nodes and VectorStore recall found nothing.
+
+    PatrolExclusionLogic:
+      type: object
+      required: [phase, reason_code, description]
+      description: Structured negative-determination payload when status=insufficient_data.
+      properties:
+        phase:
+          type: string
+          description: Pipeline stage tag (PARADIGM_GATE, NODE_PRECHECK, OVERLAP_MATCH, …).
+        reason_code:
+          $ref: "#/components/schemas/PatrolExclusionReason"
+        description:
+          type: string
+          description: Human-readable explanation of why the run concluded negatively.
+        metrics:
+          type: object
+          additionalProperties: true
+          description: Optional diagnostic numbers (thresholds, scores, counts).
+
+    PatrolDegradationReason:
+      type: string
+      enum: [INDEX_NOT_READY, QUERY_FAILED, VECTOR_STORE_UNAVAILABLE]
+      description: |
+        Typed RAG context degradation reasons:
+        - INDEX_NOT_READY: graph ready but vector index still building / missing.
+        - QUERY_FAILED: vector store reachable but chunk recall failed.
+        - VECTOR_STORE_UNAVAILABLE: Chroma/cluster down or network unreachable.
+
+    PatrolDegradationSeverity:
+      type: string
+      enum: [WARNING, ERROR]
+
+    PatrolDegradationComponent:
+      type: string
+      enum: [RAG_CONTEXT]
+
+    PatrolDegradationProfile:
+      type: object
+      required: [component, reason_code, affected_papers, severity, timestamp]
+      description: First-class degradation contract when Patrol RAG context is thinned (P9/F8).
+      properties:
+        component:
+          $ref: "#/components/schemas/PatrolDegradationComponent"
+        reason_code:
+          $ref: "#/components/schemas/PatrolDegradationReason"
+        affected_papers:
+          type: array
+          items:
+            type: string
+        severity:
+          $ref: "#/components/schemas/PatrolDegradationSeverity"
+        timestamp:
+          type: string
+          format: date-time
 
     PatrolInsight:
       type: object
@@ -646,6 +1111,31 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/NodeRef"
+        structured_points:
+          type: array
+          items:
+            $ref: "#/components/schemas/PatrolPoint"
+        is_degraded:
+          type: boolean
+          description: True when RAG context was thinned; read degradation_profile for details. Defaults to false when omitted.
+        degradation_profile:
+          allOf:
+            - $ref: "#/components/schemas/PatrolDegradationProfile"
+          nullable: true
+          description: Explicit RAG degradation profile when is_degraded is true.
+        exclusion_logic:
+          allOf:
+            - $ref: "#/components/schemas/PatrolExclusionLogic"
+          nullable: true
+          description: |
+            Required when status=insufficient_data. Structured channel-B exclusion reason
+            for FE warning-card rendering (P11/F7). Null when status=ready.
+        meta:
+          type: object
+          additionalProperties: true
+          description: |
+            Legacy machine-readable metadata. Prefer is_degraded + degradation_profile.
+            meta.patrol_rag_context_degraded remains a compatibility mirror of the profile.
 
     PatrolResponse:
       type: object

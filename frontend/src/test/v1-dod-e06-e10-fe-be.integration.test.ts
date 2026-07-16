@@ -288,6 +288,7 @@ describe('V1 DoD E-07/E-08 — QA SSE disconnect and error events', () => {
 describe('V1 DoD E-09 — citation dedup and empty node_id', () => {
   it('appendUniqueCitation deduplicates repeated SSE citation frames', () => {
     const cite: QaStreamCitationData = {
+      type: 'node',
       paper_id: 'hss-001',
       node_id: BE_FE_E06_E10.E09.dedupKey,
       label: '核心论点',
@@ -298,7 +299,7 @@ describe('V1 DoD E-09 — citation dedup and empty node_id', () => {
   })
 
   it('empty node_id citation does not crash dedup keying', () => {
-    const empty: QaStreamCitationData = { paper_id: 'hss-001', node_id: '', label: '' }
+    const empty: QaStreamCitationData = { type: 'node', paper_id: 'hss-001', node_id: '', label: '' }
     const list = appendUniqueCitation([], empty)
     expect(list).toHaveLength(1)
     expect(appendUniqueCitation(list, empty)).toHaveLength(1)
@@ -319,7 +320,7 @@ describe('V1 DoD E-09 — citation dedup and empty node_id', () => {
     )
     mockGetPaperGraph.mockResolvedValue({ data: graphFixture.data, meta: { request_id: 'e09-g' } })
 
-    const cite = { paper_id: 'hss-001', node_id: 'n1', label: thesis?.label ?? '核心论点' }
+    const cite = { type: 'node', paper_id: 'hss-001', node_id: 'n1', label: thesis?.label ?? '核心论点' }
     mockStreamPaperQa.mockImplementation(
       async (_id: string, _q: string, handlers: Parameters<typeof dispatchSseFrames>[1]) => {
         dispatchSseFrames(

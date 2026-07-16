@@ -1,6 +1,18 @@
 """Service-layer errors mapped to API / workflow error codes."""
 
+from __future__ import annotations
+
 PIPELINE_FAILED_CODE = "PIPELINE_FAILED"
+INVALID_STATE_TRANSITION_CODE = "INVALID_STATE_TRANSITION"
+OBSOLETE_PIPELINE_GENERATION_CODE = "OBSOLETE_PIPELINE_GENERATION"
+
+# Processing / pending orphan heal (wall-clock + cold-boot watchdog).
+PROCESS_ORPHANED_CODE = "PROCESS_ORPHANED"
+PROCESS_ORPHANED_MESSAGE = "系统重启导致解析中断，请尝试重新提取。"
+PROCESS_TIMEOUT_CODE = "PROCESS_TIMEOUT"
+PROCESS_TIMEOUT_MESSAGE = "解析超时未推进，任务已标记失败，请尝试重新提取。"
+QUEUE_TIMEOUT_CODE = "QUEUE_TIMEOUT"
+QUEUE_TIMEOUT_MESSAGE = "排队超时，服务器任务积压过久，请稍后重新上传或强制重新抽取。"
 
 
 class ServiceError(Exception):
@@ -10,3 +22,37 @@ class ServiceError(Exception):
         super().__init__(message)
         self.code = code
         self.message = message
+
+
+class InvalidStateTransitionError(ServiceError):
+    """Paper / pipeline status machine rejected an illegal transition."""
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        from_status: str,
+        to_status: str,
+        paper_id: str | None = None,
+    ) -> None:
+        super().__init__(INVALID_STATE_TRANSITION_CODE, message)
+        self.from_status = from_status
+        self.to_status = to_status
+        self.paper_id = paper_id
+
+
+class ObsoletePipelineGenerationError(ServiceError):
+    """Terminal write refused: task context run_id no longer matches DB generation."""
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        paper_id: str,
+        expected_generation_id: str | None,
+        current_generation_id: str | None,
+    ) -> None:
+        super().__init__(OBSOLETE_PIPELINE_GENERATION_CODE, message)
+        self.paper_id = paper_id
+        self.expected_generation_id = expected_generation_id
+        self.current_generation_id = current_generation_id

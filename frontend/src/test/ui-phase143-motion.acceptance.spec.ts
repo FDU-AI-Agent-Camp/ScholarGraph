@@ -93,7 +93,7 @@ describe('§1.4.3 Motion & interaction discipline', () => {
       const tagSrc = readSrc('components/ui/TagCitation.vue')
       const detailSrc = readSrc('views/PaperDetailView.vue')
       expect(tagSrc).toContain('var(--transition-fast)')
-      expect(detailSrc).toContain(':active="item.node_id === highlightNodeId"')
+      expect(detailSrc).toContain("item.type === 'node' && item.node_id === highlightNodeId")
       expect(detailSrc).toContain(':highlight-node-id="highlightNodeId"')
       expect(tokens['--duration-fast']).toBe('150ms')
     })
@@ -169,8 +169,9 @@ describe('§1.4.3 Motion & interaction discipline', () => {
   describe('§1.4.3 动效验收 — checklist', () => {
     it('Citation 点击后 Tag 与节点同一帧内开始变化，150ms 内完成', () => {
       const detailSrc = readSrc('views/PaperDetailView.vue')
-      expect(usesSynchronousHighlightHandlers(detailSrc)).toBe(true)
-      expect(detailSrc).toContain(':active="item.node_id === highlightNodeId"')
+      const qaComposableSrc = readSrc('composables/usePaperDetailQa.ts')
+      expect(usesSynchronousHighlightHandlers(qaComposableSrc)).toBe(true)
+      expect(detailSrc).toContain("item.type === 'node' && item.node_id === highlightNodeId")
       expect(detailSrc).toContain(':highlight-node-id="highlightNodeId"')
       expect(readSrc('components/ui/TagCitation.vue')).toContain('var(--transition-fast)')
       expect(graphMotionBudgetWithinCitationFastMs(GRAPH_STATE_ANIMATION_MS, 150)).toBe(true)

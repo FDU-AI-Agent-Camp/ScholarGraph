@@ -21,7 +21,7 @@ def _settings(
 ) -> Settings:
     return Settings(
         _env_file=None,
-        llm_mode="mock",
+        llm_mode="live",
         embedding_provider=provider,
         embedding_model=model,
         embedding_api_key=api_key,
@@ -172,3 +172,24 @@ async def test_empty_texts_returns_empty_list() -> None:
         result = await client.embed_texts([])
     assert result == []
     mock_cls.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_mock_mode_returns_deterministic_vectors_without_api_call() -> None:
+    settings = Settings(
+        _env_file=None,
+        llm_mode="mock",
+        embedding_provider="openai",
+        embedding_model="bge-m3",
+        scholargraph_api_key="fallback-key",
+        openai_api_key="",
+    )
+    client = EmbeddingClient(settings)
+
+    with patch("backend.llm.embeddings.OpenAIEmbeddings") as mock_cls:
+        result = await client.embed_texts(["hello", "world"])
+
+    mock_cls.assert_not_called()
+    assert len(result) == 2
+    assert len(result[0]) == 1536
+    assert result[0] == result[1]  # same length, same deterministic pattern

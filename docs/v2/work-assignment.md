@@ -98,6 +98,16 @@
 **依赖**：`rag-vector-store` 完成后 rebase/merge
 **验收**：摘要问题走 A 尺度，细节问题同时召回三类结果
 
+**实现说明（与 develop SSOT 对齐，2026-07）**：
+
+| 主题 | 实际约定 |
+|------|----------|
+| 问题尺度 | `QuestionScale.SUMMARY` / `DETAIL` / `VERIFICATION`；历史别名 `skeleton` 经 `coerce_question_scale()` 映射为 `SUMMARY` |
+| 向量命中落位 | `entities` / `relations` / `chunks` 独立写入 RC，由 `format_retrieval_context` 注入 Prompt；**不** merge 进 `nodes/edges` |
+| `scale` 参数 | 由 `qa_retrieval._load_graph_for_retrieval` 判定后**必填**传入 `HybridRetriever.retrieve()` |
+| 跨论文问题 | `QuestionScale.CROSS_PAPER` 在 HTTP 入口由 `qa_deps.verify_question_scale` 返回 400，**不**进入 retriever |
+| 降级子图 | `qa_retrieval` 预计算 subgraph 一次，超时/向量库故障时复用，避免重复 `GraphQuery` |
+
 ---
 
 ### 2.4 `feature/backend/rag-qa-evaluation` — 组员 C

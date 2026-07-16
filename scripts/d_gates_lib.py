@@ -31,8 +31,9 @@ CONVENTIONAL_COMMIT_HEADER = re.compile(
 )
 
 # work-assignment §3: feature/frontend/{slug} | feature/backend/{module[/slug]}
+# Also allow hotfix/{slug} for urgent production fixes.
 FEATURE_BRANCH = re.compile(
-    r"^feature/(frontend/[a-z0-9._-]+|backend/[a-z0-9._-]+(?:/[a-z0-9._-]+)?)$",
+    r"^(feature/(frontend/[a-z0-9._-]+|backend/[a-z0-9._-]+(?:/[a-z0-9._-]+)?)|hotfix/[a-z0-9._-]+(?:/[a-z0-9._-]+)?)$",
     re.IGNORECASE,
 )
 

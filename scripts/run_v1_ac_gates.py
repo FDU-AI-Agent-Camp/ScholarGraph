@@ -68,7 +68,12 @@ def run_cmd(name: str, cmd: list[str], *, cwd: Path | None = None) -> GateStep:
     return GateStep(name=name, ok=completed.returncode == 0, detail=f"exit {completed.returncode}")
 
 
-def run_gates(*, with_cp4_api: bool = False, skip_frontend: bool = False) -> GateReport:
+def run_gates(
+    *,
+    with_cp4_api: bool = False,
+    skip_frontend: bool = False,
+    with_v2_patrol_smoke: bool = True,
+) -> GateReport:
     report = GateReport()
     py = sys.executable
 
@@ -90,7 +95,7 @@ def run_gates(*, with_cp4_api: bool = False, skip_frontend: bool = False) -> Gat
     report.steps.append(qa)
 
     patrol = run_cmd(
-        "C-04 run_patrol smoke",
+        "C-04 run_patrol smoke (lens_clash)",
         [
             py,
             str(REPO_ROOT / "scripts" / "run_patrol.py"),
@@ -100,6 +105,26 @@ def run_gates(*, with_cp4_api: bool = False, skip_frontend: bool = False) -> Gat
         ],
     )
     report.steps.append(patrol)
+
+    if with_v2_patrol_smoke:
+        for mode, paper_ids in (
+            ("method_overlap", "stem-001,stem-002"),
+            ("claim_evolution", "stem-001,stem-002"),
+        ):
+            v2 = run_cmd(
+                f"C-04 V2 run_patrol smoke ({mode})",
+                [
+                    py,
+                    str(REPO_ROOT / "scripts" / "run_patrol.py"),
+                    "--paper-ids",
+                    paper_ids,
+                    "--mode",
+                    mode,
+                    "--seed-stem-demo",
+                    "--compact",
+                ],
+            )
+            report.steps.append(v2)
 
     if with_cp4_api:
         cp4 = run_cmd(
@@ -123,6 +148,11 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         action="store_true",
         help="跳过 npm run check:ci",
     )
+    parser.add_argument(
+        "--skip-v2-patrol-smoke",
+        action="store_true",
+        help="跳过 C-04 V2 method_overlap / claim_evolution CLI 冒烟",
+    )
     return parser.parse_args(argv)
 
 
@@ -132,7 +162,11 @@ def main(argv: list[str] | None = None) -> int:
     print("ScholarGraph V1 A～C Gates")
     print("=" * 60)
 
-    report = run_gates(with_cp4_api=args.with_cp4_api, skip_frontend=args.skip_frontend)
+    report = run_gates(
+        with_cp4_api=args.with_cp4_api,
+        skip_frontend=args.skip_frontend,
+        with_v2_patrol_smoke=not args.skip_v2_patrol_smoke,
+    )
 
     print()
     print("=" * 60)

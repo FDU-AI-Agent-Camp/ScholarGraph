@@ -83,6 +83,8 @@ self._pdf_paths: dict[str, Path] = {}
 | `head_refine_warnings` | `JSON` | list[str]，累加产生 |
 | `classify_warnings` | `JSON` | list[str]，累加产生 |
 | `extract_warnings` | `JSON` | list[str]，累加产生 |
+| `active_rag_run_id` | `String(64), NULL` | 当前生效的 RAG 索引 run id；`NULL` 表示从未索引，`""` 表示已清空 |
+| `preview_graph` | `JSON, NULL` | 抽取预览图谱（`UnifiedPaperGraph` JSON）；finalize 后清空 |
 | `created_at` | `DateTime, TZ` | 首次写入时间 |
 | `updated_at` | `DateTime, TZ` | 最新更新时间 |
 
@@ -97,6 +99,23 @@ self._pdf_paths: dict[str, Path] = {}
 - `papers.paradigm` 允许 `NULL`（分类前）。
 - `papers.pdf_path` 非空。
 - `papers.graph_version` 默认 `"1"`，`extractor_config_hash` 默认空字符串。
+
+### 2.3 进程内临时态下沉（D6）
+
+以下字段**不得**再驻留 `PaperService` 内存；重启后须从 DB / 磁盘恢复：
+
+| 原内存字段 | 新真相源 | 读写约定 |
+|---|---|---|
+| `_active_run_id` | `pipeline_runs.active_rag_run_id` | `VectorStore` 经 `PaperService.get/set_active_run_id` 读写；`reextract` / `clear_ephemeral_pipeline_state` 置 `NULL` |
+| `_preview_graphs` | `pipeline_runs.preview_graph` | LangGraph 预览节点 `save_preview_graph`；`pipeline_completion_service.finalize` 成功后 `clear_preview_graph` |
+| `_refined_head` / `_refined_classifier_input` | `HeadStore` 磁盘 JSON | `PaperService` 每次穿透 `HeadStore.load()`，禁止本地 cache |
+| `_bootstrapped` | `papers` 表计数 | `bootstrap()` 仅当 `SEED_DEMO_PAPERS=true` 且 `PaperRepository.is_empty()` 时 seed |
+
+**生命周期**：
+
+1. 上传 / 重抽：`reset_for_reextract` 末尾调用 `clear_ephemeral_pipeline_state`（清空 preview + active run id）。
+2. RAG 全量索引：`VectorStore.replace_paper_index` 写入新 `run_id` 到 `active_rag_run_id`。
+3. Pipeline finalize：正式图谱落盘后清空 `preview_graph`；`active_rag_run_id` 保留供检索过滤。
 
 ---
 
@@ -278,11 +297,39 @@ async def record_warnings(self, paper_id, *, head_refine=None, classify=None, ex
 
 ### 4.4 `pipeline_completion_service.py`
 
-- `complete_paper_pipeline` 中更新 `papers.graph_path`、最终 `status`。
-- 同时写入 `graph_version` 与 `extractor_config_hash`（基于当前抽取配置/Prompt/模型计算哈希）。
-- 保留 `GraphStore().save(graph)` 写磁盘 JSON。
+- `PipelineCompletionService.finalize()` **唯一**调用 `GraphPersistenceService.save(graph)` 写磁盘 JSON，并接收返回的 `graph_path`。
+- `complete_paper_pipeline()` 仅更新 `papers.graph_path`、最终 `status`、`graph_version` 与 `extractor_config_hash`；**禁止**再次 `GraphStore().save()`（D7 消除双写）。
+- finalize 成功后 **仅** 通过事件总线发射 `PipelineFinalized(paper_id, full_text, graph)`；**禁止**在 LangGraph `store_node` 内直调 RAG 索引。
 
-### 4.5 启动加载
+### 4.5 `PipelineFinalized` 事件契约（SSOT）
+
+**发射点**：`complete_paper_pipeline()` 在图谱持久化与 `mark_ready*` 之后，调用 `EventBus.publish_sync(PipelineFinalized(...))`。
+
+**载荷字段（冻结，勿随意增删）**：
+
+| 字段 | 类型 | 说明 |
+|---|---|---|
+| `paper_id` | `str` | 已完成建图的论文 ID |
+| `full_text` | `str` | PyMuPDF 抽取的全文，供 RAG chunk 切分 |
+| `graph` | `UnifiedPaperGraph` | 已写入 `GraphStore` 的图谱快照 |
+| `page_break_offsets` | `list[int] \| None` | 归一化全文中的分页累积偏移（供 chunk 页码推断，可选） |
+
+定义位置：`backend/events/types.py` → `PipelineFinalized`。
+
+**消费方（事件驱动 SSOT）**：
+
+- **当前（persistence-core 临时桩）**：`backend/events/pipeline_finalized_handlers.py` 内 `temporary_pipeline_finalized_rag_handler` 监听 `EventType.PIPELINE_FINALIZED`，记录结构化日志并委托 `RagIndexService.index_paper_for_rag_async()`，维持端到端可用性。
+- **目标（组员 A / `feature/backend/rag-vector-store`）**：在 `backend/rag/handlers.py` 使用 `@on_event(EventType.PIPELINE_FINALIZED)` 注册生产 Handler，接管向量化逻辑。
+- **合并策略**：rag-vector-store PR 合并时，由 persistence-core 负责人删除 `pipeline_finalized_handlers.py` 中的临时桩，避免双索引。
+
+**已废弃**：`backend/graph/nodes.py` `store_node` 对 `_index_paper_for_rag_async` 的同步直调（D4 清理项）。
+
+**功能可用性（临时桩契约审计 + 可观测性）**：
+
+- 订阅入口调用 `validate_pipeline_finalized_payload()`（`backend/events/pipeline_finalized_contract.py`），强类型校验 `PipelineFinalized`：`paper_id` 在 DB 存在、`full_text` 非空、`graph` JSON 往返反序列化成功且拓扑完整（节点非空、边端点合法）。
+- 发布端（`complete_paper_pipeline` 内 `publish_sync` 直前）打 `pipeline_finalized_publishing`；订阅端（临时 handler 第一行）打 `pipeline_finalized_consumed`。两条日志共享 `correlation_id`（当前等于 `paper_id`），可凭时间戳与内容判定事件通道端到端打通。
+
+### 4.6 启动加载
 
 - `PaperService.__init__` 不再从 fixture 直接注入内存，而是从 DB `SELECT` 全部 papers 列表。
 - fixture seed 改为可选：
@@ -291,7 +338,7 @@ async def record_warnings(self, paper_id, *, head_refine=None, classify=None, ex
       seed_from_fixtures(repo)
   ```
 
-### 4.6 环境变量
+### 4.7 环境变量
 
 ```env
 # 默认 SQLite；生产可改为 postgresql+asyncpg://...
@@ -360,7 +407,25 @@ SEED_DEMO_PAPERS=false
 # 新增/更新测试
 uv run pytest tests/repositories/ -q
 uv run pytest tests/integration/test_persistence_restart.py -q
+uv run pytest tests/services/test_paper_service_bootstrap.py -q
+uv run pytest tests/services/test_paper_ephemeral_db_state.py -q
+uv run pytest tests/repositories/test_ephemeral_pipeline_invariants.py -q
+uv run pytest tests/services/test_ephemeral_state_chaos.py -q
 uv run pytest tests/services/test_paper_service_db.py -q
+
+# D6 断电重启 + bootstrap 零污染（§2.3）
+# - test_mid_pipeline_ephemeral_state_survives_crash_recovery
+# - test_bootstrap_seed_without_singleton_reset_has_zero_pollution
+
+# D6 深度边界（JSON 变更追踪 / 并发读 / 混沌生命周期）
+# - test_preview_graph_inplace_mutation_not_persisted_without_flag_modified
+# - test_preview_graph_extreme_topology_survives_restart
+# - test_active_run_id_reads_nonblocking_under_concurrent_pipeline_writes
+# - test_ephemeral_state_chaos_lifecycle_invariants
+
+# D6 → RAG 下游契约（index_run_id SSOT 跨重启）
+# - test_rag_index_run_id_contract_survives_hard_restart_mock_consumer
+# - test_vector_store_index_run_id_filter_survives_hard_restart
 
 # 回归
 uv run pytest -q -m "not red"

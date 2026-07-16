@@ -27,7 +27,7 @@ describe('streamPaperQa integration', () => {
         })
         options.onmessage?.({
           event: 'citation',
-          data: JSON.stringify({ paper_id: 'hss-001', node_id: 'n1', label: '论点' }),
+          data: JSON.stringify({ type: 'node', paper_id: 'hss-001', node_id: 'n1', label: '论点' }),
         })
         options.onmessage?.({
           event: 'done',
@@ -182,5 +182,44 @@ describe('streamPaperQa integration', () => {
     })
 
     expect(errorMessage).toBe('SSE error')
+  })
+
+  it('dispatches all V2 citation types to onCitation handler', async () => {
+    fetchEventSource.mockImplementation(
+      async (
+        _url: string,
+        options: {
+          onmessage?: (ev: { event?: string; data: string }) => void
+        },
+      ) => {
+        const frames = [
+          { type: 'node', paper_id: 'hss-001', node_id: 'n1', label: '核心论点' },
+          { type: 'edge', paper_id: 'hss-001', edge_id: 'e1', label: '分论点 → 核心论点' },
+          {
+            type: 'chunk',
+            paper_id: 'hss-001',
+            chunk_id: 'c1',
+            label: '片段 c1',
+            text_preview: '预览',
+          },
+          { type: 'page', paper_id: 'hss-001', page: 12, label: '第12页' },
+        ]
+        for (const data of frames) {
+          options.onmessage?.({
+            event: 'citation',
+            data: JSON.stringify(data),
+          })
+        }
+      },
+    )
+
+    const received: string[] = []
+    await streamPaperQa('hss-001', 'detail question', {
+      onCitation: (data) => {
+        received.push(data.type)
+      },
+    })
+
+    expect(received).toEqual(['node', 'edge', 'chunk', 'page'])
   })
 })

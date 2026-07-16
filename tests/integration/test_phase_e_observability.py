@@ -117,14 +117,7 @@ async def test_head_refine_persists_and_survives_service_restart(
     )
     assert HeadStore(base_dir=graph_dir).load(paper_id) is not None
 
-    service = get_paper_service()
-    service._refined_head.pop(paper_id, None)
-    service._refined_classifier_input.pop(paper_id, None)
-    service._head_refine_warnings.pop(paper_id, None)
-    if paper_id in service._papers:
-        paper = service._papers[paper_id]
-        service._papers[paper_id] = paper.model_copy(update={"ingest_head": None})
-
+    get_paper_service.cache_clear()
     detail_resp = await api_client.get(f"/api/v1/papers/{paper_id}")
     assert detail_resp.status_code == 200
     ingest_head = detail_resp.json()["data"].get("ingest_head")

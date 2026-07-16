@@ -98,7 +98,9 @@ describe('§1.4.4 Copy & typography discipline', () => {
     })
 
     it('Patrol — 副文案 / 主按钮 / 数据不足 baseline', () => {
-      expect(PATROL_BASELINE_COPY.subtitle).toBe('跨论文探测理论视角冲突与论点矛盾 · 需 2 篇 ready 论文')
+      expect(PATROL_BASELINE_COPY.subtitle).toBe(
+        '跨论文四模式巡检（视角冲突、论点矛盾、方法重叠、观点演进）· 需 2 篇 ready 论文',
+      )
       expect(PATROL_BASELINE_COPY.runButton).toBe('运行巡检')
       expect(PATROL_BASELINE_COPY.runButtonLoading).toBe('分析中…')
       expect(PATROL_BASELINE_COPY.insufficientDataTitle).toBe('数据不足')

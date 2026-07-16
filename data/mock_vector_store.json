@@ -1,0 +1,31 @@
+{
+  "version": "2026-07-12",
+  "description": "Static vector chunks for CI/mock benchmark — no Chroma required. IDs align with data/chunk_manifests/stem-001.json.",
+  "papers": {
+    "stem-001": {
+      "chunks": [
+        {
+          "chunk_id": "stem-001:chunk:42",
+          "chunk_index": 42,
+          "section": "experiments",
+          "page_start": 7,
+          "text": "We evaluate ResNet-Light on the ImageNet validation set. The proposed model achieves a top-1 accuracy of 78.5%, outperforming the prior CNN baseline on the same split. Training uses Adam with learning rate 0.001."
+        },
+        {
+          "chunk_id": "stem-001:chunk:43",
+          "chunk_index": 43,
+          "section": "methods",
+          "page_start": 5,
+          "text": "ResNet-Light is trained on ImageNet with batch size 256 and the Adam optimizer. The learning rate is fixed at 0.001 for all convolutional blocks."
+        },
+        {
+          "chunk_id": "stem-001:chunk:44",
+          "chunk_index": 44,
+          "section": "results",
+          "page_start": 8,
+          "text": "Compared with ResNet-50 on ImageNet, ResNet-Light improves top-1 accuracy to 78.5% while keeping comparable FLOPs."
+        }
+      ]
+    }
+  }
+}

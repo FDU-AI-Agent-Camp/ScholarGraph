@@ -8,7 +8,6 @@ from pathlib import Path
 
 import pytest
 from backend.config import get_settings
-from backend.graph.qa import QaEvent
 from backend.graph.qa_samples import M2_DEMO_PAPER_ID, M2_HSS_QUESTIONS, seed_m2_qa_graph
 from backend.graph.store import GraphStore
 from backend.llm.client import reset_llm_client_cache
@@ -16,6 +15,7 @@ from backend.llm.mock_chat import MOCK_DISCLAIMER
 from httpx import ASGITransport, AsyncClient
 from tests.api.conftest import assert_error_envelope
 from tests.graph.test_qa import _bad_llm, _fake_llm
+from tests.helpers.persistence_testkit import register_ready_paper, run_async, setup_qa_persistence_env
 
 
 def _parse_sse(body: str) -> list[tuple[str, dict]]:
@@ -41,12 +41,14 @@ async def api_client() -> AsyncIterator[AsyncClient]:
 
 @pytest.fixture
 def m2_http_env(tmp_path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    graph_dir = tmp_path / "graphs"
+    setup_qa_persistence_env(tmp_path, monkeypatch, graph_dir=graph_dir)
     monkeypatch.setenv("LLM_MODE", "mock")
-    monkeypatch.setenv("GRAPH_DATA_DIR", str(tmp_path))
     get_settings.cache_clear()
     reset_llm_client_cache()
-    seed_m2_qa_graph(tmp_path)
-    return tmp_path
+    seed_m2_qa_graph(graph_dir)
+    run_async(register_ready_paper(M2_DEMO_PAPER_ID))
+    return graph_dir
 
 
 @pytest.mark.asyncio
@@ -92,10 +94,11 @@ async def test_m2_http_graph_not_found_sse_error_feedback(
 ) -> None:
     empty_dir = tmp_path / "no-graphs"
     empty_dir.mkdir()
+    setup_qa_persistence_env(tmp_path, monkeypatch, graph_dir=empty_dir)
     monkeypatch.setenv("LLM_MODE", "mock")
-    monkeypatch.setenv("GRAPH_DATA_DIR", str(empty_dir))
     get_settings.cache_clear()
     reset_llm_client_cache()
+    run_async(register_ready_paper(M2_DEMO_PAPER_ID))
 
     response = await api_client.post(
         f"/api/v1/papers/{M2_DEMO_PAPER_ID}/qa/stream",
@@ -143,14 +146,10 @@ async def test_m2_http_llm_failure_emits_qa_stream_error_in_sse(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     from backend.graph.qa import _GraphQaEngine
+    from tests.helpers.qa_stream_mock import qa_stream_from_engine
 
     engine = _GraphQaEngine(store=GraphStore(base_dir=m2_http_env), llm=_bad_llm())
-
-    async def _fail_stream(paper_id: str, question: str) -> AsyncIterator[QaEvent]:
-        async for evt in engine.stream(paper_id, question):
-            yield evt
-
-    monkeypatch.setattr("backend.graph.qa.qa_stream", _fail_stream)
+    monkeypatch.setattr("backend.graph.qa.qa_stream", qa_stream_from_engine(engine))
 
     response = await api_client.post(
         f"/api/v1/papers/{M2_DEMO_PAPER_ID}/qa/stream",
@@ -173,18 +172,14 @@ async def test_m2_http_citation_survives_chunked_mock_stream(
 ) -> None:
     """Regression: long node ids (n_lens) must still emit citation events over chunked SSE."""
     from backend.graph.qa import _GraphQaEngine
+    from tests.helpers.qa_stream_mock import qa_stream_from_engine
 
     llm_text = "验证节点[CITE:n_lens]完成。"
     engine = _GraphQaEngine(
         store=GraphStore(base_dir=m2_http_env),
         llm=_fake_llm(llm_text, chunk_size=8),
     )
-
-    async def _chunked_stream(paper_id: str, question: str) -> AsyncIterator[QaEvent]:
-        async for evt in engine.stream(paper_id, question):
-            yield evt
-
-    monkeypatch.setattr("backend.graph.qa.qa_stream", _chunked_stream)
+    monkeypatch.setattr("backend.graph.qa.qa_stream", qa_stream_from_engine(engine))
 
     response = await api_client.post(
         f"/api/v1/papers/{M2_DEMO_PAPER_ID}/qa/stream",
@@ -194,3 +189,32 @@ async def test_m2_http_citation_survives_chunked_mock_stream(
     citation = next((payload for name, payload in events if name == "citation"), None)
     assert citation is not None
     assert citation["node_id"] == "n_lens"
+
+
+@pytest.mark.asyncio
+async def test_m2_http_strips_markdown_backticks_from_stream_deltas(
+    api_client: AsyncClient,
+    m2_http_env,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Regression: empty backtick pairs must not leak into SSE message deltas."""
+    from backend.graph.qa import _GraphQaEngine
+    from tests.helpers.qa_stream_mock import qa_stream_from_engine
+
+    llm_text = "问题``。"
+    engine = _GraphQaEngine(
+        store=GraphStore(base_dir=m2_http_env),
+        llm=_fake_llm(llm_text, chunk_size=2),
+    )
+    monkeypatch.setattr("backend.graph.qa.qa_stream", qa_stream_from_engine(engine))
+
+    response = await api_client.post(
+        f"/api/v1/papers/{M2_DEMO_PAPER_ID}/qa/stream",
+        json={"question": M2_HSS_QUESTIONS[0].question},
+    )
+    events = _parse_sse(response.text)
+    messages = "".join(payload["delta"] for name, payload in events if name == "message")
+    done = next(payload for name, payload in events if name == "done")
+    assert "`" not in messages
+    assert messages == "问题。"
+    assert done.get("answer") == "问题。"

@@ -10,6 +10,7 @@ const props = defineProps<{
 const STATUS_LABELS: Record<PaperStatus, string> = {
   pending: '待开始',
   processing: '解构中',
+  indexing: '索引中',
   ready: '已就绪',
   ready_with_warnings: '已就绪（有警告）',
   failed: '失败',
@@ -49,13 +50,18 @@ const label = computed(() => STATUS_LABELS[props.status])
   background: var(--color-text-muted);
 }
 
-.badge-status--processing .badge-status__dot {
+.badge-status--processing .badge-status__dot,
+.badge-status--indexing .badge-status__dot {
   background: var(--color-info);
   animation: badge-status-pulse var(--duration-pulse) var(--ease-in-subtle) infinite;
 }
 
 .badge-status--ready .badge-status__dot {
   background: var(--color-success);
+}
+
+.badge-status--ready_with_warnings .badge-status__dot {
+  background: var(--color-warning);
 }
 
 .badge-status--failed .badge-status__dot {
@@ -74,7 +80,8 @@ const label = computed(() => STATUS_LABELS[props.status])
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .badge-status--processing .badge-status__dot {
+  .badge-status--processing .badge-status__dot,
+  .badge-status--indexing .badge-status__dot {
     animation: none;
   }
 }

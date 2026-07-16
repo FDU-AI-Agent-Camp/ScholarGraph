@@ -144,15 +144,17 @@ export interface components {
         /** @enum {string} */
         Paradigm: "STEM" | "HSS";
         /**
-         * @description `ready_with_warnings` means the graph is available but failed the
+         * @description `indexing` means the graph is persisted and VectorStore indexing is in
+         *     progress (P10 state gate). Poll until `ready` / `ready_with_warnings`.
+         *     `ready_with_warnings` means the graph is available but failed the
          *     confidence gate (e.g. low SUPPORTS rationale coverage, too many
          *     isolated nodes, or a high ratio of generic fallback edges such as
          *     RELATES_TO). The client should render a yellow warning border.
          * @enum {string}
          */
-        PaperStatus: "pending" | "processing" | "ready" | "ready_with_warnings" | "failed";
+        PaperStatus: "pending" | "processing" | "indexing" | "ready" | "ready_with_warnings" | "failed";
         /** @enum {string} */
-        PipelineStage: "ingesting" | "head_refining" | "classifying" | "extracting" | "storing" | "ready" | "failed";
+        PipelineStage: "ingesting" | "head_refining" | "classifying" | "extracting" | "storing" | "indexing" | "ready" | "failed";
         /**
          * @description Pipeline step active when status=failed (excludes terminal stage values).
          * @enum {string}
@@ -196,10 +198,19 @@ export interface components {
         };
         HealthResponse: {
             data?: {
-                /** @example ok */
-                status: string;
+                /**
+                 * @description Aggregate health — degraded when Patrol claim_evolution funnel is incomplete in live mode.
+                 * @example healthy
+                 * @enum {string}
+                 */
+                status: "healthy" | "degraded";
                 /** @example 1.0.0 */
                 version: string;
+                /** @enum {string|null} */
+                app_profile?: "ci" | "demo" | "prod" | null;
+                components: {
+                    patrol_service: components["schemas"]["PatrolServiceHealth"];
+                };
                 /**
                  * @example mock
                  * @enum {string}
@@ -209,8 +220,24 @@ export interface components {
                 llm_connected: boolean;
                 /** @example Mock 模式：LLM 云服务尚未接入，问答/巡检返回本地模板。 */
                 llm_note: string;
+                grobid_url?: string;
+                grobid_connected?: boolean;
+                grobid_note?: string;
+                patrol_claim_rq_funnel_enabled?: boolean;
+                patrol_config_warnings?: string[];
+                patrol_note?: string;
             };
             meta?: components["schemas"]["Meta"];
+        };
+        PatrolServiceHealth: {
+            /** @enum {string} */
+            status: "fully_functional" | "degraded";
+            claim_rq_funnel_enabled: boolean;
+            /** @enum {string} */
+            reranker_status: "READY" | "DISABLED_FALLBACK_ACTIVE" | "MISCONFIGURED" | "MOCK_LOCAL";
+            /** @enum {string|null} */
+            active_profile: "ci" | "demo" | "prod" | null;
+            warnings?: string[];
         };
         PaperSummary: {
             paper_id: string;
@@ -353,8 +380,163 @@ export interface components {
         QaStreamRequest: {
             question: string;
         };
+        QaStreamMessageData: {
+            /** @description LLM 增量文本片段 */
+            delta: string;
+        };
+        /**
+         * @description V2 citation 判别字段，与 backend.graph.qa_v2.dispatch_citation 一致。
+         *     缺省 `type` 时 FE 应视为 `node`（V1 兼容）。
+         * @enum {string}
+         */
+        QaStreamCitationType: "node" | "edge" | "chunk" | "page";
+        QaStreamCitationNode: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "node";
+            paper_id: string;
+            node_id: string;
+            /** @description 图谱节点展示名 */
+            label: string;
+        };
+        QaStreamCitationEdge: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "edge";
+            paper_id: string;
+            edge_id: string;
+            /** @description 通常为 `"{source_label} → {target_label}"` */
+            label: string;
+        };
+        QaStreamCitationChunk: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "chunk";
+            paper_id: string;
+            chunk_id: string;
+            /** @description 通常为 `"片段 {chunk_id}"` */
+            label: string;
+            /** @description 原文片段预览（最多 120 字符）；降级时为 canonical 占位文案 */
+            text_preview: string;
+            preview_state: components["schemas"]["ChunkPreviewState"];
+        };
+        /**
+         * @description Chunk 引用预览解析状态（B10）。
+         *     - `ready` — 正常原文预览
+         *     - `indexing` — 向量索引尚未就绪
+         *     - `retrieval_timeout` — 混合检索阶段超时降级
+         *     - `l2_timeout` — 引用点 L2 惰性追溯超时（200ms）
+         *     - `hallucinated_id` — 无法验证的 chunk_id
+         * @enum {string}
+         */
+        ChunkPreviewState: "ready" | "indexing" | "retrieval_timeout" | "l2_timeout" | "hallucinated_id";
+        QaStreamCitationPage: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "page";
+            paper_id: string;
+            /** @description 页码；非整数引用（如 appendix）时为 string */
+            page: number | string;
+            /** @description 通常为 `"第{page}页"` */
+            label: string;
+        };
+        /** @description SSE `event: citation` 的 JSON data。由 LLM 输出 `[CITE:...]` 经 dispatch_citation 解析。 */
+        QaStreamCitation: components["schemas"]["QaStreamCitationNode"] | components["schemas"]["QaStreamCitationEdge"] | components["schemas"]["QaStreamCitationChunk"] | components["schemas"]["QaStreamCitationPage"];
+        QaStreamDoneData: {
+            answer_id: string;
+            /** @description 可选；完整答案快照 */
+            answer?: string;
+        };
+        QaStreamErrorData: {
+            /** @description 流内异常常见 `QA_STREAM_ERROR` */
+            code?: string;
+            message: string;
+        };
         /** @enum {string} */
-        PatrolMode: "lens_clash" | "contradiction";
+        PatrolMode: "lens_clash" | "contradiction" | "method_overlap" | "claim_evolution";
+        PatrolPoint: components["schemas"]["ContradictionPoint"] | components["schemas"]["LensClashPoint"] | components["schemas"]["MethodOverlapPoint"] | components["schemas"]["ClaimEvolutionPoint"];
+        ContradictionPoint: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            mode: "contradiction";
+            point_a: string;
+            point_b: string;
+            conflict_type: string;
+        };
+        LensClashPoint: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            mode: "lens_clash";
+            lens_a: string;
+            lens_b: string;
+            clash_aspect: string;
+        };
+        MethodOverlapPoint: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            mode: "method_overlap";
+            /**
+             * @description Whether the point compares methods or datasets. Dual overlap emits two points (method + dataset); mixed is deprecated.
+             * @enum {string}
+             */
+            overlap_type: "method" | "dataset" | "mixed";
+            /** @description The representative label of the overlapping item (method or dataset name). */
+            overlap_label: string;
+            /** @description Significance score of the overlap. 1.0 for literal label match; 0.0-1.0 for semantic soft match. */
+            overlap_score?: number | null;
+            /**
+             * @description How the overlap was determined.
+             * @enum {string|null}
+             */
+            match_type?: "literal" | "semantic" | null;
+            /** @description Graph nodes anchored by this point; supports many-to-many literal overlaps. */
+            node_refs?: components["schemas"]["NodeRef"][];
+            /** @description Backwards-compatible alias for overlap_label. */
+            method?: string;
+            /** @description How paper A uses the overlapping item. */
+            paper_a_usage: string;
+            /** @description How paper B uses the overlapping item. */
+            paper_b_usage: string;
+            dataset_a?: string | null;
+            dataset_b?: string | null;
+            /** @description Evidence-chain summary; may be null when the LLM does not produce one. */
+            evidence_summary?: string | null;
+        };
+        ClaimEvolutionPoint: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            mode: "claim_evolution";
+            research_question: string;
+            /** @description Paper A's core claim; may be backfilled from VectorStore chunks when no Claim node exists. */
+            paper_a_claim?: string | null;
+            /** @description Paper B's core claim; may be backfilled from VectorStore chunks when no Claim node exists. */
+            paper_b_claim?: string | null;
+            /**
+             * @description Relationship between the two claims.
+             * @enum {string|null}
+             */
+            evolution_type?: "inherit" | "contradict" | "refined" | null;
+            /** @description Research-question fit score; higher means the two papers address more similar problems. */
+            problem_fit_score?: number | null;
+            /** @description Evidence-chain summary; may be null when the LLM does not produce one. */
+            evidence_summary?: string | null;
+        };
         PatrolRequest: {
             paper_ids: string[];
             mode: components["schemas"]["PatrolMode"];
@@ -367,11 +549,59 @@ export interface components {
         /**
          * @description Insight readiness status.
          *     `ready` means the insight was produced from a full LLM analysis.
-         *     `insufficient_data` means the graphs lacked required node types (Thesis/SubArgument)
-         *     and a deterministic template response was returned instead.
+         *     `insufficient_data` is a conclusive channel-B negative determination (HTTP 200),
+         *     not an API error. Read `exclusion_logic` for the structured reason. Examples:
+         *     - contradiction: missing Thesis or SubArgument nodes.
+         *     - method_overlap: HSS paradigm unsupported, missing Method, or no overlap.
+         *     - claim_evolution: ResearchQuestion/Thesis too dissimilar, or no claims.
+         *     Channel A (HTTP 422 PATROL_INSUFFICIENT_DATA) is reserved for hard preflight
+         *     barriers such as lens_clash with no AnalyticalLens nodes.
          * @enum {string}
          */
         PatrolInsightStatus: "ready" | "insufficient_data";
+        /**
+         * @description Typed channel-B exclusion reasons for insufficient_data insights (P11/F7):
+         *     - MISSING_REQUIRED_NODES: required graph node types absent.
+         *     - PARADIGM_UNSUPPORTED: mode not applicable for paper paradigm (e.g. HSS + method_overlap).
+         *     - NO_OVERLAP: analyzers finished; no significant method/dataset overlap.
+         *     - RQ_GATE_FAILED: claim_evolution RQ/Thesis alignment funnel rejected the pair.
+         *     - NO_RECALLABLE_CLAIMS: no Claim nodes and VectorStore recall found nothing.
+         * @enum {string}
+         */
+        PatrolExclusionReason: "MISSING_REQUIRED_NODES" | "PARADIGM_UNSUPPORTED" | "NO_OVERLAP" | "RQ_GATE_FAILED" | "NO_RECALLABLE_CLAIMS";
+        /** @description Structured negative-determination payload when status=insufficient_data. */
+        PatrolExclusionLogic: {
+            /** @description Pipeline stage tag (PARADIGM_GATE, NODE_PRECHECK, OVERLAP_MATCH, …). */
+            phase: string;
+            reason_code: components["schemas"]["PatrolExclusionReason"];
+            /** @description Human-readable explanation of why the run concluded negatively. */
+            description: string;
+            /** @description Optional diagnostic numbers (thresholds, scores, counts). */
+            metrics?: {
+                [key: string]: unknown;
+            };
+        };
+        /**
+         * @description Typed RAG context degradation reasons:
+         *     - INDEX_NOT_READY: graph ready but vector index still building / missing.
+         *     - QUERY_FAILED: vector store reachable but chunk recall failed.
+         *     - VECTOR_STORE_UNAVAILABLE: Chroma/cluster down or network unreachable.
+         * @enum {string}
+         */
+        PatrolDegradationReason: "INDEX_NOT_READY" | "QUERY_FAILED" | "VECTOR_STORE_UNAVAILABLE";
+        /** @enum {string} */
+        PatrolDegradationSeverity: "WARNING" | "ERROR";
+        /** @enum {string} */
+        PatrolDegradationComponent: "RAG_CONTEXT";
+        /** @description First-class degradation contract when Patrol RAG context is thinned (P9/F8). */
+        PatrolDegradationProfile: {
+            component: components["schemas"]["PatrolDegradationComponent"];
+            reason_code: components["schemas"]["PatrolDegradationReason"];
+            affected_papers: string[];
+            severity: components["schemas"]["PatrolDegradationSeverity"];
+            /** Format: date-time */
+            timestamp: string;
+        };
         PatrolInsight: {
             insight_id: string;
             title: string;
@@ -381,6 +611,23 @@ export interface components {
             has_contradiction?: boolean | null;
             paper_ids: string[];
             node_refs: components["schemas"]["NodeRef"][];
+            structured_points?: components["schemas"]["PatrolPoint"][];
+            /** @description True when RAG context was thinned; read degradation_profile for details. Defaults to false when omitted. */
+            is_degraded?: boolean;
+            /** @description Explicit RAG degradation profile when is_degraded is true. */
+            degradation_profile?: components["schemas"]["PatrolDegradationProfile"] | null;
+            /**
+             * @description Required when status=insufficient_data. Structured channel-B exclusion reason
+             *     for FE warning-card rendering (P11/F7). Null when status=ready.
+             */
+            exclusion_logic?: components["schemas"]["PatrolExclusionLogic"] | null;
+            /**
+             * @description Legacy machine-readable metadata. Prefer is_degraded + degradation_profile.
+             *     meta.patrol_rag_context_degraded remains a compatibility mirror of the profile.
+             */
+            meta?: {
+                [key: string]: unknown;
+            };
         };
         PatrolResponse: {
             data?: {
@@ -631,13 +878,25 @@ export interface operations {
             };
         };
         responses: {
-            /** @description SSE stream */
+            /**
+             * @description `text/event-stream; charset=utf-8`。帧格式见 docs/api/sse-qa.md。
+             *     Wire 为 SSE 文本；`components/schemas/QaStream*` 描述各 `event:` 的 JSON data 载荷。
+             */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
                     "text/event-stream": string;
+                };
+            };
+            /** @description CROSS_PAPER — 跨论文问题，引导使用 Patrol */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
             404: components["responses"]["NotFound"];

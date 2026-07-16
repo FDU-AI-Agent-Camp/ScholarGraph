@@ -16,7 +16,7 @@ import logging
 from backend.agents.extract_heuristic import extract_title
 from backend.agents.extractor import _extract_chunked_two_phase
 from backend.config import Settings, get_settings
-from backend.schemas.paper import PipelineStage
+from backend.schemas.paper import PaperStatus, PipelineStage
 from backend.schemas.paradigm import Paradigm, ParadigmClassification
 from backend.services.errors import PIPELINE_FAILED_CODE, ServiceError
 from backend.services.paper_service import get_paper_service
@@ -36,17 +36,23 @@ async def _run_full_extraction(
     *,
     head_context: str | None,
     settings: Settings,
+    pipeline_generation_id: str | None,
 ) -> None:
     """Run full extraction and finalize the pipeline."""
     status_service = get_pipeline_status_service()
     completion_service = get_pipeline_completion_service()
+    paper_service = get_paper_service()
 
     try:
-        status_service.advance_stage(
-            paper_id,
-            stage=PipelineStage.EXTRACTING,
-            message="后台全量抽取进行中",
-        )
+        current = await paper_service.get_status(paper_id)
+        if current.status in {PaperStatus.READY, PaperStatus.READY_WITH_WARNINGS, PaperStatus.FAILED}:
+            return
+        if not (current.status == PaperStatus.PROCESSING and current.stage == PipelineStage.EXTRACTING):
+            status_service.advance_stage(
+                paper_id,
+                stage=PipelineStage.EXTRACTING,
+                message="后台全量抽取进行中",
+            )
 
         result = await _extract_chunked_two_phase(
             full_text,
@@ -62,15 +68,16 @@ async def _run_full_extraction(
             paper_id,
             graph_data=graph.model_dump(mode="json"),
             classification_data=classification.model_dump(mode="json"),
+            full_text=full_text,
+            pipeline_generation_id=pipeline_generation_id,
         )
-        status_service.mark_ready(paper_id)
         logger.info(
             "background_full_extraction_complete",
             extra={"paper_id": paper_id, "nodes": len(graph.nodes), "edges": len(graph.edges)},
         )
     except ServiceError as exc:
         logger.exception("background_full_extraction_failed", extra={"paper_id": paper_id})
-        get_paper_service().fail_pipeline(
+        paper_service.fail_pipeline(
             paper_id,
             message=exc.message,
             error_code=exc.code,
@@ -78,7 +85,7 @@ async def _run_full_extraction(
         )
     except Exception as exc:
         logger.exception("background_full_extraction_failed", extra={"paper_id": paper_id})
-        get_paper_service().fail_pipeline(
+        paper_service.fail_pipeline(
             paper_id,
             message=f"后台全量抽取失败: {exc}",
             error_code=PIPELINE_FAILED_CODE,
@@ -96,6 +103,7 @@ def schedule_full_extraction(
     *,
     head_context: str | None = None,
     settings: Settings | None = None,
+    pipeline_generation_id: str | None = None,
 ) -> asyncio.Task[None]:
     """Start (or return) the background full-extraction task for *paper_id*.
 
@@ -116,6 +124,7 @@ def schedule_full_extraction(
             classification,
             head_context=head_context,
             settings=cfg,
+            pipeline_generation_id=pipeline_generation_id,
         ),
         name=f"full-extract-{paper_id}",
     )
@@ -132,6 +141,42 @@ def get_full_extraction_task(paper_id: str) -> asyncio.Task[None] | None:
     return None
 
 
+async def cancel_full_extraction(paper_id: str) -> None:
+    """Cancel and await the background full-extraction task for *paper_id*, if any."""
+    task = _full_extract_tasks.pop(paper_id, None)
+    if task is None or task.done():
+        return
+    task.cancel()
+    await asyncio.gather(task, return_exceptions=True)
+
+
+def request_cancel_full_extraction_sync(paper_id: str) -> None:
+    """Inject CancelledError into a background extract task without awaiting (watchdog).
+
+    Leaves the registry entry in place so ``cancel_full_extraction`` can still
+    await ``finally`` drain after a Cascading Kill Channel force-cancel.
+    """
+    task = _full_extract_tasks.get(paper_id)
+    if task is None or task.done():
+        return
+    task.cancel()
+
+
 def reset_extract_worker() -> None:
-    """Clear cached task references (used in tests)."""
+    """Cancel in-flight work and drop registry entries (sync; does not await CancelledError)."""
+    for task in list(_full_extract_tasks.values()):
+        if not task.done():
+            task.cancel()
     _full_extract_tasks.clear()
+
+
+async def areset_extract_worker() -> None:
+    """Cancel and await background extraction tasks (preferred in async test fixtures)."""
+    tasks = list(_full_extract_tasks.values())
+    _full_extract_tasks.clear()
+    for task in tasks:
+        if not task.done():
+            task.cancel()
+    if not tasks:
+        return
+    await asyncio.gather(*tasks, return_exceptions=True)

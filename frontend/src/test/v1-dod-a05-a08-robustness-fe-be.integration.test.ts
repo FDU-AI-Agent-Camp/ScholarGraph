@@ -262,7 +262,7 @@ describe('V1 DoD A-05～A-08 robustness FE↔BE', () => {
             onDone?: (data: { answer_id: string }) => void
           },
         ) => {
-          handlers.onCitation?.({ paper_id: 'hss-001', node_id: 'n1', label: '核心论点' })
+          handlers.onCitation?.({ type: 'node', paper_id: 'hss-001', node_id: 'n1', label: '核心论点' })
           handlers.onDone?.({ answer_id: 'ans-1' })
         },
       )

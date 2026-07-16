@@ -1,0 +1,211 @@
+{
+  "version": "2026-07-12",
+  "allowed_recall_floor": 0.80,
+  "description": "V2 金标 QA 问题集。每题包含 human-verified expected nodes / edges / required_patterns / forbidden_patterns。",
+  "items": [
+    {
+      "question": "这篇论文做了什么？请给出核心论点总览。",
+      "paradigm": "HSS",
+      "paper_id": "hss-001",
+      "scale": "summary",
+      "gold": {
+        "nodes": ["n1"],
+        "edges": [],
+        "paragraphs": [],
+        "required_patterns": ["核心论点", "制度"],
+        "forbidden_patterns": ["PCR", "神经网络", "p-value"]
+      }
+    },
+    {
+      "question": "这篇论文的核心论点是什么？",
+      "paradigm": "HSS",
+      "paper_id": "hss-001",
+      "scale": "summary",
+      "gold": {
+        "nodes": ["n1"],
+        "edges": [],
+        "paragraphs": [],
+        "required_patterns": ["核心论点"],
+        "forbidden_patterns": ["本研究通过复杂的方法"]
+      }
+    },
+    {
+      "question": "分论点如何支撑核心论点？请描述其论证关系。",
+      "paradigm": "HSS",
+      "paper_id": "hss-001",
+      "scale": "detail",
+      "gold": {
+        "nodes": ["n1", "n2"],
+        "edges": ["e1"],
+        "paragraphs": [],
+        "required_patterns": ["分论点", "支撑"],
+        "forbidden_patterns": []
+      }
+    },
+    {
+      "question": "论文中提到了哪些分论点？它们与核心论点的关系是什么？",
+      "paradigm": "HSS",
+      "paper_id": "hss-001",
+      "scale": "detail",
+      "gold": {
+        "nodes": ["n1", "n2"],
+        "edges": ["e1"],
+        "paragraphs": [],
+        "required_patterns": ["制度路径依赖", "SUB_ARGUMENT_OF"],
+        "forbidden_patterns": []
+      }
+    },
+    {
+      "question": "论文采用了什么理论视角来分析问题？",
+      "paradigm": "HSS",
+      "paper_id": "hss-001",
+      "scale": "detail",
+      "gold": {
+        "nodes": ["n_lens"],
+        "edges": [],
+        "paragraphs": [],
+        "required_patterns": ["历史制度主义"],
+        "forbidden_patterns": ["机器学习", "深度学习"]
+      }
+    },
+    {
+      "question": "历史制度主义视角在本研究中具体发挥了什么作用？",
+      "paradigm": "HSS",
+      "paper_id": "hss-001",
+      "scale": "verification",
+      "gold": {
+        "nodes": ["n_lens", "n1", "n2"],
+        "edges": ["e2", "e3"],
+        "paragraphs": [],
+        "required_patterns": ["历史制度主义", "核心论点", "分论点"],
+        "forbidden_patterns": []
+      }
+    },
+    {
+      "question": "核心论点通过哪些材料和理论视角被论证？",
+      "paradigm": "HSS",
+      "paper_id": "hss-001",
+      "scale": "verification",
+      "gold": {
+        "nodes": ["n1", "n_lens", "n2"],
+        "edges": ["e1", "e2"],
+        "paragraphs": [],
+        "required_patterns": ["历史制度主义", "制度"],
+        "forbidden_patterns": []
+      }
+    },
+    {
+      "question": "论文中的制度路径依赖论述与核心论点之间是什么逻辑关系？",
+      "paradigm": "HSS",
+      "paper_id": "hss-001",
+      "scale": "detail",
+      "gold": {
+        "nodes": ["n1", "n2"],
+        "edges": ["e1"],
+        "paragraphs": [],
+        "required_patterns": ["SUB_ARGUMENT_OF"],
+        "forbidden_patterns": []
+      }
+    },
+    {
+      "question": "请概述这篇论文的主要贡献和论证框架。",
+      "paradigm": "HSS",
+      "paper_id": "hss-001",
+      "scale": "summary",
+      "gold": {
+        "nodes": ["n1", "n_lens"],
+        "edges": [],
+        "paragraphs": [],
+        "required_patterns": ["历史制度主义", "核心论点"],
+        "forbidden_patterns": []
+      }
+    },
+    {
+      "question": "LENS_OF 关系在论文图谱中连接了哪些节点？它的含义是什么？",
+      "paradigm": "HSS",
+      "paper_id": "hss-001",
+      "scale": "verification",
+      "gold": {
+        "nodes": ["n_lens", "n1"],
+        "edges": ["e2"],
+        "paragraphs": [],
+        "required_patterns": ["LENS_OF", "历史制度主义"],
+        "forbidden_patterns": []
+      }
+    },
+    {
+      "question": "论文中理论视角与分论点之间存在什么关系？",
+      "paradigm": "HSS",
+      "paper_id": "hss-001",
+      "scale": "detail",
+      "gold": {
+        "nodes": ["n_lens", "n2"],
+        "edges": ["e3"],
+        "paragraphs": [],
+        "required_patterns": ["INFORMS", "历史制度主义"],
+        "forbidden_patterns": []
+      }
+    },
+    {
+      "question": "这篇论文属于什么学科范式？它的论证特点是什么？",
+      "paradigm": "HSS",
+      "paper_id": "hss-001",
+      "scale": "summary",
+      "gold": {
+        "nodes": ["n1"],
+        "edges": [],
+        "paragraphs": [],
+        "required_patterns": ["HSS", "人文社科"],
+        "forbidden_patterns": ["STEM", "p-value"]
+      }
+    },
+    {
+      "id": "stem-001-q13",
+      "question": "What is the top-1 accuracy of the proposed ResNet-Light model on the ImageNet dataset, and what was the learning rate?",
+      "paradigm": "STEM",
+      "paper_id": "stem-001",
+      "scale": "detail",
+      "gold": {
+        "nodes": ["n_method", "n_dataset"],
+        "edges": ["e_eval"],
+        "paragraphs": ["stem-001:chunk:42", "stem-001:chunk:43"],
+        "required_patterns": ["78.5%", "ImageNet", "0.001"],
+        "forbidden_patterns": ["ResNet-50", "90%"],
+        "numeric_rel_tol": 0.001,
+        "numeric_abs_tol": 0.0005,
+        "reference_answer": "The ResNet-Light model achieves a top-1 accuracy of 78.5% on ImageNet with a learning rate configured at 0.001."
+      }
+    },
+    {
+      "id": "stem-001-q14",
+      "question": "ResNet-Light 在 ImageNet 上相比哪个 Baseline 提升了 top-1 accuracy？具体数值是多少？",
+      "paradigm": "STEM",
+      "paper_id": "stem-001",
+      "scale": "detail",
+      "gold": {
+        "nodes": ["n_method", "n_baseline", "n_metric"],
+        "edges": ["e_compare", "e_measure"],
+        "paragraphs": ["stem-001:chunk:42"],
+        "chunk_ids": ["stem-001:chunk:44"],
+        "required_patterns": ["78.5%", "ResNet-50", "ImageNet"],
+        "forbidden_patterns": ["PCR"],
+        "numeric_rel_tol": 0.001
+      }
+    },
+    {
+      "id": "stem-001-q15",
+      "question": "What batch size and optimizer were used to train ResNet-Light on ImageNet?",
+      "paradigm": "STEM",
+      "paper_id": "stem-001",
+      "scale": "detail",
+      "gold": {
+        "nodes": ["n_method", "n_dataset"],
+        "edges": ["e_eval"],
+        "paragraphs": ["stem-001:chunk:43"],
+        "chunk_ids": ["stem-001:chunk:43"],
+        "required_patterns": ["256", "Adam", "ImageNet"],
+        "forbidden_patterns": []
+      }
+    }
+  ]
+}

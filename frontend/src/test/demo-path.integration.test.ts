@@ -28,6 +28,8 @@ const detailViewSrc = readFrontendSource('views/PaperDetailView.vue')
 const statusPanelSrc = readFrontendSource('components/papers/PaperStatusPanel.vue')
 const graphViewSrc = readFrontendSource('views/PaperGraphView.vue')
 const patrolViewSrc = readFrontendSource('views/PatrolView.vue')
+const patrolViewHelpersSrc = readFrontendSource('utils/patrolViewHelpers.ts')
+const patrolViewBundleSrc = `${patrolViewSrc}\n${patrolViewHelpersSrc}`
 const tagCitationSrc = readFrontendSource('components/ui/TagCitation.vue')
 const paperGraphUtilSrc = readFrontendSource('utils/paperGraph.ts')
 
@@ -88,7 +90,8 @@ describe('design-spec §16 Prototype 答辩路径', () => {
 
     it('Detail wires PaperStatusPanel for pipeline progress while not ready', () => {
       expect(detailViewSrc).toContain('PaperStatusPanel')
-      expect(detailViewSrc).toContain("status !== 'ready'")
+      expect(detailViewSrc).toContain('isGraphInteractiveStatus')
+      expect(detailViewSrc).toContain('terminal-reached')
       expect(statusPanelSrc).toContain('PIPELINE_STEPS')
       expect(statusPanelSrc).toContain('status-step-pulse')
     })
@@ -108,7 +111,9 @@ describe('design-spec §16 Prototype 答辩路径', () => {
 
   describe('Detail → QA-Citation-Active', () => {
     it('ready Detail exposes SSE QA, citation tags, and compact graph preview', () => {
-      expect(detailViewSrc).toContain('streamPaperQa')
+      const qaComposableSrc = readFrontendSource('composables/usePaperDetailQa.ts')
+      expect(qaComposableSrc).toContain('streamPaperQa')
+      expect(detailViewSrc).toContain('usePaperDetailQa')
       expect(detailViewSrc).toContain('TagCitation')
       expect(detailViewSrc).toContain('PaperGraph')
       expect(detailViewSrc).toContain('highlightNodeId')
@@ -193,9 +198,9 @@ describe('design-spec §16 Prototype 答辩路径', () => {
 
   describe('Patrol → [node_ref] → Graph / Deep-Link', () => {
     it('graphLinkForNodeRef builds PaperGraph route with node query', () => {
-      expect(patrolViewSrc).toContain('graphLinkForNodeRef')
-      expect(patrolViewSrc).toContain('query: { node: ref.node_id }')
-      expect(patrolViewSrc).toContain('RouteName.PaperGraph')
+      expect(patrolViewBundleSrc).toContain('graphLinkForNodeRef')
+      expect(patrolViewBundleSrc).toContain('query: { node: ref.node_id }')
+      expect(patrolViewBundleSrc).toContain('RouteName.PaperGraph')
       expect(patrolViewSrc).toContain('PATROL_BASELINE_COPY.nodeRefGraphLink')
     })
 
@@ -241,7 +246,7 @@ describe('design-spec §16 Prototype 答辩路径', () => {
     })
 
     it('Detail QA panel binds TagCitation :active to highlightNodeId for bidirectional sync', () => {
-      expect(detailViewSrc).toContain(':active="item.node_id === highlightNodeId"')
+      expect(detailViewSrc).toContain("item.type === 'node' && item.node_id === highlightNodeId")
       expect(detailViewSrc).toContain('@click="focusCitation(item)"')
       expect(detailViewSrc).toContain(':highlight-node-id="highlightNodeId"')
       expect(detailViewSrc).toContain('@node-click="onGraphNodeClick"')
@@ -253,7 +258,7 @@ describe('design-spec §16 Prototype 答辩路径', () => {
       const tokens = loadDesignTokenMap()
       expect(tokens['--duration-fast']).toBe('150ms')
       expect(tagCitationSrc).toContain('var(--transition-fast)')
-      expect(detailViewSrc).toContain(':active="item.node_id === highlightNodeId"')
+      expect(detailViewSrc).toContain("item.type === 'node' && item.node_id === highlightNodeId")
       expect(detailViewSrc).toContain(':highlight-node-id="highlightNodeId"')
       expect(paperGraphUtilSrc).toContain('GRAPH_STATE_ANIMATION_MS')
     })

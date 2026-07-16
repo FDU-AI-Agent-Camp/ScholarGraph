@@ -45,6 +45,20 @@ describe('BadgeStatus', () => {
     expect(wrapper.classes()).toContain('badge-status--processing')
     expect(wrapper.text()).toContain('解构中')
   })
+
+  it('uses warning token class for ready_with_warnings — not success green (G1)', () => {
+    const src = readFrontendSource('components/ui/BadgeStatus.vue')
+    const readyBlock = src.slice(src.indexOf('.badge-status--ready '), src.indexOf('.badge-status--failed'))
+    expect(readyBlock).toContain('var(--color-success)')
+    expect(readyBlock).toContain('ready_with_warnings')
+    expect(readyBlock).toContain('var(--color-warning)')
+    expect(readyBlock.indexOf('ready_with_warnings')).toBeLessThan(readyBlock.lastIndexOf('var(--color-warning)'))
+
+    const wrapper = mount(BadgeStatus, { props: { status: 'ready_with_warnings' } })
+    expect(wrapper.classes()).toContain('badge-status--ready_with_warnings')
+    expect(wrapper.text()).toContain('已就绪（有警告）')
+    expect(wrapper.classes()).not.toContain('badge-status--ready')
+  })
 })
 
 describe('TagCitation', () => {
@@ -63,8 +77,9 @@ describe('TagCitation', () => {
       props: { label: '核心论点', nodeId: 'n1', active: true },
     })
 
-    expect(wrapper.classes()).toContain('tag-citation--active')
-    await wrapper.trigger('click')
+    const button = wrapper.find('.tag-citation')
+    expect(button.classes()).toContain('tag-citation--active')
+    await button.trigger('click')
     expect(wrapper.emitted('click')).toHaveLength(1)
   })
 
@@ -73,8 +88,9 @@ describe('TagCitation', () => {
       props: { label: '核心论点', nodeId: 'n1' },
     })
 
-    expect(wrapper.classes()).toContain('citation-tag')
-    expect(wrapper.classes()).toContain('tag-citation')
+    const button = wrapper.find('.tag-citation')
+    expect(button.classes()).toContain('citation-tag')
+    expect(button.classes()).toContain('tag-citation')
   })
 
   it('uses 120ms instant transition on default hover states', () => {

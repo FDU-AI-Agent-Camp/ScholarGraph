@@ -247,7 +247,7 @@ describe('Phase 5 Detail acceptance (5.1–5.10)', () => {
 
   describe('5.8 TagCitation 150ms active sync with highlightNodeId', () => {
     it('wires citation tags to highlightNodeId with fast transition token', () => {
-      expect(detailViewSrc).toContain(':active="item.node_id === highlightNodeId"')
+      expect(detailViewSrc).toContain("item.type === 'node' && item.node_id === highlightNodeId")
       expect(detailViewSrc).toContain('@node-click="onGraphNodeClick"')
       expect(detailViewSrc).toContain('@click="focusCitation(item)"')
       expect(tagCitationSrc).toContain('var(--transition-fast)')
@@ -314,7 +314,7 @@ describe('Phase 5 Detail acceptance (5.1–5.10)', () => {
       const tokens = loadDesignTokenMap()
 
       expect(tokens['--duration-fast']).toBe('150ms')
-      expect(detailViewSrc).toContain(':active="item.node_id === highlightNodeId"')
+      expect(detailViewSrc).toContain("item.type === 'node' && item.node_id === highlightNodeId")
       expect(detailViewSrc).toContain('@node-click="onGraphNodeClick"')
       expect(detailViewSrc).toContain('@click="focusCitation(item)"')
       expect(tagCitationSrc).toContain('var(--transition-fast)')

@@ -1,7 +1,10 @@
 <script setup lang="ts">
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import { computed, ref, watch } from 'vue'
 
+import { isApiClientError } from '@/api/client'
+import * as papersApi from '@/api/papers'
+import type { PaperStatus } from '@/api/types'
 import { usePaperStatus } from '@/composables/usePaperStatus'
 import { DETAIL_BASELINE_COPY } from '@/constants/detailCopy'
 import {
@@ -12,9 +15,10 @@ import {
 import {
   EXTRACT_HEURISTIC_FALLBACK_MESSAGE,
   hasExtractHeuristicFallback,
-  resolveExtractWarningMessages,
+  resolveExtractWarningDisplays,
 } from '@/utils/extractWarnings'
-import { isFailedStatus } from '@/utils/paperStatus'
+import { isActivePipelineStatus, isFailedStatus, isGraphInteractiveStatus } from '@/utils/paperStatus'
+import { resolvePipelineFailureTitle } from '@/utils/pipelineFailureCopy'
 import {
   PIPELINE_REFRESH_CAPTION,
   PIPELINE_STEPS,
@@ -28,17 +32,23 @@ const props = defineProps<{
 }>()
 
 const emit = defineEmits<{
+  /** @deprecated Prefer terminalReached — kept for callers still listening. */
   ready: []
+  terminalReached: [status: PaperStatus]
+  reextracted: []
 }>()
 
-const { status, polling, start, stop } = usePaperStatus(props.paperId)
+const { status, polling, start, stop, pollOnce } = usePaperStatus(props.paperId)
 const extractFallbackToastShown = ref(false)
 const classifyFallbackToastShown = ref(false)
+const reextracting = ref(false)
 
 const failedSnapshot = computed(() => {
   const snapshot = status.value
   return snapshot && isFailedStatus(snapshot) ? snapshot : null
 })
+
+const canReextract = computed(() => Boolean(status.value))
 
 const stepStates = computed((): PipelineStepVisualState[] => {
   const snapshot = status.value
@@ -48,8 +58,69 @@ const stepStates = computed((): PipelineStepVisualState[] => {
   return resolvePipelineStepStates(snapshot.stage, snapshot.status, failedSnapshot.value?.failed_during)
 })
 
-const extractWarningMessages = computed(() => resolveExtractWarningMessages(status.value?.extract_warnings))
+const extractWarningDisplays = computed(() => resolveExtractWarningDisplays(status.value?.extract_warnings))
 const classifyWarningMessages = computed(() => resolveClassifyWarningMessages(status.value?.classify_warnings))
+const failureAlertTitle = computed(() => resolvePipelineFailureTitle(failedSnapshot.value?.error_code))
+
+async function confirmForceReextract(): Promise<boolean> {
+  try {
+    await ElMessageBox.confirm(
+      DETAIL_BASELINE_COPY.forceReextractConfirmMessage,
+      DETAIL_BASELINE_COPY.forceReextractConfirmTitle,
+      {
+        type: 'warning',
+        confirmButtonText: DETAIL_BASELINE_COPY.forceReextractConfirmOk,
+        cancelButtonText: DETAIL_BASELINE_COPY.forceReextractConfirmCancel,
+      },
+    )
+    return true
+  } catch {
+    return false
+  }
+}
+
+async function runReextract(force: boolean): Promise<void> {
+  const result = await papersApi.forceReextractPaper(props.paperId, { force })
+  status.value = result.data
+  emit('reextracted')
+  ElMessage.success(DETAIL_BASELINE_COPY.reextractSuccess)
+  start()
+}
+
+async function onReextractClick(): Promise<void> {
+  if (reextracting.value || !status.value) {
+    return
+  }
+  reextracting.value = true
+  try {
+    const current = status.value.status
+    if (isActivePipelineStatus(current)) {
+      if (!(await confirmForceReextract())) {
+        return
+      }
+      await runReextract(true)
+      return
+    }
+
+    try {
+      await runReextract(false)
+    } catch (error) {
+      if (isApiClientError(error) && error.code === 'PAPER_ALREADY_PROCESSING') {
+        if (!(await confirmForceReextract())) {
+          return
+        }
+        await runReextract(true)
+        return
+      }
+      ElMessage.error(isApiClientError(error) ? error.message : DETAIL_BASELINE_COPY.reextractFailed)
+    }
+  } catch (error) {
+    ElMessage.error(isApiClientError(error) ? error.message : DETAIL_BASELINE_COPY.reextractFailed)
+  } finally {
+    reextracting.value = false
+    void pollOnce()
+  }
+}
 
 watch(
   () => props.paperId,
@@ -65,7 +136,14 @@ watch(
 
 watch(
   () => status.value?.status,
-  (value) => {
+  (value, previous) => {
+    if (!value || !isGraphInteractiveStatus(value)) {
+      return
+    }
+    if (previous != null && isGraphInteractiveStatus(previous)) {
+      return
+    }
+    emit('terminalReached', value)
     if (value === 'ready') {
       emit('ready')
     }
@@ -75,10 +153,10 @@ watch(
 watch(
   () => status.value,
   (snapshot, previous) => {
-    if (!snapshot || snapshot.status !== 'ready' || extractFallbackToastShown.value) {
+    if (!snapshot || !isGraphInteractiveStatus(snapshot.status) || extractFallbackToastShown.value) {
       return
     }
-    if (previous?.status === 'ready') {
+    if (previous != null && isGraphInteractiveStatus(previous.status)) {
       return
     }
     if (!hasExtractHeuristicFallback(snapshot.extract_warnings)) {
@@ -92,10 +170,10 @@ watch(
 watch(
   () => status.value,
   (snapshot, previous) => {
-    if (!snapshot || snapshot.status !== 'ready' || classifyFallbackToastShown.value) {
+    if (!snapshot || !isGraphInteractiveStatus(snapshot.status) || classifyFallbackToastShown.value) {
       return
     }
-    if (previous?.status === 'ready') {
+    if (previous != null && isGraphInteractiveStatus(previous.status)) {
       return
     }
     if (!hasClassifierHeuristicFallback(snapshot.classify_warnings)) {
@@ -142,9 +220,12 @@ watch(
       class="status-panel__classify-warning"
     />
     <el-alert
-      v-if="extractWarningMessages.length"
+      v-if="extractWarningDisplays.length"
       type="warning"
-      :title="extractWarningMessages[0]"
+      :title="extractWarningDisplays[0]?.message"
+      :description="
+        extractWarningDisplays[0]?.technicalCode ? `技术代码: ${extractWarningDisplays[0].technicalCode}` : undefined
+      "
       show-icon
       :closable="false"
       class="status-panel__extract-warning"
@@ -152,7 +233,7 @@ watch(
     <el-alert
       v-if="failedSnapshot"
       type="error"
-      :title="failedSnapshot.error_code ?? 'PIPELINE_FAILED'"
+      :title="failureAlertTitle"
       :description="failedSnapshot.message"
       show-icon
       :closable="false"
@@ -167,6 +248,17 @@ watch(
       </el-button>
       <el-button v-else size="small" @click="stop">
         {{ DETAIL_BASELINE_COPY.pauseRefresh }}
+      </el-button>
+      <el-button
+        v-if="canReextract"
+        size="small"
+        type="warning"
+        plain
+        :loading="reextracting"
+        data-testid="reextract-button"
+        @click="onReextractClick"
+      >
+        {{ DETAIL_BASELINE_COPY.reextractButton }}
       </el-button>
     </div>
   </section>

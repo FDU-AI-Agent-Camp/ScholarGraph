@@ -10,6 +10,7 @@ from backend.schemas.paper import PaperStatus, PaperStatusData, PipelineStage
 from backend.schemas.paradigm import Paradigm, ParadigmClassification
 from backend.services.errors import ServiceError
 from backend.services.extract_worker import (
+    areset_extract_worker,
     get_full_extraction_task,
     reset_extract_worker,
     schedule_full_extraction,
@@ -32,7 +33,7 @@ def _register_paper(paper_id: str) -> None:
     service._status[paper_id] = PaperStatusData(
         paper_id=paper_id,
         status=PaperStatus.PROCESSING,
-        percent=50,
+        percent=80,
         stage=PipelineStage.EXTRACTING,
         message="extracting",
         updated_at=now,
@@ -40,19 +41,19 @@ def _register_paper(paper_id: str) -> None:
 
 
 @pytest.fixture(autouse=True)
-def _fresh_state(monkeypatch: pytest.MonkeyPatch) -> None:
+async def _fresh_state(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("LLM_MODE", "mock")
     from backend.config import Settings, get_settings
     from backend.services.paper_service import get_paper_service
 
     get_settings.cache_clear()
     get_paper_service.cache_clear()
-    reset_extract_worker()
+    await areset_extract_worker()
     # Zero retry delay keeps mock-mode worker tests fast.
     _fast_settings = Settings(_env_file=None, llm_mode="mock", extract_chunk_retry_delay_s=0.0)
     monkeypatch.setattr("backend.services.extract_worker.get_settings", lambda: _fast_settings)
     yield
-    reset_extract_worker()
+    await areset_extract_worker()
     get_paper_service.cache_clear()
 
 
@@ -75,6 +76,7 @@ class TestScheduleFullExtraction:
 
         assert task is get_full_extraction_task(paper_id)
         assert not task.done()
+        await areset_extract_worker()
 
     async def test_idempotent_scheduling(self) -> None:
         paper_id = "bg-002"
@@ -85,19 +87,30 @@ class TestScheduleFullExtraction:
         task2 = schedule_full_extraction(paper_id, "text", Paradigm.HSS, classification)
 
         assert task1 is task2
+        await areset_extract_worker()
 
     async def test_background_task_finalizes_pipeline(self) -> None:
+        from unittest.mock import AsyncMock, patch
+
+        from tests.helpers.event_bus_testkit import drain_event_bus
+
         paper_id = "bg-003"
         _register_paper(paper_id)
         classification = ParadigmClassification(paradigm=Paradigm.HSS, confidence=0.9, reason="test")
 
-        schedule_full_extraction(paper_id, "text", Paradigm.HSS, classification)
-        # Wait for the mock-mode background task to complete.
-        for _ in range(100):
-            task = get_full_extraction_task(paper_id)
-            if task is None or task.done():
-                break
-            await asyncio.sleep(0.01)
+        with patch(
+            "backend.services.rag_index_service.RagIndexService.index_paper_for_rag_async",
+            new_callable=AsyncMock,
+            return_value=True,
+        ):
+            schedule_full_extraction(paper_id, "text", Paradigm.HSS, classification)
+            # Wait for the mock-mode background task to complete.
+            for _ in range(100):
+                task = get_full_extraction_task(paper_id)
+                if task is None or task.done():
+                    break
+                await asyncio.sleep(0.01)
+            await drain_event_bus()
 
         status = await get_paper_service().get_status(paper_id)
         assert status.status == PaperStatus.READY

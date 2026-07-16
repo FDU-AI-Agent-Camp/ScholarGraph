@@ -222,6 +222,24 @@ def report_api_checks(client: httpx.Client, report: RehearsalReport) -> None:
         f"{insight_count} insights, {node_ref_count} node_refs",
     )
 
+    for mode, paper_ids in (
+        ("method_overlap", ["stem-001", "stem-002"]),
+        ("claim_evolution", ["stem-001", "stem-002"]),
+    ):
+        v2_resp = client.post(
+            f"{api}/patrol",
+            json={"paper_ids": paper_ids, "mode": mode},
+            timeout=60.0,
+        )
+        v2_data = v2_resp.json().get("data", {}) if v2_resp.status_code == 200 else {}
+        v2_insights = v2_data.get("insights", [])
+        v2_points = len(v2_insights[0].get("structured_points", [])) if v2_insights else 0
+        report.add(
+            f"POST /patrol {mode}",
+            v2_resp.status_code == 200 and len(v2_insights) > 0,
+            f"{len(v2_insights)} insights, {v2_points} structured_points",
+        )
+
 
 def report_frontend_checks(client: httpx.Client, report: RehearsalReport) -> None:
     """SPA shell smoke — rendered content verified separately via Playwright."""

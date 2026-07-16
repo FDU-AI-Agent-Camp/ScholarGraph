@@ -96,9 +96,9 @@ async def test_handoff_extract_output_feeds_store_finalize(integration_paper: tu
 
         await run_paper_pipeline(paper_id, pdf_path)
 
-    mocks["store_save"].assert_called_once()
-    saved_graph = mocks["store_save"].call_args.args[0]
-    assert saved_graph.paper_id == paper_id
+        mocks["store_save"].assert_called_once()
+        saved_graph = mocks["store_save"].call_args.args[0]
+        assert saved_graph.paper_id == paper_id
 
 
 async def test_handoff_success_updates_paper_detail_and_graph(
@@ -147,7 +147,13 @@ async def test_handoff_pipeline_invokes_all_four_stages_in_order(
         mocks["ingest"].ingest.side_effect = track_ingest
         mocks["agent"].classify_paradigm.side_effect = track_classify
         mocks["agent"].extract_graph.side_effect = track_extract
-        mocks["store_save"].side_effect = lambda _g: order.append(NODE_STORE)
+        original_finalize = mocks["completion"].finalize
+
+        def _track_finalize(*args, **kwargs):
+            order.append(NODE_STORE)
+            return original_finalize(*args, **kwargs)
+
+        mocks["completion"].finalize = _track_finalize
 
         await run_paper_pipeline(paper_id, pdf_path)
 

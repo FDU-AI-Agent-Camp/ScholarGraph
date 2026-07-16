@@ -1,0 +1,141 @@
+{
+  "schema_version": 1,
+  "dataset_id": "patrol-v1-golden",
+  "description": "Patrol V1 golden set for lens_clash and contradiction rule/LLM-light regression.",
+  "owner": "Patrol V1 QA",
+  "cases": [
+    {
+      "id": "lens-pos-01",
+      "mode": "lens_clash",
+      "expectation": "positive",
+      "paper_a_id": "v1-lens-a",
+      "paper_b_id": "v1-lens-b",
+      "rationale": "不同分析视角应产出 READY 且 clash_aspect=analytical_framework。",
+      "paper_a": { "lens_label": "结构功能主义" },
+      "paper_b": { "lens_label": "符号互动论" },
+      "expected": {
+        "insight_null": false,
+        "status": "ready",
+        "clash_aspect": "analytical_framework"
+      }
+    },
+    {
+      "id": "lens-pos-02",
+      "mode": "lens_clash",
+      "expectation": "positive",
+      "paper_a_id": "v1-lens-c",
+      "paper_b_id": "v1-lens-d",
+      "rationale": "英文不同 lens 标签仍应触发框架冲突结构化点。",
+      "paper_a": { "lens_label": "Marxist Political Economy" },
+      "paper_b": { "lens_label": "Feminist Institutionalism" },
+      "expected": {
+        "insight_null": false,
+        "status": "ready",
+        "clash_aspect": "analytical_framework"
+      }
+    },
+    {
+      "id": "lens-neg-same-01",
+      "mode": "lens_clash",
+      "expectation": "positive",
+      "paper_a_id": "v1-lens-e",
+      "paper_b_id": "v1-lens-f",
+      "rationale": "相同 lens 仍产出 insight，但 clash_aspect=none（非拦截 Case）。",
+      "paper_a": { "lens_label": "理性选择理论" },
+      "paper_b": { "lens_label": "理性选择理论" },
+      "expected": {
+        "insight_null": false,
+        "status": "ready",
+        "clash_aspect": "none"
+      }
+    },
+    {
+      "id": "lens-neg-missing-01",
+      "mode": "lens_clash",
+      "expectation": "negative",
+      "paper_a_id": "v1-lens-g",
+      "paper_b_id": "v1-lens-h",
+      "rationale": "缺失 AnalyticalLens 时应无法构建 insight（图谱不足）。",
+      "paper_a": { "thesis_label": "仅有论点" },
+      "paper_b": { "lens_label": "后现代主义" },
+      "expected": {
+        "insight_null": true
+      }
+    },
+    {
+      "id": "contra-pos-01",
+      "mode": "contradiction",
+      "expectation": "positive",
+      "paper_a_id": "v1-contra-a",
+      "paper_b_id": "v1-contra-b",
+      "rationale": "不同 Thesis + SubArgument 应产出 READY 矛盾结构化点。",
+      "paper_a": {
+        "thesis_label": "市场化改革提升效率",
+        "sub_arguments": ["产权明晰降低交易成本"]
+      },
+      "paper_b": {
+        "thesis_label": "国家干预保障公平",
+        "sub_arguments": ["再分配政策纠正市场失灵"]
+      },
+      "expected": {
+        "insight_null": false,
+        "status": "ready",
+        "conflict_type": "potential"
+      }
+    },
+    {
+      "id": "contra-pos-02",
+      "mode": "contradiction",
+      "expectation": "positive",
+      "paper_a_id": "v1-contra-c",
+      "paper_b_id": "v1-contra-d",
+      "rationale": "英文不同论点仍应触发 potential 冲突类型。",
+      "paper_a": {
+        "thesis_label": "Social media increases political participation",
+        "sub_arguments": ["Algorithmic feeds mobilize youth voters"]
+      },
+      "paper_b": {
+        "thesis_label": "Social media polarizes public discourse",
+        "sub_arguments": ["Echo chambers reduce cross-cutting exposure"]
+      },
+      "expected": {
+        "insight_null": false,
+        "status": "ready",
+        "conflict_type": "potential"
+      }
+    },
+    {
+      "id": "contra-neg-insufficient-01",
+      "mode": "contradiction",
+      "expectation": "negative",
+      "paper_a_id": "v1-contra-e",
+      "paper_b_id": "v1-contra-f",
+      "rationale": "缺少 SubArgument 时应返回 insufficient_data。",
+      "paper_a": { "thesis_label": "论点 A" },
+      "paper_b": { "thesis_label": "论点 B" },
+      "expected": {
+        "insight_null": false,
+        "status": "insufficient_data",
+        "has_contradiction": false
+      }
+    },
+    {
+      "id": "contra-neg-missing-thesis-01",
+      "mode": "contradiction",
+      "expectation": "negative",
+      "paper_a_id": "v1-contra-g",
+      "paper_b_id": "v1-contra-h",
+      "rationale": "缺失 Thesis 时应返回 insufficient_data。",
+      "paper_a": { "lens_label": "仅视角" },
+      "paper_b": {
+        "thesis_label": "论点 B",
+        "sub_arguments": ["分论点 B"]
+      },
+      "expected": {
+        "insight_null": false,
+        "status": "insufficient_data",
+        "has_contradiction": false
+      }
+    }
+  ]
+}

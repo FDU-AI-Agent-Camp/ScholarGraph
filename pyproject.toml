@@ -21,6 +21,10 @@ dependencies = [
     "json-repair>=0.35.0",
     "tenacity>=9.0.0",
     "numpy>=1.26.0",
+    "chromadb>=0.5.0",
+    "sqlalchemy>=2.0.51",
+    "aiosqlite>=0.22.1",
+    "alembic>=1.18.5",
 ]
 
 [project.optional-dependencies]
@@ -72,11 +76,19 @@ markers = [
     "live_mineru: MinerU path-B 真机对比实验，需 uv sync --extra mineru 与语料 PDF；默认排除",
     "live_grobid: GROBID sidecar isalive 抽验，需 docker compose up；默认排除",
     "live_benchmark: 全量 17 篇 benchmark 与 committed baseline 对比；需语料 + MinerU + GROBID；默认排除",
+    "live_judge: QA Judge snapshot 回放小样本 CI；需 JUDGE_SNAPSHOT_REPLAY=1，零 token",
+    "live_patrol_logic: Patrol 真实算法链路回归（embedding/reranker/四模式 live）；默认排除",
+    "live_qa_logic: QA 真实链路回归（SSE/检索/Judge 等）；默认排除",
+    "demo_profile_check: demo 准入验收；需 APP_PROFILE=demo + RERANKER_ENABLED=true + live API；默认排除",
+    "patrol_fault_injection: Patrol RAG 故障注入 / 降级契约断言（PR 默认可跑；release 门禁必跑）",
+    "p13_release_gate: P13 孤儿线程/Watchdog 债务回归矩阵（PR 默认可跑；make p13-release-gate 必跑）",
+    "process_release_gate: processing/pending 墙钟 + 冷启动 grace 回归矩阵（make process-release-gate 必跑）",
+    "architecture_evolution: 主 loop/外部 broker 多进程解耦演进验收（默认 skip；未落地前仅占位）",
     "integration: 跨节点 / 编译后工作流集成测试",
     "three_branch: FE + platform + ingest 三分支联调（语料缺失时 skip）",
     "smoke: 快速冒烟（import / 路由 / 契约字段）",
 ]
-addopts = "-m 'not red and not live_mineru and not live_grobid and not live_benchmark'"
+addopts = "-m 'not red and not live_patrol_logic and not live_qa_logic and not demo_profile_check and not live_mineru and not live_grobid and not live_benchmark and not live_e10 and not live_judge'"
 
 [tool.ruff]
 line-length = 120

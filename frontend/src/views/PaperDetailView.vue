@@ -1,20 +1,28 @@
 <script setup lang="ts">
-import { computed, defineAsyncComponent, onMounted, ref, watch } from 'vue'
+import { computed, defineAsyncComponent, onMounted, ref, toRef, watch } from 'vue'
 import { RouterLink, useRouter } from 'vue-router'
 
-import { streamPaperQa } from '@/api/qaStream'
-import type { QaStreamCitationData } from '@/api/types'
 import PaperMetadataCard from '@/components/papers/PaperMetadataCard.vue'
 import PaperStatusPanel from '@/components/papers/PaperStatusPanel.vue'
 import BadgeParadigm from '@/components/ui/BadgeParadigm.vue'
 import BadgeStatus from '@/components/ui/BadgeStatus.vue'
 import TagCitation from '@/components/ui/TagCitation.vue'
+import { usePaperDetailQa } from '@/composables/usePaperDetailQa'
 import { DETAIL_BASELINE_COPY } from '@/constants/detailCopy'
 import { RouteName } from '@/router/meta'
 import { usePaperStore } from '@/stores/paper'
 import { resolveClassifyWarningMessages } from '@/utils/classifyWarnings'
-import { resolveExtractWarningMessages } from '@/utils/extractWarnings'
-import { appendUniqueCitation, citationKey } from '@/utils/qaCitations'
+import { resolveExtractWarningDisplays } from '@/utils/extractWarnings'
+import { formatDetailTime } from '@/utils/formatDetailTime'
+import { confirmAndDeletePaper, PAPER_DELETE_COPY } from '@/utils/paperDelete'
+import {
+  chunkCitationPreview,
+  chunkPreviewPlaceholderTooltip,
+  citationDisplayId,
+  citationKey,
+  isChunkPreviewDegraded,
+} from '@/utils/qaCitations'
+import { isGraphInteractiveStatus, isPreviewAvailableStatus } from '@/utils/paperStatus'
 
 const PaperGraph = defineAsyncComponent(() => import('@/components/graph/PaperGraph.vue'))
 
@@ -22,35 +30,68 @@ const props = defineProps<{ paperId: string }>()
 const router = useRouter()
 const paperStore = usePaperStore()
 
-const question = ref('')
-const answer = ref('')
-const streaming = ref(false)
-const citations = ref<QaStreamCitationData[]>([])
-const highlightNodeId = ref<string | null>(null)
 const graphLoading = ref(false)
-let abort: AbortController | null = null
+const deleting = ref(false)
 
-const isReady = () => paperStore.currentPaper?.status === 'ready'
-const isPreview = () =>
-  paperStore.currentPaper?.status !== 'ready' && Boolean(paperStore.currentPaper?.preview_available)
-const isInteractive = () => isReady() || isPreview()
+/** Capability gates — graph/QA use interactive+preview; Badge uses raw status. */
+const isPreview = () => {
+  const paper = paperStore.currentPaper
+  if (!paper) {
+    return false
+  }
+  return isPreviewAvailableStatus(paper.status, Boolean(paper.preview_available))
+}
 
-const extractWarningMessages = computed(() => resolveExtractWarningMessages(paperStore.currentPaper?.extract_warnings))
+const isInteractive = () => {
+  const status = paperStore.currentPaper?.status
+  if (!status) {
+    return false
+  }
+  return isGraphInteractiveStatus(status) || isPreview()
+}
+
+const {
+  question,
+  answer,
+  streaming,
+  citations,
+  qaStreamWarningMessage,
+  highlightNodeId,
+  resetQaSession,
+  ask,
+  stopStream,
+  focusCitation,
+  onGraphNodeClick,
+} = usePaperDetailQa(toRef(props, 'paperId'), isInteractive)
+
+const extractWarningDisplays = computed(() => resolveExtractWarningDisplays(paperStore.currentPaper?.extract_warnings))
 const classifyWarningMessages = computed(() =>
   resolveClassifyWarningMessages(paperStore.currentPaper?.classify_warnings),
 )
 
-function formatDetailTime(iso: string | undefined): string {
-  if (!iso) {
-    return '—'
+function onPipelineTerminalReached(): void {
+  void paperStore.fetchDetail(props.paperId)
+}
+
+function onPipelineReextracted(): void {
+  resetQaSession()
+  void paperStore.fetchDetail(props.paperId)
+}
+
+async function onDeletePaper(): Promise<void> {
+  const paper = paperStore.currentPaper
+  if (!paper || deleting.value) {
+    return
   }
-  return new Date(iso).toLocaleString('zh-CN', {
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
+  const ok = await confirmAndDeletePaper(paper.paper_id, {
+    onDeleteInFlight: (inFlight) => {
+      deleting.value = inFlight
+    },
   })
+  if (ok) {
+    paperStore.clearCurrent()
+    await router.push({ name: RouteName.Papers })
+  }
 }
 
 async function loadGraphIfReady(): Promise<void> {
@@ -83,62 +124,12 @@ watch(
   },
 )
 
-async function ask(): Promise<void> {
-  if (!question.value.trim() || !isInteractive()) {
-    return
-  }
-  answer.value = ''
-  citations.value = []
-  highlightNodeId.value = null
-  streaming.value = true
-  abort = new AbortController()
-  try {
-    await streamPaperQa(
-      props.paperId,
-      question.value.trim(),
-      {
-        onMessage: (data) => {
-          answer.value += data.delta
-        },
-        onCitation: (data) => {
-          citations.value = appendUniqueCitation(citations.value, data)
-          highlightNodeId.value = data.node_id
-        },
-        onDone: (data) => {
-          if (data.answer) {
-            answer.value = data.answer
-          }
-        },
-        onError: (msg) => {
-          answer.value = `错误: ${msg}`
-        },
-      },
-      abort.signal,
-    )
-  } finally {
-    streaming.value = false
-  }
-}
-
-function stopStream(): void {
-  abort?.abort()
-  streaming.value = false
-}
-
-function focusCitation(citation: QaStreamCitationData): void {
-  highlightNodeId.value = citation.node_id
-}
-
 function openFullGraph(): void {
   void router.push({
     name: RouteName.PaperGraph,
     params: { paperId: props.paperId },
     query: highlightNodeId.value ? { node: highlightNodeId.value } : {},
   })
-}
-
-function onGraphNodeClick(nodeId: string): void {
-  highlightNodeId.value = nodeId
 }
 </script>
 
@@ -148,9 +139,21 @@ function onGraphNodeClick(nodeId: string): void {
       <header class="detail-header">
         <div class="detail-header__toolbar">
           <RouterLink to="/papers" class="detail-header__back">← {{ DETAIL_BASELINE_COPY.backLink }}</RouterLink>
-          <el-button v-if="isInteractive()" link type="primary" @click="openFullGraph">
-            {{ DETAIL_BASELINE_COPY.fullGraph }}
-          </el-button>
+          <div class="detail-header__actions">
+            <el-button
+              type="danger"
+              plain
+              size="small"
+              data-testid="detail-delete-button"
+              :loading="deleting"
+              @click="onDeletePaper"
+            >
+              {{ PAPER_DELETE_COPY.button }}
+            </el-button>
+            <el-button v-if="isInteractive()" link type="primary" @click="openFullGraph">
+              {{ DETAIL_BASELINE_COPY.fullGraph }}
+            </el-button>
+          </div>
         </div>
         <h1 class="text-h1 detail-header__title">{{ paperStore.currentPaper.title }}</h1>
         <div class="detail-header__meta">
@@ -169,8 +172,11 @@ function onGraphNodeClick(nodeId: string): void {
 
           <PaperStatusPanel
             :paper-id="props.paperId"
-            :auto-start="paperStore.currentPaper.status !== 'ready'"
-            @ready="paperStore.fetchDetail(props.paperId)"
+            :auto-start="
+              Boolean(paperStore.currentPaper?.status) && !isGraphInteractiveStatus(paperStore.currentPaper.status)
+            "
+            @terminal-reached="onPipelineTerminalReached"
+            @reextracted="onPipelineReextracted"
           />
 
           <section class="detail-qa">
@@ -208,7 +214,19 @@ function onGraphNodeClick(nodeId: string): void {
                 {{ DETAIL_BASELINE_COPY.fullGraph }}
               </el-button>
             </el-space>
-            <div v-if="(answer || streaming) && isInteractive()" class="detail-qa__answer-panel text-body-lg">
+            <div
+              v-if="(answer || streaming || qaStreamWarningMessage) && isInteractive()"
+              class="detail-qa__answer-panel text-body-lg"
+            >
+              <el-alert
+                v-if="qaStreamWarningMessage"
+                type="warning"
+                :title="qaStreamWarningMessage"
+                show-icon
+                :closable="false"
+                class="detail-qa__stream-warning"
+                data-testid="qa-stream-warning"
+              />
               <span class="detail-qa__answer-text">{{ answer }}</span>
               <span v-if="streaming" class="detail-qa__cursor" aria-hidden="true">|</span>
             </div>
@@ -219,8 +237,13 @@ function onGraphNodeClick(nodeId: string): void {
                   v-for="item in citations"
                   :key="citationKey(item)"
                   :label="item.label"
-                  :node-id="item.node_id"
-                  :active="item.node_id === highlightNodeId"
+                  :node-id="citationDisplayId(item)"
+                  :active="item.type === 'node' && item.node_id === highlightNodeId"
+                  :preview="chunkCitationPreview(item) ?? undefined"
+                  :preview-placeholder="item.type === 'chunk' && isChunkPreviewDegraded(item.preview_state)"
+                  :preview-tooltip="
+                    item.type === 'chunk' ? chunkPreviewPlaceholderTooltip(item.preview_state) : undefined
+                  "
                   @click="focusCitation(item)"
                 />
               </div>
@@ -238,9 +261,14 @@ function onGraphNodeClick(nodeId: string): void {
             class="detail-graph__classify-warning"
           />
           <el-alert
-            v-if="extractWarningMessages.length"
+            v-if="extractWarningDisplays.length"
             type="warning"
-            :title="extractWarningMessages[0]"
+            :title="extractWarningDisplays[0]?.message"
+            :description="
+              extractWarningDisplays[0]?.technicalCode
+                ? `技术代码: ${extractWarningDisplays[0].technicalCode}`
+                : undefined
+            "
             show-icon
             :closable="false"
             class="detail-graph__extract-warning"
@@ -304,6 +332,14 @@ function onGraphNodeClick(nodeId: string): void {
 
 .detail-header__back:hover {
   color: var(--color-primary-hover);
+}
+
+.detail-header__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--spacing-8);
 }
 
 .detail-header__title {
@@ -371,6 +407,10 @@ function onGraphNodeClick(nodeId: string): void {
   background: var(--color-bg-subtle);
   white-space: pre-wrap;
   color: var(--color-text-primary);
+}
+
+.detail-qa__stream-warning {
+  margin-bottom: var(--spacing-12);
 }
 
 .detail-qa__cursor {

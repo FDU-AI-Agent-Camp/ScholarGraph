@@ -21,8 +21,12 @@ from pathlib import Path
 from uuid import uuid4
 
 from backend.config import get_settings
+from backend.db.migrations import ensure_migrated
 from backend.graph.workflow import run_paper_pipeline
-from backend.schemas.paper import PaperDetail, PaperStatus, PaperStatusData
+from backend.repositories.async_bridge import run_async
+from backend.repositories.paper_repository import get_paper_repository
+from backend.repositories.pipeline_repository import get_pipeline_repository
+from backend.schemas.paper import PaperStatus, PaperStatusData
 from backend.services.paper_service import get_paper_service
 
 EXIT_SUCCESS = 0
@@ -58,6 +62,31 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     return parser.parse_args(argv)
 
 
+async def _ensure_paper_pending(
+    paper_id: str,
+    *,
+    title: str,
+    pdf_path: str,
+) -> None:
+    ensure_migrated()
+    paper_repo = get_paper_repository()
+    if await paper_repo.get(paper_id) is not None:
+        return
+    now = datetime.now(UTC)
+    await paper_repo.create(paper_id, title, pdf_path, status=PaperStatus.PENDING)
+    await get_pipeline_repository().save_status(
+        paper_id,
+        PaperStatusData(
+            paper_id=paper_id,
+            status=PaperStatus.PENDING,
+            percent=0,
+            stage=None,
+            message="任务已创建，请轮询 status 接口",
+            updated_at=now,
+        ),
+    )
+
+
 def register_paper_for_pipeline(
     paper_id: str,
     pdf_path: Path,
@@ -81,30 +110,15 @@ def register_paper_for_pipeline(
     upload_dir.mkdir(parents=True, exist_ok=True)
     dest = upload_dir / f"{paper_id}.pdf"
 
-    service = get_paper_service()
-    if paper_id not in service._papers:
-        now = datetime.now(UTC)
-        display_title = title or resolved.stem
-        service._papers[paper_id] = PaperDetail(
-            paper_id=paper_id,
-            title=display_title,
-            status=PaperStatus.PENDING,
-            created_at=now,
-            updated_at=now,
-        )
-        service._status[paper_id] = PaperStatusData(
-            paper_id=paper_id,
-            status=PaperStatus.PENDING,
-            percent=0,
-            stage=None,
-            message="任务已创建，请轮询 status 接口",
-            updated_at=now,
-        )
-
     if copy_to_upload_dir and resolved != dest.resolve():
         shutil.copy2(resolved, dest)
-        return dest
-    return resolved
+        pdf_for_pipeline = str(dest)
+    else:
+        pdf_for_pipeline = str(resolved)
+
+    display_title = title or resolved.stem
+    run_async(_ensure_paper_pending(paper_id, title=display_title, pdf_path=pdf_for_pipeline))
+    return Path(pdf_for_pipeline)
 
 
 def _format_status_line(snapshot: PaperStatusData) -> str:
@@ -132,6 +146,13 @@ async def run_single_paper_pipeline(
 
     if snapshot.status == PaperStatus.READY:
         print("[done] 建图完成，可通过 GET /api/v1/papers/{id}/graph 查看图谱")
+        return EXIT_SUCCESS
+
+    if snapshot.status == PaperStatus.READY_WITH_WARNINGS:
+        print(
+            "[done] 建图完成（含告警），可通过 GET /api/v1/papers/{id}/graph 查看图谱",
+            file=sys.stderr,
+        )
         return EXIT_SUCCESS
 
     print(f"[warn] 终态非常规: status={snapshot.status.value}", file=sys.stderr)

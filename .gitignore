@@ -2,19 +2,28 @@
 progress.md
 progress-v2.md
 problems.md
+problems-v2.md
 ui-design-progress.md
+persistence-core-plan.md
+persistence-core-test-design.md
 
 # ── 密钥与环境（勿提交）────────────────────────────────
+# Broad env copies (`.env`, `.env.backup`, `.env.copy`, `.env.local`, …)
 .env
-.env.local
-.env.*.local
+.env.*
 API KEY.txt
 *.pem
 *.key
+*.secret
 secrets/
+credentials.json
+**/credentials.json
+**/secrets.json
 
-# 保留模板
+# 保留可提交的环境模板（必须写在 ignore 规则之后）
 !.env.example
+!.env.demo
+!.env.prod
 
 # ── Python / uv ─────────────────────────────────────────
 .venv/
@@ -40,6 +49,13 @@ pip-wheel-metadata/
 # ── 运行时数据与产物（保留空目录占位）──────────────────
 data/*
 !data/.gitkeep
+!data/patrol_golden_set.json
+!data/patrol_method_overlap_golden.json
+!data/patrol_v1_golden_set.json
+!data/qa_golden_set.json
+!data/mock_vector_store.json
+!data/chunk_manifests/
+!data/chunk_manifests/*.json
 !data/corpus/
 !data/corpus/.gitkeep
 data/corpus/*.pdf
@@ -60,8 +76,9 @@ chroma/
 frontend/node_modules/
 frontend/dist/
 frontend/.vite/
-frontend/.env.development
-frontend/.env.local
+frontend/.env
+frontend/.env.*
+!frontend/.env.development.example
 
 # ── 编辑器与系统 ───────────────────────────────────────
 .idea/

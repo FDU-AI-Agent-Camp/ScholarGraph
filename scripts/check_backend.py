@@ -15,7 +15,8 @@
 1. ruff check        （默认不自动修复）
 2. ruff format --check
 3. pyright backend   （静态类型检查）
-4. pytest            （动态单元测试）
+4. RAG I/O timeout 静态审计 + PaperService LoD AST + P13 release-gate 矩阵
+5. pytest            （动态单元测试）
 """
 
 from __future__ import annotations
@@ -26,7 +27,11 @@ import sys
 from collections.abc import Sequence
 
 RUFF_TARGETS = ("backend", "tests", "scripts")
-DEFAULT_PYTEST_MARKER = "not red and not live_mineru and not live_grobid and not live_benchmark"
+DEFAULT_PYTEST_MARKER = (
+    "not red and not live_patrol_logic and not live_qa_logic and not demo_profile_check "
+    "and not live_mineru and not live_grobid and not live_benchmark and not live_e10 "
+    "and not live_judge and not live_head_merge"
+)
 EXIT_SUCCESS = 0
 EXIT_FAILURE = 1
 
@@ -73,7 +78,15 @@ def main(argv: list[str] | None = None) -> int:
     steps: list[tuple[str, list[str]]] = [
         ("ruff check", ruff_check_cmd),
         ("ruff format", ruff_format_cmd),
-        ("pyright", ["pyright", "backend"]),
+        ("pyright", [sys.executable, "-m", "pyright", "backend"]),
+        # P13: keep wait_for / httpx timeout / [P13_WATCHDOG_HEAL] wire unbroken.
+        ("rag io timeouts", [sys.executable, "scripts/check_rag_io_timeouts.py"]),
+        # Architecture: forbid piercing PaperService._pipeline_repo outside the facade.
+        ("pipeline repo lod", [sys.executable, "scripts/check_pipeline_repo_lod.py"]),
+        # P13: orphan-thread + watchdog debt matrix (generation / compensate / starve / cold-boot).
+        ("p13 release gate", [sys.executable, "scripts/check_p13_release_gate.py"]),
+        # Parallel: processing/pending wall-clock + cold-boot grace matrix.
+        ("process release gate", [sys.executable, "scripts/check_process_release_gate.py"]),
     ]
     if not args.lint_only:
         # Use ``python -m pytest`` to avoid Windows entry-point canonicalisation issues.

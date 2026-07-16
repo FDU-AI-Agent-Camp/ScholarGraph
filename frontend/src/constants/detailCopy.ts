@@ -8,6 +8,13 @@ export const DETAIL_BASELINE_COPY = {
   refreshCaption: '每 2 秒自动刷新',
   resumeRefresh: '继续自动刷新',
   pauseRefresh: '暂停自动刷新',
+  reextractButton: '重新提取',
+  forceReextractConfirmTitle: '强行中止并重新提取？',
+  forceReextractConfirmMessage: '论文正在提取或构建索引中。如果确认系统已卡死，可选择强行中止并重新提取。',
+  forceReextractConfirmOk: '强行中止并重新提取',
+  forceReextractConfirmCancel: '取消',
+  reextractSuccess: '已重新加入抽取队列',
+  reextractFailed: '重新提取失败',
   notReadyAlert: '论文尚未 ready，问答与图谱预览将在流水线完成后可用。',
   mvpPreviewAlert:
     'SYSTEM NOTIFICATION: 当前加载为 MVP 宏观骨架，深度实验节点正在后台组装。问答引擎已自动切换至【宏观摘要尺度】。',

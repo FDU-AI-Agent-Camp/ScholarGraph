@@ -12,7 +12,7 @@ import pytest
 from backend.config import get_settings
 from backend.llm.client import reset_llm_client_cache
 from backend.schemas.paper import PaperStatus
-from backend.services.paper_service import get_paper_service
+from backend.services.paper_service import get_paper_service, reset_persistence_singletons
 
 from tests.conftest import REPO_ROOT, RUN_PIPELINE_SCRIPT
 from tests.ingest.conftest import write_text_pdf
@@ -38,9 +38,8 @@ def pipeline_mock_env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     monkeypatch.setenv("LLM_MODE", "mock")
     monkeypatch.setenv("UPLOAD_DIR", str(upload_dir))
     monkeypatch.setenv("GRAPH_DATA_DIR", str(graph_dir))
-    get_settings.cache_clear()
+    reset_persistence_singletons()
     reset_llm_client_cache()
-    get_paper_service.cache_clear()
     return tmp_path
 
 
@@ -157,6 +156,8 @@ async def test_a11_pipeline_live_mode_heuristic_be2_succeeds(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """LLM_MODE=live uses BE-2 heuristic classify/extract (no cloud LLM required)."""
+    from unittest.mock import AsyncMock, patch
+
     mod = run_pipeline_module
     monkeypatch.setenv("LLM_MODE", "live")
     get_settings.cache_clear()
@@ -167,7 +168,13 @@ async def test_a11_pipeline_live_mode_heuristic_be2_succeeds(
     pdf_path = write_text_pdf(tmp_path / "live-heuristic.pdf", "夏尔巴人父系历史研究")
     mod.register_paper_for_pipeline(paper_id, pdf_path, copy_to_upload_dir=False)
 
-    code = await mod.run_single_paper_pipeline(paper_id, pdf_path)
+    # Keep this DoD on classify/extract heuristics; avoid cloud embedding 404 noise.
+    with patch(
+        "backend.services.rag_index_service.RagIndexService.index_paper_for_rag_async",
+        new_callable=AsyncMock,
+        return_value=True,
+    ):
+        code = await mod.run_single_paper_pipeline(paper_id, pdf_path)
     assert code == mod.EXIT_SUCCESS
 
     status = await get_paper_service().get_status(paper_id)

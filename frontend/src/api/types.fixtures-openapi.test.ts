@@ -13,6 +13,8 @@ import graphFixture from '../../../docs/api/fixtures/graph-hss.json'
 import paperCreateFixture from '../../../docs/api/fixtures/paper-create.json'
 import paperDetailFixture from '../../../docs/api/fixtures/paper-detail-ready.json'
 import patrolFixture from '../../../docs/api/fixtures/patrol-lens-clash.json'
+import patrolMethodOverlapFixture from '../../../docs/api/fixtures/patrol-method-overlap.json'
+import patrolClaimEvolutionFixture from '../../../docs/api/fixtures/patrol-claim-evolution.json'
 import papersListFixture from '../../../docs/api/fixtures/papers-list.json'
 import failedStatusFixture from '../../../docs/api/fixtures/paper-status-hss-failed-001.json'
 
@@ -32,6 +34,31 @@ describe('docs/api fixtures vs generated-backed types.ts', () => {
     expect(report.insights[0]?.node_refs).toHaveLength(2)
     expect(report.insights[0]?.node_refs[0]?.paper_id).toBe('hss-001')
     expect(report.insights[0]?.node_refs[0]?.node_id).toBe('n_lens_a')
+    expect(report.insights[0]?.structured_points?.[0]?.mode).toBe('lens_clash')
+  })
+
+  it('assigns method_overlap fixture structured_points to PatrolReport', () => {
+    const report = patrolMethodOverlapFixture.data as PatrolReport
+    expect(report.mode).toBe('method_overlap')
+    expect(report.paper_ids).toEqual(['stem-001', 'stem-002'])
+    const point = report.insights[0]?.structured_points?.[0]
+    expect(point?.mode).toBe('method_overlap')
+    if (point && point.mode === 'method_overlap') {
+      expect(point.overlap_type).toBe('method')
+      expect(point.overlap_label).toBe('PCA')
+      expect(point.match_type).toBe('semantic')
+    }
+  })
+
+  it('assigns claim_evolution fixture structured_points to PatrolReport', () => {
+    const report = patrolClaimEvolutionFixture.data as PatrolReport
+    expect(report.mode).toBe('claim_evolution')
+    const point = report.insights[0]?.structured_points?.[0]
+    expect(point?.mode).toBe('claim_evolution')
+    if (point && point.mode === 'claim_evolution') {
+      expect(point.evolution_type).toBe('refined')
+      expect(point.problem_fit_score).toBe(82)
+    }
   })
 
   it('assigns graph fixture data to UnifiedPaperGraph', () => {

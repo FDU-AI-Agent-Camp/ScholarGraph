@@ -1,16 +1,35 @@
 """Contradiction patrol logic (BE-4)."""
 
+from __future__ import annotations
+
 from collections.abc import Mapping
+from typing import TYPE_CHECKING
 
 from backend.llm.client import LlmClient
+from backend.patrol.exclusion import PHASE_NODE_PRECHECK, make_exclusion_logic
 from backend.patrol.llm_summary import generate_patrol_summary
+from backend.patrol.node_selection import select_primary_node
+from backend.patrol.rag_service import PatrolRAGService, attach_degradation_fields
+from backend.patrol.similarity import derive_conflict_type
 from backend.schemas.graph import GraphNode, UnifiedPaperGraph
-from backend.schemas.patrol import NodeRef, PatrolInsight, PatrolInsightStatus, PatrolMode
+from backend.schemas.patrol import (
+    ContradictionPoint,
+    NodeRef,
+    PatrolDegradationProfile,
+    PatrolExclusionReason,
+    PatrolInsight,
+    PatrolInsightStatus,
+    PatrolMode,
+)
+
+if TYPE_CHECKING:
+    from backend.rag.vector_store import VectorStore
 
 THESIS_NODE_TYPE = "Thesis"
 SUB_ARGUMENT_NODE_TYPE = "SubArgument"
 CONTRADICTION_INSIGHT_ID = "ins-contradiction-001"
 CONTRADICTION_TITLE = "核心论点张力（Contradiction）"
+CONTRADICTION_QUERY_TEMPLATE = "{thesis_label} 引言 结论 核心论点 论证"
 
 
 def thesis_nodes(graph: UnifiedPaperGraph | None) -> list[GraphNode]:
@@ -29,6 +48,7 @@ async def build_contradiction_insight(
     graphs: Mapping[str, UnifiedPaperGraph],
     paper_ids: list[str],
     *,
+    vector_store: VectorStore | None = None,
     llm_client: LlmClient | None = None,
 ) -> PatrolInsight | None:
     """Compare thesis/sub-argument nodes across two papers and build one insight.
@@ -65,6 +85,12 @@ async def build_contradiction_insight(
             has_contradiction=False,
             paper_ids=[left_id, right_id],
             node_refs=[],
+            exclusion_logic=make_exclusion_logic(
+                PatrolExclusionReason.MISSING_REQUIRED_NODES,
+                phase=PHASE_NODE_PRECHECK,
+                description=summary,
+                metrics={"missing_node_type": "Thesis", "affected_papers": missing_paper_ids},
+            ),
         )
 
     # Gatekeeper: both papers must provide SubArgument nodes for a meaningful
@@ -94,16 +120,36 @@ async def build_contradiction_insight(
                 NodeRef(paper_id=left_id, node_id=left_thesis.id, label=left_thesis.label),
                 NodeRef(paper_id=right_id, node_id=right_thesis.id, label=right_thesis.label),
             ],
+            exclusion_logic=make_exclusion_logic(
+                PatrolExclusionReason.MISSING_REQUIRED_NODES,
+                phase=PHASE_NODE_PRECHECK,
+                description=summary,
+                metrics={
+                    "missing_node_type": "SubArgument",
+                    "affected_papers": missing_subargument_paper_ids,
+                },
+            ),
         )
 
     assert left_thesis is not None and right_thesis is not None
-    context = _build_contradiction_context(graphs, paper_ids)
+    context, degradation = await _build_contradiction_context(
+        graphs,
+        paper_ids,
+        vector_store=vector_store,
+    )
     llm_summary = await generate_patrol_summary(
         PatrolMode.CONTRADICTION,
         context,
         llm_client=llm_client,
     )
     summary = llm_summary or _fallback_contradiction_summary(left_thesis.label, right_thesis.label)
+
+    point = ContradictionPoint(
+        mode="contradiction",
+        point_a=left_thesis.label,
+        point_b=right_thesis.label,
+        conflict_type=derive_conflict_type(left_thesis.label, right_thesis.label),
+    )
 
     return PatrolInsight(
         insight_id=CONTRADICTION_INSIGHT_ID,
@@ -115,23 +161,25 @@ async def build_contradiction_insight(
             NodeRef(paper_id=left_id, node_id=left_thesis.id, label=left_thesis.label),
             NodeRef(paper_id=right_id, node_id=right_thesis.id, label=right_thesis.label),
         ],
+        structured_points=[point],
+        **attach_degradation_fields(degradation),
     )
 
 
 def _primary_thesis(graph: UnifiedPaperGraph | None) -> GraphNode | None:
     if graph is None:
         return None
-    theses = thesis_nodes(graph)
-    if not theses:
-        return None
-    return theses[0]
+    return select_primary_node(thesis_nodes(graph), graph=graph)
 
 
-def _build_contradiction_context(
+async def _build_contradiction_context(
     graphs: Mapping[str, UnifiedPaperGraph],
     paper_ids: list[str],
-) -> str:
+    *,
+    vector_store: VectorStore | None = None,
+) -> tuple[str, PatrolDegradationProfile | None]:
     sections: list[str] = []
+    paper_queries: dict[str, str] = {}
     for paper_id in paper_ids:
         graph = graphs.get(paper_id)
         if graph is None:
@@ -143,7 +191,18 @@ def _build_contradiction_context(
             f"Thesis: {', '.join(thesis_labels) or '（无）'}\n"
             f"SubArgument: {', '.join(sub_labels) or '（无）'}",
         )
-    return "\n\n".join(sections)
+        primary = _primary_thesis(graph)
+        if primary is not None:
+            paper_queries[paper_id] = CONTRADICTION_QUERY_TEMPLATE.format(thesis_label=primary.label)
+
+    rag_service = PatrolRAGService(vector_store)
+    rag_sections, degradation = await rag_service.enrich_context(
+        PatrolMode.CONTRADICTION,
+        paper_queries,
+    )
+    sections.extend(rag_sections)
+
+    return "\n\n".join(sections), degradation
 
 
 def _fallback_contradiction_summary(left_label: str, right_label: str) -> str:

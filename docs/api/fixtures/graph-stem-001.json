@@ -1,0 +1,37 @@
+{
+  "data": {
+    "paper_id": "stem-001",
+    "paradigm": "STEM",
+    "nodes": [
+      { "id": "n_method", "label": "ResNet-Light", "type": "Method", "data": {} },
+      { "id": "n_dataset", "label": "ImageNet", "type": "Dataset", "data": {} },
+      { "id": "n_metric", "label": "top-1 accuracy", "type": "Metric", "data": {} },
+      { "id": "n_baseline", "label": "ResNet-50", "type": "Baseline", "data": {} },
+      { "id": "n_claim", "label": "78.5% top-1 on ImageNet", "type": "Claim", "data": {} }
+    ],
+    "edges": [
+      {
+        "id": "e_eval",
+        "source": "n_method",
+        "target": "n_dataset",
+        "label": "EVALUATED_ON",
+        "type": "EVALUATED_ON"
+      },
+      {
+        "id": "e_measure",
+        "source": "n_claim",
+        "target": "n_metric",
+        "label": "MEASURED_BY",
+        "type": "MEASURED_BY"
+      },
+      {
+        "id": "e_compare",
+        "source": "n_claim",
+        "target": "n_baseline",
+        "label": "COMPARES_TO",
+        "type": "COMPARES_TO"
+      }
+    ],
+    "summary": "STEM QA eval fixture: ResNet-Light trained on ImageNet with Adam (lr=0.001, batch=256)."
+  }
+}

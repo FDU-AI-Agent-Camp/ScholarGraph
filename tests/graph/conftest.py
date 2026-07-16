@@ -1,7 +1,6 @@
 """Shared fixtures for graph / workflow tests."""
 
 from collections.abc import Iterator
-from datetime import UTC, datetime
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -9,12 +8,14 @@ import pytest
 from backend.config import get_settings
 from backend.graph.state import STAGE_PERCENT, WorkflowState, initial_workflow_state
 from backend.graph.workflow import get_compiled_paper_pipeline
+from backend.repositories.async_bridge import run_async
 from backend.schemas.graph import GraphEdge, GraphNode, UnifiedPaperGraph
-from backend.schemas.paper import PaperDetail, PaperStatus, PipelineStage
+from backend.schemas.paper import PaperStatus, PipelineStage
 from backend.schemas.paradigm import Paradigm, ParadigmClassification
 from backend.services.graph_persistence_service import GraphPersistenceService
-from backend.services.paper_service import get_paper_service
 from backend.services.pipeline_completion_service import PipelineCompletionService
+
+from tests.helpers.persistence_testkit import register_test_paper
 
 
 @pytest.fixture
@@ -38,22 +39,19 @@ def clear_compiled_pipeline_cache() -> Iterator[None]:
 
 
 @pytest.fixture
-def workflow_paper(tmp_path: Path) -> tuple[str, Path]:
-    """Register a pending paper and create a minimal PDF on disk."""
+def workflow_paper(tmp_path: Path, persistence_env: dict) -> tuple[str, Path]:
+    """Register a pending paper (SQLite) and create a minimal PDF on disk."""
     paper_id = "wf-test-paper"
     pdf_path = tmp_path / f"{paper_id}.pdf"
     pdf_path.write_bytes(b"%PDF-1.4\n% mock content")
-
-    now = datetime.now(UTC)
-    service = get_paper_service()
-    service._papers[paper_id] = PaperDetail(
-        paper_id=paper_id,
-        title="workflow unit test",
-        status=PaperStatus.PENDING,
-        created_at=now,
-        updated_at=now,
+    run_async(
+        register_test_paper(
+            paper_id,
+            title="workflow unit test",
+            pdf_path=str(pdf_path),
+            status=PaperStatus.PENDING,
+        ),
     )
-    service._status.pop(paper_id, None)
     return paper_id, pdf_path
 
 
@@ -172,24 +170,28 @@ def mock_pipeline_dependencies() -> Iterator[dict[str, MagicMock]]:
     agent_svc.extract_graph_background = AsyncMock(return_value=ExtractResult(graph=graph, warnings=[]))
     agent_svc.should_extract_in_background = MagicMock(return_value=False)
 
-    with patch("backend.services.graph_persistence_service.GraphStore") as store_cls:
-        store_cls.return_value.save = MagicMock()
-        persistence = GraphPersistenceService(store=store_cls.return_value)
-        completion_svc = PipelineCompletionService(graph_persistence=persistence)
+    persistence = GraphPersistenceService()
+    completion_svc = PipelineCompletionService(graph_persistence=persistence)
+    store_save = MagicMock(wraps=persistence._store.save)
 
-        with (
-            patch("backend.graph.nodes.get_ingest_service", return_value=ingest_svc),
-            patch("backend.graph.nodes.get_agent_service", return_value=agent_svc),
-            patch("backend.graph.nodes.get_pipeline_completion_service", return_value=completion_svc),
-            patch("backend.graph.nodes.ensure_head_refine_scheduled"),
-            patch(
-                "backend.graph.nodes.wait_for_refined_classifier_input",
-                new=AsyncMock(side_effect=lambda _pid, _path, fallback, **_: (fallback, [])),
-            ),
-        ):
-            yield {
-                "ingest": ingest_svc,
-                "agent": agent_svc,
-                "completion": completion_svc,
-                "store_save": store_cls.return_value.save,
-            }
+    with (
+        patch("backend.graph.nodes.get_ingest_service", return_value=ingest_svc),
+        patch("backend.graph.nodes.get_agent_service", return_value=agent_svc),
+        patch("backend.graph.nodes.get_pipeline_completion_service", return_value=completion_svc),
+        patch(
+            "backend.services.rag_index_service.RagIndexService.index_paper_for_rag_async",
+            new_callable=AsyncMock,
+        ) as mock_rag_index,
+        patch("backend.graph.nodes.ensure_head_refine_scheduled"),
+        patch(
+            "backend.graph.nodes.wait_for_refined_classifier_input",
+            new=AsyncMock(side_effect=lambda _pid, _path, fallback, **_: (fallback, [])),
+        ),
+    ):
+        mock_rag_index.return_value = None
+        yield {
+            "ingest": ingest_svc,
+            "agent": agent_svc,
+            "completion": completion_svc,
+            "store_save": store_save,
+        }

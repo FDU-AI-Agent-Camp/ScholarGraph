@@ -58,6 +58,7 @@ describe('Phase 2 UI acceptance', () => {
       expect(badgeStatusSrc).toContain('var(--color-text-muted)')
       expect(badgeStatusSrc).toContain('var(--color-info)')
       expect(badgeStatusSrc).toContain('var(--color-success)')
+      expect(badgeStatusSrc).toContain('var(--color-warning)')
       expect(badgeStatusSrc).toContain('var(--color-error)')
     })
 
@@ -68,7 +69,7 @@ describe('Phase 2 UI acceptance', () => {
     })
 
     it('covers all PaperStatus variants with dot + label', () => {
-      const statuses: PaperStatus[] = ['pending', 'processing', 'ready', 'failed']
+      const statuses: PaperStatus[] = ['pending', 'processing', 'indexing', 'ready', 'ready_with_warnings', 'failed']
       for (const status of statuses) {
         const wrapper = mount(BadgeStatus, { props: { status } })
         expect(wrapper.find('.badge-status__dot').exists()).toBe(true)
@@ -111,7 +112,7 @@ describe('Phase 2 UI acceptance', () => {
       const wrapper = mount(TagCitation, {
         props: { label: '核心论点', nodeId: 'n1', active: true },
       })
-      expect(wrapper.classes()).toContain('tag-citation--active')
+      expect(wrapper.find('.tag-citation').classes()).toContain('tag-citation--active')
     })
   })
 

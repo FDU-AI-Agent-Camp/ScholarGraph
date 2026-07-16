@@ -15,6 +15,8 @@ import {
   validatePatrolSelection,
 } from '@/utils/patrolForm'
 import patrolFixture from '../../../docs/api/fixtures/patrol-lens-clash.json'
+import patrolMethodOverlapFixture from '../../../docs/api/fixtures/patrol-method-overlap.json'
+import patrolClaimEvolutionFixture from '../../../docs/api/fixtures/patrol-claim-evolution.json'
 import packageJson from '../../package.json'
 
 describe('patrol integration (fixtures + API + form)', () => {
@@ -36,6 +38,38 @@ describe('patrol integration (fixtures + API + form)', () => {
       { paper_id: 'hss-001', node_id: 'n_lens_a', label: '消费社会' },
       { paper_id: 'hss-002', node_id: 'n_lens_b', label: '公共领域' },
     ])
+    postSpy.mockRestore()
+  })
+
+  it('forwards method_overlap mode with V2 fixture structured_points', async () => {
+    const postSpy = vi
+      .spyOn(client, 'postData')
+      .mockResolvedValue(patrolMethodOverlapFixture as DataResponse<PatrolReport>)
+
+    const result = await runPatrol(['stem-001', 'stem-002'], { mode: 'method_overlap' })
+
+    expect(postSpy).toHaveBeenCalledWith('/patrol', {
+      paper_ids: ['stem-001', 'stem-002'],
+      mode: 'method_overlap',
+    })
+    const point = result.data.insights[0]?.structured_points?.[0]
+    expect(point?.mode).toBe('method_overlap')
+    postSpy.mockRestore()
+  })
+
+  it('forwards claim_evolution mode with V2 fixture structured_points', async () => {
+    const postSpy = vi
+      .spyOn(client, 'postData')
+      .mockResolvedValue(patrolClaimEvolutionFixture as DataResponse<PatrolReport>)
+
+    const result = await runPatrol(['stem-001', 'stem-002'], { mode: 'claim_evolution' })
+
+    expect(postSpy).toHaveBeenCalledWith('/patrol', {
+      paper_ids: ['stem-001', 'stem-002'],
+      mode: 'claim_evolution',
+    })
+    const point = result.data.insights[0]?.structured_points?.[0]
+    expect(point?.mode).toBe('claim_evolution')
     postSpy.mockRestore()
   })
 
@@ -76,7 +110,9 @@ describe('patrol integration (fixtures + API + form)', () => {
   })
 
   it('§1.4.4 baseline copy table matches patrolCopy constants', () => {
-    expect(PATROL_BASELINE_COPY.subtitle).toBe('跨论文探测理论视角冲突与论点矛盾 · 需 2 篇 ready 论文')
+    expect(PATROL_BASELINE_COPY.subtitle).toBe(
+      '跨论文四模式巡检（视角冲突、论点矛盾、方法重叠、观点演进）· 需 2 篇 ready 论文',
+    )
     expect(PATROL_BASELINE_COPY.runButton).toBe('运行巡检')
     expect(PATROL_BASELINE_COPY.runButtonLoading).toBe('分析中…')
     expect(PATROL_BASELINE_COPY.insufficientDataTitle).toBe('数据不足')
