@@ -49,7 +49,8 @@ logger = logging.getLogger(__name__)
 
 # Track fire-and-forget tasks so they are not GC'd mid-flight.
 _WIPE_SWEEP_TASKS: set[asyncio.Task[None]] = set()
-# (paper_id, run_id) currently owned by an in-process Wave-2 task — prevents double delete_run.
+# Process-local only: multi-worker may each spawn once for the same due row;
+# ``delete_run`` is idempotent, so that is waste not a correctness hole.
 _INFLIGHT_KEYS: set[tuple[str, str]] = set()
 _POLL_TASK: asyncio.Task[None] | None = None
 _POLL_STOP: asyncio.Event | None = None

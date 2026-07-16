@@ -11,6 +11,8 @@
 | Wave2 | ``test_force_delete_schedules_wave2_after_wave1`` | wipe 接线 |
 | Wave2 Outbox | ``test_schedule_wave2_persists_outbox_before_task`` | 落盘防重启蒸发 |
 | Wave2 Outbox | ``test_startup_reconcile_drains_due_outbox_rows`` | 冷启动补刀 |
+| Wave2 Outbox | ``test_duplicate_enqueue_does_not_spawn_second_task`` | 同 run 不双建 task |
+| Wave2 Outbox | ``test_drain_due_retries_after_failed_compensate`` | 进程内 due 重试 |
 """
 
 from __future__ import annotations
