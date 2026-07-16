@@ -12,16 +12,24 @@ export const PAPER_DELETE_COPY = {
   confirmTitle: '确认删除这篇论文？',
   confirmMessage: '将物理清空图谱、向量索引与原始 PDF，此操作不可恢复。',
   confirmOk: '确认删除',
-  forceConfirmTitle: '强行中止并删除？',
-  forceConfirmMessage: '警告：该文件正在处理中，强行删除将打断后台算力并物理清空所有相关图谱与索引。此操作不可恢复。',
-  forceConfirmOk: '强行中止并删除',
+  forceConfirmTitle: '强制删除确认',
+  forceConfirmMessage:
+    '该论文当前正在提取内容或构建语义索引。<br/><br/>强行删除将中断后台计算，并物理清空所有已生成的图谱和问答数据。此操作不可恢复，是否确认删除？',
+  forceConfirmOk: '确认删除',
   cancel: '取消',
   success: '论文已删除',
   failed: '删除失败',
+  vectorStoreUnavailableTitle: '安全保护阻断',
+  vectorStoreUnavailable:
+    '底层向量数据库暂时不可用。为防止数据残留与系统泄露，已安全拦截本次物理删除。请稍后再试，或联系管理员检查 Chroma 服务。',
 } as const
 
-export async function confirmAndDeletePaper(paperId: string, status: PaperStatus): Promise<boolean> {
-  const force = isActivePipelineStatus(status)
+export type DeletePaperHooks = {
+  /** Fires only around ``DELETE`` network attempts (not confirm modals). */
+  onDeleteInFlight?: (inFlight: boolean) => void
+}
+
+async function confirmDeleteDialog(force: boolean): Promise<boolean> {
   try {
     await ElMessageBox.confirm(
       force ? PAPER_DELETE_COPY.forceConfirmMessage : PAPER_DELETE_COPY.confirmMessage,
@@ -31,18 +39,101 @@ export async function confirmAndDeletePaper(paperId: string, status: PaperStatus
         confirmButtonText: force ? PAPER_DELETE_COPY.forceConfirmOk : PAPER_DELETE_COPY.confirmOk,
         cancelButtonText: PAPER_DELETE_COPY.cancel,
         confirmButtonClass: force ? 'el-button--danger' : undefined,
+        dangerouslyUseHTMLString: force,
       },
     )
+    return true
   } catch {
+    return false
+  }
+}
+
+async function fetchLivePaperStatus(paperId: string): Promise<PaperStatus> {
+  const result = await papersApi.getPaperStatus(paperId)
+  return result.data.status
+}
+
+function isProcessingConflict(error: unknown): boolean {
+  return isApiClientError(error) && error.code === 'PAPER_ALREADY_PROCESSING'
+}
+
+function isVectorStoreUnavailable(error: unknown): boolean {
+  return isApiClientError(error) && error.code === 'VECTOR_STORE_UNAVAILABLE'
+}
+
+function resolveDeleteErrorMessage(error: unknown): string {
+  if (isApiClientError(error)) {
+    return error.message
+  }
+  return PAPER_DELETE_COPY.failed
+}
+
+async function notifyDeleteFailure(error: unknown): Promise<void> {
+  if (isVectorStoreUnavailable(error)) {
+    await ElMessageBox.alert(PAPER_DELETE_COPY.vectorStoreUnavailable, PAPER_DELETE_COPY.vectorStoreUnavailableTitle, {
+      type: 'warning',
+    }).catch(() => undefined)
+    return
+  }
+  ElMessage.error(resolveDeleteErrorMessage(error))
+}
+
+async function deletePaperWithHook(paperId: string, force: boolean, hooks?: DeletePaperHooks): Promise<void> {
+  hooks?.onDeleteInFlight?.(true)
+  try {
+    await papersApi.deletePaper(paperId, { force })
+  } finally {
+    hooks?.onDeleteInFlight?.(false)
+  }
+}
+
+/** Stage 2: 409 escape — force confirm then ``DELETE ?force=true`` (symmetric with reextract). */
+async function retryDeleteAfterProcessingConflict(paperId: string, hooks?: DeletePaperHooks): Promise<boolean> {
+  if (!(await confirmDeleteDialog(true))) {
+    return false
+  }
+  try {
+    await deletePaperWithHook(paperId, true, hooks)
+    ElMessage.success(PAPER_DELETE_COPY.success)
+    return true
+  } catch (retryError) {
+    await notifyDeleteFailure(retryError)
+    return false
+  }
+}
+
+/**
+ * Delete flow shared by detail + list (single entry, identical behavior).
+ *
+ * 1. Pre-flight: ``GET /papers/{id}/status`` — kill stale list/detail snapshots.
+ * 2. Confirm modal (standard vs force) from live status via ``isActivePipelineStatus``.
+ * 3. Stage-1 ``DELETE`` with computed ``force``.
+ * 4. On ``409 PAPER_ALREADY_PROCESSING`` when stage-1 used ``force=false``:
+ *    stage-2 force confirm → ``DELETE ?force=true``.
+ */
+export async function confirmAndDeletePaper(paperId: string, hooks?: DeletePaperHooks): Promise<boolean> {
+  let liveStatus: PaperStatus
+  try {
+    liveStatus = await fetchLivePaperStatus(paperId)
+  } catch (error) {
+    await notifyDeleteFailure(error)
+    return false
+  }
+
+  const force = isActivePipelineStatus(liveStatus)
+  if (!(await confirmDeleteDialog(force))) {
     return false
   }
 
   try {
-    await papersApi.deletePaper(paperId, { force })
+    await deletePaperWithHook(paperId, force, hooks)
     ElMessage.success(PAPER_DELETE_COPY.success)
     return true
   } catch (error) {
-    ElMessage.error(isApiClientError(error) ? error.message : PAPER_DELETE_COPY.failed)
+    if (!force && isProcessingConflict(error)) {
+      return retryDeleteAfterProcessingConflict(paperId, hooks)
+    }
+    await notifyDeleteFailure(error)
     return false
   }
 }
