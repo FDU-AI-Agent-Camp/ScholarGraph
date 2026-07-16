@@ -25,11 +25,7 @@ function sanitizeChunk(text: string): string {
     .replace(EXCESS_BACKTICKS_RE, '')
 }
 
-function polishStreamRelease(
-  text: string,
-  pendingTrailingSpace: { value: string },
-  flush = false,
-): string {
+function polishStreamRelease(text: string, pendingTrailingSpace: { value: string }, flush = false): string {
   if (pendingTrailingSpace.value) {
     if (text && CJK_PUNCT_START_RE.test(text)) {
       pendingTrailingSpace.value = ''
