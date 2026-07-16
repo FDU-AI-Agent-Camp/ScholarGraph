@@ -49,6 +49,19 @@ export function isActivePipelineStatus(status: PaperStatus): status is ActivePip
   return ACTIVE_PIPELINE_STATUSES.has(status as ActivePipelinePaperStatus)
 }
 
+/** List-page active-only poll: pending ∪ in-flight pipeline stages. */
+export type ListActivePollPaperStatus = Extract<PaperStatus, 'pending' | 'processing' | 'indexing'>
+
+const LIST_ACTIVE_POLL_STATUSES: ReadonlySet<ListActivePollPaperStatus> = new Set(['pending', 'processing', 'indexing'])
+
+export function isListActivePollStatus(status: PaperStatus): status is ListActivePollPaperStatus {
+  return LIST_ACTIVE_POLL_STATUSES.has(status as ListActivePollPaperStatus)
+}
+
+export function listHasActivePollStatus(items: ReadonlyArray<{ status: PaperStatus }>): boolean {
+  return items.some((row) => isListActivePollStatus(row.status))
+}
+
 /**
  * Thin MVP preview — only when not yet fully interactive and backend set preview_available.
  * RWW must not degrade into preview.

@@ -7,6 +7,8 @@ import {
   isActivePipelineStatus,
   isFailedStatus,
   isGraphInteractiveStatus,
+  isListActivePollStatus,
+  listHasActivePollStatus,
   isPreviewAvailableStatus,
   isQaReadyStatus,
   isReadyStatus,
@@ -29,6 +31,15 @@ describe('paperStatus helpers', () => {
     expect(isActivePipelineStatus('pending')).toBe(false)
     expect(isActivePipelineStatus('ready')).toBe(false)
     expect(isActivePipelineStatus('failed')).toBe(false)
+  })
+
+  it('isListActivePollStatus covers pending, processing, and indexing', () => {
+    expect(isListActivePollStatus('pending')).toBe(true)
+    expect(isListActivePollStatus('processing')).toBe(true)
+    expect(isListActivePollStatus('indexing')).toBe(true)
+    expect(isListActivePollStatus('ready')).toBe(false)
+    expect(listHasActivePollStatus([{ status: 'ready' }, { status: 'failed' }])).toBe(false)
+    expect(listHasActivePollStatus([{ status: 'ready' }, { status: 'processing' }])).toBe(true)
   })
 
   it('isFailedStatus narrows failed payloads with error fields', () => {
