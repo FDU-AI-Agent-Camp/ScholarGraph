@@ -36,7 +36,14 @@ GROBID 独立服务
 ## 2. 主服务（本仓库）
 
 1. Create Service → 绑定本 Git 仓库（根目录有 `Dockerfile`，Zeabur 会自动用 Docker 构建）
-2. **Volumes**：添加云盘，Mount Path = **`/app/data`**，建议 ≥ **20–40 GB**
+2. **Volumes**：建议挂两个云盘（也可合并，见下）
+
+| Mount Path | 建议容量 | 用途 |
+|------------|----------|------|
+| **`/app/data`** | 5–20 GB | SQLite、uploads、graphs、Chroma |
+| **`/app/models`** | **20–40 GB** | MinerU / HuggingFace / ModelScope 权重 |
+
+若只挂一个盘，请把模型环境变量也指到该盘下（见下表），否则重启后会重新下载模型。
 3. Port：容器监听 **`$PORT`**（entrypoint 默认 8080）；在 Zeabur 按平台提示映射公网域名
 4. 健康检查（可选）：`GET /api/v1/health`
 
@@ -67,27 +74,31 @@ GROBID 独立服务
 | `GRAPH_DATA_DIR` | `/app/data/graphs` | 镜像默认 |
 | `UPLOAD_DIR` | `/app/data/uploads` | 镜像默认 |
 | `CHROMADB_PATH` | `/app/data/chroma` | 镜像默认 |
-| `HF_HOME` | `/app/data/models/huggingface` | 模型缓存进 Volume |
-| `MODELSCOPE_CACHE` | `/app/data/models/modelscope` | 同上 |
-| `INGEST_MINERU_MODEL_SOURCE` | `modelscope` | |
+| `HF_HOME` | `/app/models/huggingface` | 模型缓存进 Volume（镜像默认） |
+| `HUGGINGFACE_HUB_CACHE` | `/app/models/huggingface/hub` | 可选；与 HF_HOME 对齐 |
+| `MODELSCOPE_CACHE` | `/app/models/modelscope` | 同上（`INGEST_MINERU_MODEL_SOURCE=modelscope` 时关键） |
+| `INGEST_MINERU_MODEL_SOURCE` | `modelscope` | 写入进程环境 `MINERU_MODEL_SOURCE` |
 
 镜像已写入上述路径类默认值；密钥与 `GROBID_URL` / CORS 务必在控制台覆盖。
 
 ### 2.2 Volume 目录约定
 
-挂载 `/app/data` 后，持久化内容包括：
-
 ```text
-/app/data/
+/app/data/                    ← Volume A（业务数据）
   scholargraph.db
   graphs/
   uploads/
   chroma/
-  models/huggingface/
-  models/modelscope/
+
+/app/models/                  ← Volume B（MinerU 权重，可单独挂）
+  huggingface/
+  modelscope/
 ```
 
-首次启动 MinerU 会向 `models/` 下载权重（可能较久）。之后重启/重新部署只要 Volume 还在，即可跳过重复下载。
+- 镜像安装的是 MinerU **代码与系统依赖**（`uv sync --extra mineru`），**不把权重打进镜像**。
+- 首次解析短 PDF 时，MinerU 会按 `MINERU_MODEL_SOURCE=modelscope`（由 `INGEST_MINERU_MODEL_SOURCE` 注入）把权重下载到 `MODELSCOPE_CACHE`。
+- 只要 `/app/models` 挂在持久卷上，之后重建/重启会命中本地缓存，无需重新下载。
+- 若你只挂了 `/app/models` 而**没有** `/app/data`，业务库与上传仍会丢；两边都要挂（或把 `DATABASE_URL` 等也指到同一持久路径）。
 
 ## 3. 本地验证镜像（可选）
 
@@ -101,6 +112,7 @@ docker run --rm -p 8080:8080 \
   -e RERANKER_ENABLED=false \
   -e SCHOLARGRAPH_IGNORE_DOTENV=1 \
   -v scholargraph-data:/app/data \
+  -v scholargraph-models:/app/models \
   scholargraph:local
 ```
 
@@ -111,7 +123,7 @@ docker run --rm -p 8080:8080 \
 ## 4. 构建注意
 
 - 镜像含 `uv sync --extra mineru`，体积大、构建时间长，属预期。
-- Zeabur 无状态：不要在 SSH 里手动 pip / 下载模型到容器可写层；模型必须落在 `/app/data/models`。
+- Zeabur 无状态：不要在 SSH 里手动 pip / 下载模型到容器可写层；模型必须落在 **`/app/models`**。
 - 推送代码或改环境变量会触发重建；Volume 数据保留。
 
 ## 5. 相关文件
