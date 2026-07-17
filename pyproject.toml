@@ -4,8 +4,11 @@ version = "0.3.0.1"
 description = "ScholarGraph — 学术论文逻辑解构与共同体发现 Agent（后端）"
 readme = "README.md"
 requires-python = ">=3.11,<3.14"
-license = { text = "MIT" }
+license = { text = "Apache-2.0" }
 authors = [{ name = "FDU-AI-Agent-Camp" }]
+classifiers = [
+    "License :: OSI Approved :: Apache Software License",
+]
 dependencies = [
     "fastapi>=0.115.0",
     "uvicorn[standard]>=0.32.0",
