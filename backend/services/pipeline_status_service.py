@@ -226,7 +226,9 @@ class PipelineStatusService:
             error_code=error_code,
             failed_during=failed_during,
         )
-        existing = run_async(get_paper_service().get_pipeline_snapshot(paper_id))
+        from backend.services.paper_pipeline_ops import get_paper_pipeline_ops_service
+
+        existing = run_async(get_paper_pipeline_ops_service().get_pipeline_snapshot(paper_id))
         if existing is not None:
             assert_status_transition_allowed(existing.status, status, paper_id=paper_id)
         return get_paper_service().set_status_snapshot(

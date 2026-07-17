@@ -29,10 +29,7 @@ from backend.schemas.paradigm import Paradigm, ParadigmClassification
 from backend.services.head_refine_coordinator import HeadRefineCoordinator
 from backend.services.paper_core_service import PaperCoreService
 from backend.services.paper_detail_assembler import PaperDetailAssembler
-from backend.services.paper_pipeline_ops import (
-    RAG_INDEXING_STUCK_WARNING,
-    PaperPipelineOpsService,
-)
+from backend.services.paper_pipeline_ops import PaperPipelineOpsService
 from backend.services.paper_pipeline_scheduler import schedule_paper_pipeline
 from backend.services.paper_warning_service import PaperWarningService, WarningType
 from backend.services.persistence_reset import reset_persistence_singletons
@@ -40,6 +37,29 @@ from backend.services.preview_graph_facade import PreviewGraphFacade
 
 MAX_UPLOAD_BYTES = 32 * 1024 * 1024
 UPLOAD_QUEUED_MESSAGE = "已接收 PDF，正在自动解构…"
+_LEGACY_PIPELINE_OPS = frozenset(
+    {
+        "get_pipeline_snapshot",
+        "save_pipeline_snapshot",
+        "touch_indexing_heartbeat",
+        "list_stuck_indexing_papers",
+        "reset_pipeline_for_reextract",
+        "get_pipeline_generation_id",
+        "begin_pipeline_generation",
+        "invalidate_pipeline_generation",
+        "promote_paper_to_terminal_status",
+        "promote_stuck_indexing_paper",
+        "promote_stuck_indexing_paper_sync",
+        "list_stuck_indexing_paper_ids_sync",
+        "list_orphan_pipeline_paper_ids",
+        "list_stuck_processing_paper_ids_sync",
+        "list_stuck_pending_paper_ids_sync",
+        "fail_orphaned_pipeline_paper_sync",
+        "touch_processing_lease_sync",
+        "fail_orphaned_pipeline_paper",
+        "clear_ephemeral_pipeline_state",
+    },
+)
 
 __all__ = [
     "MAX_UPLOAD_BYTES",
@@ -92,6 +112,12 @@ class PaperService:
             warning_service=self._warnings,
             preview_facade=self._preview,
         )
+
+    def __getattr__(self, name: str) -> object:
+        """Forward legacy pipeline APIs while new callers inject ``PaperPipelineOpsService``."""
+        if name in _LEGACY_PIPELINE_OPS:
+            return getattr(self._pipeline_ops, name)
+        raise AttributeError(name)
 
     async def bootstrap(self) -> None:
         """Optionally seed demo fixtures when ``SEED_DEMO_PAPERS=true`` and the DB is empty."""
@@ -350,173 +376,10 @@ class PaperService:
     def get_preview_graph(self, paper_id: str) -> UnifiedPaperGraph | None:
         return self._preview.get(paper_id)
 
-    async def get_pipeline_snapshot(self, paper_id: str) -> PaperStatusData | None:
-        return await self._pipeline_ops.get_pipeline_snapshot(paper_id)
-
-    async def save_pipeline_snapshot(self, paper_id: str, snapshot: PaperStatusData) -> None:
-        await self._pipeline_ops.save_pipeline_snapshot(paper_id, snapshot)
-
-    async def touch_indexing_heartbeat(self, paper_id: str, *, at: datetime | None = None) -> bool:
-        return await self._pipeline_ops.touch_indexing_heartbeat(paper_id, at=at)
-
-    async def list_stuck_indexing_papers(
-        self,
-        *,
-        older_than: datetime | None = None,
-        heartbeat_stale_before: datetime | None = None,
-        limit: int = 200,
-    ) -> list[tuple[str, datetime | None, datetime | None]]:
-        return await self._pipeline_ops.list_stuck_indexing_papers(
-            older_than=older_than,
-            heartbeat_stale_before=heartbeat_stale_before,
-            limit=limit,
-        )
-
-    def reset_pipeline_for_reextract(self, paper_id: str, *, message: str) -> PaperStatusData:
-        return self._pipeline_ops.reset_pipeline_for_reextract(paper_id, message=message)
-
-    def get_pipeline_generation_id(self, paper_id: str) -> str | None:
-        return self._pipeline_ops.get_pipeline_generation_id(paper_id)
-
-    def begin_pipeline_generation(self, paper_id: str) -> str:
-        return self._pipeline_ops.begin_pipeline_generation(paper_id)
-
-    def invalidate_pipeline_generation(self, paper_id: str) -> None:
-        self._pipeline_ops.invalidate_pipeline_generation(paper_id)
-
-    async def promote_paper_to_terminal_status(
-        self,
-        paper_id: str,
-        *,
-        success: bool,
-        preferred_terminal: PaperStatus | None = None,
-        warning_message: str | None = None,
-        warning_codes: list[str] | None = None,
-        message_override: str | None = None,
-        publish_rag_indexed: bool = True,
-    ) -> PaperStatusData:
-        return await self._pipeline_ops.promote_paper_to_terminal_status(
-            paper_id,
-            success=success,
-            preferred_terminal=preferred_terminal,
-            warning_message=warning_message,
-            warning_codes=warning_codes,
-            message_override=message_override,
-            publish_rag_indexed=publish_rag_indexed,
-        )
-
-    async def promote_stuck_indexing_paper(
-        self,
-        paper_id: str,
-        *,
-        warning_code: str = RAG_INDEXING_STUCK_WARNING,
-        message: str | None = None,
-        publish_rag_indexed: bool = True,
-    ) -> bool:
-        return await self._pipeline_ops.promote_stuck_indexing_paper(
-            paper_id,
-            warning_code=warning_code,
-            message=message,
-            publish_rag_indexed=publish_rag_indexed,
-        )
-
-    def promote_stuck_indexing_paper_sync(
-        self,
-        paper_id: str,
-        *,
-        warning_code: str = RAG_INDEXING_STUCK_WARNING,
-        message: str | None = None,
-        publish_rag_indexed: bool = True,
-    ) -> bool:
-        return self._pipeline_ops.promote_stuck_indexing_paper_sync(
-            paper_id,
-            warning_code=warning_code,
-            message=message,
-            publish_rag_indexed=publish_rag_indexed,
-        )
-
-    def list_stuck_indexing_paper_ids_sync(
-        self,
-        *,
-        older_than: datetime | None = None,
-        heartbeat_stale_before: datetime | None = None,
-        limit: int = 200,
-    ) -> list[str]:
-        return self._pipeline_ops.list_stuck_indexing_paper_ids_sync(
-            older_than=older_than,
-            heartbeat_stale_before=heartbeat_stale_before,
-            limit=limit,
-        )
-
-    async def list_orphan_pipeline_paper_ids(
-        self,
-        *,
-        older_than: datetime | None = None,
-        limit: int = 200,
-    ) -> list[str]:
-        return await self._pipeline_ops.list_orphan_pipeline_paper_ids(
-            older_than=older_than,
-            limit=limit,
-        )
-
-    def list_stuck_processing_paper_ids_sync(
-        self,
-        *,
-        older_than: datetime,
-        limit: int = 200,
-    ) -> list[str]:
-        return self._pipeline_ops.list_stuck_processing_paper_ids_sync(
-            older_than=older_than,
-            limit=limit,
-        )
-
-    def list_stuck_pending_paper_ids_sync(
-        self,
-        *,
-        older_than: datetime,
-        limit: int = 200,
-    ) -> list[str]:
-        return self._pipeline_ops.list_stuck_pending_paper_ids_sync(
-            older_than=older_than,
-            limit=limit,
-        )
-
-    def fail_orphaned_pipeline_paper_sync(
-        self,
-        paper_id: str,
-        *,
-        error_code: str,
-        message: str,
-    ) -> bool:
-        return self._pipeline_ops.fail_orphaned_pipeline_paper_sync(
-            paper_id,
-            error_code=error_code,
-            message=message,
-        )
-
-    def touch_processing_lease_sync(self, paper_id: str) -> bool:
-        return self._pipeline_ops.touch_processing_lease_sync(paper_id)
-
-    async def fail_orphaned_pipeline_paper(
-        self,
-        paper_id: str,
-        *,
-        error_code: str,
-        message: str,
-    ) -> bool:
-        return await self._pipeline_ops.fail_orphaned_pipeline_paper(
-            paper_id,
-            error_code=error_code,
-            message=message,
-        )
-
-    def clear_ephemeral_pipeline_state(self, paper_id: str) -> None:
-        self._pipeline_ops.clear_ephemeral_pipeline_state(paper_id)
-
     async def get_status(self, paper_id: str) -> PaperStatusData:
         await self.bootstrap()
         paper = await self.get_paper(paper_id)
-        snapshot = await self.get_pipeline_snapshot(paper_id)
+        snapshot = await self._pipeline_ops.get_pipeline_snapshot(paper_id)
         if snapshot is not None:
             from backend.services.status_snapshot_guard import ensure_status_contract
 
@@ -579,7 +442,7 @@ class PaperService:
             str(dest),
             status=PaperStatus.PENDING,
         )
-        await self.save_pipeline_snapshot(
+        await self._pipeline_ops.save_pipeline_snapshot(
             paper_id,
             PaperStatusData(
                 paper_id=paper_id,

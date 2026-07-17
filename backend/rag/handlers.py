@@ -213,7 +213,7 @@ async def _index_with_heartbeat_and_timeout(
     stop_event = asyncio.Event()
     # Initial pulse so watchdog sees an alive task immediately.
     try:
-        await get_paper_service().touch_indexing_heartbeat(paper_id)
+        await get_paper_pipeline_ops_service().touch_indexing_heartbeat(paper_id)
     except Exception:
         logger.exception("indexing_heartbeat_initial_touch_failed", extra={"paper_id": paper_id})
 

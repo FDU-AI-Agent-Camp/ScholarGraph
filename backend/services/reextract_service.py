@@ -26,6 +26,7 @@ from backend.services.paper_ops_claim import (
     release_paper_ops_claim,
     reset_paper_ops_claims,
 )
+from backend.services.paper_pipeline_ops import get_paper_pipeline_ops_service
 from backend.services.paper_pipeline_scheduler import schedule_paper_pipeline
 from backend.services.pipeline_task_registry import abort_in_flight_pipeline
 
@@ -82,9 +83,9 @@ def _clear_persisted_artefacts(paper_id: str) -> None:
     HeadStore().delete(paper_id)
 
 
-def _clear_in_memory_state(paper_service: PaperService, paper_id: str) -> None:
+def _clear_in_memory_state(paper_id: str) -> None:
     """Reset preview and RAG run tracking for a paper."""
-    paper_service.clear_ephemeral_pipeline_state(paper_id)
+    get_paper_pipeline_ops_service().clear_ephemeral_pipeline_state(paper_id)
 
 
 async def _purge_vector_index(
@@ -159,10 +160,10 @@ async def force_reextract(
         await _purge_vector_index(paper_id, vector_store=vector_store)
         schedule_wipe_wave2_sweep(paper_id, wipe_targets)
         _clear_persisted_artefacts(paper_id)
-        _clear_in_memory_state(paper_service, paper_id)
+        _clear_in_memory_state(paper_id)
 
         run_async(paper_service._paper_repo.reset_for_reextract(paper_id))
-        snapshot = paper_service.reset_pipeline_for_reextract(
+        snapshot = get_paper_pipeline_ops_service().reset_pipeline_for_reextract(
             paper_id,
             message=_REEXTRACT_QUEUED_MESSAGE,
         )

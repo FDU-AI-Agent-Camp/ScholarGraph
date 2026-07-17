@@ -12,6 +12,7 @@ from typing import TYPE_CHECKING
 from backend.graph.state import STAGE_PERCENT
 from backend.repositories.async_bridge import run_async
 from backend.schemas.paper import FailedDuringStage, PaperStatus, PaperStatusData, PipelineStage
+from backend.services.paper_pipeline_ops import get_paper_pipeline_ops_service
 from backend.services.pipeline_status_service import (
     validate_failed_error_fields,
     validate_status_contract,
@@ -83,7 +84,8 @@ def persist_status_snapshot(
     paper_service.ensure_paper_exists(paper_id)
     now = datetime.now(UTC)
     preview_available = paper_service.is_preview_available(paper_id)
-    existing = run_async(paper_service.get_pipeline_snapshot(paper_id))
+    pipeline_ops = get_paper_pipeline_ops_service()
+    existing = run_async(pipeline_ops.get_pipeline_snapshot(paper_id))
     merged_extract_warnings = list(existing.extract_warnings if existing is not None else [])
     if append_extract_warnings:
         merged_extract_warnings = list(dict.fromkeys([*merged_extract_warnings, *append_extract_warnings]))
@@ -101,7 +103,7 @@ def persist_status_snapshot(
         classify_warnings=existing.classify_warnings if existing is not None else [],
         extract_warnings=merged_extract_warnings,
     )
-    run_async(paper_service.save_pipeline_snapshot(paper_id, snapshot))
+    run_async(pipeline_ops.save_pipeline_snapshot(paper_id, snapshot))
     return snapshot
 
 

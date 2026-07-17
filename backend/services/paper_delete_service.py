@@ -20,6 +20,7 @@ from backend.services.paper_ops_claim import (
     acquire_paper_ops_claim,
     release_paper_ops_claim,
 )
+from backend.services.paper_pipeline_ops import get_paper_pipeline_ops_service
 from backend.services.pipeline_task_registry import abort_in_flight_pipeline
 
 if TYPE_CHECKING:
@@ -269,7 +270,7 @@ async def delete_paper(
         # Prefer glob wipe (covers HeadStore + future sidecars); keep explicit deletes for clarity.
         graph_files_removed = _purge_graph_dir_artefacts(paper_id)
         _delete_graph_stores(paper_id)
-        paper_service.clear_ephemeral_pipeline_state(paper_id)
+        get_paper_pipeline_ops_service().clear_ephemeral_pipeline_state(paper_id)
         pdf_removed = _unlink_pdf(pdf_path_str)
 
         deleted = run_async(paper_service._paper_repo.delete(paper_id))
