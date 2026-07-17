@@ -16,7 +16,7 @@ from backend.repositories import run_async
 from backend.repositories.paper_repository import PaperRepository, get_paper_repository
 from backend.repositories.pipeline_repository import PipelineRepository, get_pipeline_repository
 from backend.schemas.graph import UnifiedPaperGraph
-from backend.schemas.ingest_head import IngestHead, PersistedHeadRefine
+from backend.schemas.ingest_head import IngestHead
 from backend.schemas.paper import (
     PaperCreateResult,
     PaperDetail,
@@ -26,9 +26,17 @@ from backend.schemas.paper import (
     PipelineStage,
 )
 from backend.schemas.paradigm import Paradigm, ParadigmClassification
-from backend.services.paper_pipeline_ops import PaperPipelineOpsMixin
+from backend.services.head_refine_coordinator import HeadRefineCoordinator
+from backend.services.paper_core_service import PaperCoreService
+from backend.services.paper_detail_assembler import PaperDetailAssembler
+from backend.services.paper_pipeline_ops import (
+    RAG_INDEXING_STUCK_WARNING,
+    PaperPipelineOpsService,
+)
 from backend.services.paper_pipeline_scheduler import schedule_paper_pipeline
+from backend.services.paper_warning_service import PaperWarningService, WarningType
 from backend.services.persistence_reset import reset_persistence_singletons
+from backend.services.preview_graph_facade import PreviewGraphFacade
 
 MAX_UPLOAD_BYTES = 32 * 1024 * 1024
 UPLOAD_QUEUED_MESSAGE = "已接收 PDF，正在自动解构…"
@@ -42,11 +50,11 @@ __all__ = [
 ]
 
 
-class PaperService(PaperPipelineOpsMixin):
+class PaperService:
     """DB-backed paper store; pipeline ephemeral state lives in ``pipeline_runs``.
 
-    External RAG / watchdog callers must use ``PaperPipelineOpsMixin`` public
-    methods (e.g. ``promote_paper_to_terminal_status``) instead of ``_pipeline_repo``.
+    External RAG / watchdog callers must use public facade methods
+    (e.g. ``promote_paper_to_terminal_status``) instead of ``_pipeline_repo``.
     """
 
     def __init__(
@@ -55,10 +63,35 @@ class PaperService(PaperPipelineOpsMixin):
         *,
         paper_repo: PaperRepository | None = None,
         pipeline_repo: PipelineRepository | None = None,
+        pipeline_ops: PaperPipelineOpsService | None = None,
+        core_service: PaperCoreService | None = None,
+        warning_service: PaperWarningService | None = None,
+        head_refine_coordinator: HeadRefineCoordinator | None = None,
+        preview_facade: PreviewGraphFacade | None = None,
+        detail_assembler: PaperDetailAssembler | None = None,
     ) -> None:
         self._settings = settings or get_settings()
         self._paper_repo = paper_repo or get_paper_repository()
         self._pipeline_repo = pipeline_repo or get_pipeline_repository()
+        self._pipeline_ops = pipeline_ops or PaperPipelineOpsService(self._pipeline_repo)
+        self._core = core_service or PaperCoreService(self._paper_repo)
+        self._warnings = warning_service or PaperWarningService(self._pipeline_repo)
+        self._head_refine = head_refine_coordinator or HeadRefineCoordinator(
+            core_service=self._core,
+            warning_service=self._warnings,
+            paper_repo=self._paper_repo,
+            pipeline_repo=self._pipeline_repo,
+        )
+        self._preview = preview_facade or PreviewGraphFacade(
+            core_service=self._core,
+            paper_repo=self._paper_repo,
+            pipeline_repo=self._pipeline_repo,
+        )
+        self._detail = detail_assembler or PaperDetailAssembler(
+            head_refine=self._head_refine,
+            warning_service=self._warnings,
+            preview_facade=self._preview,
+        )
 
     async def bootstrap(self) -> None:
         """Optionally seed demo fixtures when ``SEED_DEMO_PAPERS=true`` and the DB is empty."""
@@ -97,26 +130,7 @@ class PaperService(PaperPipelineOpsMixin):
         paper = await self._paper_repo.get(paper_id)
         if paper is None:
             raise ApiError("PAPER_NOT_FOUND", f"论文不存在: {paper_id}", status_code=404)
-        return self._enrich_paper_detail(paper, paper_id)
-
-    def _enrich_paper_detail(self, paper: PaperDetail, paper_id: str) -> PaperDetail:
-        """Attach optional ingest head, preview flag, and degrade codes for detail API (X17)."""
-        self._sync_head_refine_warnings_from_disk(paper_id)
-        ingest_head = self._load_ingest_head(paper_id)
-        snapshot = run_async(self._pipeline_repo.get_latest(paper_id))
-        extract_warnings: list[str] = []
-        classify_warnings: list[str] = []
-        if snapshot is not None:
-            extract_warnings = snapshot.extract_warnings
-            classify_warnings = snapshot.classify_warnings
-        return paper.model_copy(
-            update={
-                "ingest_head": ingest_head,
-                "preview_available": paper.preview_available or self.is_preview_available(paper_id),
-                "extract_warnings": extract_warnings,
-                "classify_warnings": classify_warnings,
-            },
-        )
+        return await self._detail.assemble(paper, paper_id)
 
     def ensure_paper_exists(self, paper_id: str) -> None:
         paper = run_async(self._paper_repo.get(paper_id))
@@ -149,13 +163,13 @@ class PaperService(PaperPipelineOpsMixin):
         paper_id: str,
         classification: ParadigmClassification,
     ) -> None:
-        run_async(self._paper_repo.update_classification(paper_id, classification))
+        self._core.update_classification(paper_id, classification)
 
     def update_pipeline_graph_path(self, paper_id: str, *, graph_path: str) -> None:
-        run_async(self._paper_repo.update_paths(paper_id, graph_path=graph_path))
+        self._core.update_paths(paper_id, graph_path=graph_path)
 
     def get_pipeline_graph_version(self, paper_id: str) -> str:
-        return run_async(self._paper_repo.get_graph_version(paper_id))
+        return self._core.get_graph_version(paper_id)
 
     def update_pipeline_graph_version(
         self,
@@ -164,12 +178,10 @@ class PaperService(PaperPipelineOpsMixin):
         graph_version: str,
         extractor_config_hash: str,
     ) -> None:
-        run_async(
-            self._paper_repo.update_graph_version(
-                paper_id,
-                graph_version=graph_version,
-                extractor_config_hash=extractor_config_hash,
-            ),
+        self._core.update_graph_version(
+            paper_id,
+            graph_version=graph_version,
+            extractor_config_hash=extractor_config_hash,
         )
 
     def set_status_snapshot(
@@ -289,132 +301,222 @@ class PaperService(PaperPipelineOpsMixin):
         warnings: list[str] | None = None,
     ) -> None:
         """Persist async head merge result; never changes pipeline failure state."""
-        if warnings:
-            self.record_head_refine_warnings(paper_id, warnings)
-        paper = run_async(self._paper_repo.get(paper_id))
-        if merged.title.strip() and paper is not None and paper.status == PaperStatus.PENDING:
-            run_async(self._paper_repo.update_title(paper_id, merged.title.strip()))
-        self._persist_head_refine(
+        self._head_refine.apply_sync(
             paper_id,
             merged=merged,
             classifier_input=classifier_input,
             warnings=warnings,
         )
-
-    def _load_ingest_head(self, paper_id: str) -> IngestHead | None:
-        from backend.graph.head_store import HeadStore
-
-        record = HeadStore().load(paper_id)
-        return record.merged if record is not None else None
-
-    def _load_head_refine_record(self, paper_id: str) -> PersistedHeadRefine | None:
-        from backend.graph.head_store import HeadStore
-
-        return HeadStore().load(paper_id)
-
-    def _sync_head_refine_warnings_from_disk(self, paper_id: str) -> None:
-        from backend.graph.head_store import HeadStore
-
-        record = HeadStore().load(paper_id)
-        if record is None or not record.warnings:
-            return
-        snapshot = run_async(self._pipeline_repo.get_latest(paper_id))
-        if snapshot is not None and snapshot.head_refine_warnings:
-            return
-        self.record_head_refine_warnings(paper_id, list(record.warnings))
-
-    def _persist_head_refine(
-        self,
-        paper_id: str,
-        *,
-        merged: IngestHead,
-        classifier_input: str,
-        warnings: list[str] | None,
-    ) -> None:
-        from backend.graph.head_store import HeadStore
-
-        HeadStore().save(
-            paper_id,
-            merged=merged,
-            classifier_input=classifier_input,
-            warnings=warnings,
-        )
-        head_path = str(HeadStore()._path(paper_id))
-        run_async(self._paper_repo.update_paths(paper_id, head_path=head_path))
 
     def get_refined_classifier_input(self, paper_id: str) -> str | None:
-        record = self._load_head_refine_record(paper_id)
-        if record is None:
-            return None
-        stripped = record.classifier_input.strip()
-        return stripped or None
+        return self._head_refine.get_classifier_input_sync(paper_id)
 
     def get_refined_head(self, paper_id: str) -> IngestHead | None:
-        return self._load_ingest_head(paper_id)
+        return self._head_refine.load_head_sync(paper_id)
 
     def record_head_refine_warnings(self, paper_id: str, warnings: list[str]) -> None:
-        if not warnings:
-            return
-        run_async(
-            self._pipeline_repo.record_warnings(paper_id, head_refine=warnings),
-        )
+        self._warnings.record(paper_id, WarningType.HEAD_REFINE, warnings)
 
     def get_head_refine_warnings(self, paper_id: str) -> list[str]:
-        snapshot = run_async(self._pipeline_repo.get_latest(paper_id))
-        if snapshot is None:
-            return []
-        return list(snapshot.head_refine_warnings)
+        return self._warnings.get(paper_id, WarningType.HEAD_REFINE)
 
     def record_extract_warnings(self, paper_id: str, warnings: list[str]) -> None:
-        if not warnings:
-            return
-        run_async(self._pipeline_repo.record_warnings(paper_id, extract=warnings))
+        self._warnings.record(paper_id, WarningType.EXTRACT, warnings)
 
     def clear_preview_graph(self, paper_id: str) -> None:
         """Clear the temporary preview graph for a specific paper pipeline."""
-        run_async(self._pipeline_repo.clear_preview_graph(paper_id))
+        self._preview.clear(paper_id)
 
     def record_classify_warnings(self, paper_id: str, warnings: list[str]) -> None:
-        if not warnings:
-            return
-        run_async(self._pipeline_repo.record_warnings(paper_id, classify=warnings))
+        self._warnings.record(paper_id, WarningType.CLASSIFY, warnings)
 
     def get_classify_warnings(self, paper_id: str) -> list[str]:
-        snapshot = run_async(self._pipeline_repo.get_latest(paper_id))
-        if snapshot is None:
-            return []
-        return list(snapshot.classify_warnings)
+        return self._warnings.get(paper_id, WarningType.CLASSIFY)
 
     def get_extract_warnings(self, paper_id: str) -> list[str]:
-        snapshot = run_async(self._pipeline_repo.get_latest(paper_id))
-        if snapshot is None:
-            return []
-        return list(snapshot.extract_warnings)
+        return self._warnings.get(paper_id, WarningType.EXTRACT)
 
     def save_preview_graph(self, paper_id: str, graph: UnifiedPaperGraph) -> None:
         self.ensure_paper_exists(paper_id)
-        run_async(self._pipeline_repo.save_preview_graph(paper_id, graph))
+        self._preview.save(paper_id, graph)
 
     def mark_preview_available(self, paper_id: str) -> None:
         self.ensure_paper_exists(paper_id)
-        run_async(self._paper_repo.mark_preview_available(paper_id))
+        self._preview.mark_available(paper_id)
 
     def is_preview_available(self, paper_id: str) -> bool:
-        paper = run_async(self._paper_repo.get(paper_id))
-        if paper is not None and paper.preview_available:
-            return True
-        return run_async(self._pipeline_repo.get_preview_graph(paper_id)) is not None
+        return self._preview.is_available(paper_id)
 
     def get_preview_graph(self, paper_id: str) -> UnifiedPaperGraph | None:
-        return run_async(self._pipeline_repo.get_preview_graph(paper_id))
+        return self._preview.get(paper_id)
+
+    async def get_pipeline_snapshot(self, paper_id: str) -> PaperStatusData | None:
+        return await self._pipeline_ops.get_pipeline_snapshot(paper_id)
+
+    async def save_pipeline_snapshot(self, paper_id: str, snapshot: PaperStatusData) -> None:
+        await self._pipeline_ops.save_pipeline_snapshot(paper_id, snapshot)
+
+    async def touch_indexing_heartbeat(self, paper_id: str, *, at: datetime | None = None) -> bool:
+        return await self._pipeline_ops.touch_indexing_heartbeat(paper_id, at=at)
+
+    async def list_stuck_indexing_papers(
+        self,
+        *,
+        older_than: datetime | None = None,
+        heartbeat_stale_before: datetime | None = None,
+        limit: int = 200,
+    ) -> list[tuple[str, datetime | None, datetime | None]]:
+        return await self._pipeline_ops.list_stuck_indexing_papers(
+            older_than=older_than,
+            heartbeat_stale_before=heartbeat_stale_before,
+            limit=limit,
+        )
+
+    def reset_pipeline_for_reextract(self, paper_id: str, *, message: str) -> PaperStatusData:
+        return self._pipeline_ops.reset_pipeline_for_reextract(paper_id, message=message)
+
+    def get_pipeline_generation_id(self, paper_id: str) -> str | None:
+        return self._pipeline_ops.get_pipeline_generation_id(paper_id)
+
+    def begin_pipeline_generation(self, paper_id: str) -> str:
+        return self._pipeline_ops.begin_pipeline_generation(paper_id)
+
+    def invalidate_pipeline_generation(self, paper_id: str) -> None:
+        self._pipeline_ops.invalidate_pipeline_generation(paper_id)
+
+    async def promote_paper_to_terminal_status(
+        self,
+        paper_id: str,
+        *,
+        success: bool,
+        preferred_terminal: PaperStatus | None = None,
+        warning_message: str | None = None,
+        warning_codes: list[str] | None = None,
+        message_override: str | None = None,
+        publish_rag_indexed: bool = True,
+    ) -> PaperStatusData:
+        return await self._pipeline_ops.promote_paper_to_terminal_status(
+            paper_id,
+            success=success,
+            preferred_terminal=preferred_terminal,
+            warning_message=warning_message,
+            warning_codes=warning_codes,
+            message_override=message_override,
+            publish_rag_indexed=publish_rag_indexed,
+        )
+
+    async def promote_stuck_indexing_paper(
+        self,
+        paper_id: str,
+        *,
+        warning_code: str = RAG_INDEXING_STUCK_WARNING,
+        message: str | None = None,
+        publish_rag_indexed: bool = True,
+    ) -> bool:
+        return await self._pipeline_ops.promote_stuck_indexing_paper(
+            paper_id,
+            warning_code=warning_code,
+            message=message,
+            publish_rag_indexed=publish_rag_indexed,
+        )
+
+    def promote_stuck_indexing_paper_sync(
+        self,
+        paper_id: str,
+        *,
+        warning_code: str = RAG_INDEXING_STUCK_WARNING,
+        message: str | None = None,
+        publish_rag_indexed: bool = True,
+    ) -> bool:
+        return self._pipeline_ops.promote_stuck_indexing_paper_sync(
+            paper_id,
+            warning_code=warning_code,
+            message=message,
+            publish_rag_indexed=publish_rag_indexed,
+        )
+
+    def list_stuck_indexing_paper_ids_sync(
+        self,
+        *,
+        older_than: datetime | None = None,
+        heartbeat_stale_before: datetime | None = None,
+        limit: int = 200,
+    ) -> list[str]:
+        return self._pipeline_ops.list_stuck_indexing_paper_ids_sync(
+            older_than=older_than,
+            heartbeat_stale_before=heartbeat_stale_before,
+            limit=limit,
+        )
+
+    async def list_orphan_pipeline_paper_ids(
+        self,
+        *,
+        older_than: datetime | None = None,
+        limit: int = 200,
+    ) -> list[str]:
+        return await self._pipeline_ops.list_orphan_pipeline_paper_ids(
+            older_than=older_than,
+            limit=limit,
+        )
+
+    def list_stuck_processing_paper_ids_sync(
+        self,
+        *,
+        older_than: datetime,
+        limit: int = 200,
+    ) -> list[str]:
+        return self._pipeline_ops.list_stuck_processing_paper_ids_sync(
+            older_than=older_than,
+            limit=limit,
+        )
+
+    def list_stuck_pending_paper_ids_sync(
+        self,
+        *,
+        older_than: datetime,
+        limit: int = 200,
+    ) -> list[str]:
+        return self._pipeline_ops.list_stuck_pending_paper_ids_sync(
+            older_than=older_than,
+            limit=limit,
+        )
+
+    def fail_orphaned_pipeline_paper_sync(
+        self,
+        paper_id: str,
+        *,
+        error_code: str,
+        message: str,
+    ) -> bool:
+        return self._pipeline_ops.fail_orphaned_pipeline_paper_sync(
+            paper_id,
+            error_code=error_code,
+            message=message,
+        )
+
+    def touch_processing_lease_sync(self, paper_id: str) -> bool:
+        return self._pipeline_ops.touch_processing_lease_sync(paper_id)
+
+    async def fail_orphaned_pipeline_paper(
+        self,
+        paper_id: str,
+        *,
+        error_code: str,
+        message: str,
+    ) -> bool:
+        return await self._pipeline_ops.fail_orphaned_pipeline_paper(
+            paper_id,
+            error_code=error_code,
+            message=message,
+        )
 
     def clear_ephemeral_pipeline_state(self, paper_id: str) -> None:
-        run_async(self._pipeline_repo.clear_ephemeral_pipeline_state(paper_id))
+        self._pipeline_ops.clear_ephemeral_pipeline_state(paper_id)
 
     async def get_status(self, paper_id: str) -> PaperStatusData:
         await self.bootstrap()
         paper = await self.get_paper(paper_id)
-        snapshot = await self._pipeline_repo.get_latest(paper_id)
+        snapshot = await self.get_pipeline_snapshot(paper_id)
         if snapshot is not None:
             from backend.services.status_snapshot_guard import ensure_status_contract
 
@@ -477,7 +579,7 @@ class PaperService(PaperPipelineOpsMixin):
             str(dest),
             status=PaperStatus.PENDING,
         )
-        await self._pipeline_repo.save_status(
+        await self.save_pipeline_snapshot(
             paper_id,
             PaperStatusData(
                 paper_id=paper_id,
