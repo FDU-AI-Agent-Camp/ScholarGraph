@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """Cascading physical delete for papers (SQL + graph JSON + Chroma + PDF)."""
 
 from __future__ import annotations

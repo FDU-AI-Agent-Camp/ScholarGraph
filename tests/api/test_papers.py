@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """API route-layer QA scale defense and hybrid retrieval shadow verification."""
 
 from __future__ import annotations

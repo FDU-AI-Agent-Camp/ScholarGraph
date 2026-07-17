@@ -1,4 +1,9 @@
 /**
+ * Copyright 2026 FDU-AI-Agent-Camp
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+/**
  * ui-design-progress §9 — 体验质量 × Phase 对照表 + 总验收（Phase 8 全表复核）。
  */
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs'

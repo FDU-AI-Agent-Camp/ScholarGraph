@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """F.6 smoke gate: T11文案、T12脚本、T13 mock 流水线、F.3 Prompt 文件."""
 
 from __future__ import annotations

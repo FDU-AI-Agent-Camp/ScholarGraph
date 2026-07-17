@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """C4 — query_embedding dimension and finiteness validation with embed fallback."""
 
 from __future__ import annotations

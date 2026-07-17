@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """B10 SSE event-level stream audit — no empty chunk text_preview mid-flight."""
 
 from __future__ import annotations

@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """
 从微语料 PDF 导出纯文本（BE-1）。
 

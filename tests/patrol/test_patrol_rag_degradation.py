@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """P9 fault-injection matrix, JSON Schema contracts, cache TTL, and multi-fault overlay."""
 
 from __future__ import annotations

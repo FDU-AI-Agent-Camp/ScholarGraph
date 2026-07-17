@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """Shared assertions for api-contract §2 status/stage/percent rules."""
 
 from backend.schemas.paper import PaperStatus, PaperStatusData, PipelineStage

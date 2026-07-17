@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """Deterministic embedding stubs for method_overlap benchmark dry-run."""
 
 from __future__ import annotations

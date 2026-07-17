@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """API graph endpoint tests with DB backend (API-GRAPH-01/02)."""
 
 from __future__ import annotations

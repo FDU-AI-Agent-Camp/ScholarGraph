@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """Regression boundary gates: cold-boot heal / force reextract / cascading DELETE.
 
 These three named assertions lock the V2 self-heal + control escape hatches.

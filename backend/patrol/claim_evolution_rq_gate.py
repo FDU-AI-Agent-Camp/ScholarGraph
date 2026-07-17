@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """Two-stage ResearchQuestion alignment gate for claim_evolution (TD-4).
 
 Stage 1 — Bi-encoder coarse recall at a relaxed cosine threshold.

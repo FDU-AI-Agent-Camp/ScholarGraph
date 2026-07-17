@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """Contract validation tests for PipelineFinalized official RAG handler."""
 
 from __future__ import annotations

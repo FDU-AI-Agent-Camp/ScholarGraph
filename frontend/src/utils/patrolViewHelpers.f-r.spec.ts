@@ -1,4 +1,9 @@
 /**
+ * Copyright 2026 FDU-AI-Agent-Camp
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+/**
  * Unit / boundary / 越权 — Part F residual F-R1 / F-R2 on production patrolViewHelpers.
  * Imports the real helpers module; asserts exported production functions' behaviour.
  */

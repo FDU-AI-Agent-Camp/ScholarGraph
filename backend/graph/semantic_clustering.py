@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """Second-order graph dehydration: semantic clustering and island stitching."""
 
 from __future__ import annotations

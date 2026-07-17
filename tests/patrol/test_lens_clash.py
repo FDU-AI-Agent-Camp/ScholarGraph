@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """Unit tests for lens_clash detection."""
 
 from unittest.mock import AsyncMock, patch

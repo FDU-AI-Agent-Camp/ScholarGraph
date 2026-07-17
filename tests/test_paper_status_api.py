@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """HTTP integration: GET /papers/{id}/status returns api-contract-compliant payloads."""
 
 import pytest

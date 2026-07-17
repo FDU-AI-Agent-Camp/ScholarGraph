@@ -1,4 +1,9 @@
 /**
+ * Copyright 2026 FDU-AI-Agent-Camp
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+/**
  * Unit / interface — Part F / F4: V2 left-border variants on production InsightCard.
  *
  * Class binding is exercised via mount (runtime). Accent colors cannot be read via

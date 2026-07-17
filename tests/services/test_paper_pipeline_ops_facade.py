@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """PaperService pipeline facade — LoD harden for RAG/watchdog callers."""
 
 from __future__ import annotations

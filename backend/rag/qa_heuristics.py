@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """Deterministic heuristic guardrails for QA benchmark (Dual-Track Track A)."""
 
 from __future__ import annotations

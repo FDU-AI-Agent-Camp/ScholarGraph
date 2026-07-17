@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """Unit tests for sync/async repository bridge (U-BRG-01/02)."""
 
 from __future__ import annotations

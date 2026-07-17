@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """In-process asyncio Task registry for force abort (reextract / delete).
 
 There is no Celery. Pipeline, head-refine, and full-extract tasks are tracked

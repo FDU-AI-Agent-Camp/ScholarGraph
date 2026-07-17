@@ -1,3 +1,8 @@
+/**
+ * Copyright 2026 FDU-AI-Agent-Camp
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
 import { extractStyleBlocks } from '@/test/helpers/motionDiscipline'
 
 /** ui-design-progress §1.4.4 forbidden marketing / placeholder copy. */

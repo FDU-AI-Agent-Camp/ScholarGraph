@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """Validation helpers for graph schemas."""
 
 from backend.schemas.graph import HSS_NODE_TYPES, STEM_NODE_TYPES, UnifiedPaperGraph

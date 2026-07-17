@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """Pyright should fail: HybridRetriever-style call with query_embedding on legacy store."""
 
 from __future__ import annotations

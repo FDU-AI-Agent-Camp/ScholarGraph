@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """Verify workflow nodes connect to business layer only through service facades."""
 
 from pathlib import Path

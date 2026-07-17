@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """Optional live Judge CI path using snapshot replay (zero token cost)."""
 
 from __future__ import annotations

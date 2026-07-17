@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """D10 boundary tests: latency isolation and concurrent publish_sync stress."""
 
 from __future__ import annotations

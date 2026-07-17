@@ -1,4 +1,9 @@
 /**
+ * Copyright 2026 FDU-AI-Agent-Camp
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+/**
  * Integration — Part F residual F-R1～F-R3 against production PatrolView + point cards.
  */
 import { flushPromises, mount } from '@vue/test-utils'

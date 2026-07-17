@@ -1,4 +1,9 @@
 /**
+ * Copyright 2026 FDU-AI-Agent-Camp
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+/**
  * V1 Definition of Done — A-01～A-04（progress.md §6.1）
  *
  * A-01 六主屏 + 路由 ↔ collaboration.md §3 REST 索引

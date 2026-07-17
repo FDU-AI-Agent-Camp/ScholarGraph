@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """Hash-lock drift tests for committed Judge snapshot fixtures."""
 
 from __future__ import annotations

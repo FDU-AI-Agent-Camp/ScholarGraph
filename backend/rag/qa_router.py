@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """Hard-rule question-scale router for hybrid RAG (V2 §4.1 / P2-1).
 
 Uses regex + academic keyword tables only — no LLM routing. Returns

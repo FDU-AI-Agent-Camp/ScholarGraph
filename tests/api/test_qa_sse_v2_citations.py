@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """B6 HTTP tests: V2 multi-type citation SSE payloads on POST /qa/stream."""
 
 from __future__ import annotations

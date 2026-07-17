@@ -1,3 +1,8 @@
+/**
+ * Copyright 2026 FDU-AI-Agent-Camp
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
 /** ui-design-progress §1.4.2 spacing scale — only these px values for margin/padding/gap. */
 export const SPACING_SCALE_PX = [4, 8, 12, 16, 24, 32, 48, 64] as const
 

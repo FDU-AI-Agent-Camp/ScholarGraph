@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """Async path-B ingest + head merge after upload (§2.1, non-blocking)."""
 
 from __future__ import annotations

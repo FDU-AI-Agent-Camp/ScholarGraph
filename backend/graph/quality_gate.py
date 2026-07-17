@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """Graph quality gate for the extraction finalize step (Plan D).
 
 A graph is flagged as low-confidence when:

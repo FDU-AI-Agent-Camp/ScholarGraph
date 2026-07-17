@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """Agent service facade (BE-2 implements backend.agents)."""
 
 from functools import lru_cache

@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """Cross-stack frozen contract: backend constants ↔ frontend classifyWarnings.ts."""
 
 from __future__ import annotations

@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """handoff §5 / collaboration §4.4 contract checks."""
 
 from __future__ import annotations

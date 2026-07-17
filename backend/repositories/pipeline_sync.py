@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """Sync SQLAlchemy helpers for out-of-loop indexing watchdog (P13).
 
 Used only from the dedicated watchdog OS thread / PaperService sync promote path.

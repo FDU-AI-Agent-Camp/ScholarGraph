@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """Stress test: full chunked two-phase extraction on hss-002 (≈460k chars).
 
 Reports:

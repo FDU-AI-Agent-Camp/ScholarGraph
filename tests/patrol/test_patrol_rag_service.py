@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """Unit tests for PatrolRAGService exists probe and typed degradation bubbling."""
 
 from __future__ import annotations

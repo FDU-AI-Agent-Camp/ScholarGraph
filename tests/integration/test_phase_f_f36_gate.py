@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """F.6 acceptance gate T9: pipeline reaches ready after extract fallback."""
 
 from __future__ import annotations

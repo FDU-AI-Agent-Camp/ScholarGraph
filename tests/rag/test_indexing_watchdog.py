@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """P13 indexing watchdog — micro wait_for + macro sweep / heartbeat boundaries."""
 
 from __future__ import annotations

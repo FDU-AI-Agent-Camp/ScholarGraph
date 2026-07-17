@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """Replace-paper-index + generation-guard helpers for ``VectorStore`` (P13).
 
 Keeps ``vector_store.py`` under the D-12 line budget while owning:

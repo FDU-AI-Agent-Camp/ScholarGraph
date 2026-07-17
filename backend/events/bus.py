@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """Lightweight in-process event bus for cross-module decoupling."""
 
 from __future__ import annotations

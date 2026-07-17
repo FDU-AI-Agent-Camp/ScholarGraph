@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """Convert sync DATABASE_URL values to SQLAlchemy async driver URLs."""
 
 from __future__ import annotations

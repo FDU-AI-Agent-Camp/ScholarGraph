@@ -1,3 +1,8 @@
+/**
+ * Copyright 2026 FDU-AI-Agent-Camp
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
 /** Patrol form helpers (paper selection validation and API error presentation). */
 
 import { PATROL_BASELINE_COPY } from '@/constants/patrolCopy'

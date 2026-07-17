@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """Streaming and final sanitization for QA answer text.
 
 Removes Markdown artifacts (backticks, bold, headers) from LLM output before

@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """F.2.1 integration: real AgentService extract through pipeline wiring."""
 
 from __future__ import annotations

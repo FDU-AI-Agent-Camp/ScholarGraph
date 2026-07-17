@@ -1,4 +1,9 @@
 /**
+ * Copyright 2026 FDU-AI-Agent-Camp
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+/**
  * Phase 8 acceptance (8.1–8.8) — design-spec §13–§14 + ui-design-progress §1.4 + §6 demo path.
  */
 import { readdirSync, readFileSync, statSync } from 'node:fs'

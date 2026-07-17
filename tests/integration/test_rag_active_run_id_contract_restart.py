@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """Contract Drift Test: ``active_run_id`` SSOT survives restart for RAG ``index_run_id`` filter."""
 
 from __future__ import annotations

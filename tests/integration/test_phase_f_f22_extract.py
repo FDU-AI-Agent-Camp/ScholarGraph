@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """F.2.2 integration: real extractor fallback through LangGraph pipeline (X11)."""
 
 from __future__ import annotations

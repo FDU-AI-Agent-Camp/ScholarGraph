@@ -1,3 +1,8 @@
+/**
+ * Copyright 2026 FDU-AI-Agent-Camp
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
 /** ui-design-progress §1.4.3 motion token names from tokens.css */
 export const MOTION_DURATION_TOKENS = [
   '--duration-instant',

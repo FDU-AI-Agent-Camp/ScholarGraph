@@ -1,4 +1,9 @@
 /**
+ * Copyright 2026 FDU-AI-Agent-Camp
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+/**
  * G.6 OpenAPI / fixtures 前端专项：classify_warnings 字段与 generated schema。
  */
 import { describe, expect, it } from 'vitest'

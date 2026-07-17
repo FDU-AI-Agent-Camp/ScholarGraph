@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """Unit tests for keyword-heuristic paradigm classification (Phase G fallback)."""
 
 from backend.agents.classifier_heuristic import classify_heuristic

@@ -1,4 +1,9 @@
 /**
+ * Copyright 2026 FDU-AI-Agent-Camp
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+/**
  * Phase 6 Graph acceptance (6.1–6.8) — design-spec §10 + ui-design-progress.
  */
 import { describe, expect, it } from 'vitest'

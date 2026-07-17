@@ -1,4 +1,9 @@
 /**
+ * Copyright 2026 FDU-AI-Agent-Camp
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+/**
  * V1 DoD A-05 — SSE 问答：流式答案 + citation → 图谱高亮联动。
  */
 import { describe, expect, it } from 'vitest'

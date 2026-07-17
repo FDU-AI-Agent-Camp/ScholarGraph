@@ -1,3 +1,8 @@
+/**
+ * Copyright 2026 FDU-AI-Agent-Camp
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
 /** design-spec §7 + ui-design-progress §1.4.4 Home baseline copy. */
 export const HOME_BASELINE_COPY = {
   eyebrow: 'AI AGENT · GRAPH RAG',

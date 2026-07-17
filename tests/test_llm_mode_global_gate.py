@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """G.4 cross-module gate: LLM_MODE=mock must skip live LLM for classify / extract / head merge."""
 
 from __future__ import annotations

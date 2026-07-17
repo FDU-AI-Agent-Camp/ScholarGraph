@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """G.2.3 unit: PaperDetail / PaperStatusData classify_warnings schema."""
 
 from __future__ import annotations

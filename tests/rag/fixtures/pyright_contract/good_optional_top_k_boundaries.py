@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """Pyright should pass: optional top_k may be omitted or passed explicitly."""
 
 from __future__ import annotations

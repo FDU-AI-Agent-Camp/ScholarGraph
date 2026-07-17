@@ -1,3 +1,8 @@
+<!--
+Copyright 2026 FDU-AI-Agent-Camp
+SPDX-License-Identifier: Apache-2.0
+-->
+
 <script setup lang="ts">
 import { Close, Document, HomeFilled, Menu, Search } from '@element-plus/icons-vue'
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'

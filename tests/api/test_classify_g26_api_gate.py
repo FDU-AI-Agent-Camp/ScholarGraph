@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """G2.6–G2.7 API gate: classify_warnings on status/detail + OpenAPI contract."""
 
 from __future__ import annotations

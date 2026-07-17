@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """Convert graph structures into vector-indexable RAG evidence."""
 
 from __future__ import annotations

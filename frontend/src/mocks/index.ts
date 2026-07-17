@@ -1,4 +1,9 @@
 /**
+ * Copyright 2026 FDU-AI-Agent-Camp
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+/**
  * Re-exports canonical API fixtures for optional offline / test imports.
  * Source of truth: `docs/api/fixtures/`.
  */

@@ -1,3 +1,8 @@
+/**
+ * Copyright 2026 FDU-AI-Agent-Camp
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
 import { onUnmounted, watch, type Ref } from 'vue'
 
 import type { PaperSummary } from '@/api/types'

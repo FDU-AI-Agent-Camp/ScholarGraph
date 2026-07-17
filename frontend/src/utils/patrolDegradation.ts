@@ -1,3 +1,8 @@
+/**
+ * Copyright 2026 FDU-AI-Agent-Camp
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
 /** Patrol RAG degradation helpers (P9 / F8 / FE-H1) — SSOT for is_degraded + profile. */
 
 import type { components } from '@/api/generated/schema'

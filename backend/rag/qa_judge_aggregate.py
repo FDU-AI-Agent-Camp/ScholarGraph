@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """Bottom-up aggregation: sentence_judgments (Step 1) → macro Judge metrics (Step 2)."""
 
 from __future__ import annotations

@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """HTTP integration tests for preview graph / preview QA (Slice 1)."""
 
 from __future__ import annotations

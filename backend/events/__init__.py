@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """Event bus exports."""
 
 from backend.events.bus import EventBus, get_event_bus, on_event, reset_event_bus_cache, stop_event_bus_worker

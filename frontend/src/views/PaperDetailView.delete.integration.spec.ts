@@ -1,4 +1,9 @@
 /**
+ * Copyright 2026 FDU-AI-Agent-Camp
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+/**
  * Detail delete chaos — stale store snapshot vs live pre-flight status.
  */
 import { flushPromises, mount } from '@vue/test-utils'

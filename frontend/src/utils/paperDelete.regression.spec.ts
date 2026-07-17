@@ -1,4 +1,9 @@
 /**
+ * Copyright 2026 FDU-AI-Agent-Camp
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+/**
  * Delete self-heal regression gate — pre-flight status + 409 force escape.
  *
  * Guards against stale store snapshots and missing 409 retry (symmetric with reextract).

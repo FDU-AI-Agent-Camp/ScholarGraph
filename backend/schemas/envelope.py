@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """API response envelope models (aligned with OpenAPI)."""
 
 from typing import Any, Generic, TypeVar

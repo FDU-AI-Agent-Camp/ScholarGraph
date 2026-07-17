@@ -1,4 +1,9 @@
 /**
+ * Copyright 2026 FDU-AI-Agent-Camp
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+/**
  * Phase 4 Papers acceptance — design-spec §8 + ui-design-progress §1.4.
  */
 import { flushPromises, mount } from '@vue/test-utils'

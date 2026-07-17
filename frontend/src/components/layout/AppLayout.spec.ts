@@ -1,3 +1,8 @@
+/**
+ * Copyright 2026 FDU-AI-Agent-Camp
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
 import { createPinia, setActivePinia } from 'pinia'
 import { ref } from 'vue'
 import { flushPromises, mount, type VueWrapper } from '@vue/test-utils'

@@ -1,3 +1,8 @@
+/**
+ * Copyright 2026 FDU-AI-Agent-Camp
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
 import { describe, expect, it } from 'vitest'
 
 import qaStreamV2Frames from '../../../docs/api/fixtures/qa-stream-v2-frames.json'

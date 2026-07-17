@@ -1,3 +1,8 @@
+/**
+ * Copyright 2026 FDU-AI-Agent-Camp
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
 /** Phase F.2.3 — machine codes → user-visible extract degrade messages. */
 
 export const EXTRACT_HEURISTIC_FALLBACK_CODE = 'extract_heuristic_fallback' as const

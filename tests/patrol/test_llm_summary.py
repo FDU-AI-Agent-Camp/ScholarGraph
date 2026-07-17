@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """Unit tests for patrol LLM summary helper."""
 
 from unittest.mock import AsyncMock, MagicMock, patch

@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """G2.8: ParadigmClassification contract unchanged; classify_warnings is a sibling field."""
 
 from __future__ import annotations

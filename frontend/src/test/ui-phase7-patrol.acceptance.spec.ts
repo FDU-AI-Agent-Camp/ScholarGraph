@@ -1,4 +1,9 @@
 /**
+ * Copyright 2026 FDU-AI-Agent-Camp
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+/**
  * Phase 7 Patrol acceptance (7.1–7.6) — design-spec §11 + ui-design-progress §1.4.4.
  */
 import { describe, expect, it } from 'vitest'

@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """HTTP API: F.2.1 extract path observability (extract_warnings on status)."""
 
 from __future__ import annotations

@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """Paradigm classifier — two-stage LLM with heuristic fallback (Phase G)."""
 
 from __future__ import annotations

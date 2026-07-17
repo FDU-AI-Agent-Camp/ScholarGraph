@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """P13 Release Gate — collect + run the orphan-thread / watchdog debt matrix.
 
 Ensures the four canonical regression cases (plus catalog meta-test) remain

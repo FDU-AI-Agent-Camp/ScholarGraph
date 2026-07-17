@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """Pydantic schemas shared by API and agents."""
 
 from backend.schemas.envelope import DataResponse, ErrorBody, ErrorResponse, Meta, PaginatedData

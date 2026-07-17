@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """FastAPI dependencies for QA scale verification (B4 / P2-1)."""
 
 from __future__ import annotations

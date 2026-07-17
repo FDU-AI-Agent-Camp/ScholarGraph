@@ -1,4 +1,9 @@
 /**
+ * Copyright 2026 FDU-AI-Agent-Camp
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+/**
  * §14.6 — PaperStatusPanel.vue 与 usePaperStatus / client 链路的冒烟测试。
  */
 import { mount, flushPromises } from '@vue/test-utils'

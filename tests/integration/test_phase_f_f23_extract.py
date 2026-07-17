@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """F.2.3 integration: fallback warnings on status + PaperDetail after pipeline (X16–X17)."""
 
 from __future__ import annotations

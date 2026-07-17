@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """V1 DoD A-05～A-08 — 绿路径 / 边界 / 红灯鲁棒性（BE 侧，与 FE 成对）.
 
 与 ``frontend/src/test/v1-dod-a05-a08-robustness-fe-be.integration.test.ts`` 成对。

@@ -1,3 +1,8 @@
+/**
+ * Copyright 2026 FDU-AI-Agent-Camp
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
 import type { FailedDuringStage, PaperStatus, PipelineStage } from '@/api/types'
 
 import { DETAIL_BASELINE_COPY } from '@/constants/detailCopy'

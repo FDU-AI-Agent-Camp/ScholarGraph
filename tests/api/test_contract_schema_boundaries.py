@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """API / contract layer: pagination extrema + response Schema + upload hygiene.
 
 Maps to the full-stack matrix §2 (Contract Level).

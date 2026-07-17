@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """Phase F.2.1 acceptance tests (X1–X8): LLM structured extract main path."""
 
 from __future__ import annotations

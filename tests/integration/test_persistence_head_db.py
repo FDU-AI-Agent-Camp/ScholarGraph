@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """Integration tests: head/classify/extract warnings survive service restart (INT-HEAD-01)."""
 
 from __future__ import annotations

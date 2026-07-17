@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """Upload must return immediately; path-B head refine runs asynchronously."""
 
 from __future__ import annotations

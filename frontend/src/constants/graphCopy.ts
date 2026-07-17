@@ -1,3 +1,8 @@
+/**
+ * Copyright 2026 FDU-AI-Agent-Camp
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
 /** design-spec §10 + ui-design-progress Phase 6 Graph baseline copy. */
 export const GRAPH_BASELINE_COPY = {
   pageTitle: '逻辑图谱',

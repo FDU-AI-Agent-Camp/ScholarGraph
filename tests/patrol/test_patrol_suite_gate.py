@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """Aggregated mock golden gate for all Patrol modes (V1 + V2) — P3 suite entry."""
 
 from __future__ import annotations

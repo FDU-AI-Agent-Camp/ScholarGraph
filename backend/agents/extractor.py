@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """Paper graph extractor — LLM structured output with heuristic fallback (Phase F)."""
 
 from __future__ import annotations

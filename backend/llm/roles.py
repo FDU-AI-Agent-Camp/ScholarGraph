@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """Role-based LLM binding for Generator (QA) vs Judge decoupling."""
 
 from __future__ import annotations

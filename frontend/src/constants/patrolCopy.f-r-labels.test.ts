@@ -1,4 +1,9 @@
 /**
+ * Copyright 2026 FDU-AI-Agent-Camp
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+/**
  * Unit / interface — Part F residual F-R3: production PATROL_BASELINE_COPY point-field keys.
  * Exercises the real constants module (not test helpers).
  */

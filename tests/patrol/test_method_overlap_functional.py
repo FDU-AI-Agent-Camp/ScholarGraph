@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """Functional verification for method_overlap Plan C topology resonance.
 
 These tests exercise production modules end-to-end (semantic finder, topology

@@ -1,4 +1,9 @@
 /**
+ * Copyright 2026 FDU-AI-Agent-Camp
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+/**
  * Unit tests — Part F / F1: four PatrolMode options + product labels.
  * RED until PATROL_MODE_OPTIONS / copy cover method_overlap + claim_evolution.
  */

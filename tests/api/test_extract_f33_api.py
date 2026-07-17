@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """HTTP API: F.3 HSS graph node/edge contract on graph endpoints."""
 
 from __future__ import annotations

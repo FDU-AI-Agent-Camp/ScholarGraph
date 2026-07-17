@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """JSON Schema fragment for PatrolInsight.degradation_profile (P9 contract)."""
 
 from __future__ import annotations

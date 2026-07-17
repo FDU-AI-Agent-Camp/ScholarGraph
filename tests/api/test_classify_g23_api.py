@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """HTTP API: Phase G classify fallback warning contract (G2.6–G2.8)."""
 
 from __future__ import annotations

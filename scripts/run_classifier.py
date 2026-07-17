@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """Run the BE-2 paradigm classifier on text, a file, or the V1 evaluation fixtures."""
 
 from __future__ import annotations

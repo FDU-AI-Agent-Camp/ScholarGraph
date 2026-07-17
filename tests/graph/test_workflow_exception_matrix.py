@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """Exception propagation: ServiceError → node failed state → fail_node → PaperService."""
 
 from pathlib import Path

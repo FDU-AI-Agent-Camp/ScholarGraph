@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """Official RAG event handlers and indexing entry points (P10 + P13).
 
 P10: ``PipelineFinalized`` → index → promote terminal status + ``RagIndexed``.

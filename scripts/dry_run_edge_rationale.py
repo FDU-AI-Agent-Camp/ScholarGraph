@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """Dry-run script for edge rationale enrichment (Phase 1).
 
 Reads a sample text file, runs the short-paper extraction path, and reports:

@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """API pagination and validation boundary tests (BND-08~10)."""
 
 from __future__ import annotations

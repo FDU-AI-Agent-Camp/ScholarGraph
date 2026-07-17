@@ -1,4 +1,9 @@
 /**
+ * Copyright 2026 FDU-AI-Agent-Camp
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+/**
  * Integration — Part F P1: View → runPatrol → DOM for F4/F5/F9.
  * Uses real runPatrol; spies postData only.
  */

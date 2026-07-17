@@ -1,3 +1,8 @@
+/**
+ * Copyright 2026 FDU-AI-Agent-Camp
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
 import type { HealthData, PatrolServiceHealth, RerankerStatus } from '@/api/types'
 
 export const DEMO_PATROL_ROUTE_PREFIX = '/patrol'

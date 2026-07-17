@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """Strong paradigm signals mined outside the paper head (BE-1 extension)."""
 
 from __future__ import annotations

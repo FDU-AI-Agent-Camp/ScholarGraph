@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """Load and validate patrol method-overlap golden pairs (topology blueprint v2)."""
 
 from __future__ import annotations

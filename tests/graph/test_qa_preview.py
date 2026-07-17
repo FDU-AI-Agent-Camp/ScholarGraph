@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """Tests for qa_stream preview/MVP skeleton behaviour (Slice 1)."""
 
 from __future__ import annotations

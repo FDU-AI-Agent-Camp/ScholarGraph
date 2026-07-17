@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """CLI tests for scripts/run_qa.py — M2 smoke, boundaries, red-path exit codes."""
 
 from __future__ import annotations

@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """Dual-route benchmark: orchestration unit tests + optional live MinerU comparison."""
 
 from __future__ import annotations

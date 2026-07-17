@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """Run the latest extraction pipeline over the six benchmark corpora.
 
 Outputs final graphs to ``data/graphs/{paper_id}.json`` and a metrics report.

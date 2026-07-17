@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """HTTP API: Phase E observability — head_refining stage, warnings, ingest_head (P7–P11)."""
 
 from __future__ import annotations

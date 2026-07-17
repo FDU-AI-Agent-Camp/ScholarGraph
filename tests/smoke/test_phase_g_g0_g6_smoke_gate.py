@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """Phase G G.0–G.6 smoke gate: deliverables exist and key contracts hold."""
 
 from __future__ import annotations

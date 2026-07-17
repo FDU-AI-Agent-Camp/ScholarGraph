@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """PDF ingest unit tests (BE-1). Corpus smoke见 test_corpus_smoke.py。"""
 
 from pathlib import Path

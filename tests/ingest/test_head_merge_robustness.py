@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """Head merge and async refine robustness (edge cases, fallbacks)."""
 
 from __future__ import annotations

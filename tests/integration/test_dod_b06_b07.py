@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """V1 DoD B-06 / B-07 — GET graph UnifiedPaperGraph + G6 conversion separation."""
 
 from __future__ import annotations

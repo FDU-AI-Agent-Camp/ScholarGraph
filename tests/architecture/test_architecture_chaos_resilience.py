@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """Architecture evolution / chaos matrix for residual-2 main-loop decoupling.
 
 Ship today:

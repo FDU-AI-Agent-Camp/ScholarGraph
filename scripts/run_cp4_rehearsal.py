@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """
 CP4 端到端联调 / rehearsal 脚本。
 

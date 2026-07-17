@@ -1,4 +1,9 @@
 /**
+ * Copyright 2026 FDU-AI-Agent-Camp
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+/**
  * V1 DoD §6.5 — 前后端联调红灯路径与功能可用性（FE 侧）.
  *
  * 与 tests/integration/test_dod_fe_be_red_paths.py 成对验收。

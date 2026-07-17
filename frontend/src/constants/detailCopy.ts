@@ -1,3 +1,8 @@
+/**
+ * Copyright 2026 FDU-AI-Agent-Camp
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
 /** design-spec §9 + ui-design-progress §1.4.4 Detail baseline copy. */
 export const DETAIL_BASELINE_COPY = {
   backLink: '返回文献库',

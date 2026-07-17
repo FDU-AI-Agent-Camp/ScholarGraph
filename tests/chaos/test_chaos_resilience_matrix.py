@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """Chaos & resilience matrix — event-loop starvation, partition, cold-boot heal.
 
 Ship today (in-process, no Testcontainers):

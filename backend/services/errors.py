@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """Service-layer errors mapped to API / workflow error codes."""
 
 from __future__ import annotations

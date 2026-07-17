@@ -1,4 +1,9 @@
 /**
+ * Copyright 2026 FDU-AI-Agent-Camp
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+/**
  * Unit / boundary / 越权 — Part F / F12: ClaimEvolutionPointCard dedicated display.
  */
 import { mount } from '@vue/test-utils'

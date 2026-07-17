@@ -1,4 +1,9 @@
 /**
+ * Copyright 2026 FDU-AI-Agent-Camp
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+/**
  * Functional / boundary / 越权 — Part F P1 on production PatrolView.
  * Layout CSS is locked via scoped stylesheet rules (happy-dom cannot compute scoped borders/grids).
  */

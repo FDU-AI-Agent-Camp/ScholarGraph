@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """Structured exclusion / negative-determination contracts for channel-B Patrol insights.
 
 When analyzers finish but cannot produce a ready insight, they return HTTP 200 with

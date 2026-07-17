@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """Phase E integration: head_refining stage, status warnings, head persistence (P7–P11)."""
 
 from __future__ import annotations

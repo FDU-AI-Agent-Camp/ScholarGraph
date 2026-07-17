@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """Backward-compatible re-exports — canonical router lives in ``backend.rag.qa_router``."""
 
 from __future__ import annotations

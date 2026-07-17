@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """Cloud reranker client for fine-grained semantic pair verification."""
 
 from __future__ import annotations

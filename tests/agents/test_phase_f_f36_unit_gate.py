@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """F.6 acceptance gate T7–T8: LLM success and heuristic fallback unit paths."""
 
 from __future__ import annotations

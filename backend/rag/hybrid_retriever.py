@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """Hybrid graph + vector retrieval for multi-scale QA (V2 §4.2)."""
 
 from __future__ import annotations

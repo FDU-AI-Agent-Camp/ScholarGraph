@@ -1,3 +1,8 @@
+/**
+ * Copyright 2026 FDU-AI-Agent-Camp
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
 /** G5 冒烟：Phase G 前后端成对测试门禁文件存在。 */
 import { describe, expect, it } from 'vitest'
 

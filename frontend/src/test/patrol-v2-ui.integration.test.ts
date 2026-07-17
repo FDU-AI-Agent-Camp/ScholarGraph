@@ -1,4 +1,9 @@
 /**
+ * Copyright 2026 FDU-AI-Agent-Camp
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+/**
  * Integration — Part F / F1–F3.
  * Production chain: PatrolView (real) → runPatrol (real) → postData (spy) → report DOM.
  * Does not re-assert fixture JSON shape (that belongs to OpenAPI/fixture contract tests).

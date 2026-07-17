@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """Patrol benchmark evaluators — unified four-mode orchestration (P3)."""
 
 from __future__ import annotations

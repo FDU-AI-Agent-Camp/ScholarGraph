@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """Shared plain-text normalization utilities for PDF ingest (BE-1)."""
 
 from __future__ import annotations

@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """Integration test: finalize emits PipelineFinalized (INT-EVT-01, EVT-03)."""
 
 from __future__ import annotations

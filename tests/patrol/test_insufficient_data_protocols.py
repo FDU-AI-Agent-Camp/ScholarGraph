@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """P11: channel-A (422) vs channel-B (200 + insufficient_data + exclusion_logic)."""
 
 from __future__ import annotations

@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """Compatibility facade for PipelineFinalized registration (P10).
 
 The exclusive official subscriber lives in ``backend.rag.handlers``. This module

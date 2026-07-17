@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """Pipeline generation (run_id) write gate for cross-worker orphan defense.
 
 Each extract / re-extract mints a ``pipeline_generation_id`` on ``pipeline_runs``.

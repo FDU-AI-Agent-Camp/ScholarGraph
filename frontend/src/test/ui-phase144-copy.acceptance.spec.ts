@@ -1,4 +1,9 @@
 /**
+ * Copyright 2026 FDU-AI-Agent-Camp
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+/**
  * ui-design-progress §1.4.4 — 文案与排版（基准表 / 禁止词 / 排版验收）
  */
 import { readdirSync, readFileSync, statSync } from 'node:fs'

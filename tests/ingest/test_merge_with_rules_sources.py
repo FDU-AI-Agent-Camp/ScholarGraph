@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """P11 unit: merge_with_rules records per-field sources for audit."""
 
 from __future__ import annotations

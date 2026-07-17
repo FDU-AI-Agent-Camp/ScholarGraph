@@ -1,4 +1,9 @@
 /**
+ * Copyright 2026 FDU-AI-Agent-Camp
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+/**
  * ui-design-progress §1.3 — 反模式清单自动化自查（Phase 8 全站复核）。
  */
 import { readdirSync, readFileSync, statSync } from 'node:fs'

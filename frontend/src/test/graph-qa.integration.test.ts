@@ -1,4 +1,9 @@
 /**
+ * Copyright 2026 FDU-AI-Agent-Camp
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+/**
  * Graph + QA SSE integration: fixture graph ↔ G6 payload ↔ citation highlight.
  */
 import { describe, expect, it } from 'vitest'

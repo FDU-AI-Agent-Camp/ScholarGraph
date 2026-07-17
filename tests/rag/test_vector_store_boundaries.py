@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """Boundary and edge-case unit tests for VectorStore and helpers."""
 
 from __future__ import annotations

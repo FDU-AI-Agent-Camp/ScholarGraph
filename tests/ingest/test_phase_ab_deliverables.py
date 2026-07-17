@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """Phase A/B ingest deliverables checklist (progress.md §5 Phase A–B).
 
 Maps progress tasks B1–B5 and Phase A GROBID spike artifacts to automated checks.

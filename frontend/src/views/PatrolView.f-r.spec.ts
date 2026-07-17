@@ -1,4 +1,9 @@
 /**
+ * Copyright 2026 FDU-AI-Agent-Camp
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+/**
  * Functional / boundary / 越权 — Part F residual F-R1 / F-R2 on production PatrolView.
  * RED until STEM prefill on mode change + insight/point node_refs dedupe land.
  */

@@ -1,4 +1,7 @@
 #!/usr/bin/env python
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """Demo script: run multi-scale QA over a stored paper graph.
 
 Usage (from repo root)::

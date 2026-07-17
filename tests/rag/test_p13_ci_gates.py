@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """P13 anti-regression CI gates — timeout audit + heal log marker."""
 
 from __future__ import annotations

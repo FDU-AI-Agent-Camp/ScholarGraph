@@ -1,4 +1,9 @@
 /**
+ * Copyright 2026 FDU-AI-Agent-Camp
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+/**
  * Presentational helpers for PatrolView (D-12 line-budget extract).
  * Mode options / graph-link builders live here so acceptance tests can assert
  * against `PatrolView.vue` + this module as a bundle.

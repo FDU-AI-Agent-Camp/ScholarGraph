@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """E2E HTTP tests: detail QA stream recalls vector chunks via HybridRetriever."""
 
 from __future__ import annotations

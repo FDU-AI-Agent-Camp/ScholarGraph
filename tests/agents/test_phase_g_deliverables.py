@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """Phase G deliverables checklist (progress.md §12).
 
 Static / schema regression for LLM classify + heuristic fallback.

@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """
 F.3 红灯测试（STEM 节点/边边界 + HSS 禁止 STEM type 交叉）
 

@@ -1,3 +1,8 @@
+/**
+ * Copyright 2026 FDU-AI-Agent-Camp
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
 /** Read a CSS custom property from :root; fall back when SSR/tests omit tokens. */
 export function cssToken(name: string, fallback: string): string {
   if (typeof document === 'undefined') {

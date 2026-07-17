@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """HTTP interface tests for Slice 2 background full extraction.
 
 These tests hit the real FastAPI endpoints and verify the observable contract:

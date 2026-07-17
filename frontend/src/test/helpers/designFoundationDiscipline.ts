@@ -1,3 +1,8 @@
+/**
+ * Copyright 2026 FDU-AI-Agent-Camp
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
 /** ui-design-progress §1.5 design parameter quick reference. */
 export const DESIGN_CANVAS_BASE = { width: 1440, height: 900 } as const
 

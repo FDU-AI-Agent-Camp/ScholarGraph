@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """Integration tests: full pipeline status progression persisted to DB (INT-PIPE-01/02)."""
 
 from __future__ import annotations

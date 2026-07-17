@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """B7 shadow diff — V1 GraphQuery path vs V2 RetrievalContext path (M2 pure graph)."""
 
 from __future__ import annotations

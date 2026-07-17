@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """Facade smoke tests for PipelineStatusService (see test_status_contract / test_pipeline_status_updates)."""
 
 import pytest

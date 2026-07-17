@@ -1,4 +1,9 @@
 /**
+ * Copyright 2026 FDU-AI-Agent-Camp
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+/**
  * Unit — Part F / F5: production PATROL_BASELINE_COPY.subtitle four-mode copy.
  */
 import { describe, expect, it } from 'vitest'

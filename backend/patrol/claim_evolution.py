@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """Claim evolution patrol logic (RAG Phase 3)."""
 
 from __future__ import annotations

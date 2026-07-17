@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """Boundary friction: cluster wipe claim + ghost-vector logical isolation.
 
 Hard proofs for the force-wipe lifecycle (claim ∪ read filter ∪ wave2)::

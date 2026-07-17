@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """Phase E deliverables checklist (progress.md §5 Phase E.2).
 
 Maps P7–P11 to automated static / schema regression checks.

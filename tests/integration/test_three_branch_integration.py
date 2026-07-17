@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """
 三分支联调：BE-1 ingest（真） + BE-L platform workflow/HTTP（真） + FE 契约（fixtures）。
 

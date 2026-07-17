@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """Long-paper chunking: section-aware splitting with head-context anchoring."""
 
 from __future__ import annotations

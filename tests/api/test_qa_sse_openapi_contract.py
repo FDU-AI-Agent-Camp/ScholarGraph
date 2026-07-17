@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """B6 gate: OpenAPI documents V2 QA SSE citation payloads."""
 
 from __future__ import annotations

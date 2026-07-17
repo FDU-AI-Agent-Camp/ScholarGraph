@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """File-backed mock VectorStore for CI / LLM_MODE=mock benchmark runs (no Chroma)."""
 
 from __future__ import annotations

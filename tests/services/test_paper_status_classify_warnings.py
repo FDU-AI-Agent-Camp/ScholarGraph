@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """Phase G: classify_warnings on PaperStatusData and GET /papers/{id}/status."""
 
 from __future__ import annotations

@@ -1,3 +1,8 @@
+/**
+ * Copyright 2026 FDU-AI-Agent-Camp
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
 import type { UploadRequestOptions } from 'element-plus'
 import { defineComponent, type PropType } from 'vue'
 

@@ -1,4 +1,9 @@
 /**
+ * Copyright 2026 FDU-AI-Agent-Camp
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+/**
  * Unit / component — Part F / F2+F12.
  * Mounts the production PatrolStructuredPoints module with OpenAPI fixtures.
  */

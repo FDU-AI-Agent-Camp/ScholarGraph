@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """错误处理：ServiceError → workflow state → status 快照与可读 message。"""
 
 from __future__ import annotations

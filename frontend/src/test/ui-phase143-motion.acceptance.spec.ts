@@ -1,4 +1,9 @@
 /**
+ * Copyright 2026 FDU-AI-Agent-Camp
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+/**
  * ui-design-progress §1.4.3 — 动效与交互（时长 / 缓动 / reduced-motion / focus-visible）
  */
 import { readdirSync, readFileSync, statSync } from 'node:fs'

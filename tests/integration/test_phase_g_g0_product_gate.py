@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """G.0 product decision integration: classify fallback must not fail pipeline."""
 
 from __future__ import annotations

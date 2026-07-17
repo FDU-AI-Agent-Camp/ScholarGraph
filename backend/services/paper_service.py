@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """Paper CRUD and pipeline status backed by the persistence repositories."""
 
 from __future__ import annotations

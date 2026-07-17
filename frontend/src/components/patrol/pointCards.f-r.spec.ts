@@ -1,4 +1,9 @@
 /**
+ * Copyright 2026 FDU-AI-Agent-Camp
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+/**
  * Unit / functional / 越权 — Part F residual F-R3 on production *PointCard components.
  * Runtime mount only — no existsSync / source-string locks.
  */

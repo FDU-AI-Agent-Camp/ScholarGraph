@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """Live regression for claim_evolution RQ gate — all 10 golden pairs (P4).
 
 Uses ``@pytest.mark.live_patrol_logic`` and drift-tolerant score monitoring.

@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """T6 contract: ingest HTTP API unchanged while benchmark baseline is script-side."""
 
 from __future__ import annotations

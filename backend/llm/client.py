@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """Unified LLM client — ``live`` (cloud) or ``mock`` (local templates).
 
 Supports role-based bindings so QA Generator and Judge evaluators can use

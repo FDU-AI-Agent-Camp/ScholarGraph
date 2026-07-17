@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """Integration tests for SEED_DEMO_PAPERS conditional fixture loading."""
 
 from __future__ import annotations

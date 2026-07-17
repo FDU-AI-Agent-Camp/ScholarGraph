@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """Service facade for triggering RAG vector indexing from the workflow graph."""
 
 from __future__ import annotations

@@ -1,3 +1,8 @@
+<!--
+Copyright 2026 FDU-AI-Agent-Camp
+SPDX-License-Identifier: Apache-2.0
+-->
+
 <script setup lang="ts">
 import type { components } from '@/api/types'
 import { PATROL_BASELINE_COPY } from '@/constants/patrolCopy'

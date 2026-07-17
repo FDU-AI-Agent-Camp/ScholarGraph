@@ -1,3 +1,8 @@
+/**
+ * Copyright 2026 FDU-AI-Agent-Camp
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
 /** Map failed pipeline error_code → short Chinese alert titles. */
 
 export const PROCESS_ORPHANED_CODE = 'PROCESS_ORPHANED' as const

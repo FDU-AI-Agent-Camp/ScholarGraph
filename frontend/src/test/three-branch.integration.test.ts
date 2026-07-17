@@ -1,4 +1,9 @@
 /**
+ * Copyright 2026 FDU-AI-Agent-Camp
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+/**
  * 三分支联调：FE 契约 + platform fixtures + ingest 金标（develop 合入后）。
  *
  * - feature/frontend：API 客户端与 PaperStatus 类型

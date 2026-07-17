@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """P10: EventBus topology — exclusive official RAG handler, no temporary_* subscribers."""
 
 from __future__ import annotations

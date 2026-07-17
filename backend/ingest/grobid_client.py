@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """HTTP client for GROBID CRF fulltext TEI (§2.1 path B, long PDF)."""
 
 from __future__ import annotations

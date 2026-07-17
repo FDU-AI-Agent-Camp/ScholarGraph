@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """Per-instance LRU chunk text lookup for VectorStore (B10 L2 preview)."""
 
 from __future__ import annotations

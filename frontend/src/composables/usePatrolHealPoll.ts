@@ -1,4 +1,9 @@
 /**
+ * Copyright 2026 FDU-AI-Agent-Camp
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+/**
  * Exponential backoff heal polling when Patrol returned INDEX_NOT_READY.
  * Quietly re-runs patrol until is_degraded clears or attempts are exhausted.
  */

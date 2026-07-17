@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """End-to-end HTTP: upload → status poll → graph access matrix (FE↔BE 联调路径)."""
 
 from __future__ import annotations

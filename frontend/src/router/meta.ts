@@ -1,3 +1,8 @@
+/**
+ * Copyright 2026 FDU-AI-Agent-Camp
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
 /** Augment vue-router RouteMeta (see module declaration below). */
 export interface AppRouteMeta {
   /** Page title for document / header. */

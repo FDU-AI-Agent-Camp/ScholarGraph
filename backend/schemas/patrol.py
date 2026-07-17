@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """Community patrol report schemas (BE-4) — aligned with docs/api/openapi.yaml."""
 
 from collections.abc import Sequence

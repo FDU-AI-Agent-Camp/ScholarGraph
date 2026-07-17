@@ -1,4 +1,9 @@
 /**
+ * Copyright 2026 FDU-AI-Agent-Camp
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+/**
  * FE↔BE 联调：papers 主路径真实行为 + 红路径 UI 反馈。
  *
  * 覆盖 upload → 详情、status 轮询三态、graph 409/500 差异化反馈。

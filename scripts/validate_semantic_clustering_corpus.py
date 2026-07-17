@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """Validate semantic clustering on two small corpus samples.
 
 This script runs the extraction pipeline (with semantic clustering enabled) on

@@ -1,4 +1,9 @@
 /**
+ * Copyright 2026 FDU-AI-Agent-Camp
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+/**
  * 答辩路径冒烟 + 边界鲁棒性：memory router 挂载真实视图，API 层 mock。
  */
 import { createPinia, setActivePinia } from 'pinia'

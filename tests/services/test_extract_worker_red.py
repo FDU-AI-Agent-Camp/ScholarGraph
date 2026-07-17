@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """Boundary / red tests: extract_worker resilience and MVP skeleton survival.
 
 These tests deliberately break the background full-extraction pipeline and

@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """
 V1 A～C 自动化门禁（C-09：合 develop / 答辩前复跑）。
 

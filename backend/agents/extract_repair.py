@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """Self-correction helpers for two-phase graph extraction (v2)."""
 
 from __future__ import annotations

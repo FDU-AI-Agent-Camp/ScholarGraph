@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """V1 DoD A-01～A-04 — 前后端联调联试（BE 侧）.
 
 与 ``frontend/src/test/v1-dod-a01-a04.integration.test.ts``、

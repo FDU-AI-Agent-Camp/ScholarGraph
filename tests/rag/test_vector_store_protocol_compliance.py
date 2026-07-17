@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """契约合规性测试：校验所有 VectorStore 实现是否顺从 ``VectorStoreProtocol``。"""
 
 from __future__ import annotations

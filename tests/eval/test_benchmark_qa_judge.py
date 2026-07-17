@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """Tests for LLM-as-a-Judge QA evaluation (B1 fix)."""
 
 from __future__ import annotations

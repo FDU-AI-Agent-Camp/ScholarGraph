@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """API tests: GET /health GROBID sidecar disclosure (Phase C / C9)."""
 
 from __future__ import annotations

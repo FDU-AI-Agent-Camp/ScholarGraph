@@ -1,4 +1,9 @@
 /**
+ * Copyright 2026 FDU-AI-Agent-Camp
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+/**
  * V1 DoD B-06 / B-07 — GET graph UnifiedPaperGraph + FE G6 adapter 前后端联调联试。
  *
  * 覆盖：功能可用、边界鲁棒、红灯异常（409 GRAPH_NOT_READY / 404）。

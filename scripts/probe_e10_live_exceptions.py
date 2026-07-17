@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """E-10 live 异常路径抽验：无效 Key + 超时（仓库根目录执行）.
 
 uv run python scripts/probe_e10_live_exceptions.py

@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """Paper routes — register here; business logic lives in services + BE modules."""
 
 from collections.abc import AsyncIterator

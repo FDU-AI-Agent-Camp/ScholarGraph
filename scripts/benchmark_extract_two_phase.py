@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """Benchmark two-phase vs single-phase graph extraction on local corpus papers.
 
 Usage (repo root):

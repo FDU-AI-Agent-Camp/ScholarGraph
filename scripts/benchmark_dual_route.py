@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """Compare dual-route ingest (§2.1) vs single-parser baselines on golden corpus.
 
 Quality: classifier 四段 0–4 分（与 progress.md §2.2 同一套启发式规则）。

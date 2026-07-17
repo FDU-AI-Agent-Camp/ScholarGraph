@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """Live automation regression engine for method_overlap golden pairs.
 
 Pipeline (see problems-v2 Part E §2):

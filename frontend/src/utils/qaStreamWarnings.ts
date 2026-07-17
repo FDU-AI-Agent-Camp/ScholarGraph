@@ -1,3 +1,8 @@
+/**
+ * Copyright 2026 FDU-AI-Agent-Camp
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
 /** QA-D1 — map SSE warning codes to bubble-level Chinese copy. */
 
 export const RAG_INDEX_NOT_READY_CODE = 'RAG_INDEX_NOT_READY' as const

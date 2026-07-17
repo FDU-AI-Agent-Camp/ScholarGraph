@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """Build path-A / path-B head field candidates for merge (§2.1)."""
 
 from __future__ import annotations

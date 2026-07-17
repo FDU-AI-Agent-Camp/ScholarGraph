@@ -1,4 +1,9 @@
 /**
+ * Copyright 2026 FDU-AI-Agent-Camp
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+/**
  * V1 DoD §6.4 D-07～D-12 — 治理项前后端联调联试（FE 侧）.
  *
  * 与 tests/integration/test_dod_d_fe_be_governance.py 成对验收。

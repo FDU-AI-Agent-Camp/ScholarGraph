@@ -1,3 +1,8 @@
+<!--
+Copyright 2026 FDU-AI-Agent-Camp
+SPDX-License-Identifier: Apache-2.0
+-->
+
 <script setup lang="ts">
 import HomeGraphMock from '@/components/home/HomeGraphMock.vue'
 import BadgeParadigm from '@/components/ui/BadgeParadigm.vue'

@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """Robustness integration tests for VectorStore against real ChromaDB."""
 
 from __future__ import annotations

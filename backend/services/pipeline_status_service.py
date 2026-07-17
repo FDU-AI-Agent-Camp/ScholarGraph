@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """Pipeline status/stage/percent updates aligned with api-contract §2."""
 
 from functools import lru_cache

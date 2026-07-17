@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """Red-light / robustness tests for RAG indexing handlers.
 
 These tests intentionally break dependencies to verify that

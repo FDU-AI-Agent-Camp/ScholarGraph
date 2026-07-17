@@ -1,4 +1,9 @@
 /**
+ * Copyright 2026 FDU-AI-Agent-Camp
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+/**
  * Functional / interface — Part F / F12: production dedicated Patrol display components.
  * Runtime mount only (no existsSync / source-string lock doubles).
  */

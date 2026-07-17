@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """HTTP: POST /api/v1/papers/{id}/qa/stream — SSE wired to qa_stream()."""
 
 from __future__ import annotations

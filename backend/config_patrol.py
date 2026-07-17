@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """Patrol-mode configuration fields and helpers for :class:`backend.config.Settings`."""
 
 from __future__ import annotations

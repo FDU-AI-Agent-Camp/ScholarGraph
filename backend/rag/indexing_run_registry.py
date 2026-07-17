@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """In-process generation registry for RAG index runs (P13 orphan-thread hardening).
 
 ``asyncio.wait_for`` cancels the indexing coroutine but cannot kill ``to_thread``

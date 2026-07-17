@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """Unit tests for classifier input slicing (BE-1)."""
 
 from backend.ingest.classifier_signals import extract_conclusion_tail, extract_meta_info

@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """F.3 integration: HSS extract produces F.3 argumentation-tree structure."""
 
 from __future__ import annotations

@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """Run the full upload pipeline on short + long corpus samples and evaluate semantic clustering.
 
 Reuses the production path: ``PaperService.create_from_upload`` → LangGraph pipeline

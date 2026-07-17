@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """Async SQLAlchemy engine and session factory."""
 
 from __future__ import annotations

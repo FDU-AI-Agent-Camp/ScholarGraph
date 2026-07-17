@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """Diagnose extract heuristic fallback when paradigm classify succeeds (Phase G + F).
 
 Classify (``ParadigmClassification``) and extract (``UnifiedPaperGraph``) are independent:

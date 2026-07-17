@@ -1,3 +1,8 @@
+/**
+ * Copyright 2026 FDU-AI-Agent-Camp
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
 import type { DataResponse, PaperStatusData } from '@/api/types'
 
 import failedStatusEnvelope from '../../../../docs/api/fixtures/paper-status-hss-failed-001.json'

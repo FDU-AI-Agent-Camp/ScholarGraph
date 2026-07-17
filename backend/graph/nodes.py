@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """LangGraph node handlers — orchestration only; all domain work in services."""
 
 import logging

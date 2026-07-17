@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """Tests for structured output parsing and JSON repair (Slice 2 robustness)."""
 
 from __future__ import annotations

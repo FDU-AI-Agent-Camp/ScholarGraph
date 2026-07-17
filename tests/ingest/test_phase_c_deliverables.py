@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """Phase C pipeline integration checklist (progress.md §5 Phase C).
 
 Maps C1–C10 deliverables to automated regression checks.

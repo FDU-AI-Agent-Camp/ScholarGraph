@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """Build or refresh committed dual(rules) regression baseline from a batch report.
 
 Usage (repo root):

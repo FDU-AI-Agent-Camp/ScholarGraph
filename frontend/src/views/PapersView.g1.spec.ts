@@ -1,4 +1,9 @@
 /**
+ * Copyright 2026 FDU-AI-Agent-Camp
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+/**
  * G1 — Papers list «图谱» gate unlocks ready_with_warnings (runtime render).
  */
 import { flushPromises, mount } from '@vue/test-utils'

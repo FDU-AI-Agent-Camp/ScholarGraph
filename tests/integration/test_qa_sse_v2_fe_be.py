@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """B6 integration: BE SSE citation payloads align with OpenAPI + FE fixture contract."""
 
 from __future__ import annotations

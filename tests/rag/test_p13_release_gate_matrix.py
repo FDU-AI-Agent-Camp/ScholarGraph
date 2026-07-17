@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """P13 Release Gate matrix — catalog of debt-regression defenses.
 
 | 测试分类 | 测试用例命名 | 检验的防御边界 |

@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """Heuristic graph extraction — fallback only when LLM structured extract fails."""
 
 from __future__ import annotations

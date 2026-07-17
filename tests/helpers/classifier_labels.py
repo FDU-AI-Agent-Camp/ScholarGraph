@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """Load docs/v1/eval/classifier_labels.csv for ingest / classifier eval tests."""
 
 from __future__ import annotations

@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """Graph storage, query, GraphRAG, and LangGraph pipeline."""
 
 from backend.graph.query import GraphQuery

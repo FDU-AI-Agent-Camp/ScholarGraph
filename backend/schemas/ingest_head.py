@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """Structured document head fields for ingest routing and LLM merge."""
 
 from __future__ import annotations

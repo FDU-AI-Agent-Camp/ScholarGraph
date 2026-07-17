@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """Shared fixtures for graph / workflow tests."""
 
 from collections.abc import Iterator

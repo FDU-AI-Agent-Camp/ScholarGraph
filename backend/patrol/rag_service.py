@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """Unified RAG enrichment facade for all patrol modes.
 
 This module centralises VectorStore interactions so individual analysers do not

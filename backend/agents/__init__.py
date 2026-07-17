@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """LangGraph workflows and BE-2 agent nodes (classify / extract)."""
 
 from backend.agents.classifier import classify

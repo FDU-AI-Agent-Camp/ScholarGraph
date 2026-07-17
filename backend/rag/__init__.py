@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """RAG vector indexing primitives for ScholarGraph V2."""
 
 from backend.rag.chunking import chunk_text

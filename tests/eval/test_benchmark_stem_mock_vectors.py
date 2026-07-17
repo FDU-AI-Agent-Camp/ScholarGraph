@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """Benchmark mock-mode STEM full-path smoke (A+B retrieval → SSE → guardrails)."""
 
 from __future__ import annotations

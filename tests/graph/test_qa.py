@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """Tests for qa_stream (BE-3).
 
 Uses fake LLM objects to avoid real API calls.  Tests cover all four SSE

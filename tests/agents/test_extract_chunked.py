@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """Tests for backend.agents.extract_chunked coordinator."""
 
 from __future__ import annotations

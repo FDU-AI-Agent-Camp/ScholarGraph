@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """HTTP API: force re-extract escape hatch (Plan C)."""
 
 from __future__ import annotations

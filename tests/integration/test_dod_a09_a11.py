@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """V1 DoD A-09 / A-11 — M2 QA smoke CLI + M4 pipeline mock E2E."""
 
 from __future__ import annotations

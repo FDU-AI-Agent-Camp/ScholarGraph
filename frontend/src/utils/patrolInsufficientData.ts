@@ -1,4 +1,9 @@
 /**
+ * Copyright 2026 FDU-AI-Agent-Camp
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+/**
  * Channel-B insufficient_data presentation helpers (P11 / F7).
  * Distinct from channel-A 422 PATROL_INSUFFICIENT_DATA (patrolForm.ts).
  */

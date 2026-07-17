@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """Canonical Judge snapshot input contract for hash-lock drift detection."""
 
 from __future__ import annotations

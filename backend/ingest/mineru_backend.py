@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """MinerU pipeline simplified backend for short-PDF async head extraction."""
 
 from __future__ import annotations

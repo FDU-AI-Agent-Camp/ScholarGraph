@@ -1,3 +1,8 @@
+/**
+ * Copyright 2026 FDU-AI-Agent-Camp
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
 import { isApiClientError } from '@/api/client'
 
 /** User-facing message from an unknown thrown value. */

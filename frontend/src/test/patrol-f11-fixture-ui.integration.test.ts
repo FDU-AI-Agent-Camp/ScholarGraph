@@ -1,4 +1,9 @@
 /**
+ * Copyright 2026 FDU-AI-Agent-Camp
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+/**
  * Integration — Part F / F11: production UI consumes @/mocks (canonical fixtures).
  * Only mounts production PatrolView / PatrolStructuredPoints; mocks are data only.
  */

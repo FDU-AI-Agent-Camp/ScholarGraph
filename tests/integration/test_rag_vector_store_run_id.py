@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """Integration tests for VectorStore index_run_id snapshot switching."""
 
 from __future__ import annotations

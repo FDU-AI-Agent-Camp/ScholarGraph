@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """Availability helpers for ``@pytest.mark.demo_profile_check`` admission tests."""
 
 from __future__ import annotations

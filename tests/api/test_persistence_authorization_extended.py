@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """Extended authorization tests (AUTH-07, AUTH-10)."""
 
 from __future__ import annotations

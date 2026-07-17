@@ -1,4 +1,9 @@
 /**
+ * Copyright 2026 FDU-AI-Agent-Camp
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+/**
  * G1 Layer 1 — exhaustive capability-predicate matrix (防退化卡点).
  * Future success terminals must be added to GRAPH_INTERACTIVE set + this matrix together.
  */

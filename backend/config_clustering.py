@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """Per-model / per-paradigm clustering similarity thresholds for Settings."""
 
 from __future__ import annotations

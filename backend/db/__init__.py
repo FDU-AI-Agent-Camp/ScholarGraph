@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """SQLAlchemy database engine, session factory, and ORM models."""
 
 from backend.db.base import Base, async_session_factory, get_async_engine

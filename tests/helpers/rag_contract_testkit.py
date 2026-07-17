@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """Stand-in for downstream RAG stores that hard-filter on ``index_run_id`` metadata."""
 
 from __future__ import annotations

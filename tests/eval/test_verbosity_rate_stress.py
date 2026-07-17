@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """High-redundancy stress tests for verbosity_rate (character inflation heuristic).
 
 Proves the metric is no longer hard-coded 0.0 and catches answers that pad

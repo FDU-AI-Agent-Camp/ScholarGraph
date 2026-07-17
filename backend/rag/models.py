@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """Pydantic models and protocols for V2 RAG vector indexing (Phase 1+2+4)."""
 
 from __future__ import annotations

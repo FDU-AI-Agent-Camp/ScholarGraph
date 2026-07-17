@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """First-class Patrol RAG degradation contracts and helpers.
 
 Explicit ``degradation_profile`` on ``PatrolInsight`` is the source of truth.

@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """Corpus smoke tests: gold labels ↔ local PDFs ↔ ingest output (BE-1)."""
 
 from __future__ import annotations

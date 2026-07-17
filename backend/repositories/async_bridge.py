@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """Run async repository coroutines from synchronous LangGraph / service code.
 
 The process-wide SQLAlchemy async engine must **not** be disposed from this

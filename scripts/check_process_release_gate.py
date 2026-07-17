@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """Process Release Gate — PROCESSING 全链路自愈矩阵（CI 硬阻断）。
 
 五层核心场景（详见 ``tests/pipeline/test_process_release_gate_matrix.py``）：

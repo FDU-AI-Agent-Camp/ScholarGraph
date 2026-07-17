@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """Integration: real ingest PDF extraction → structured classifier input (BE-1)."""
 
 from __future__ import annotations

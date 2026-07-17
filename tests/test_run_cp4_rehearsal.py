@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """Unit tests for scripts/run_cp4_rehearsal.py — SSE parse, API probes, CLI flags."""
 
 from __future__ import annotations

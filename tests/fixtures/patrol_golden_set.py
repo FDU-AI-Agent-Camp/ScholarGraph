@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """Load and validate patrol claim-evolution RQ golden pairs (组员 D hardened fixtures)."""
 
 from __future__ import annotations

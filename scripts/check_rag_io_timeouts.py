@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """P13 static concurrency audit: RAG/LLM I/O timeouts + watchdog wiring.
 
 Exit non-zero when critical call sites lose ``asyncio.wait_for`` / HTTP timeouts,

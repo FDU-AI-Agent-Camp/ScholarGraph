@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """
 G.4 红灯：LLM_MODE 与 classify 能力点边界。
 

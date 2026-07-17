@@ -1,4 +1,9 @@
 /**
+ * Copyright 2026 FDU-AI-Agent-Camp
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+/**
  * V1 DoD A-09 / A-11 — M2 多尺度问答 + M4 流水线前后端联调联试。
  *
  * 覆盖：功能可用（三类问题 citation 可复核）、边界鲁棒性、红灯异常反馈。

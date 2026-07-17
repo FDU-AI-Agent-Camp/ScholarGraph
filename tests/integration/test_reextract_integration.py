@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """Integration: re-extract escape hatch runs the full pipeline again."""
 
 from __future__ import annotations

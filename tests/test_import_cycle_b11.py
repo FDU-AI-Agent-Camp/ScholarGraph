@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """B11 regression: cold import of LlmClient must not hit rag↔graph↔llm cycle."""
 
 from __future__ import annotations

@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """Integration: LangGraph pipeline writes status/stage/percent per api-contract."""
 
 from pathlib import Path

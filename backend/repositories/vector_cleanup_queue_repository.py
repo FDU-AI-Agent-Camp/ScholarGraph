@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """Durable Wave-2 vector cleanup outbox (``vector_cleanup_queue``).
 
 Persists delayed ``delete_run`` tombstones so a process restart cannot evaporate

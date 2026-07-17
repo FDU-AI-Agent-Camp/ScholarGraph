@@ -1,4 +1,9 @@
 /**
+ * Copyright 2026 FDU-AI-Agent-Camp
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+/**
  * G.3 冒烟：前端 classify_warnings 文案与组件接线静态门禁。
  */
 import { describe, expect, it } from 'vitest'

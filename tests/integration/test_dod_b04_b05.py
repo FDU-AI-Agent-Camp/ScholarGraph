@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """V1 DoD B-04 / B-05 — SSE QA 真流 + citation payload 前后端联调联试.
 
 覆盖：功能可用、边界鲁棒、红灯异常（404 JSON / SSE error+done）。

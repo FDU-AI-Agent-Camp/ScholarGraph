@@ -1,3 +1,8 @@
+/**
+ * Copyright 2026 FDU-AI-Agent-Camp
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
 /** design-spec §14 + ui-design-progress Phase 8 App Shell baseline copy. */
 export const SHELL_BASELINE_COPY = {
   mobileNavToggleLabel: '打开导航菜单',

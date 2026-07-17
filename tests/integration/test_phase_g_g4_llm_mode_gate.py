@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """G.4 integration gate: LLM_MODE=mock pipeline uses real AgentService without live LLM calls."""
 
 from __future__ import annotations

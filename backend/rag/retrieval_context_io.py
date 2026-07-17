@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """Serialize / deserialize ``RetrievalContext`` for offline QA replay (B7)."""
 
 from __future__ import annotations

@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """Bootstrap idempotency tests (SVC-BOOT-01 / D6 zero-pollution)."""
 
 from __future__ import annotations

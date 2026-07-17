@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """Unit tests for claim_evolution live drift engine (no real API)."""
 
 from __future__ import annotations

@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """Lens Clash patrol logic (BE-4)."""
 
 from collections.abc import Mapping

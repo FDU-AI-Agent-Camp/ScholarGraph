@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """Retry, failure classification and fallback helpers for graph extraction.
 
 This module is intentionally separated from ``backend.agents.extractor`` to keep

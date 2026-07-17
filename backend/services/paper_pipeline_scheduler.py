@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """Schedule single-paper LangGraph pipeline after HTTP upload (V1 in-process queue)."""
 
 from __future__ import annotations

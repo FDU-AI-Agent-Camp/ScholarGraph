@@ -1,4 +1,9 @@
 /**
+ * Copyright 2026 FDU-AI-Agent-Camp
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+/**
  * V1 DoD §6.5 E — 边界处理与鲁棒性前后端联调联试.
  *
  * 与 tests/integration/test_dod_e_robustness.py 成对：后端 error code ↔ FE 文案/行为。

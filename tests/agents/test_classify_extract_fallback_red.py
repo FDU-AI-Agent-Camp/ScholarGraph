@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """
 红灯：分类成功但抽取 fallback 的边界与根因可观测性。
 

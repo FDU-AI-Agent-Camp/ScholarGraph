@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """B10 adversarial edge matrix — mock time/space gaps, never emit bare empty preview."""
 
 from __future__ import annotations

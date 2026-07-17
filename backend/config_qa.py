@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """QA / Judge LLM role bindings and RAG retrieval settings for :class:`backend.config.Settings`."""
 
 from __future__ import annotations

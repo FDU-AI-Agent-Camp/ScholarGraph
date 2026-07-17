@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """Concurrency & temporal friction tests — reextract race + replace-lock release.
 
 Maps to the full-stack matrix §异步时序验证 (Race / Cancellation).

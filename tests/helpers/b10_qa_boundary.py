@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """Shared helpers for B10 chunk-preview boundary / E2E tests."""
 
 from __future__ import annotations

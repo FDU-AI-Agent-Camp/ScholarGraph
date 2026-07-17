@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """Processing / pending orphan heal — cold-boot reconcile + wall-clock watchdog."""
 
 from __future__ import annotations

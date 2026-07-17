@@ -1,4 +1,7 @@
 #!/usr/bin/env python
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """QA 金标回归脚本 (V2 Phase 4).
 
 读取 ``data/qa_golden_set.json`` 中的金标问题，逐题调用 ``qa_stream``，

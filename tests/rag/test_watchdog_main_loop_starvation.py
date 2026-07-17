@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """Problem 2 verification: Watchdog keeps ticking while the main asyncio loop is starved.
 
 Injects a bare ``time.sleep`` on the pytest/FastAPI event-loop thread (false-async)

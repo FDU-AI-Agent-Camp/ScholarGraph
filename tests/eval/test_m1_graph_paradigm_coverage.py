@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """M1 eval — UnifiedPaperGraph schema coverage per paradigm (A-08).
 
 Green: fixture graphs validate + GraphStore round-trip (CI default).

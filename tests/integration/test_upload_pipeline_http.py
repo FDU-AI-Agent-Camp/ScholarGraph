@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """HTTP integration: POST /papers must schedule LangGraph pipeline (upload → ready)."""
 
 from __future__ import annotations

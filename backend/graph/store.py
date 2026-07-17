@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """Graph persistence (BE-3: JSON-based storage, G6-ready export)."""
 
 from pathlib import Path

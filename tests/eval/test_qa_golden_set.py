@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """Validate golden QA set schema and data integrity (V2 Phase 4).
 
 Verifies:

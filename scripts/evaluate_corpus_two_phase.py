@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """Evaluate the updated two-phase extraction logic on all papers in data/corpus.
 
 Usage (repo root):

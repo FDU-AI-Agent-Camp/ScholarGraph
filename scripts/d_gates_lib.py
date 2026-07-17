@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """Shared validators for V1 DoD §6.4 D — code-base standards gates."""
 
 from __future__ import annotations
@@ -67,6 +70,28 @@ REQUIRED_GITIGNORE_SENSITIVE_ENTRIES = (
 BACKEND_GOD_FILE_LINE_BUDGET = 500
 
 
+def _count_lines_excluding_license_header(text: str) -> int:
+    """Count lines while ignoring leading SPDX / copyright boilerplate.
+
+    Apache-2.0 file headers add a few lines at the top of every source file;
+    those must not inflate the God-file budget used by D-12.
+    """
+    lines = text.splitlines()
+    index = 0
+    if lines and lines[0].startswith("#!"):
+        index = 1
+    while index < len(lines):
+        stripped = lines[index].strip()
+        if not stripped:
+            index += 1
+            break
+        if stripped.startswith("#") and (stripped.startswith("# Copyright ") or "SPDX-License-Identifier:" in stripped):
+            index += 1
+            continue
+        break
+    return len(lines) - index
+
+
 def scan_handoff_modules_for_private_routes() -> list[str]:
     """Return ``path: marker`` strings when BE delivery dirs import/register HTTP routes."""
     violations: list[str] = []
@@ -118,7 +143,7 @@ def backend_python_files_exceeding_line_budget(*, budget: int = BACKEND_GOD_FILE
     if not backend_root.is_dir():
         return offenders
     for path in sorted(backend_root.rglob("*.py")):
-        line_count = len(path.read_text(encoding="utf-8").splitlines())
+        line_count = _count_lines_excluding_license_header(path.read_text(encoding="utf-8"))
         if line_count > budget:
             rel = path.relative_to(REPO_ROOT).as_posix()
             offenders.append(f"{rel} ({line_count} lines)")

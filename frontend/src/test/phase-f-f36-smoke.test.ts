@@ -1,4 +1,9 @@
 /**
+ * Copyright 2026 FDU-AI-Agent-Camp
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+/**
  * F.6 冒烟 T11：前端 fallback 文案冻结与组件展示。
  */
 import { describe, expect, it } from 'vitest'

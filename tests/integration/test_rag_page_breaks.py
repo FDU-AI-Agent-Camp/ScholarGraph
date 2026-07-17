@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """Integration tests for page_start/page_end propagation from ingest to chunks."""
 
 from __future__ import annotations

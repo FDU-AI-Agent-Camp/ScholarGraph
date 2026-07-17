@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """Durable cluster-wide wipe mutex for force delete ∪ force reextract.
 
 Replaces the process-local ``_reextract_inflight`` set. Cross-worker safety is

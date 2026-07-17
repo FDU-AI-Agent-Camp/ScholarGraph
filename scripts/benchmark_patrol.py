@@ -1,4 +1,7 @@
 #!/usr/bin/env python
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """Patrol 统一评估与四模式 Benchmark 编排 (P3).
 
 覆盖 V1 (lens_clash / contradiction) 与 V2 (method_overlap / claim_evolution) 金标。

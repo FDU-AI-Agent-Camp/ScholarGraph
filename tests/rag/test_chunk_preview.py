@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """B10 — chunk text_preview L2 lazy lookup and structured placeholders."""
 
 from __future__ import annotations

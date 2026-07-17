@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """Patrol result cache for healthy (thick-context) reports.
 
 Call sites (``PatrolService``) skip ``set`` for RAG-degraded reports and include

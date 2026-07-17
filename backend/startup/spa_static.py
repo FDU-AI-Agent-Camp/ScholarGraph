@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """Optional Vue SPA static hosting for single-container deployments."""
 
 from __future__ import annotations

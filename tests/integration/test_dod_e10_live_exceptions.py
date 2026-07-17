@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """V1 DoD §6.5 E-10 — live 异常路径（无效 Key / 超时）.
 
 与 ``scripts/probe_e10_live_exceptions.py`` 抽验对齐；无效 Key 用例不依赖有效 MaaS Key。

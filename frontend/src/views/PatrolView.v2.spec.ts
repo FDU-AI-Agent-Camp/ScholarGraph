@@ -1,4 +1,9 @@
 /**
+ * Copyright 2026 FDU-AI-Agent-Camp
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+/**
  * Functional / boundary / authz tests — Part F / F1–F3 (product UI).
  * RED until four-mode selector + structured_points render land in PatrolView.
  */

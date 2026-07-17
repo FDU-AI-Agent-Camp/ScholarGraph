@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """Paper lifecycle status transition ADT for PipelineStatusService writes.
 
 Reextract resets go through ``pipeline_repo.reset_for_reextract`` (not ``_apply``).

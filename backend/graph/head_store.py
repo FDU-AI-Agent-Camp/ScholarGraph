@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """Persist refined ingest head alongside graph JSON (P10 / P11)."""
 
 from pathlib import Path

@@ -1,4 +1,9 @@
 /**
+ * Copyright 2026 FDU-AI-Agent-Camp
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+/**
  * V1 DoD §6.4 D-01～D-12 — 代码基座规范性（静态契约 + CI 对齐）。
  *
  * 与 tests/test_dod_d_standards.py、scripts/run_d_gates.py 成对验收。

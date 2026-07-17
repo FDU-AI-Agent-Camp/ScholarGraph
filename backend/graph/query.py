@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """GraphRAG query helpers (BE-3).
 
 Provides keyword-driven subgraph extraction for feeding relevant graph

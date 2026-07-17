@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """Phase G acceptance gate: LLM success and heuristic fallback unit paths."""
 
 from __future__ import annotations

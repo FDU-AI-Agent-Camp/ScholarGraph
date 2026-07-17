@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """Tests for Patrol golden config_snapshot layered gating."""
 
 from __future__ import annotations

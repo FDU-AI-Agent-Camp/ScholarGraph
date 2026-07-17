@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """PaperService facade for pipeline status writes (P13 LoD harden).
 
 External RAG / watchdog / re-extract callers must use these methods instead of

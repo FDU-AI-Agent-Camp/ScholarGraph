@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """
 Phase G 红灯：classify_warnings 边界 — API 仅返回机器码，不含用户文案。
 

@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """V1 DoD §6.4 D-01～D-12 — code-base standards (static + gate wiring)."""
 
 from __future__ import annotations

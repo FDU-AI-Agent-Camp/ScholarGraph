@@ -1,4 +1,9 @@
 /**
+ * Copyright 2026 FDU-AI-Agent-Camp
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+/**
  * Phase 5 Detail acceptance (5.1–5.10) — design-spec §9 + ui-design-progress §1.4.
  */
 import { ref } from 'vue'

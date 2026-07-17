@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """ChromaDB-backed vector store for RAG chunks, entities, and relations.
 
 Run-id snapshot replace + generation-guard activation live in

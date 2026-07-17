@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """GROBID isalive probe for health endpoint (Phase C / C9)."""
 
 from __future__ import annotations

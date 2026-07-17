@@ -1,4 +1,9 @@
 /**
+ * Copyright 2026 FDU-AI-Agent-Camp
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+/**
  * Papers list delete UX boundary drill (Vitest/VTU).
  *
  * Locks row-level lock independence + 503 safety-block alert — same contracts a Playwright

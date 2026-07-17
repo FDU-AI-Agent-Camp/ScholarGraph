@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """Tests for mock agents (LLM_MODE=mock pipeline path)."""
 
 from __future__ import annotations

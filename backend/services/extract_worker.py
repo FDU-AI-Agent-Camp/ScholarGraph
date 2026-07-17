@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """Background full-graph extraction worker (Slice 2).
 
 After the LangGraph pipeline reaches the extract stage, long papers are handed

@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """Chunked two-phase extraction for papers longer than ``EXTRACT_MAX_INPUT_CHARS``."""
 
 from __future__ import annotations

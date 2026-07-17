@@ -1,4 +1,9 @@
 /**
+ * Copyright 2026 FDU-AI-Agent-Camp
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+/**
  * V1 DoD A-04 — 图谱 G6 + ?node= 高亮 + 409 未就绪（FE↔BE 成对联调）.
  *
  * 与 tests/integration/test_dod_a01_a04_fe_be.py::TestA04GraphPageContract 成对。

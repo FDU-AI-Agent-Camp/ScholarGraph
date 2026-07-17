@@ -1,3 +1,8 @@
+/**
+ * Copyright 2026 FDU-AI-Agent-Camp
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
 import { PAPERS_BASELINE_COPY } from '@/constants/papersCopy'
 
 export type EmptyStateVariant = 'no-papers' | 'no-graph' | 'no-report'

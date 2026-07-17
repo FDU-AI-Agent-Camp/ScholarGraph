@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """Cascading physical cleanup — prevent distributed resource leaks on DELETE.
 
 Physical verification matrix (after ``DELETE /papers/{id}`` commits):

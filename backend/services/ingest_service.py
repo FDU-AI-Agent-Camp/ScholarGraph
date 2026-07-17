@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """Ingest service facade (BE-1 implements backend.ingest)."""
 
 from functools import lru_cache

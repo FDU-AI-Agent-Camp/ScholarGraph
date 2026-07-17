@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """Race-amplification: timed-out Run A must not clobber successor Run B (P13 Problem 1).
 
 Timeline (wall clock):

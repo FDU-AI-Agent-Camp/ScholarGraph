@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """HTTP API: Phase F observability — extract_warnings on status (X13–X17)."""
 
 from __future__ import annotations

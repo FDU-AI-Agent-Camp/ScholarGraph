@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """Fuzzy-match resilience tests for chunk citation parsing in compute_chunk_recall."""
 
 from __future__ import annotations

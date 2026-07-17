@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """Cross-stack merge verification: backend HTTP ↔ docs/api fixtures ↔ FE contract.
 
 After merging feature/frontend, feature/backend/platform, and feature/backend/ingest into develop, these tests

@@ -1,3 +1,8 @@
+/**
+ * Copyright 2026 FDU-AI-Agent-Camp
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
 /** WCAG 2.x contrast helpers for §1.4.1 acceptance tests. */
 
 const MIN_CHANNEL = 0

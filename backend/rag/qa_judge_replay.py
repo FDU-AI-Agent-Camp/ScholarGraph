@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """Hash-indexed Judge snapshot replay for zero-cost CI (VCR-style contract playback)."""
 
 from __future__ import annotations

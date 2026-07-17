@@ -1,4 +1,7 @@
 #!/usr/bin/env python
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """Validate Patrol golden config snapshots against runtime Settings.
 
 Used by Nightly/Release gate before ``pytest -m live_patrol_logic`` and

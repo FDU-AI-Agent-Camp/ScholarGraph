@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """P13 dual-layer indexing watchdog — macro sweep + cold-boot reconcile.
 
 The macro loop runs on a **dedicated daemon thread** and performs **sync** DB

@@ -1,4 +1,9 @@
 /**
+ * Copyright 2026 FDU-AI-Agent-Camp
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+/**
  * Typed access / expected literals for Part F V2 Patrol copy contracts.
  */
 import { PATROL_BASELINE_COPY } from '@/constants/patrolCopy'

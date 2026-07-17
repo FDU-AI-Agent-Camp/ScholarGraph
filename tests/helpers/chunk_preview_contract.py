@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """Pydantic contract enforcement for B10 chunk citation SSE payloads."""
 
 from __future__ import annotations

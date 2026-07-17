@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """M0 eval — micro-corpus paradigm classification vs classifier_labels.csv gold.
 
 Green: harness / CSV contract (CI default).

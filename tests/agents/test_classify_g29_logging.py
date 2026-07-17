@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """G2.9: classify_llm_fallback / classify_llm_disabled logs include reason."""
 
 from __future__ import annotations

@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """Pyright should pass: Retrieved* fields are inferred without cast/as_dict."""
 
 from __future__ import annotations

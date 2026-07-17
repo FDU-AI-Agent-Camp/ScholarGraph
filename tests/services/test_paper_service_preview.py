@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """Tests for PaperService preview-graph lifecycle (Slice 1 / D6 DB-backed)."""
 
 from __future__ import annotations

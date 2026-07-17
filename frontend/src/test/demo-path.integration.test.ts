@@ -1,4 +1,9 @@
 /**
+ * Copyright 2026 FDU-AI-Agent-Camp
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+/**
  * design-spec §16 / ui-design-progress §6 — Prototype 答辩路径验收。
  *
  * 路径树：

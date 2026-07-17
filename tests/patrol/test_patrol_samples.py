@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """Unit tests for backend.patrol.samples eval graph seeds."""
 
 from backend.graph.store import GraphStore

@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """Property-style chaos lifecycle tests for D6 ephemeral pipeline state."""
 
 from __future__ import annotations

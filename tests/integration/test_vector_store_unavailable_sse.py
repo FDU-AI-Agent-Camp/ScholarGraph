@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """Week 4 B/C merge gate — STEM QA SSE symmetry when vector store is unavailable."""
 
 from __future__ import annotations

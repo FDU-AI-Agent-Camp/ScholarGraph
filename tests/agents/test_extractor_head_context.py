@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """Unit tests: ``_resolve_head_context`` (F.2.1 X6)."""
 
 from __future__ import annotations

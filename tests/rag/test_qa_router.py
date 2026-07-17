@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """Question-scale router alignment with golden set (B4 / V2 §4.1).
 
 Layered parametrized matrix tests for ``detect_question_scale()`` — each group

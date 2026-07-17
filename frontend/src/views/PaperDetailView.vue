@@ -1,3 +1,8 @@
+<!--
+Copyright 2026 FDU-AI-Agent-Camp
+SPDX-License-Identifier: Apache-2.0
+-->
+
 <script setup lang="ts">
 import { computed, defineAsyncComponent, onMounted, ref, toRef, watch } from 'vue'
 import { RouterLink, useRouter } from 'vue-router'

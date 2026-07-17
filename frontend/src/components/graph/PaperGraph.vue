@@ -1,3 +1,8 @@
+<!--
+Copyright 2026 FDU-AI-Agent-Camp
+SPDX-License-Identifier: Apache-2.0
+-->
+
 <script setup lang="ts">
 import { Graph, NodeEvent, type IElementEvent } from '@antv/g6'
 import { onMounted, onUnmounted, ref, watch } from 'vue'

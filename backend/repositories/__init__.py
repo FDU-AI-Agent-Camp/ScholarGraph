@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """Repository layer for ScholarGraph persistence."""
 
 from backend.repositories.async_bridge import register_main_event_loop, run_async

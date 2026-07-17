@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """Pyright should fail: compile-time guard catches wrong query_chunks return type."""
 
 from __future__ import annotations

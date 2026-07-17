@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """Unified paper graph schema with paradigm-specific validation (G6 via GraphStore)."""
 
 import re

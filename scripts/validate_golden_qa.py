@@ -1,4 +1,7 @@
 #!/usr/bin/env python
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """金标 QA ID 校验脚本 (V2 Phase 4).
 
 遍历 ``data/qa_golden_set.json`` 中引用的 ``node_id``、``edge_id`` 与 chunk/paragraph ID，

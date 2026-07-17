@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """API tests: GET /health Patrol claim_evolution funnel disclosure."""
 
 from __future__ import annotations

@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """Adversarial Mock tests for TrackBJudgeSchema validator repair and fuse mapping."""
 
 from __future__ import annotations

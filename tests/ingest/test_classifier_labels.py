@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """Unit tests for docs/v1/eval/classifier_labels.csv (P1 eval gold labels)."""
 
 from __future__ import annotations

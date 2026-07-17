@@ -1,4 +1,9 @@
 /**
+ * Copyright 2026 FDU-AI-Agent-Camp
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+/**
  * ui-design-progress §1.4.2 — 形状、布局与排布（间距 / 圆角 / typography / 视线流）
  */
 import { readFileSync } from 'node:fs'

@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """Wave-2 vector_cleanup_queue outbox — durable scrub across restarts."""
 
 from __future__ import annotations

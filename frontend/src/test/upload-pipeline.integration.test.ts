@@ -1,4 +1,9 @@
 /**
+ * Copyright 2026 FDU-AI-Agent-Camp
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+/**
  * Upload → pipeline status contract (FE mocks aligned with POST /papers + scheduler).
  */
 import { createPinia, setActivePinia } from 'pinia'

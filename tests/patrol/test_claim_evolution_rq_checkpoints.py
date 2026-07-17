@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """合入红线：claim_evolution 双阶段 RQ 漏斗宏微观拦截与跨语言放行卡点。"""
 
 from __future__ import annotations

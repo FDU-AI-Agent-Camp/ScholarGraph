@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """V2 QA helpers — citation dispatch and retrieval-context formatting.
 
 Extracted from ``backend/graph/qa.py`` to keep that module under the 500-line

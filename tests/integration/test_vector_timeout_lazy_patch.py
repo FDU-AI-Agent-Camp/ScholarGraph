@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """B10 boundary ② — vector retrieval timeout + L2 lazy chunk preview patch."""
 
 from __future__ import annotations

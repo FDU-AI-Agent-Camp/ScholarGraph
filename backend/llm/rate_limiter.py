@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """Async token-bucket rate limiter for LLM calls (Slice 2).
 
 Enforces both requests-per-minute (RPM) and tokens-per-minute (TPM) caps using

@@ -1,4 +1,9 @@
 /**
+ * Copyright 2026 FDU-AI-Agent-Camp
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+/**
  * V1 DoD C-03 / C-04 — CLI 冒烟契约与前后端联调联试.
  *
  * C-03: M2 三类尺度 citation ↔ graph-hss.json ↔ DetailView 高亮

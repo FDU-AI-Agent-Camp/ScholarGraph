@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """Load and evaluate Patrol V1 golden cases (lens_clash / contradiction)."""
 
 from __future__ import annotations

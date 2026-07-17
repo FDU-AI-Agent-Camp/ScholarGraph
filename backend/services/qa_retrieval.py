@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """Shared QA retrieval-context builder for HTTP routes and benchmarks."""
 
 from __future__ import annotations

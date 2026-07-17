@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """Parse GROBID TEI XML into header fields (§2.1 path B, long PDF)."""
 
 from __future__ import annotations

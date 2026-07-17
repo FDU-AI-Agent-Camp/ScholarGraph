@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """Regression tests for patrol claim-evolution RQ golden set (data/patrol_golden_set.json)."""
 
 from __future__ import annotations

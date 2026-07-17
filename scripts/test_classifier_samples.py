@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """Probe the live LLM classifier on all corpus txt samples after prompt changes."""
 
 from __future__ import annotations

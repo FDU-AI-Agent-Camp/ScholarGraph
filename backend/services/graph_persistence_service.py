@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """Graph persistence facade (BE-3 implements backend.graph.store)."""
 
 from __future__ import annotations

@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """V1 DoD §6.5 E-06～E-10 — 边界鲁棒性前后端联调联试（BE 侧）.
 
 与 ``frontend/src/test/v1-dod-e06-e10-fe-be.integration.test.ts`` 成对。

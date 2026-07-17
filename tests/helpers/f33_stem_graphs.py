@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """F.3 STEM verification-chain graph builders and assertions for tests."""
 
 from __future__ import annotations

@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """
 双文共同体巡检 CLI（四模式：lens_clash / contradiction / method_overlap / claim_evolution）。
 

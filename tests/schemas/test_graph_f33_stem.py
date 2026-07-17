@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """Phase F.3 schema unit tests: STEM node/edge whitelist on UnifiedPaperGraph."""
 
 from __future__ import annotations

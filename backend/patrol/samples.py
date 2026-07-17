@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """Demo / eval graph seeds for patrol (see docs/v1/eval/patrol_samples.md)."""
 
 from __future__ import annotations

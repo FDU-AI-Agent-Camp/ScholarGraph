@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """CLI entry: ``uv run python -m backend.app``."""
 
 import uvicorn

@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """Pyright adversarial fixtures — prove VectorStoreProtocol blocks compile-time drift."""
 
 from __future__ import annotations

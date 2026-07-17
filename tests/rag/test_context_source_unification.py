@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """B7 acceptance — RetrievalContext SSOT audit, fallback, and prompt consistency."""
 
 from __future__ import annotations

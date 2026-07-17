@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """Regression tests using real corpus extraction outputs.
 
 These tests load the ExtractedGraph fixtures produced by

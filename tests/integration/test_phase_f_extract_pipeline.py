@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """Phase F integration: LLM extract + heuristic fallback through LangGraph pipeline."""
 
 from __future__ import annotations

@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """STEM numeric tolerance boundary tests (eval acceptance: decimal ↔ percent alignment).
 
 Verifies extract_numbers_from_text + math.isclose guardrails for gold patterns like

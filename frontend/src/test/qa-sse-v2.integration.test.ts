@@ -1,4 +1,9 @@
 /**
+ * Copyright 2026 FDU-AI-Agent-Camp
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+/**
  * B6 integration: V2 QA SSE fixture ↔ parser ↔ citation helpers ↔ OpenAPI types.
  */
 import { readFileSync } from 'node:fs'

@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """Benchmark JSON regression helpers for dual(rules) quality baseline (Phase D / T6).
 
 Committed baseline: ``tests/fixtures/benchmark/dual_rules_baseline.json``.

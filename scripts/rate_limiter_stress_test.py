@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """Rate limiter stress test using the hss-002 corpus (Slice 2).
 
 Run with:

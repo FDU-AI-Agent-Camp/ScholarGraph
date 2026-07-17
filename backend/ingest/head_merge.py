@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """LLM gate and rule-based head merge (§2.4)."""
 
 from __future__ import annotations

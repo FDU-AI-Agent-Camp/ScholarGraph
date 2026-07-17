@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """Problem 2 (processing): Watchdog commit survives main asyncio loop starvation.
 
 Release-gate hard stop (``make process-release-gate`` / ``make ci-patrol-release``):

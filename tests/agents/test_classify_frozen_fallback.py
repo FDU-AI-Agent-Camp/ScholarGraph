@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """Unit: frozen classifier_heuristic_fallback code vs user toast message separation."""
 
 from __future__ import annotations

@@ -1,4 +1,9 @@
 /**
+ * Copyright 2026 FDU-AI-Agent-Camp
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+/**
  * G1 Layer 3 — polling stop + detail rehydration when indexing → ready_with_warnings.
  * Vitest fake timers stand in for Playwright (no FE Playwright stack in this repo).
  */

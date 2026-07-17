@@ -1,4 +1,9 @@
 /**
+ * Copyright 2026 FDU-AI-Agent-Camp
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+/**
  * Patrol integration: fixture envelope ↔ API client ↔ form helpers ↔ demo path.
  */
 import { describe, expect, it, vi } from 'vitest'

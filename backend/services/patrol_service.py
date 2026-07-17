@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """PatrolService facade with mode-aware lazy RAG/embedding dependencies."""
 
 from __future__ import annotations

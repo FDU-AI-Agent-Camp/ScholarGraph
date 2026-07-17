@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """B-04 — POST /papers/{id}/qa/stream wired to qa_stream() with frozen SSE contract."""
 
 from __future__ import annotations

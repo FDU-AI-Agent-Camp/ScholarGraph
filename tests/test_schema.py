@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """Schema validation tests for BE-2 graph contracts."""
 
 from __future__ import annotations

@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """Tests for background extraction orchestration (Slice 2).
 
 These tests exercise the real ``extract_preview_and_schedule_full`` and

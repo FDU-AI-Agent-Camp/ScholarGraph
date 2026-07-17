@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """Unit tests for the V2 RAG VectorStore wrapper."""
 
 from __future__ import annotations

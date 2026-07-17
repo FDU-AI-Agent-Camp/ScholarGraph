@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """Minimal connectivity probe for the configured cloud reranker.
 
 Usage (from repository root):

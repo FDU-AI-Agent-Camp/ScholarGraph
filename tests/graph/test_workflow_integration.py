@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """Integration tests: compiled LangGraph pipeline end-to-end (mocked services)."""
 
 from pathlib import Path

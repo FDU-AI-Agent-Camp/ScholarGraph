@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """ORM models for papers and pipeline run state."""
 
 from __future__ import annotations

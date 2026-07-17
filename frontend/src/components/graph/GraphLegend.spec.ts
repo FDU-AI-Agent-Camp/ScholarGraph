@@ -1,3 +1,8 @@
+/**
+ * Copyright 2026 FDU-AI-Agent-Camp
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
 import { mount } from '@vue/test-utils'
 import { describe, expect, it } from 'vitest'
 

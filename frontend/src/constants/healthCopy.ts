@@ -1,3 +1,8 @@
+/**
+ * Copyright 2026 FDU-AI-Agent-Camp
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
 /** Health / onboarding guard copy for Patrol claim_evolution demo paths. */
 export const HEALTH_BASELINE_COPY = {
   rerankerBannerTitle: '后端 Reranker 未就绪',

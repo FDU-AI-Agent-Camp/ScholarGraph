@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """D8 architecture guard: compat shims must not live in production PaperService."""
 
 from __future__ import annotations

@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """M2 eval — multi-scale QA with verifiable citations (A-09).
 
 Green: mock LLM + fixture graph (CI default).

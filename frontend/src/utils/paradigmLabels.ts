@@ -1,3 +1,8 @@
+/**
+ * Copyright 2026 FDU-AI-Agent-Camp
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
 import type { Paradigm } from '@/api/types'
 
 /** User-facing Chinese labels for API paradigm codes (HSS / STEM). */

@@ -1,4 +1,9 @@
 /**
+ * Copyright 2026 FDU-AI-Agent-Camp
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+/**
  * Unit / boundary / 越权 — Part F / F9: point-level node_refs on MethodOverlapPointCard.
  * RED until the card embeds graph deep links for structured_points[].node_refs.
  */

@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """Lightweight topology resonance filter for method_overlap semantic soft path (Plan C).
 
 Uses 1-hop neighbors from the local ``UnifiedPaperGraph`` edge list (same adjacency

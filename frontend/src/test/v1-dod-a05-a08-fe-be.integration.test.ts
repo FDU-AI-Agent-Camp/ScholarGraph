@@ -1,4 +1,9 @@
 /**
+ * Copyright 2026 FDU-AI-Agent-Camp
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+/**
  * V1 DoD A-05～A-08 — 前后端联调联试（Mock LLM + 红路径反馈）。
  */
 import { createPinia, setActivePinia } from 'pinia'

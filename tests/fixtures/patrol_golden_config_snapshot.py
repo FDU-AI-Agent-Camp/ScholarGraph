@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """Golden config snapshot validation for Patrol live regression baselines."""
 
 from __future__ import annotations

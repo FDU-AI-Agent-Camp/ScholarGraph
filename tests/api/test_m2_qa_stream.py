@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """HTTP: M2 multi-scale QA (A-09) — functional + boundary + red-path SSE feedback."""
 
 from __future__ import annotations

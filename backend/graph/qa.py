@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """Multi-scale QA over paper graph (BE-3 / V2 RAG Phase 2).
 
 Exposes ``qa_stream()`` — an async generator that yields ``QaEvent``

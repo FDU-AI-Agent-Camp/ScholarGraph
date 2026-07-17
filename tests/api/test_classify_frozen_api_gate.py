@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """API gate: classify_warnings carries machine code only; user copy is FE-mapped."""
 
 from __future__ import annotations

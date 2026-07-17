@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """
 端到端流水线集成测试（Mock BE-1～3，不调用真实 LLM / PDF 解析）。
 

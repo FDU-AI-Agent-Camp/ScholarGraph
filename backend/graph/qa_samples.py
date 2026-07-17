@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """M2 eval graph seeds and canonical questions (see docs/v1/eval/qa_samples.md)."""
 
 from __future__ import annotations

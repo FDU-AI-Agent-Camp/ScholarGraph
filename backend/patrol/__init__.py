@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """Community patrol and Lens Clash (BE-4)."""
 
 from backend.patrol.claim_evolution import build_claim_evolution_insight

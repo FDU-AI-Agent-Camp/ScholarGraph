@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """Report-layer contract tests for scripts/benchmark_qa.py (paradigm split + breakdown)."""
 
 from __future__ import annotations

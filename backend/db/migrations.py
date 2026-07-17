@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """Alembic migration entrypoints for production and operator scripts."""
 
 from __future__ import annotations

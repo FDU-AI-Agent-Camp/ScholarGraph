@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """Persist event-bus handler failures into pipeline extract_warnings."""
 
 from __future__ import annotations

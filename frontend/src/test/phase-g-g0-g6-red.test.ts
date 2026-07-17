@@ -1,4 +1,9 @@
 /**
+ * Copyright 2026 FDU-AI-Agent-Camp
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+/**
  * Phase G G.0–G.6 红灯：前端边界 — fixtures / 文案 / 契约。
  */
 import { describe, expect, it } from 'vitest'

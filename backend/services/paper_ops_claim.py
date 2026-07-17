@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """Service facade for cluster-wide paper wipe claims (delete ∪ reextract).
 
 Part of the force-wipe lifecycle (see ``backend.rag.wipe_vector_sweep``)::

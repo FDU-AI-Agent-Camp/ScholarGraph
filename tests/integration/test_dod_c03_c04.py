@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """V1 DoD C-03 / C-04 — CLI 冒烟 + HTTP 链路前后端联调联试.
 
 覆盖：功能真实可用、边界鲁棒、红灯异常（exit code / SSE error / 错误文案反馈）。

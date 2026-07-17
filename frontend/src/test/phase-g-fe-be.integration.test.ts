@@ -1,4 +1,9 @@
 /**
+ * Copyright 2026 FDU-AI-Agent-Camp
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+/**
  * G5 FE↔BE 联调：classify_warnings 机器码 → 冻结文案 → StatusPanel / DetailView。
  *
  * 与 tests/integration/test_phase_g_fe_be_integration.py 成对验收（test_phase_g_fe_be_integration.py）。

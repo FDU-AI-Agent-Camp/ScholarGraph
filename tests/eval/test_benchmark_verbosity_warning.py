@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """Tests for QA_VERBOSITY_CEILING yellow-line warnings in benchmark_qa (non-blocking)."""
 
 from __future__ import annotations

@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """Compat shim behavior tests (D8 test-only helpers)."""
 
 from __future__ import annotations

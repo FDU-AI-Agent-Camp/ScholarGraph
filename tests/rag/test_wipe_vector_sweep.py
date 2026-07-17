@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """Read-time soft isolation + Wave-2 wipe compensate for ghost vectors."""
 
 from __future__ import annotations

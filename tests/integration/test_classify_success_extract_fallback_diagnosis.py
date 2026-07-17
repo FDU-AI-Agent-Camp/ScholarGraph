@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """Integration: classify success + extract heuristic fallback diagnosis."""
 
 from __future__ import annotations

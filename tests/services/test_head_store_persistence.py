@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """HeadStore persistence (P10 / P11)."""
 
 from __future__ import annotations

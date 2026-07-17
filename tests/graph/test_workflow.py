@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """Graph topology smoke tests (see also test_workflow_nodes / _integration / _red)."""
 
 from backend.graph.state import (

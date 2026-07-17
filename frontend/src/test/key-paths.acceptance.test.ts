@@ -1,4 +1,9 @@
 /**
+ * Copyright 2026 FDU-AI-Agent-Camp
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+/**
  * §14.6 关键路径速查 — 仓库结构与门禁脚本（不替代 npm run typecheck/lint/build）。
  */
 import { describe, expect, it, vi } from 'vitest'

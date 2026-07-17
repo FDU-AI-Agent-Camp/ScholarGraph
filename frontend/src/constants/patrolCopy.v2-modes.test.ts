@@ -1,4 +1,9 @@
 /**
+ * Copyright 2026 FDU-AI-Agent-Camp
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+/**
  * Unit tests — Part F / F1(+F5 copy keys): V2 mode labels required by the selector.
  * RED until PATROL_BASELINE_COPY grows method_overlap / claim_evolution keys.
  */

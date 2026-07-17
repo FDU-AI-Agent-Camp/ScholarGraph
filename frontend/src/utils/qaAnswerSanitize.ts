@@ -1,4 +1,9 @@
 /**
+ * Copyright 2026 FDU-AI-Agent-Camp
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+/**
  * Lightweight client-side fallback for QA answer Markdown artifacts.
  * Backend is the source of truth; this guards historical or bypassed payloads.
  */

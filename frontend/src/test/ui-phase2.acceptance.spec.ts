@@ -1,4 +1,9 @@
 /**
+ * Copyright 2026 FDU-AI-Agent-Camp
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+/**
  * Phase 2 shared UI acceptance — design-spec §12 + ui-design-progress §1.4.
  */
 import { mount } from '@vue/test-utils'

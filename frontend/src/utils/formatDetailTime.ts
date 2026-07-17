@@ -1,3 +1,8 @@
+/**
+ * Copyright 2026 FDU-AI-Agent-Camp
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
 /** Format ISO timestamps for paper detail meta strip. */
 export function formatDetailTime(iso: string | undefined): string {
   if (!iso) {

@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """BE-2 agent tests exercise heuristic classify/extract, not mock_agents."""
 
 from __future__ import annotations

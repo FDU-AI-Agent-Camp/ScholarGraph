@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """F.2.3 unit: PaperDetail / PaperStatusData extract_warnings schema (X13, X17)."""
 
 from __future__ import annotations

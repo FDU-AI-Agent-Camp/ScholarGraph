@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """Regression tests for method-overlap golden set (data/patrol_method_overlap_golden.json)."""
 
 from __future__ import annotations

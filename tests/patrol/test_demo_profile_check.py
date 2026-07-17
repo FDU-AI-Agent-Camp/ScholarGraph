@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """Track B — demo profile admission tests (``@pytest.mark.demo_profile_check``).
 
 Unlike Track A mock CI (``GoldenPairRerankerClient`` injected scores), this track

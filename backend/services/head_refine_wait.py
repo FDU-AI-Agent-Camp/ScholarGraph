@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """Poll PaperService until async head refine completes or times out (§2.1 / P4)."""
 
 from __future__ import annotations

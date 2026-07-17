@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """Test-only dict-like shims for legacy ``service._papers`` / ``_status`` assignments (D8)."""
 
 from __future__ import annotations

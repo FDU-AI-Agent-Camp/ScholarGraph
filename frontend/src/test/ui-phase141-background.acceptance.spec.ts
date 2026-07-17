@@ -1,4 +1,9 @@
 /**
+ * Copyright 2026 FDU-AI-Agent-Camp
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+/**
  * ui-design-progress §1.4.1 — 背景与色彩（学术工作台三层体系 + 对比度验收）
  */
 import { readdirSync, readFileSync, statSync } from 'node:fs'

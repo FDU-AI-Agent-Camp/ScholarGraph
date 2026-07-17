@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """Integration: run_patrol with injected LLM client (both modes)."""
 
 from unittest.mock import AsyncMock, MagicMock

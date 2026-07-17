@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """run_paper_pipeline 功能与鲁棒性（async 入口、前置校验、终态）。"""
 
 from __future__ import annotations

@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """Phase G.2 acceptance: classify_with_llm primary path (G2.1–G2.3)."""
 
 from __future__ import annotations

@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """Phase C: classify consumes dual(rules) refined head after wait (P4 / T2)."""
 
 from __future__ import annotations

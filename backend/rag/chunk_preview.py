@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """Chunk citation ``text_preview`` resolution — L1 cache + L2 vector lookup (B10)."""
 
 from __future__ import annotations

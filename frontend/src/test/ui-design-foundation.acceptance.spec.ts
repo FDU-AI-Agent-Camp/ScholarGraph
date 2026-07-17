@@ -1,4 +1,9 @@
 /**
+ * Copyright 2026 FDU-AI-Agent-Camp
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+/**
  * ui-design-progress §1.2 核心设计决策 + §1.5 设计参数速查
  */
 import { readFileSync } from 'node:fs'

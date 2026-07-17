@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """全链路模块交接：ingest → classify → extract → store 数据传递与调用参数。"""
 
 from __future__ import annotations

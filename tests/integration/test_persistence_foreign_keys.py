@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """Integration test: foreign key cascade delete (INT-FK-01)."""
 
 from __future__ import annotations

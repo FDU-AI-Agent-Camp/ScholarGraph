@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """Domain facade tests: terminal promote + state-machine gating + RagIndexed fan-out."""
 
 from __future__ import annotations

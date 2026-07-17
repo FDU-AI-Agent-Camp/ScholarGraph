@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """G5 FE↔BE 联调：classify_warnings 机器码与前端冻结文案成对验收。
 
 与 ``frontend/src/test/phase-g-fe-be.integration.test.ts`` 成对。

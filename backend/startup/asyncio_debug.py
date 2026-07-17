@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """Development / CI guards against false-async blocking of the event loop."""
 
 from __future__ import annotations

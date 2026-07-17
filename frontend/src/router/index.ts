@@ -1,3 +1,8 @@
+/**
+ * Copyright 2026 FDU-AI-Agent-Camp
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
 import { createRouter, createWebHistory, type RouteRecordRaw } from 'vue-router'
 
 import { RouteName } from './meta'

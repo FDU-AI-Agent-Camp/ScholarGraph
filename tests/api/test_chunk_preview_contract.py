@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """B10 contract gate — degraded ``text_preview`` whitelist + Pydantic enforcement."""
 
 from __future__ import annotations

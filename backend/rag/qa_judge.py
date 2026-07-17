@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """LLM-as-a-Judge evaluation helpers for QA benchmark (Phase 4, Track B)."""
 
 from __future__ import annotations

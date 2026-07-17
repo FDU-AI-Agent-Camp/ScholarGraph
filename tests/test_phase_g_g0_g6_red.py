@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """
 Phase G G.0–G.6 红灯：产品决策 / 架构 / OpenAPI / fixtures 边界。
 

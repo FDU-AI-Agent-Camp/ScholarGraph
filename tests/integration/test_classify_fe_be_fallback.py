@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """Integration: classify fallback machine code on status/detail after pipeline (FE polling contract)."""
 
 from __future__ import annotations

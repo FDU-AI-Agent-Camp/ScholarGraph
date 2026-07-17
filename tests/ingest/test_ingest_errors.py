@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """Ingest error mapping and message reporting (BE-1)."""
 
 from __future__ import annotations

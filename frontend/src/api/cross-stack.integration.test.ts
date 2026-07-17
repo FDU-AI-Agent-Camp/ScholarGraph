@@ -1,4 +1,9 @@
 /**
+ * Copyright 2026 FDU-AI-Agent-Camp
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+/**
  * Cross-stack merge verification: FE API client ↔ docs/api/fixtures ↔ backend contract.
  *
  * Simulates FastAPI `{ data, meta }` envelopes the Vue app consumes after merging

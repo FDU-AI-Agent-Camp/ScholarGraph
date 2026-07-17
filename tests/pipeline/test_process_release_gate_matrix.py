@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """Process Release Gate — 全链路自动化验证矩阵一览.
 
 CI 阻断：``make process-release-gate`` / ``make ci`` /

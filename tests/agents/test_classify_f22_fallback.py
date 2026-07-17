@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """Phase G acceptance: classifier LLM fallback (G2.1–G2.5)."""
 
 from __future__ import annotations

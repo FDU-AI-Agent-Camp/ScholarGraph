@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """Red-light tests for persistence features planned but not yet required in P1."""
 
 from __future__ import annotations

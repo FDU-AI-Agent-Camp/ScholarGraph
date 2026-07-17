@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """Capture a RetrievalContext replay bundle from local graph retrieval (no Chroma/Neo4j).
 
 Usage (repo root)::

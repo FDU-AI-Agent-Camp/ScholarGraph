@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """G.4 unit gate: LLM_MODE mock/live × CLASSIFIER_LLM_ENABLED / CLASSIFIER_HEURISTIC_FALLBACK."""
 
 from __future__ import annotations

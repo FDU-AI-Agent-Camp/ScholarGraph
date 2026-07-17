@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """Domain state machine — exercises production PipelineStatusService + contracts.
 
 False-test avoidance: illegal transitions are asserted through ``start_processing`` /

@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """Patrol profile / Settings invariants — fail-fast must not regress.
 
 Uses monkeypatched environment variables and ``get_settings()`` (no real models).

@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """Dual-track OR matrix boundary tests (Track A hard fuse ∨ Track B Judge).
 
 Four boundary states verify the strictest fuse always wins:

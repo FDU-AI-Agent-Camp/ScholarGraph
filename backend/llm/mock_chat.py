@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """Deterministic LLM stand-ins when ``LLM_MODE=mock`` (no cloud API calls)."""
 
 from __future__ import annotations

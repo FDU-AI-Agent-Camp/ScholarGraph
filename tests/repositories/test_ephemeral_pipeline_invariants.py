@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """Deep serialization, concurrency, and invariant tests for D6 ephemeral pipeline state."""
 
 from __future__ import annotations

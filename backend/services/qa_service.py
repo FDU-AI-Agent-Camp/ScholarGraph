@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """QA orchestration facade for benchmark scripts (HTTP route uses explicit deps)."""
 
 from __future__ import annotations

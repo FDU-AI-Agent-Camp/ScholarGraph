@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """MinerU optional extra availability checks (path-B short PDF)."""
 
 from __future__ import annotations

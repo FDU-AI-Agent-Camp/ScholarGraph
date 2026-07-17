@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """Static async contracts for RAG vector retrieval (Pyright structural typing)."""
 
 from __future__ import annotations

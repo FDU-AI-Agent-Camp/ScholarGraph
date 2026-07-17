@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """Force wipe data-lifecycle — claim ∪ read isolation ∪ two-wave sweep.
 
 Closed-loop blueprint for force DELETE / force reextract under asyncio + Chroma

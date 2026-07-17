@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """Tests for the two-phase extraction routing in backend.agents.extractor."""
 
 from __future__ import annotations

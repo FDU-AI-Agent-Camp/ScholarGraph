@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """Subprocess integration tests for scripts/validate_golden_qa.py exit codes."""
 
 from __future__ import annotations

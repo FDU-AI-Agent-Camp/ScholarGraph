@@ -1,3 +1,6 @@
+# Copyright 2026 FDU-AI-Agent-Camp
+# SPDX-License-Identifier: Apache-2.0
+
 """Critical boundary tests for chunk_recall gate float comparisons."""
 
 from __future__ import annotations
