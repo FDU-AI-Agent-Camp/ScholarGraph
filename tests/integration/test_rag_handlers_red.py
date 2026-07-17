@@ -61,7 +61,14 @@ def sample_graph() -> UnifiedPaperGraph:
 def mock_paper_service(monkeypatch: Any) -> MagicMock:
     service = MagicMock()
     service.record_extract_warnings = MagicMock()
-    monkeypatch.setattr("backend.rag.handlers.get_paper_service", lambda: service)
+    warning_service = MagicMock()
+    warning_service.record.side_effect = lambda paper_id, _warning_type, warnings: service.record_extract_warnings(
+        paper_id, warnings
+    )
+    monkeypatch.setattr(
+        "backend.services.paper_warning_service.get_paper_warning_service",
+        lambda: warning_service,
+    )
     return service
 
 

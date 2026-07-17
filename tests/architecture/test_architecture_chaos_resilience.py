@@ -37,7 +37,7 @@ def test_sync_watchdog_path_never_run_async_onto_main_loop() -> None:
     assert "run_async(scan_and_promote_stuck_indexing())" not in watchdog
     assert "run_async" not in pipeline_sync
     assert "promote_stuck_indexing_paper_sync" in watchdog
-    assert "get_paper_service()" in watchdog
+    assert "get_paper_pipeline_ops_service()" in watchdog
 
 
 def test_p13_starvation_release_gate_remains_catalogued() -> None:

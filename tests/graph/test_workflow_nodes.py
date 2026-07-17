@@ -19,6 +19,7 @@ from backend.services.agent_service import AgentService
 from backend.services.errors import ServiceError
 from backend.services.graph_persistence_service import GraphPersistenceService
 from backend.services.paper_service import get_paper_service
+from backend.services.paper_warning_service import WarningType, get_paper_warning_service
 from backend.services.pipeline_completion_service import PipelineCompletionService
 
 from tests.helpers.event_bus_testkit import drain_event_bus
@@ -203,16 +204,22 @@ async def test_classify_node_records_classify_warnings(
         ),
     )
     paper_id = post_ingest_state["paper_id"]
-    paper_svc = get_paper_service()
+    warning_service = get_paper_warning_service()
     with (
         patch("backend.graph.nodes.get_agent_service", return_value=agent_svc),
         patch.object(
-            paper_svc, "record_classify_warnings", wraps=paper_svc.record_classify_warnings
+            warning_service,
+            "record",
+            wraps=warning_service.record,
         ) as record_warnings,
     ):
         out = await nodes.classify_node(post_ingest_state)
 
-    record_warnings.assert_called_once_with(paper_id, [CLASSIFIER_HEURISTIC_FALLBACK_CODE])
+    record_warnings.assert_called_once_with(
+        paper_id,
+        WarningType.CLASSIFY,
+        [CLASSIFIER_HEURISTIC_FALLBACK_CODE],
+    )
     assert out["classify_warnings"] == [CLASSIFIER_HEURISTIC_FALLBACK_CODE]
 
 
@@ -300,16 +307,17 @@ async def test_extract_node_records_extract_warnings(
         return_value=ExtractResult(graph=graph, warnings=[EXTRACT_HEURISTIC_FALLBACK_CODE]),
     )
     agent_svc.should_extract_in_background = MagicMock(return_value=False)
-    paper_svc = MagicMock()
+    warning_service = MagicMock()
 
     with (
         patch("backend.graph.nodes.get_agent_service", return_value=agent_svc),
-        patch("backend.graph.nodes.get_paper_service", return_value=paper_svc),
+        patch("backend.graph.nodes.get_paper_warning_service", return_value=warning_service),
     ):
         out = await nodes.extract_node(post_classify_state)
 
-    paper_svc.record_extract_warnings.assert_called_once_with(
+    warning_service.record.assert_called_once_with(
         post_classify_state["paper_id"],
+        WarningType.EXTRACT,
         [EXTRACT_HEURISTIC_FALLBACK_CODE],
     )
     assert out["extract_warnings"] == [EXTRACT_HEURISTIC_FALLBACK_CODE]

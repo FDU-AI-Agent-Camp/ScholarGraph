@@ -812,7 +812,7 @@ async def test_cold_boot_drains_orphan_batches_beyond_single_limit(
 ) -> None:
     """Startup must loop past the 200-row list cap instead of leaving zombies for reboot #2."""
     from backend.pipeline import processing_watchdog as pw
-    from backend.services.paper_service import get_paper_service
+    from backend.services.paper_pipeline_ops import get_paper_pipeline_ops_service
 
     batch1 = [f"orphan-batch-a-{i}" for i in range(pw.COLD_BOOT_ORPHAN_BATCH_LIMIT)]
     batch2 = [f"orphan-batch-b-{i}" for i in range(3)]
@@ -831,7 +831,7 @@ async def test_cold_boot_drains_orphan_batches_beyond_single_limit(
         _ = paper_id
         return True
 
-    service = get_paper_service()
+    service = get_paper_pipeline_ops_service()
     monkeypatch.setattr(service, "list_orphan_pipeline_paper_ids", _paged_list)
     monkeypatch.setattr(service, "fail_orphaned_pipeline_paper", _fail)
 

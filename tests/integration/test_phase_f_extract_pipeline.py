@@ -16,6 +16,7 @@ from backend.schemas.graph import GraphEdge, GraphNode, UnifiedPaperGraph
 from backend.schemas.paper import PaperStatus, PipelineStage
 from backend.schemas.paradigm import Paradigm
 from backend.services.paper_service import get_paper_service
+from backend.services.paper_warning_service import WarningType, get_paper_warning_service
 
 from tests.conftest import mock_pipeline_node_services
 
@@ -103,13 +104,16 @@ async def test_pipeline_extract_node_records_warnings_via_paper_service(
                 warnings=[EXTRACT_HEURISTIC_FALLBACK_CODE],
             ),
         )
-        paper_svc = get_paper_service()
-        record_warnings = MagicMock(wraps=paper_svc.record_extract_warnings)
-        paper_svc.record_extract_warnings = record_warnings
-        with patch("backend.graph.nodes.get_paper_service", return_value=paper_svc):
+        warning_service = get_paper_warning_service()
+        record_warnings = MagicMock(wraps=warning_service.record)
+        with patch.object(warning_service, "record", record_warnings):
             await run_paper_pipeline(paper_id, pdf_path)
 
-    record_warnings.assert_called_once_with(paper_id, [EXTRACT_HEURISTIC_FALLBACK_CODE])
+    record_warnings.assert_called_once_with(
+        paper_id,
+        WarningType.EXTRACT,
+        [EXTRACT_HEURISTIC_FALLBACK_CODE],
+    )
 
 
 @pytest.mark.asyncio

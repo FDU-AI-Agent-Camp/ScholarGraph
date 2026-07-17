@@ -10,6 +10,7 @@ from backend.services.paper_service import PaperService, get_paper_service
 
 
 def test_paper_service_exposes_pipeline_facade_methods() -> None:
+    service = get_paper_service()
     required = (
         "get_pipeline_snapshot",
         "save_pipeline_snapshot",
@@ -22,7 +23,7 @@ def test_paper_service_exposes_pipeline_facade_methods() -> None:
         "list_stuck_indexing_paper_ids_sync",
     )
     for name in required:
-        assert callable(getattr(PaperService, name, None)), f"missing PaperService.{name}"
+        assert callable(getattr(service, name, None)), f"missing PaperService.{name}"
 
 
 @pytest.mark.asyncio

@@ -162,7 +162,7 @@ def test_smoke_f23_fixtures_on_disk() -> None:
 def test_smoke_f23_paper_service_enrich_detail() -> None:
     from backend.services.paper_service import PaperService
 
-    assert "_enrich_paper_detail" in inspect.getsource(PaperService.get_paper)
+    assert "_detail.assemble" in inspect.getsource(PaperService.get_paper)
 
 
 @pytest.mark.smoke

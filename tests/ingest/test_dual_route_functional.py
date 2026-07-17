@@ -6,7 +6,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from backend.config import Settings
@@ -18,6 +18,16 @@ from backend.ingest.router import (
     resolve_ingest_route,
 )
 from backend.services.head_refine_service import refine_head_async
+
+
+@pytest.fixture(autouse=True)
+def _stub_head_refine_persistence(monkeypatch: pytest.MonkeyPatch) -> None:
+    coordinator = MagicMock()
+    coordinator.apply = AsyncMock()
+    monkeypatch.setattr(
+        "backend.services.head_refine_coordinator.get_head_refine_coordinator",
+        lambda: coordinator,
+    )
 
 
 def test_classifier_head_limit_matches_ingest_default() -> None:
