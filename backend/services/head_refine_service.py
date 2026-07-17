@@ -136,9 +136,9 @@ async def refine_head_async(
     if not classifier_input.strip():
         classifier_input = snippets.title or ""
 
-    from backend.services.paper_service import get_paper_service
+    from backend.services.head_refine_coordinator import get_head_refine_coordinator
 
-    get_paper_service().apply_head_refine(
+    await get_head_refine_coordinator().apply(
         paper_id,
         merged=merged,
         classifier_input=classifier_input,

@@ -14,7 +14,7 @@ from backend.services.errors import PIPELINE_FAILED_CODE, ServiceError
 from backend.services.head_refine_wait import wait_for_refined_classifier_input
 from backend.services.ingest_service import get_ingest_service
 from backend.services.paper_pipeline_scheduler import ensure_head_refine_scheduled
-from backend.services.paper_service import get_paper_service
+from backend.services.paper_warning_service import WarningType, get_paper_warning_service
 from backend.services.pipeline_completion_service import get_pipeline_completion_service
 from backend.services.pipeline_status_service import get_pipeline_status_service
 
@@ -97,7 +97,7 @@ async def wait_head_refine_node(state: WorkflowState) -> WorkflowState:
         fallback,
     )
     if warnings:
-        get_paper_service().record_head_refine_warnings(paper_id, warnings)
+        get_paper_warning_service().record(paper_id, WarningType.HEAD_REFINE, warnings)
 
     _mark_progress(state, stage=PipelineStage.HEAD_REFINING, message="文档头部精炼完成")
 
@@ -118,7 +118,7 @@ async def classify_node(state: WorkflowState) -> WorkflowState:
         return _failure_patch(exc, stage=PipelineStage.CLASSIFYING)
 
     if result.warnings:
-        get_paper_service().record_classify_warnings(paper_id, result.warnings)
+        get_paper_warning_service().record(paper_id, WarningType.CLASSIFY, result.warnings)
 
     classification = result.classification
     return _success_patch(
@@ -150,7 +150,7 @@ async def extract_node(state: WorkflowState) -> WorkflowState:
             return _failure_patch(exc, stage=PipelineStage.EXTRACTING)
 
         if result.warnings:
-            get_paper_service().record_extract_warnings(paper_id, result.warnings)
+            get_paper_warning_service().record(paper_id, WarningType.EXTRACT, result.warnings)
 
         return _success_patch(
             stage=PipelineStage.EXTRACTING,
@@ -170,7 +170,7 @@ async def extract_node(state: WorkflowState) -> WorkflowState:
         return _failure_patch(exc, stage=PipelineStage.EXTRACTING)
 
     if result.warnings:
-        get_paper_service().record_extract_warnings(paper_id, result.warnings)
+        get_paper_warning_service().record(paper_id, WarningType.EXTRACT, result.warnings)
 
     return _success_patch(
         stage=PipelineStage.EXTRACTING,

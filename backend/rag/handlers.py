@@ -26,6 +26,7 @@ from backend.rag.chunking import chunk_text
 from backend.rag.indexing import graph_to_entities, graph_to_relations
 from backend.rag.vector_store import VectorStore
 from backend.schemas.graph import UnifiedPaperGraph
+from backend.services.paper_pipeline_ops import get_paper_pipeline_ops_service
 from backend.services.paper_service import get_paper_service
 
 logger = logging.getLogger(__name__)
@@ -115,19 +116,21 @@ async def index_paper_for_rag(
 
 def _record_index_warning(paper_id: str, exc_type_name: str, exc_msg: str) -> None:
     """Persist a machine-readable RAG index warning on the paper status snapshot."""
+    from backend.services.paper_warning_service import WarningType, get_paper_warning_service
 
     try:
-        get_paper_service().record_extract_warnings(paper_id, [RAG_INDEX_WARNING_CODE])
+        get_paper_warning_service().record(paper_id, WarningType.EXTRACT, [RAG_INDEX_WARNING_CODE])
     except Exception:
         logger.exception("failed_to_record_rag_index_warning", extra={"paper_id": paper_id})
 
 
 async def _heartbeat_loop(paper_id: str, stop_event: asyncio.Event, *, interval_seconds: float) -> None:
     """Keep indexing_heartbeat fresh while a long index build is still running."""
-    paper_service = get_paper_service()
+
+    pipeline_ops = get_paper_pipeline_ops_service()
     while not stop_event.is_set():
         try:
-            await paper_service.touch_indexing_heartbeat(paper_id)
+            await pipeline_ops.touch_indexing_heartbeat(paper_id)
         except Exception:
             logger.exception("indexing_heartbeat_touch_failed", extra={"paper_id": paper_id})
         try:
@@ -257,9 +260,9 @@ async def _promote_terminal_status(
     from backend.schemas.paper import PaperStatus
     from backend.services.errors import InvalidStateTransitionError
 
-    paper_service = get_paper_service()
+    pipeline_ops = get_paper_pipeline_ops_service()
     try:
-        await paper_service.promote_paper_to_terminal_status(
+        await pipeline_ops.promote_paper_to_terminal_status(
             event.paper_id,
             success=success,
             preferred_terminal=event.terminal_status,
@@ -269,7 +272,7 @@ async def _promote_terminal_status(
             publish_rag_indexed=True,
         )
     except InvalidStateTransitionError as exc:
-        snapshot = await paper_service.get_pipeline_snapshot(event.paper_id)
+        snapshot = await pipeline_ops.get_pipeline_snapshot(event.paper_id)
         if snapshot is not None and snapshot.status in {
             PaperStatus.READY,
             PaperStatus.READY_WITH_WARNINGS,
