@@ -4,8 +4,9 @@
 
 """AST architecture guard: forbid piercing ``PaperService._pipeline_repo``.
 
-Only ``paper_service.py`` and ``paper_pipeline_ops.py`` may reference the private
-attribute. All other ``backend/`` modules must use PaperService public facade APIs.
+Only ``paper_service.py``, ``paper_pipeline_ops.py``, and step-1 sub-services
+may reference the private ``_pipeline_repo`` attribute. All other ``backend/``
+modules must use ``PaperService`` public facade APIs.
 
 Usage (repo root)::
 
@@ -26,6 +27,9 @@ _ALLOWED_RELATIVE = frozenset(
     {
         "services/paper_service.py",
         "services/paper_pipeline_ops.py",
+        "services/paper_warning_service.py",
+        "services/preview_graph_facade.py",
+        "services/head_refine_coordinator.py",
     },
 )
 
