@@ -62,5 +62,9 @@ async def test_promote_stuck_indexing_via_facade(persistence_env) -> None:
     assert RAG_INDEXING_STUCK_WARNING in latest.extract_warnings
 
 
-def test_get_paper_service_is_pipeline_ops_mixin() -> None:
-    assert isinstance(get_paper_service(), PaperService)
+def test_paper_service_composes_pipeline_ops_service() -> None:
+    from backend.services.paper_pipeline_ops import PaperPipelineOpsService
+
+    service = get_paper_service()
+    assert isinstance(service, PaperService)
+    assert isinstance(service._pipeline_ops, PaperPipelineOpsService)
