@@ -90,9 +90,14 @@ def check_watchdog_heal_log_tag() -> list[str]:
             f"{_WATCHDOG.relative_to(REPO_ROOT)}: thread body must not run_async(scan…) "
             "(main-loop starvation would stall the watchdog)",
         )
-    if "promote_stuck_indexing_paper_sync" not in watchdog or "get_paper_service()" not in watchdog:
+    if "promote_stuck_indexing_paper_sync" not in watchdog:
         errors.append(
-            f"{_WATCHDOG.relative_to(REPO_ROOT)}: sync promote must go through PaperService facade",
+            f"{_WATCHDOG.relative_to(REPO_ROOT)}: sync promote helper must remain exported",
+        )
+    elif "get_paper_service()" not in watchdog and "get_paper_pipeline_ops_service()" not in watchdog:
+        errors.append(
+            f"{_WATCHDOG.relative_to(REPO_ROOT)}: sync promote must go through "
+            "PaperService or PaperPipelineOpsService facade",
         )
     return errors
 
