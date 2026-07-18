@@ -10,6 +10,7 @@ from backend.agents.classifier_constants import CLASSIFIER_HEURISTIC_FALLBACK_CO
 from backend.main import app
 from backend.schemas.paper import PaperStatus, PipelineStage
 from backend.services.paper_service import get_paper_service
+from backend.services.paper_warning_service import WarningType, get_paper_warning_service
 from httpx import ASGITransport, AsyncClient
 
 
@@ -23,9 +24,12 @@ async def api_client() -> AsyncClient:
 @pytest.mark.asyncio
 async def test_record_classify_warnings_merges_without_duplicates(registered_paper: str) -> None:
     service = get_paper_service()
-    service.record_classify_warnings(registered_paper, [CLASSIFIER_HEURISTIC_FALLBACK_CODE])
-    service.record_classify_warnings(
+    await get_paper_warning_service().record(
+        registered_paper, WarningType.CLASSIFY, [CLASSIFIER_HEURISTIC_FALLBACK_CODE]
+    )
+    await get_paper_warning_service().record(
         registered_paper,
+        WarningType.CLASSIFY,
         [CLASSIFIER_HEURISTIC_FALLBACK_CODE, "other_code"],
     )
 
@@ -37,7 +41,9 @@ async def test_record_classify_warnings_merges_without_duplicates(registered_pap
 @pytest.mark.asyncio
 async def test_get_status_includes_classify_warnings_after_record(registered_paper: str) -> None:
     service = get_paper_service()
-    service.record_classify_warnings(registered_paper, [CLASSIFIER_HEURISTIC_FALLBACK_CODE])
+    await get_paper_warning_service().record(
+        registered_paper, WarningType.CLASSIFY, [CLASSIFIER_HEURISTIC_FALLBACK_CODE]
+    )
 
     status = await service.get_status(registered_paper)
 
@@ -47,7 +53,9 @@ async def test_get_status_includes_classify_warnings_after_record(registered_pap
 @pytest.mark.asyncio
 async def test_status_snapshot_carries_classify_warnings_on_stage_advance(registered_paper: str) -> None:
     service = get_paper_service()
-    service.record_classify_warnings(registered_paper, [CLASSIFIER_HEURISTIC_FALLBACK_CODE])
+    await get_paper_warning_service().record(
+        registered_paper, WarningType.CLASSIFY, [CLASSIFIER_HEURISTIC_FALLBACK_CODE]
+    )
     service.set_status_snapshot(
         registered_paper,
         status=PaperStatus.READY,
@@ -68,7 +76,7 @@ async def test_status_api_returns_classify_warnings(
     registered_paper: str,
 ) -> None:
     paper_id = registered_paper
-    get_paper_service().record_classify_warnings(paper_id, [CLASSIFIER_HEURISTIC_FALLBACK_CODE])
+    await get_paper_warning_service().record(paper_id, WarningType.CLASSIFY, [CLASSIFIER_HEURISTIC_FALLBACK_CODE])
 
     response = await api_client.get(f"/api/v1/papers/{paper_id}/status")
 
@@ -79,7 +87,9 @@ async def test_status_api_returns_classify_warnings(
 @pytest.mark.asyncio
 async def test_get_paper_includes_classify_warnings_on_detail(registered_paper: str) -> None:
     service = get_paper_service()
-    service.record_classify_warnings(registered_paper, [CLASSIFIER_HEURISTIC_FALLBACK_CODE])
+    await get_paper_warning_service().record(
+        registered_paper, WarningType.CLASSIFY, [CLASSIFIER_HEURISTIC_FALLBACK_CODE]
+    )
 
     paper = await service.get_paper(registered_paper)
 
@@ -91,8 +101,10 @@ async def test_g26_set_status_snapshot_includes_classify_warnings_same_as_extrac
     registered_paper: str,
 ) -> None:
     service = get_paper_service()
-    service.record_classify_warnings(registered_paper, [CLASSIFIER_HEURISTIC_FALLBACK_CODE])
-    service.record_extract_warnings(registered_paper, ["extract_heuristic_fallback"])
+    await get_paper_warning_service().record(
+        registered_paper, WarningType.CLASSIFY, [CLASSIFIER_HEURISTIC_FALLBACK_CODE]
+    )
+    await get_paper_warning_service().record(registered_paper, WarningType.EXTRACT, ["extract_heuristic_fallback"])
 
     snapshot = service.set_status_snapshot(
         registered_paper,

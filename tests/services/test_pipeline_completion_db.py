@@ -29,7 +29,7 @@ async def test_finalize_writes_graph_path_and_extractor_config_hash(
 
     graph = sample_graph.model_copy(update={"paper_id": paper_id})
     persistence = mock_graph_persistence(paper_id, graph_dir=persistence_env["graph_dir"])
-    PipelineCompletionService(graph_persistence=persistence).finalize(
+    await PipelineCompletionService(graph_persistence=persistence).finalize(
         paper_id,
         graph_data=graph.model_dump(mode="json"),
         classification_data=sample_classification.model_dump(mode="json"),
@@ -63,7 +63,7 @@ async def test_finalize_preserves_bumped_graph_version_after_reextract(
 
     graph = sample_graph.model_copy(update={"paper_id": paper_id})
     persistence = mock_graph_persistence(paper_id, graph_dir=persistence_env["graph_dir"])
-    PipelineCompletionService(graph_persistence=persistence).finalize(
+    await PipelineCompletionService(graph_persistence=persistence).finalize(
         paper_id,
         graph_data=graph.model_dump(mode="json"),
         classification_data=sample_classification.model_dump(mode="json"),

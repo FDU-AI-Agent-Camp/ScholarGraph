@@ -63,7 +63,7 @@ def _make_preview_graph(paper_id: str) -> UnifiedPaperGraph:
     )
 
 
-def _setup_paper_with_preview(paper_id: str) -> None:
+async def _setup_paper_with_preview(paper_id: str) -> None:
     """Create a paper in PROCESSING state with an available MVP preview graph."""
     service = get_paper_service()
     now = datetime.now(UTC)
@@ -82,8 +82,8 @@ def _setup_paper_with_preview(paper_id: str) -> None:
         percent=80,
         message="全量抽取已在后台启动，可先预览 MVP 骨架",
     )
-    service.mark_preview_available(paper_id)
-    service.save_preview_graph(paper_id, _make_preview_graph(paper_id))
+    await service.mark_preview_available(paper_id)
+    await service.save_preview_graph(paper_id, _make_preview_graph(paper_id))
 
 
 @pytest.fixture(autouse=True)
@@ -97,7 +97,7 @@ def _fresh_service() -> None:
 
 async def test_worker_catches_generic_exception_and_marks_failed() -> None:
     paper_id = "red-worker-generic-fail"
-    _setup_paper_with_preview(paper_id)
+    await _setup_paper_with_preview(paper_id)
 
     async def boom(*args, **kwargs) -> None:
         raise RuntimeError("network down")
@@ -126,7 +126,7 @@ async def test_worker_catches_generic_exception_and_marks_failed() -> None:
 
 async def test_worker_catches_service_error_and_preserves_code() -> None:
     paper_id = "red-worker-service-error"
-    _setup_paper_with_preview(paper_id)
+    await _setup_paper_with_preview(paper_id)
 
     async def service_boom(*args, **kwargs) -> None:
         raise ServiceError("INGEST_FAILED", "无法解析")
@@ -152,7 +152,7 @@ async def test_worker_catches_service_error_and_preserves_code() -> None:
 
 async def test_preview_graph_survives_full_extraction_failure() -> None:
     paper_id = "red-preview-survives"
-    _setup_paper_with_preview(paper_id)
+    await _setup_paper_with_preview(paper_id)
     expected_graph = _make_preview_graph(paper_id)
 
     async def boom(*args, **kwargs) -> None:
@@ -172,8 +172,8 @@ async def test_preview_graph_survives_full_extraction_failure() -> None:
         await task
 
     service = get_paper_service()
-    assert service.is_preview_available(paper_id)
-    preview = service.get_preview_graph(paper_id)
+    assert await service.is_preview_available(paper_id)
+    preview = await service.get_preview_graph(paper_id)
     assert preview is not None
     assert preview.paper_id == paper_id
     assert {n.id for n in preview.nodes} == {n.id for n in expected_graph.nodes}
@@ -181,7 +181,7 @@ async def test_preview_graph_survives_full_extraction_failure() -> None:
 
 async def test_qa_still_works_using_preview_after_full_failure() -> None:
     paper_id = "red-qa-after-failure"
-    _setup_paper_with_preview(paper_id)
+    await _setup_paper_with_preview(paper_id)
 
     async def boom(*args, **kwargs) -> None:
         raise RuntimeError("network down")
@@ -216,7 +216,7 @@ async def test_qa_still_works_using_preview_after_full_failure() -> None:
 
 async def test_graph_endpoint_returns_preview_when_full_extraction_failed() -> None:
     paper_id = "red-graph-preview-fallback"
-    _setup_paper_with_preview(paper_id)
+    await _setup_paper_with_preview(paper_id)
 
     async def boom(*args, **kwargs) -> None:
         raise RuntimeError("network down")

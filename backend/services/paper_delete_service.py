@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from pathlib import Path
 from typing import TYPE_CHECKING, Protocol, cast
@@ -14,7 +15,6 @@ from backend.config import get_settings
 from backend.db.models import PAPER_OPS_OPERATION_DELETE
 from backend.graph.head_store import HeadStore
 from backend.graph.store import GraphStore
-from backend.repositories import run_async
 from backend.schemas.paper import PaperStatus
 from backend.services.paper_ops_claim import (
     acquire_paper_ops_claim,
@@ -134,30 +134,42 @@ def _purge_graph_dir_artefacts(paper_id: str) -> int:
     return removed
 
 
-def _delete_graph_stores(paper_id: str) -> None:
+async def _delete_graph_stores(paper_id: str) -> None:
     """Explicit GraphStore / HeadStore deletes; soft-missing is ok, leftover file is not."""
-    try:
-        GraphStore().delete(paper_id)
-    except OSError as exc:
-        path = Path(get_settings().graph_data_dir) / f"{paper_id}.json"
-        if path.is_file():
-            raise ApiError(
-                DISK_ARTEFACT_DELETE_FAILED_CODE,
-                f"无法删除图谱 JSON 残留，已中止级联: {path}",
-                status_code=500,
-            ) from exc
-        logger.warning("paper_delete_graph_store_failed", extra={"paper_id": paper_id}, exc_info=True)
-    try:
-        HeadStore().delete(paper_id)
-    except OSError as exc:
-        path = Path(get_settings().graph_data_dir) / f"{paper_id}.head.json"
-        if path.is_file():
-            raise ApiError(
-                DISK_ARTEFACT_DELETE_FAILED_CODE,
-                f"无法删除 head JSON 残留，已中止级联: {path}",
-                status_code=500,
-            ) from exc
-        logger.warning("paper_delete_head_store_failed", extra={"paper_id": paper_id}, exc_info=True)
+
+    def _delete_sync() -> None:
+        try:
+            GraphStore().delete(paper_id)
+        except OSError as exc:
+            path = Path(get_settings().graph_data_dir) / f"{paper_id}.json"
+            if path.is_file():
+                raise ApiError(
+                    DISK_ARTEFACT_DELETE_FAILED_CODE,
+                    f"无法删除图谱 JSON 残留，已中止级联: {path}",
+                    status_code=500,
+                ) from exc
+            logger.warning(
+                "paper_delete_graph_store_failed",
+                extra={"paper_id": paper_id},
+                exc_info=True,
+            )
+        try:
+            HeadStore().delete(paper_id)
+        except OSError as exc:
+            path = Path(get_settings().graph_data_dir) / f"{paper_id}.head.json"
+            if path.is_file():
+                raise ApiError(
+                    DISK_ARTEFACT_DELETE_FAILED_CODE,
+                    f"无法删除 head JSON 残留，已中止级联: {path}",
+                    status_code=500,
+                ) from exc
+            logger.warning(
+                "paper_delete_head_store_failed",
+                extra={"paper_id": paper_id},
+                exc_info=True,
+            )
+
+    await asyncio.to_thread(_delete_sync)
 
 
 def _is_vector_not_found_error(exc: BaseException) -> bool:
@@ -237,7 +249,7 @@ async def delete_paper(
     Concurrent wipe ops for the same ``paper_id`` (delete ∪ reextract) are rejected
     with 409 via durable ``paper_ops_claims`` for the critical section duration.
     """
-    paper = run_async(paper_service._paper_repo.get(paper_id))
+    paper = await paper_service._paper_repo.get(paper_id)
     if paper is None:
         raise ApiError("PAPER_NOT_FOUND", f"论文不存在: {paper_id}", status_code=404)
 
@@ -261,19 +273,19 @@ async def delete_paper(
         await abort_in_flight_pipeline(paper_id)
         wipe_targets = extend_wipe_targets_after_abort(paper_id, wipe_targets)
 
-        pdf_path_str = run_async(paper_service._paper_repo.get_pdf_path(paper_id))
+        pdf_path_str = await paper_service._paper_repo.get_pdf_path(paper_id)
         # Wave 1: immediate paper-wide Chroma purge (hard-fail if Chroma is down).
         chroma_purged = await _purge_vector_index_hard(paper_id, vector_store=vector_store)
         # Wave 2: delayed delete_run for revoked / prior active ids (late to_thread upserts).
         schedule_wipe_wave2_sweep(paper_id, wipe_targets)
 
         # Prefer glob wipe (covers HeadStore + future sidecars); keep explicit deletes for clarity.
-        graph_files_removed = _purge_graph_dir_artefacts(paper_id)
-        _delete_graph_stores(paper_id)
+        graph_files_removed = await asyncio.to_thread(_purge_graph_dir_artefacts, paper_id)
+        await _delete_graph_stores(paper_id)
         get_paper_pipeline_ops_service().clear_ephemeral_pipeline_state(paper_id)
         pdf_removed = _unlink_pdf(pdf_path_str)
 
-        deleted = run_async(paper_service._paper_repo.delete(paper_id))
+        deleted = await paper_service._paper_repo.delete(paper_id)
         if not deleted:
             raise ApiError("PAPER_NOT_FOUND", f"论文不存在: {paper_id}", status_code=404)
 

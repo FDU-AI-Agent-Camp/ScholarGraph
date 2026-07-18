@@ -94,8 +94,8 @@ async def _seed_artefacts(service: PaperService, paper_id: str) -> None:
     )
     GraphStore().save(graph)
     HeadStore().save(paper_id, merged=IngestHead(title="T", abstract="A", intro="I"))
-    service.save_preview_graph(paper_id, graph)
-    service.mark_preview_available(paper_id)
+    await service.save_preview_graph(paper_id, graph)
+    await service.mark_preview_available(paper_id)
 
 
 @pytest.mark.asyncio

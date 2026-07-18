@@ -33,8 +33,8 @@ class PaperDetailAssembler:
         await self._head_refine.sync_warnings_from_disk(paper_id)
         ingest_head, warning_pair, preview_available = await asyncio.gather(
             self._head_refine.load_head(paper_id),
-            self._warnings.aget_extract_and_classify(paper_id),
-            self._preview.ais_available(paper_id),
+            self._warnings.get_extract_and_classify(paper_id),
+            self._preview.is_available(paper_id),
         )
         extract_warnings, classify_warnings = warning_pair
         return paper.model_copy(

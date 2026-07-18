@@ -39,7 +39,8 @@ def test_run_async_without_running_loop_returns_value() -> None:
     assert run_async(compute()) == "ok"
 
 
-def test_run_async_preserves_cached_engine_across_calls(persistence_env) -> None:
+@pytest.mark.asyncio
+async def test_run_async_preserves_cached_engine_across_calls(persistence_env) -> None:
     async def touch_engine() -> int:
         engine = get_async_engine()
         async with engine.connect() as conn:

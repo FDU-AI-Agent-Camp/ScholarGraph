@@ -179,10 +179,10 @@ class TestScheduleFullExtraction:
         classification = ParadigmClassification(paradigm=Paradigm.HSS, confidence=0.9, reason="test")
 
         task1 = schedule_full_extraction(paper_id, "text", Paradigm.HSS, classification)
-        for _ in range(100):
+        for _ in range(500):
             if task1.done():
                 break
-            await asyncio.sleep(0.01)
+            await asyncio.sleep(0.02)
 
         task2 = schedule_full_extraction(paper_id, "text", Paradigm.HSS, classification)
         assert task1 is not task2

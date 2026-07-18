@@ -13,6 +13,7 @@ V2 extensions (rag-qa-evaluation):
 - Optional ``RetrievalContext`` for hybrid graph + vector QA prompt.
 """
 
+import asyncio
 import logging
 import re
 from collections.abc import AsyncIterator
@@ -282,10 +283,10 @@ class _GraphQaEngine:
             yield QaEvent("done", {"answer_id": ""})
             return
 
-        graph = self._store.load(paper_id)
+        graph = await asyncio.to_thread(self._store.load, paper_id)
         if graph is None:
             # Fall back to the in-memory preview graph for non-ready papers.
-            graph = self._paper_service.get_preview_graph(paper_id)
+            graph = await self._paper_service.get_preview_graph(paper_id)
 
         if graph is None:
             yield QaEvent(

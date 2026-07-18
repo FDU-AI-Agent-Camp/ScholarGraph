@@ -153,7 +153,7 @@ class TestWorkflowBackgroundRouting:
         )
 
         completion_svc = MagicMock()
-        completion_svc.finalize = MagicMock(return_value=preview)
+        completion_svc.finalize = AsyncMock(return_value=preview)
 
         with (
             patch("backend.graph.nodes.get_ingest_service", return_value=ingest_svc),
@@ -210,7 +210,7 @@ class TestWorkflowForegroundRouting:
         )
 
         completion_svc = MagicMock()
-        completion_svc.finalize = MagicMock(return_value=None)
+        completion_svc.finalize = AsyncMock(return_value=None)
 
         with (
             patch("backend.graph.nodes.get_ingest_service", return_value=ingest_svc),

@@ -13,6 +13,7 @@ from backend.schemas.ingest_head import IngestHead
 from backend.schemas.paper import PaperStatus, PipelineStage
 from backend.services.head_refine_wait import HEAD_REFINE_TIMEOUT_WARNING
 from backend.services.paper_service import get_paper_service
+from backend.services.paper_warning_service import WarningType, get_paper_warning_service
 from httpx import ASGITransport, AsyncClient
 
 
@@ -50,8 +51,10 @@ async def test_get_status_includes_head_refine_warnings_after_apply(
 @pytest.mark.asyncio
 async def test_record_head_refine_warnings_merges_without_duplicates(registered_paper: str) -> None:
     service = get_paper_service()
-    service.record_head_refine_warnings(registered_paper, ["mineru_unavailable"])
-    service.record_head_refine_warnings(registered_paper, ["head_refine_timeout", "mineru_unavailable"])
+    await get_paper_warning_service().record(registered_paper, WarningType.HEAD_REFINE, ["mineru_unavailable"])
+    await get_paper_warning_service().record(
+        registered_paper, WarningType.HEAD_REFINE, ["head_refine_timeout", "mineru_unavailable"]
+    )
 
     status = await service.get_status(registered_paper)
 
@@ -61,7 +64,7 @@ async def test_record_head_refine_warnings_merges_without_duplicates(registered_
 @pytest.mark.asyncio
 async def test_status_api_returns_head_refine_warnings(api_client: AsyncClient) -> None:
     paper_id = "hss-002"
-    get_paper_service().record_head_refine_warnings(paper_id, ["grobid_unavailable"])
+    await get_paper_warning_service().record(paper_id, WarningType.HEAD_REFINE, ["grobid_unavailable"])
 
     response = await api_client.get(f"/api/v1/papers/{paper_id}/status")
 
@@ -72,7 +75,7 @@ async def test_status_api_returns_head_refine_warnings(api_client: AsyncClient) 
 @pytest.mark.asyncio
 async def test_status_snapshot_carries_warnings_on_stage_advance(registered_paper: str) -> None:
     service = get_paper_service()
-    service.record_head_refine_warnings(registered_paper, ["mineru_disabled"])
+    await get_paper_warning_service().record(registered_paper, WarningType.HEAD_REFINE, ["mineru_disabled"])
     service.set_status_snapshot(
         registered_paper,
         status=PaperStatus.PROCESSING,

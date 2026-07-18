@@ -215,7 +215,7 @@ async def test_classify_node_records_classify_warnings(
     ):
         out = await nodes.classify_node(post_ingest_state)
 
-    record_warnings.assert_called_once_with(
+    record_warnings.assert_awaited_once_with(
         paper_id,
         WarningType.CLASSIFY,
         [CLASSIFIER_HEURISTIC_FALLBACK_CODE],
@@ -231,7 +231,6 @@ async def test_g23_classify_node_llm_failure_persists_warnings_without_failed(
     _ = live_classify_env
     agent = AgentService()
     paper_id = post_ingest_state["paper_id"]
-    paper_svc = get_paper_service()
 
     with (
         patch("backend.graph.nodes.get_agent_service", return_value=agent),
@@ -244,7 +243,7 @@ async def test_g23_classify_node_llm_failure_persists_warnings_without_failed(
 
     assert out.get("failed") is not True
     assert CLASSIFIER_HEURISTIC_FALLBACK_CODE in out["classify_warnings"]
-    assert paper_svc.get_classify_warnings(paper_id) == [CLASSIFIER_HEURISTIC_FALLBACK_CODE]
+    assert await get_paper_warning_service().get(paper_id, WarningType.CLASSIFY) == [CLASSIFIER_HEURISTIC_FALLBACK_CODE]
     assert out["paradigm"] in (Paradigm.STEM.value, Paradigm.HSS.value)
 
 
@@ -308,6 +307,7 @@ async def test_extract_node_records_extract_warnings(
     )
     agent_svc.should_extract_in_background = MagicMock(return_value=False)
     warning_service = MagicMock()
+    warning_service.record = AsyncMock()
 
     with (
         patch("backend.graph.nodes.get_agent_service", return_value=agent_svc),
@@ -315,7 +315,7 @@ async def test_extract_node_records_extract_warnings(
     ):
         out = await nodes.extract_node(post_classify_state)
 
-    warning_service.record.assert_called_once_with(
+    warning_service.record.assert_awaited_once_with(
         post_classify_state["paper_id"],
         WarningType.EXTRACT,
         [EXTRACT_HEURISTIC_FALLBACK_CODE],
@@ -385,7 +385,7 @@ async def test_store_node_finalize_error_fails(
     post_extract_state: WorkflowState,
 ) -> None:
     completion_svc = MagicMock()
-    completion_svc.finalize = MagicMock(
+    completion_svc.finalize = AsyncMock(
         side_effect=ServiceError("PIPELINE_FAILED", "建图收尾失败: bad graph"),
     )
     with patch("backend.graph.nodes.get_pipeline_completion_service", return_value=completion_svc):

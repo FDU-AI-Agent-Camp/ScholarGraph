@@ -56,7 +56,7 @@ async def test_graph_ready_paper_returns_unified_graph(
         edges=[GraphEdge(id="e1", source="n1", target="n1", label="REF", type="REF")],
     )
     persistence = GraphPersistenceService(store=GraphStore(base_dir=persistence_env["graph_dir"]))
-    PipelineCompletionService(graph_persistence=persistence).finalize(
+    await PipelineCompletionService(graph_persistence=persistence).finalize(
         paper_id,
         graph_data=graph.model_dump(mode="json"),
         classification_data=classification.model_dump(mode="json"),

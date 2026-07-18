@@ -106,7 +106,7 @@ async def test_api_ready_with_warnings_for_low_quality_graph(
     _seed_paper(paper_id)
     graph = _make_graph(paper_id, supports_with_rationale=1, supports_without_rationale=3)
 
-    get_paper_service().complete_pipeline(
+    await get_paper_service().complete_pipeline(
         paper_id,
         classification=ParadigmClassification(paradigm=Paradigm.HSS, confidence=0.9, reason="test"),
         graph=graph,
@@ -137,7 +137,7 @@ async def test_api_ready_for_high_quality_graph(
     _seed_paper(paper_id)
     graph = _make_graph(paper_id, supports_with_rationale=3, supports_without_rationale=0)
 
-    get_paper_service().complete_pipeline(
+    await get_paper_service().complete_pipeline(
         paper_id,
         classification=ParadigmClassification(paradigm=Paradigm.HSS, confidence=0.9, reason="test"),
         graph=graph,

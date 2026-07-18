@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import logging
 from typing import Any
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from backend.rag.handlers import RAG_INDEX_WARNING_CODE, index_paper_for_rag
@@ -59,24 +59,20 @@ def sample_graph() -> UnifiedPaperGraph:
 
 
 @pytest.fixture
-def mock_paper_service(monkeypatch: Any) -> MagicMock:
-    service = MagicMock()
-    service.record_extract_warnings = MagicMock()
+def mock_warning_service(monkeypatch: Any) -> MagicMock:
     warning_service = MagicMock()
-    warning_service.record.side_effect = lambda paper_id, _warning_type, warnings: service.record_extract_warnings(
-        paper_id, warnings
-    )
+    warning_service.record = AsyncMock()
     monkeypatch.setattr(
         "backend.services.paper_warning_service.get_paper_warning_service",
         lambda: warning_service,
     )
-    return service
+    return warning_service
 
 
 @pytest.mark.asyncio
 async def test_index_paper_for_rag_success_returns_true_and_indexes(
     sample_graph: UnifiedPaperGraph,
-    mock_paper_service: MagicMock,
+    mock_warning_service: MagicMock,
 ) -> None:
     store = FakeVectorStore()
 
@@ -91,13 +87,13 @@ async def test_index_paper_for_rag_success_returns_true_and_indexes(
     assert "paper-1" in store.indexed
     assert store.indexed["paper-1"]["chunks"]
     assert store.indexed["paper-1"]["entities"]
-    mock_paper_service.record_extract_warnings.assert_not_called()
+    mock_warning_service.record.assert_not_called()
 
 
 @pytest.mark.asyncio
 async def test_index_paper_for_rag_passes_chunk_options_to_chunk_text(
     sample_graph: UnifiedPaperGraph,
-    mock_paper_service: MagicMock,
+    mock_warning_service: MagicMock,
     monkeypatch: Any,
 ) -> None:
     """All chunking configuration values must flow from settings into chunk_text."""
@@ -155,7 +151,7 @@ async def test_index_paper_for_rag_passes_chunk_options_to_chunk_text(
 @pytest.mark.asyncio
 async def test_index_paper_for_rag_rejects_mismatched_graph_paper_id(
     sample_graph: UnifiedPaperGraph,
-    mock_paper_service: MagicMock,
+    mock_warning_service: MagicMock,
 ) -> None:
     store = FakeVectorStore()
 
@@ -169,7 +165,7 @@ async def test_index_paper_for_rag_rejects_mismatched_graph_paper_id(
 
     # Validation happens before any side effect; nothing should be indexed.
     assert not store.indexed
-    mock_paper_service.record_extract_warnings.assert_not_called()
+    mock_warning_service.record.assert_not_called()
 
 
 @pytest.mark.parametrize("invalid_paper_id", [None, "", "   ", 123])
@@ -177,7 +173,7 @@ async def test_index_paper_for_rag_rejects_mismatched_graph_paper_id(
 async def test_index_paper_for_rag_rejects_invalid_paper_id(
     invalid_paper_id: Any,
     sample_graph: UnifiedPaperGraph,
-    mock_paper_service: MagicMock,
+    mock_warning_service: MagicMock,
 ) -> None:
     store = FakeVectorStore()
 
@@ -190,13 +186,13 @@ async def test_index_paper_for_rag_rejects_invalid_paper_id(
         )
 
     assert not store.indexed
-    mock_paper_service.record_extract_warnings.assert_not_called()
+    mock_warning_service.record.assert_not_called()
 
 
 @pytest.mark.asyncio
 async def test_index_paper_for_rag_rejects_mismatched_graph_paper_id_variants(
     sample_graph: UnifiedPaperGraph,
-    mock_paper_service: MagicMock,
+    mock_warning_service: MagicMock,
 ) -> None:
     store = FakeVectorStore()
 
@@ -215,13 +211,13 @@ async def test_index_paper_for_rag_rejects_mismatched_graph_paper_id_variants(
         )
 
     assert not store.indexed
-    mock_paper_service.record_extract_warnings.assert_not_called()
+    mock_warning_service.record.assert_not_called()
 
 
 @pytest.mark.asyncio
 async def test_index_paper_for_rag_suppresses_error_and_records_warning(
     sample_graph: UnifiedPaperGraph,
-    mock_paper_service: MagicMock,
+    mock_warning_service: MagicMock,
     caplog: Any,
 ) -> None:
     store = FakeVectorStore()
@@ -239,10 +235,10 @@ async def test_index_paper_for_rag_suppresses_error_and_records_warning(
     assert result is False
 
     # Warning is surfaced on the paper status snapshot as a pure machine code.
-    mock_paper_service.record_extract_warnings.assert_called_once()
-    call_args = mock_paper_service.record_extract_warnings.call_args
+    mock_warning_service.record.assert_called_once()
+    call_args = mock_warning_service.record.call_args
     assert call_args.args[0] == "paper-1"
-    assert call_args.args[1] == [RAG_INDEX_WARNING_CODE]
+    assert call_args.args[2] == [RAG_INDEX_WARNING_CODE]
 
     # Structured log retains detailed error context for operators.
     assert any("rag_index_failed" in record.message for record in caplog.records)
@@ -256,7 +252,7 @@ async def test_index_paper_for_rag_suppresses_error_and_records_warning(
 @pytest.mark.asyncio
 async def test_index_paper_for_rag_can_re_raise_when_suppress_disabled(
     sample_graph: UnifiedPaperGraph,
-    mock_paper_service: MagicMock,
+    mock_warning_service: MagicMock,
 ) -> None:
     store = FakeVectorStore()
     store.should_fail = ValueError("embedding failed")
@@ -271,18 +267,18 @@ async def test_index_paper_for_rag_can_re_raise_when_suppress_disabled(
         )
 
     # Even when re-raising, the warning should still be recorded for observability.
-    mock_paper_service.record_extract_warnings.assert_called_once()
+    mock_warning_service.record.assert_called_once()
 
 
 @pytest.mark.asyncio
 async def test_index_paper_for_rag_does_not_hide_warning_write_failure(
     sample_graph: UnifiedPaperGraph,
-    mock_paper_service: MagicMock,
+    mock_warning_service: MagicMock,
     caplog: Any,
 ) -> None:
     store = FakeVectorStore()
     store.should_fail = RuntimeError("ChromaDB disk full")
-    mock_paper_service.record_extract_warnings.side_effect = OSError("DB unavailable")
+    mock_warning_service.record.side_effect = OSError("DB unavailable")
 
     with caplog.at_level(logging.ERROR, logger="backend.rag.handlers"):
         result = await index_paper_for_rag(

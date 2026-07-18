@@ -15,6 +15,7 @@ from backend.agents.extract_constants import (
 from backend.main import app
 from backend.schemas.paper import PaperDetail, PaperStatus, PipelineStage
 from backend.services.paper_service import get_paper_service
+from backend.services.paper_warning_service import WarningType, get_paper_warning_service
 from backend.services.pipeline_status_service import get_pipeline_status_service
 from httpx import ASGITransport, AsyncClient
 from tests.api.conftest import assert_success_envelope
@@ -45,7 +46,7 @@ def _register_ready_paper(paper_id: str) -> None:
 async def test_api_x17_get_paper_includes_extract_warnings(api_client: AsyncClient) -> None:
     paper_id = "api-f23-detail-fallback-001"
     _register_ready_paper(paper_id)
-    get_paper_service().record_extract_warnings(paper_id, [EXTRACT_HEURISTIC_FALLBACK_CODE])
+    await get_paper_warning_service().record(paper_id, WarningType.EXTRACT, [EXTRACT_HEURISTIC_FALLBACK_CODE])
 
     response = await api_client.get(f"/api/v1/papers/{paper_id}")
 
@@ -75,7 +76,7 @@ async def test_api_x14_fallback_machine_code_on_status(api_client: AsyncClient) 
         PipelineStage.EXTRACTING,
         message="正在抽取逻辑图谱",
     )
-    get_paper_service().record_extract_warnings(paper_id, [EXTRACT_HEURISTIC_FALLBACK_CODE])
+    await get_paper_warning_service().record(paper_id, WarningType.EXTRACT, [EXTRACT_HEURISTIC_FALLBACK_CODE])
     get_pipeline_status_service().mark_ready(paper_id)
 
     response = await api_client.get(f"/api/v1/papers/{paper_id}/status")
@@ -101,8 +102,9 @@ def test_api_x20_openapi_paper_detail_documents_extract_warnings() -> None:
 async def test_api_x16_status_and_detail_warnings_stay_consistent(api_client: AsyncClient) -> None:
     paper_id = "api-f23-consistent-001"
     _register_ready_paper(paper_id)
-    get_paper_service().record_extract_warnings(
+    await get_paper_warning_service().record(
         paper_id,
+        WarningType.EXTRACT,
         [EXTRACT_HEURISTIC_FALLBACK_CODE, "other_code"],
     )
 
@@ -130,7 +132,7 @@ async def test_api_x16_extracting_stage_exposes_fallback_before_ready(api_client
         PipelineStage.EXTRACTING,
         message="正在抽取逻辑图谱",
     )
-    get_paper_service().record_extract_warnings(paper_id, [EXTRACT_HEURISTIC_FALLBACK_CODE])
+    await get_paper_warning_service().record(paper_id, WarningType.EXTRACT, [EXTRACT_HEURISTIC_FALLBACK_CODE])
 
     response = await api_client.get(f"/api/v1/papers/{paper_id}/status")
 

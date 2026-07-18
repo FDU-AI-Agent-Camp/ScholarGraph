@@ -106,7 +106,7 @@ async def index_paper_for_rag(
                     "exc_msg": exc_msg,
                 },
             )
-            _record_index_warning(paper_id, exc_type_name, exc_msg)
+            await _record_index_warning(paper_id, exc_type_name, exc_msg)
 
             if not suppress_errors:
                 raise
@@ -114,12 +114,13 @@ async def index_paper_for_rag(
         return True
 
 
-def _record_index_warning(paper_id: str, exc_type_name: str, exc_msg: str) -> None:
+async def _record_index_warning(paper_id: str, exc_type_name: str, exc_msg: str) -> None:
     """Persist a machine-readable RAG index warning on the paper status snapshot."""
     from backend.services.paper_warning_service import WarningType, get_paper_warning_service
 
+    _ = exc_type_name, exc_msg
     try:
-        get_paper_warning_service().record(paper_id, WarningType.EXTRACT, [RAG_INDEX_WARNING_CODE])
+        await get_paper_warning_service().record(paper_id, WarningType.EXTRACT, [RAG_INDEX_WARNING_CODE])
     except Exception:
         logger.exception("failed_to_record_rag_index_warning", extra={"paper_id": paper_id})
 

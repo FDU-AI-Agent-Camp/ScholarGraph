@@ -131,7 +131,7 @@ async def test_finalize_refuses_graph_write_when_generation_obsolete(gen_guard_d
     classification = _minimal_classification()
 
     with pytest.raises(ObsoletePipelineGenerationError):
-        completion.finalize(
+        await completion.finalize(
             paper_id,
             graph_data=graph.model_dump(mode="json"),
             classification_data=classification.model_dump(mode="json"),
@@ -188,7 +188,7 @@ async def test_obsolete_run_id_write_blocked(gen_guard_db, monkeypatch: pytest.M
     async def _run_a_ghost_finalize() -> None:
         at_graph_store_entry.set()
         await thaw_run_a.wait()
-        completion.finalize(
+        await completion.finalize(
             paper_id,
             graph_data=_minimal_graph(paper_id).model_dump(mode="json"),
             classification_data=_minimal_classification().model_dump(mode="json"),
@@ -322,7 +322,7 @@ async def test_finalize_refuses_after_reextract_mints_new_generation(gen_guard_d
     completion = PipelineCompletionService(graph_persistence=persistence)
 
     with pytest.raises(ObsoletePipelineGenerationError):
-        completion.finalize(
+        await completion.finalize(
             paper_id,
             graph_data=_minimal_graph(paper_id).model_dump(mode="json"),
             classification_data=_minimal_classification().model_dump(mode="json"),

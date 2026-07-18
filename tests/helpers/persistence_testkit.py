@@ -270,7 +270,7 @@ def mock_graph_persistence(
     graph_dir: Path | str | None = None,
 ) -> MagicMock:
     """GraphPersistenceService mock whose ``save`` returns a concrete graph path (D7)."""
-    from unittest.mock import MagicMock
+    from unittest.mock import AsyncMock, MagicMock
 
     from backend.services.graph_persistence_service import GraphPersistenceService
 
@@ -279,5 +279,5 @@ def mock_graph_persistence(
         graph_path = str(Path(graph_dir) / f"{paper_id}.json")
     else:
         graph_path = f"/mock/graphs/{paper_id}.json"
-    persistence.save.return_value = graph_path
+    persistence.save = AsyncMock(return_value=graph_path)
     return persistence

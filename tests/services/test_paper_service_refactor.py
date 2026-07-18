@@ -14,7 +14,7 @@ from backend.schemas.ingest_head import IngestHead
 from backend.schemas.paper import PaperStatus
 from backend.schemas.paradigm import Paradigm
 from backend.services.paper_service import get_paper_service
-from backend.services.paper_warning_service import WarningType
+from backend.services.paper_warning_service import WarningType, get_paper_warning_service
 from tests.helpers.persistence_testkit import register_test_paper
 
 
@@ -31,10 +31,10 @@ async def test_warning_service_shim_records_and_reads_extract_warnings() -> None
     paper_id = "refactor-warning-001"
     await register_test_paper(paper_id, status=PaperStatus.PROCESSING)
 
-    service.record_extract_warnings(paper_id, ["extract_heuristic_fallback"])
+    await get_paper_warning_service().record(paper_id, WarningType.EXTRACT, ["extract_heuristic_fallback"])
 
-    assert service.get_extract_warnings(paper_id) == ["extract_heuristic_fallback"]
-    assert service._warnings.get(paper_id, WarningType.EXTRACT) == ["extract_heuristic_fallback"]
+    assert await get_paper_warning_service().get(paper_id, WarningType.EXTRACT) == ["extract_heuristic_fallback"]
+    assert await service._warnings.get(paper_id, WarningType.EXTRACT) == ["extract_heuristic_fallback"]
 
 
 @pytest.mark.asyncio
@@ -49,11 +49,11 @@ async def test_preview_facade_shim_persists_and_detects_availability() -> None:
         edges=[],
     )
 
-    service.save_preview_graph(paper_id, graph)
-    service.mark_preview_available(paper_id)
+    await service.save_preview_graph(paper_id, graph)
+    await service.mark_preview_available(paper_id)
 
-    assert service.get_preview_graph(paper_id) == graph
-    assert service.is_preview_available(paper_id) is True
+    assert await service.get_preview_graph(paper_id) == graph
+    assert await service.is_preview_available(paper_id) is True
 
 
 @pytest.mark.asyncio
@@ -86,7 +86,7 @@ async def test_head_refine_coordinator_shim_persists_to_disk(
     record = HeadStore(base_dir=tmp_path).load(paper_id)
     assert record is not None
     assert record.merged.title == "Refined Title"
-    assert service.get_head_refine_warnings(paper_id) == ["mineru_unavailable"]
+    assert await get_paper_warning_service().get(paper_id, WarningType.HEAD_REFINE) == ["mineru_unavailable"]
     assert service.get_refined_classifier_input(paper_id) == "Title: Refined Title"
 
     get_settings.cache_clear()
@@ -110,8 +110,8 @@ async def test_detail_assembler_enriches_paper_detail() -> None:
     service = get_paper_service()
     paper_id = "refactor-assembler-001"
     await register_test_paper(paper_id, status=PaperStatus.PROCESSING)
-    service.record_extract_warnings(paper_id, ["extract_heuristic_fallback"])
-    service.mark_preview_available(paper_id)
+    await get_paper_warning_service().record(paper_id, WarningType.EXTRACT, ["extract_heuristic_fallback"])
+    await service.mark_preview_available(paper_id)
 
     paper = await service.get_paper(paper_id)
 

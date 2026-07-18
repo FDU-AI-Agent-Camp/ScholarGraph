@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from unittest.mock import AsyncMock
 
 import pytest
 from backend.events.bus import get_event_bus
@@ -48,14 +49,16 @@ async def test_promote_paper_to_terminal_status_publishes_rag_indexed(
     service = get_paper_service()
     seen: list[RagIndexed] = []
     bus = get_event_bus()
-    original = bus.publish_sync
 
-    def _capture(event: object) -> None:
+    async def _capture(event: object) -> None:
         if isinstance(event, RagIndexed):
+            persisted = await service.get_pipeline_snapshot(paper_id)
+            assert persisted is not None
+            assert persisted.status == PaperStatus.READY
             seen.append(event)
-        original(event)
 
-    monkeypatch.setattr(bus, "publish_sync", _capture)
+    publish_spy = AsyncMock(side_effect=_capture)
+    monkeypatch.setattr(bus, "publish", publish_spy)
 
     snapshot = await service.promote_paper_to_terminal_status(
         paper_id,
@@ -66,6 +69,7 @@ async def test_promote_paper_to_terminal_status_publishes_rag_indexed(
     latest = await service.get_pipeline_snapshot(paper_id)
     assert latest is not None
     assert latest.status == PaperStatus.READY
+    publish_spy.assert_awaited_once()
     assert len(seen) == 1
     assert seen[0].paper_id == paper_id
     assert seen[0].success is True
@@ -82,14 +86,16 @@ async def test_promote_paper_to_terminal_status_failure_path_ready_with_warnings
     service = get_paper_service()
     seen: list[RagIndexed] = []
     bus = get_event_bus()
-    original = bus.publish_sync
 
-    def _capture(event: object) -> None:
+    async def _capture(event: object) -> None:
         if isinstance(event, RagIndexed):
+            persisted = await service.get_pipeline_snapshot(paper_id)
+            assert persisted is not None
+            assert persisted.status == PaperStatus.READY_WITH_WARNINGS
             seen.append(event)
-        original(event)
 
-    monkeypatch.setattr(bus, "publish_sync", _capture)
+    publish_spy = AsyncMock(side_effect=_capture)
+    monkeypatch.setattr(bus, "publish", publish_spy)
 
     snapshot = await service.promote_paper_to_terminal_status(
         paper_id,
@@ -99,6 +105,7 @@ async def test_promote_paper_to_terminal_status_failure_path_ready_with_warnings
     )
     assert snapshot.status == PaperStatus.READY_WITH_WARNINGS
     assert "rag_index_timeout" in snapshot.extract_warnings
+    publish_spy.assert_awaited_once()
     assert seen and seen[0].success is False
 
 

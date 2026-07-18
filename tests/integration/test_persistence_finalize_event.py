@@ -48,7 +48,7 @@ async def test_finalize_publishes_pipeline_finalized_event(persistence_env) -> N
     bus_module.get_event_bus = lambda: bus  # type: ignore[assignment]
     pcs_module.get_event_bus = lambda: bus  # type: ignore[attr-defined]
     try:
-        completion.finalize(
+        await completion.finalize(
             paper_id,
             graph_data=graph.model_dump(mode="json"),
             classification_data=classification.model_dump(mode="json"),

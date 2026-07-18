@@ -49,7 +49,7 @@ async def cold_start_qa_client(
     GraphStore(base_dir=graph_dir).save(graph)
 
     paper_service = get_paper_service()
-    register_processing_paper(paper_service, paper_id, preview_available=True)
+    await register_processing_paper(paper_service, paper_id, preview_available=True)
 
     store, *_rest = _store_with_settings(None)
     store._paper_service = paper_service  # type: ignore[attr-defined]
@@ -120,7 +120,7 @@ async def test_unindexed_processing_paper_qa_stream_engine_path(
     store_graph.save(graph)
 
     paper_service = get_paper_service()
-    register_processing_paper(paper_service, paper_id, preview_available=True)
+    await register_processing_paper(paper_service, paper_id, preview_available=True)
 
     vector_store, *_rest = _store_with_settings(None)
     vector_store._paper_service = paper_service  # type: ignore[attr-defined]

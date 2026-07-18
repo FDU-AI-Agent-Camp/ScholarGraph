@@ -6,7 +6,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock
 
 import pytest
 from backend.graph import nodes
@@ -84,7 +84,7 @@ async def test_store_failure_message_persisted_on_status(
     store_message = "建图收尾失败: disk full"
 
     with mock_pipeline_node_services(paper_id) as mocks:
-        mocks["completion"].finalize = MagicMock(
+        mocks["completion"].finalize = AsyncMock(
             side_effect=ServiceError("PIPELINE_FAILED", store_message),
         )
         final = await run_paper_pipeline(paper_id, pdf_path)

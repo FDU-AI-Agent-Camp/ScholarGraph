@@ -185,13 +185,13 @@ async def test_preview_graph_extreme_topology_survives_restart(persistence_env) 
     stress_graph = _build_stress_topology(paper_id)
 
     service = PaperService()
-    service.save_preview_graph(paper_id, stress_graph)
+    await service.save_preview_graph(paper_id, stress_graph)
     service.set_active_run_id(paper_id, "run-stress-topology")
 
     simulate_service_crash()
     restarted = await restart_paper_service()
 
-    loaded = restarted.get_preview_graph(paper_id)
+    loaded = await restarted.get_preview_graph(paper_id)
     assert loaded is not None
     assert len(loaded.nodes) == STRESS_NODE_COUNT
     assert len(loaded.edges) == STRESS_NODE_COUNT

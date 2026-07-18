@@ -170,7 +170,7 @@ class PaperPipelineOpsService:
         )
         await self.save_pipeline_snapshot(paper_id, snapshot)
         if publish_rag_indexed:
-            get_event_bus().publish_sync(
+            await get_event_bus().publish(
                 RagIndexed(
                     paper_id=paper_id,
                     success=success,
@@ -222,8 +222,8 @@ class PaperPipelineOpsService:
         )
         await self.save_pipeline_snapshot(paper_id, snapshot)
         if publish_rag_indexed:
-            # EventBus still drains on the FastAPI loop; under starvation delivery may lag.
-            get_event_bus().publish_sync(
+            # Prefer async publish on the caller's loop to avoid bridge-loop ghost sync.
+            await get_event_bus().publish(
                 RagIndexed(
                     paper_id=paper_id,
                     success=False,

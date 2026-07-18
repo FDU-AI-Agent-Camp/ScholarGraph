@@ -98,7 +98,7 @@ async def _seed_ready_with_artefacts(
         )
     )
     HeadStore().save(paper_id, merged=IngestHead(title="T", abstract="A", intro="I"))
-    service.save_preview_graph(
+    await service.save_preview_graph(
         paper_id,
         UnifiedPaperGraph(
             paper_id=paper_id,
@@ -107,7 +107,7 @@ async def _seed_ready_with_artefacts(
             edges=[],
         ),
     )
-    service.mark_preview_available(paper_id)
+    await service.mark_preview_available(paper_id)
 
     graph_json = graph_dir / f"{paper_id}.json"
     head_json = graph_dir / f"{paper_id}.head.json"

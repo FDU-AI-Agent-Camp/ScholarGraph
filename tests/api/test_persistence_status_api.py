@@ -66,7 +66,7 @@ async def test_status_ready_after_finalize_matches_contract(
         edges=[GraphEdge(id="e1", source="n1", target="n1", label="REF", type="REF")],
     )
     persistence = mock_graph_persistence(paper_id, graph_dir=persistence_env["graph_dir"])
-    PipelineCompletionService(graph_persistence=persistence).finalize(
+    await PipelineCompletionService(graph_persistence=persistence).finalize(
         paper_id,
         graph_data=graph.model_dump(mode="json"),
         classification_data=classification.model_dump(mode="json"),

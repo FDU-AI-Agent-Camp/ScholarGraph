@@ -40,16 +40,16 @@ async def test_preview_graph_survives_service_restart(persistence_env) -> None:
     await register_test_paper(paper_id, status=PaperStatus.PROCESSING)
     preview = _sample_preview(paper_id)
     service = PaperService()
-    service.save_preview_graph(paper_id, preview)
-    service.mark_preview_available(paper_id)
+    await service.save_preview_graph(paper_id, preview)
+    await service.mark_preview_available(paper_id)
 
     restarted = await restart_paper_service()
-    loaded = restarted.get_preview_graph(paper_id)
+    loaded = await restarted.get_preview_graph(paper_id)
 
     assert loaded is not None
     assert loaded.paper_id == paper_id
     assert loaded.nodes[0].id == "n1"
-    assert restarted.is_preview_available(paper_id) is True
+    assert await restarted.is_preview_available(paper_id) is True
 
 
 @pytest.mark.asyncio
@@ -58,12 +58,12 @@ async def test_clear_ephemeral_pipeline_state_removes_preview_and_run_id(persist
     await register_test_paper(paper_id, status=PaperStatus.READY)
     service = PaperService()
     service.set_active_run_id(paper_id, "run-clear-me")
-    service.save_preview_graph(paper_id, _sample_preview(paper_id))
+    await service.save_preview_graph(paper_id, _sample_preview(paper_id))
 
     service.clear_ephemeral_pipeline_state(paper_id)
 
     assert service.get_active_run_id(paper_id) is None
-    assert service.get_preview_graph(paper_id) is None
+    assert await service.get_preview_graph(paper_id) is None
 
 
 @pytest.mark.asyncio

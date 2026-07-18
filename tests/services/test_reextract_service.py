@@ -24,6 +24,7 @@ from backend.schemas.ingest_head import IngestHead
 from backend.schemas.paper import PaperStatus, PaperStatusData, PipelineStage
 from backend.schemas.paradigm import Paradigm
 from backend.services.paper_service import PaperService
+from backend.services.paper_warning_service import WarningType, get_paper_warning_service
 from tests.helpers.persistence_testkit import restart_paper_service
 
 
@@ -102,9 +103,11 @@ async def _seed_previous_run(service: PaperService, paper_id: str) -> None:
     """Simulate a paper that has completed a fallback run."""
     from backend.agents.extract_constants import EXTRACT_HEURISTIC_FALLBACK_CODE, EXTRACT_LLM_TIMEOUT_CODE
 
-    service.record_extract_warnings(paper_id, [EXTRACT_LLM_TIMEOUT_CODE, EXTRACT_HEURISTIC_FALLBACK_CODE])
-    service.record_classify_warnings(paper_id, ["classifier_some_warning"])
-    service.record_head_refine_warnings(paper_id, ["mineru_unavailable"])
+    await get_paper_warning_service().record(
+        paper_id, WarningType.EXTRACT, [EXTRACT_LLM_TIMEOUT_CODE, EXTRACT_HEURISTIC_FALLBACK_CODE]
+    )
+    await get_paper_warning_service().record(paper_id, WarningType.CLASSIFY, ["classifier_some_warning"])
+    await get_paper_warning_service().record(paper_id, WarningType.HEAD_REFINE, ["mineru_unavailable"])
 
     graph = UnifiedPaperGraph(
         paper_id=paper_id,
@@ -114,8 +117,8 @@ async def _seed_previous_run(service: PaperService, paper_id: str) -> None:
     )
     GraphStore().save(graph)
     HeadStore().save(paper_id, merged=IngestHead(title="T", abstract="A", intro="I"))
-    service.save_preview_graph(paper_id, graph)
-    service.mark_preview_available(paper_id)
+    await service.save_preview_graph(paper_id, graph)
+    await service.mark_preview_available(paper_id)
 
 
 @pytest.mark.asyncio
@@ -152,11 +155,11 @@ async def test_force_reextract_clears_state_and_requeues_pipeline(
     assert paper.paradigm is None
     assert paper.classification is None
     assert paper.preview_available is False
-    assert service.get_extract_warnings(paper_id) == []
-    assert service.get_classify_warnings(paper_id) == []
-    assert service.get_head_refine_warnings(paper_id) == []
-    assert service.get_preview_graph(paper_id) is None
-    assert service.is_preview_available(paper_id) is False
+    assert await get_paper_warning_service().get(paper_id, WarningType.EXTRACT) == []
+    assert await get_paper_warning_service().get(paper_id, WarningType.CLASSIFY) == []
+    assert await get_paper_warning_service().get(paper_id, WarningType.HEAD_REFINE) == []
+    assert await service.get_preview_graph(paper_id) is None
+    assert await service.is_preview_available(paper_id) is False
     assert GraphStore().load(paper_id) is None
     assert HeadStore().load(paper_id) is None
     assert sample_pdf.is_file()

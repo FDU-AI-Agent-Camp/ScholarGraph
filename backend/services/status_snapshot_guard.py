@@ -74,18 +74,46 @@ def persist_status_snapshot(
     failed_during: PipelineStage | None = None,
     append_extract_warnings: list[str] | None = None,
 ) -> PaperStatusData:
-    """Validate and atomically persist a pipeline status snapshot."""
+    """Validate and atomically persist a pipeline status snapshot (sync callers)."""
+    return run_async(
+        apersist_status_snapshot(
+            paper_service,
+            paper_id,
+            status=status,
+            stage=stage,
+            percent=percent,
+            message=message,
+            error_code=error_code,
+            failed_during=failed_during,
+            append_extract_warnings=append_extract_warnings,
+        )
+    )
+
+
+async def apersist_status_snapshot(
+    paper_service: PaperService,
+    paper_id: str,
+    *,
+    status: PaperStatus,
+    stage: PipelineStage | None,
+    percent: int,
+    message: str,
+    error_code: str | None = None,
+    failed_during: PipelineStage | None = None,
+    append_extract_warnings: list[str] | None = None,
+) -> PaperStatusData:
+    """Async twin of ``persist_status_snapshot`` for callers already on an event loop."""
     validate_status_contract(status=status, stage=stage, percent=percent)
     validate_failed_error_fields(
         status=status,
         error_code=error_code,
         failed_during=failed_during,
     )
-    paper_service.ensure_paper_exists(paper_id)
+    await paper_service.ensure_paper_exists(paper_id)
     now = datetime.now(UTC)
-    preview_available = paper_service.is_preview_available(paper_id)
+    preview_available = await paper_service.is_preview_available(paper_id)
     pipeline_ops = get_paper_pipeline_ops_service()
-    existing = run_async(pipeline_ops.get_pipeline_snapshot(paper_id))
+    existing = await pipeline_ops.get_pipeline_snapshot(paper_id)
     merged_extract_warnings = list(existing.extract_warnings if existing is not None else [])
     if append_extract_warnings:
         merged_extract_warnings = list(dict.fromkeys([*merged_extract_warnings, *append_extract_warnings]))
@@ -103,7 +131,7 @@ def persist_status_snapshot(
         classify_warnings=existing.classify_warnings if existing is not None else [],
         extract_warnings=merged_extract_warnings,
     )
-    run_async(pipeline_ops.save_pipeline_snapshot(paper_id, snapshot))
+    await pipeline_ops.save_pipeline_snapshot(paper_id, snapshot)
     return snapshot
 
 

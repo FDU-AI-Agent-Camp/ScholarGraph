@@ -14,6 +14,7 @@ import pytest
 from backend.agents.extract_constants import EXTRACT_HEURISTIC_FALLBACK_CODE
 from backend.config import get_settings
 from backend.main import app
+from backend.services.paper_warning_service import WarningType, get_paper_warning_service
 from backend.services.pipeline_status_service import get_pipeline_status_service
 from httpx import ASGITransport, AsyncClient
 from tests.helpers.persistence_testkit import init_isolated_database, reset_persistence_singletons
@@ -84,8 +85,8 @@ async def test_force_reextract_resets_status_and_clears_warnings(
 
     from backend.services.paper_service import get_paper_service
 
-    service = get_paper_service()
-    service.record_extract_warnings(paper_id, [EXTRACT_HEURISTIC_FALLBACK_CODE])
+    get_paper_service()
+    await get_paper_warning_service().record(paper_id, WarningType.EXTRACT, [EXTRACT_HEURISTIC_FALLBACK_CODE])
 
     with (
         patch("backend.services.reextract_service.abort_in_flight_pipeline", AsyncMock()),

@@ -17,6 +17,7 @@ from backend.schemas.graph import GraphNode, UnifiedPaperGraph
 from backend.schemas.paper import PaperDetail, PaperStatus, PaperStatusData, PipelineStage
 from backend.schemas.paradigm import Paradigm
 from backend.services.paper_service import get_paper_service
+from backend.services.paper_warning_service import WarningType, get_paper_warning_service
 
 
 def _register_paper(paper_id: str, status: PaperStatus = PaperStatus.PROCESSING) -> None:
@@ -80,7 +81,8 @@ class TestBuildMvpInput:
 
 
 class TestSavePreviewGraph:
-    def test_saves_preview_for_registered_paper(self) -> None:
+    @pytest.mark.asyncio
+    async def test_saves_preview_for_registered_paper(self) -> None:
         paper_id = "preview-save-001"
         _register_paper(paper_id)
         graph = UnifiedPaperGraph(
@@ -90,16 +92,17 @@ class TestSavePreviewGraph:
             edges=[],
         )
 
-        _save_preview_graph(paper_id, graph)
+        await _save_preview_graph(paper_id, graph)
 
         service = get_paper_service()
-        assert service.is_preview_available(paper_id)
-        assert service.get_preview_graph(paper_id) == graph
+        assert await service.is_preview_available(paper_id)
+        assert await service.get_preview_graph(paper_id) == graph
         status = service._status.get(paper_id)
         assert status is not None
         assert status.preview_available is True
 
-    def test_skips_unregistered_paper_without_error(self) -> None:
+    @pytest.mark.asyncio
+    async def test_skips_unregistered_paper_without_error(self) -> None:
         graph = UnifiedPaperGraph(
             paper_id="unregistered",
             paradigm=Paradigm.HSS,
@@ -107,11 +110,12 @@ class TestSavePreviewGraph:
             edges=[],
         )
 
-        _save_preview_graph("unregistered", graph)
+        await _save_preview_graph("unregistered", graph)
 
-        assert not get_paper_service().is_preview_available("unregistered")
+        assert not await get_paper_service().is_preview_available("unregistered")
 
-    def test_records_warning_codes(self) -> None:
+    @pytest.mark.asyncio
+    async def test_records_warning_codes(self) -> None:
         paper_id = "preview-save-warn-001"
         _register_paper(paper_id)
         graph = UnifiedPaperGraph(
@@ -121,9 +125,9 @@ class TestSavePreviewGraph:
             edges=[],
         )
 
-        _save_preview_graph(paper_id, graph, warnings=[MVP_SKELETON_PREVIEW_CODE])
+        await _save_preview_graph(paper_id, graph, warnings=[MVP_SKELETON_PREVIEW_CODE])
 
-        assert MVP_SKELETON_PREVIEW_CODE in get_paper_service().get_extract_warnings(paper_id)
+        assert MVP_SKELETON_PREVIEW_CODE in await get_paper_warning_service().get(paper_id, WarningType.EXTRACT)
 
 
 class TestExtractPreviewFlag:
@@ -140,8 +144,8 @@ class TestExtractPreviewFlag:
 
         assert result.graph.paper_id == paper_id
         service = get_paper_service()
-        assert service.is_preview_available(paper_id)
-        assert service.get_preview_graph(paper_id) == result.graph
+        assert await service.is_preview_available(paper_id)
+        assert await service.get_preview_graph(paper_id) == result.graph
 
     @pytest.mark.asyncio
     async def test_long_text_extract_saves_mvp_preview_before_full(self) -> None:
@@ -153,13 +157,13 @@ class TestExtractPreviewFlag:
         result = await extract(long_text, Paradigm.HSS, paper_id=paper_id)
 
         service = get_paper_service()
-        assert service.is_preview_available(paper_id)
-        preview = service.get_preview_graph(paper_id)
+        assert await service.is_preview_available(paper_id)
+        preview = await service.get_preview_graph(paper_id)
         assert preview is not None
         assert preview.paper_id == paper_id
         assert preview.paradigm == Paradigm.HSS
         # Mock mode persists the final graph as the current preview.
-        assert service.get_preview_graph(paper_id) == result.graph
+        assert await service.get_preview_graph(paper_id) == result.graph
 
     @pytest.mark.asyncio
     async def test_extract_without_paper_registration_does_not_crash(self) -> None:

@@ -68,8 +68,8 @@ class TestQaStreamPreview:
         paper_id = "preview-qa-001"
         await register_test_paper(paper_id, status=PaperStatus.PROCESSING)
         service = get_paper_service()
-        service.mark_preview_available(paper_id)
-        service.save_preview_graph(paper_id, preview_graph)
+        await service.mark_preview_available(paper_id)
+        await service.save_preview_graph(paper_id, preview_graph)
 
         llm = _fake_llm("答案")
         engine = _GraphQaEngine(llm=llm, paper_service=service)
@@ -90,8 +90,8 @@ class TestQaStreamPreview:
         paper_id = "preview-qa-002"
         await register_test_paper(paper_id, status=PaperStatus.PROCESSING)
         service = get_paper_service()
-        service.mark_preview_available(paper_id)
-        service.save_preview_graph(paper_id, preview_graph)
+        await service.mark_preview_available(paper_id)
+        await service.save_preview_graph(paper_id, preview_graph)
 
         captured: list[str] = []
 
@@ -144,7 +144,7 @@ class TestQaStreamPreview:
         paper_id = "preview-qa-ready-001"
         await register_test_paper(paper_id, status=PaperStatus.READY)
         service = get_paper_service()
-        service.mark_preview_available(paper_id)
+        await service.mark_preview_available(paper_id)
         full_graph = UnifiedPaperGraph(
             paper_id=paper_id,
             paradigm=Paradigm.STEM,

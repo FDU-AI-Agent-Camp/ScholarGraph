@@ -123,7 +123,7 @@ async def run_paper_pipeline(paper_id: str, pdf_path: Path) -> WorkflowState:
         raise FileNotFoundError(f"PDF not found: {pdf_path}")
 
     paper_service = get_paper_service()
-    paper_service.ensure_paper_exists(paper_id)
+    await paper_service.ensure_paper_exists(paper_id)
     get_pipeline_status_service().start_processing(paper_id)
     from backend.services.paper_pipeline_ops import get_paper_pipeline_ops_service
 

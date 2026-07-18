@@ -12,7 +12,7 @@ import sys
 from collections.abc import Coroutine
 from pathlib import Path
 from typing import Any
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
 from backend.graph.state import STAGE_PERCENT
@@ -186,7 +186,7 @@ async def test_script_exits_failed_when_store_finalize_raises(
     mod.register_paper_for_pipeline(paper_id, minimal_pdf, copy_to_upload_dir=False)
 
     with mock_pipeline_node_services(paper_id) as mocks:
-        mocks["completion"].finalize = MagicMock(
+        mocks["completion"].finalize = AsyncMock(
             side_effect=ServiceError("PIPELINE_FAILED", "disk full"),
         )
         code = await mod.run_single_paper_pipeline(paper_id, minimal_pdf)

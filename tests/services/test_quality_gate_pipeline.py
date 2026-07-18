@@ -12,7 +12,8 @@ from backend.schemas.graph import GraphEdge, GraphNode, UnifiedPaperGraph
 from backend.schemas.paper import PaperStatus
 from backend.schemas.paradigm import Paradigm, ParadigmClassification
 from backend.services.paper_service import get_paper_service
-from tests.helpers.event_bus_testkit import drain_event_bus_sync
+from backend.services.paper_warning_service import WarningType, get_paper_warning_service
+from tests.helpers.event_bus_testkit import drain_event_bus
 from tests.helpers.persistence_testkit import register_test_paper
 
 
@@ -120,12 +121,12 @@ async def test_complete_pipeline_marks_ready_when_quality_gate_passes(
     await _register_paper(paper_id)
     graph = _make_graph(paper_id, supports_with_rationale=2, supports_without_rationale=0, isolated_nodes=0)
 
-    service.complete_pipeline(paper_id, classification=classification, graph=graph)
-    drain_event_bus_sync()
+    await service.complete_pipeline(paper_id, classification=classification, graph=graph)
+    await drain_event_bus()
 
     paper = await service.get_paper(paper_id)
     assert paper.status == PaperStatus.READY
-    assert LOW_CONFIDENCE_GRAPH_CODE not in service.get_extract_warnings(paper_id)
+    assert LOW_CONFIDENCE_GRAPH_CODE not in await get_paper_warning_service().get(paper_id, WarningType.EXTRACT)
 
 
 @pytest.mark.asyncio
@@ -137,12 +138,12 @@ async def test_complete_pipeline_marks_ready_with_warnings_on_low_rationale(
     await _register_paper(paper_id)
     graph = _make_graph(paper_id, supports_with_rationale=1, supports_without_rationale=3, isolated_nodes=0)
 
-    service.complete_pipeline(paper_id, classification=classification, graph=graph)
-    drain_event_bus_sync()
+    await service.complete_pipeline(paper_id, classification=classification, graph=graph)
+    await drain_event_bus()
 
     paper = await service.get_paper(paper_id)
     assert paper.status == PaperStatus.READY_WITH_WARNINGS
-    assert LOW_CONFIDENCE_GRAPH_CODE in service.get_extract_warnings(paper_id)
+    assert LOW_CONFIDENCE_GRAPH_CODE in await get_paper_warning_service().get(paper_id, WarningType.EXTRACT)
 
 
 @pytest.mark.asyncio
@@ -154,12 +155,12 @@ async def test_complete_pipeline_marks_ready_with_warnings_on_high_isolation(
     await _register_paper(paper_id)
     graph = _make_graph(paper_id, supports_with_rationale=2, supports_without_rationale=0, isolated_nodes=6)
 
-    service.complete_pipeline(paper_id, classification=classification, graph=graph)
-    drain_event_bus_sync()
+    await service.complete_pipeline(paper_id, classification=classification, graph=graph)
+    await drain_event_bus()
 
     paper = await service.get_paper(paper_id)
     assert paper.status == PaperStatus.READY_WITH_WARNINGS
-    assert LOW_CONFIDENCE_GRAPH_CODE in service.get_extract_warnings(paper_id)
+    assert LOW_CONFIDENCE_GRAPH_CODE in await get_paper_warning_service().get(paper_id, WarningType.EXTRACT)
 
 
 @pytest.mark.asyncio
@@ -183,12 +184,12 @@ async def test_complete_pipeline_marks_ready_with_warnings_on_high_generic_edge_
     settings = get_settings()
     monkeypatch.setattr(settings, "extract_max_generic_edge_ratio", 0.3)
 
-    service.complete_pipeline(paper_id, classification=classification, graph=graph)
-    drain_event_bus_sync()
+    await service.complete_pipeline(paper_id, classification=classification, graph=graph)
+    await drain_event_bus()
 
     paper = await service.get_paper(paper_id)
     assert paper.status == PaperStatus.READY_WITH_WARNINGS
-    assert LOW_CONFIDENCE_GRAPH_CODE in service.get_extract_warnings(paper_id)
+    assert LOW_CONFIDENCE_GRAPH_CODE in await get_paper_warning_service().get(paper_id, WarningType.EXTRACT)
 
 
 @pytest.mark.asyncio
@@ -201,6 +202,6 @@ async def test_complete_pipeline_saves_graph_regardless_of_gate(
     await _register_paper(paper_id)
     graph = _make_graph(paper_id, supports_with_rationale=0, supports_without_rationale=1, isolated_nodes=0)
 
-    service.complete_pipeline(paper_id, classification=classification, graph=graph)
+    await service.complete_pipeline(paper_id, classification=classification, graph=graph)
 
     assert GraphStore(base_dir=persistence_env["graph_dir"]).load(paper_id) is not None

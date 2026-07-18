@@ -34,4 +34,4 @@ async def persist_event_handler_failure(
     from backend.services.paper_warning_service import WarningType, get_paper_warning_service
 
     warning = format_handler_failure_warning(event_type, exc)
-    get_paper_warning_service().record(paper_id, WarningType.EXTRACT, [warning])
+    await get_paper_warning_service().record(paper_id, WarningType.EXTRACT, [warning])

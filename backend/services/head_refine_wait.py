@@ -1,7 +1,7 @@
 # Copyright 2026 FDU-AI-Agent-Camp
 # SPDX-License-Identifier: Apache-2.0
 
-"""Poll PaperService until async head refine completes or times out (§2.1 / P4)."""
+"""Poll until async head refine completes or times out (§2.1 / P4)."""
 
 from __future__ import annotations
 
@@ -12,7 +12,8 @@ from pathlib import Path
 
 from backend.config import Settings, get_settings
 from backend.ingest.router import IngestRouteKind, get_pdf_page_count, resolve_ingest_route
-from backend.services.paper_service import get_paper_service
+from backend.services.head_refine_coordinator import get_head_refine_coordinator
+from backend.services.paper_warning_service import WarningType, get_paper_warning_service
 
 logger = logging.getLogger(__name__)
 
@@ -44,7 +45,7 @@ async def wait_for_refined_classifier_input(
     settings: Settings | None = None,
 ) -> tuple[str, list[str]]:
     """
-    Poll until ``apply_head_refine`` stores classifier input or timeout.
+    Poll until head refine stores classifier input or timeout.
 
     Returns ``(classifier_input, warnings)``; on timeout uses ``fallback`` and
     appends ``head_refine_timeout``.
@@ -53,14 +54,15 @@ async def wait_for_refined_classifier_input(
     resolved = pdf_path.resolve()
     page_count = await asyncio.to_thread(get_pdf_page_count, resolved)
     timeout = resolve_head_refine_timeout_seconds(page_count, settings=cfg)
-    paper_svc = get_paper_service()
+    head_refine = get_head_refine_coordinator()
+    warnings_svc = get_paper_warning_service()
     deadline = time.monotonic() + timeout
     warnings: list[str] = []
 
     while time.monotonic() < deadline:
-        refined = paper_svc.get_refined_classifier_input(paper_id)
+        refined = await head_refine.get_classifier_input(paper_id)
         if refined is not None:
-            return refined, paper_svc.get_head_refine_warnings(paper_id)
+            return refined, await warnings_svc.get(paper_id, WarningType.HEAD_REFINE)
         await asyncio.sleep(HEAD_REFINE_POLL_SECONDS)
 
     warnings.append(HEAD_REFINE_TIMEOUT_WARNING)

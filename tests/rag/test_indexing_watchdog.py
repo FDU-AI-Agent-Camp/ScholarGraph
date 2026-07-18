@@ -8,6 +8,7 @@ from __future__ import annotations
 import logging
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from unittest.mock import AsyncMock
 
 import pytest
 from backend.config import get_settings
@@ -99,14 +100,16 @@ async def test_macro_zombie_scan_promotes_and_emits_rag_indexed_false(
 
     seen: list[RagIndexed] = []
     bus = get_event_bus()
-    original_publish_sync = bus.publish_sync
 
-    def _capture_publish_sync(event: object) -> None:
+    async def _capture_publish(event: object) -> None:
         if isinstance(event, RagIndexed):
+            persisted = await get_pipeline_repository().get_latest("paper-a")
+            assert persisted is not None
+            assert persisted.status == PaperStatus.READY_WITH_WARNINGS
             seen.append(event)
-        original_publish_sync(event)
 
-    monkeypatch.setattr(bus, "publish_sync", _capture_publish_sync)
+    publish_spy = AsyncMock(side_effect=_capture_publish)
+    monkeypatch.setattr(bus, "publish", publish_spy)
 
     promoted = await scan_and_promote_stuck_indexing(
         stuck_after_seconds=60.0,
@@ -118,6 +121,7 @@ async def test_macro_zombie_scan_promotes_and_emits_rag_indexed_false(
     assert latest is not None
     assert latest.status == PaperStatus.READY_WITH_WARNINGS
     assert RAG_INDEXING_STUCK_WARNING in latest.extract_warnings
+    publish_spy.assert_awaited_once()
     assert len(seen) == 1
     assert seen[0].paper_id == "paper-a"
     assert seen[0].success is False

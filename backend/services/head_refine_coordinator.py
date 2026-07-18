@@ -67,11 +67,11 @@ class HeadRefineCoordinator:
     ) -> None:
         """Persist head refine output with ordered, retry-safe dual-media writes."""
         if warnings:
-            await self._warning_service.arecord(paper_id, WarningType.HEAD_REFINE, warnings)
+            await self._warning_service.record(paper_id, WarningType.HEAD_REFINE, warnings)
 
         paper = await self._paper_repo.get(paper_id)
         if merged.title.strip() and paper is not None and paper.status == PaperStatus.PENDING:
-            await self._core_service.aupdate_title(paper_id, merged.title.strip())
+            await self._core_service.update_title(paper_id, merged.title.strip())
 
         head_path = str(self._head_store()._path(paper_id))
         try:
@@ -91,7 +91,7 @@ class HeadRefineCoordinator:
             )
             raise
 
-        await self._core_service.aupdate_paths(paper_id, head_path=head_path)
+        await self._core_service.update_paths(paper_id, head_path=head_path)
 
     def apply_sync(
         self,
@@ -148,7 +148,7 @@ class HeadRefineCoordinator:
         snapshot = await self._pipeline_repo.get_latest(paper_id)
         if snapshot is not None and snapshot.head_refine_warnings:
             return
-        await self._warning_service.arecord(
+        await self._warning_service.record(
             paper_id,
             WarningType.HEAD_REFINE,
             list(record.warnings),

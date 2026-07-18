@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -13,7 +14,6 @@ from backend.api.exceptions import ApiError
 from backend.db.models import PAPER_OPS_OPERATION_REEXTRACT
 from backend.graph.head_store import HeadStore
 from backend.graph.store import GraphStore
-from backend.repositories import run_async
 from backend.schemas.paper import PaperStatus, PaperStatusData
 from backend.services.paper_delete_service import (
     _VectorStoreDelete,
@@ -77,10 +77,14 @@ def _resolve_pdf_path(pdf_path_str: str | None, paper_id: str) -> Path:
     return pdf_path
 
 
-def _clear_persisted_artefacts(paper_id: str) -> None:
-    """Remove final graph and refined head from disk."""
-    GraphStore().delete(paper_id)
-    HeadStore().delete(paper_id)
+async def _clear_persisted_artefacts(paper_id: str) -> None:
+    """Remove final graph and refined head from disk (off the event loop)."""
+
+    def _delete_sync() -> None:
+        GraphStore().delete(paper_id)
+        HeadStore().delete(paper_id)
+
+    await asyncio.to_thread(_delete_sync)
 
 
 def _clear_in_memory_state(paper_id: str) -> None:
@@ -130,7 +134,7 @@ async def force_reextract(
     with 409 via durable ``paper_ops_claims``; the owner token is released in
     ``finally`` (Cascading Kill may force-evict abandoned claims).
     """
-    paper = run_async(paper_service._paper_repo.get(paper_id))
+    paper = await paper_service._paper_repo.get(paper_id)
     if paper is None:
         raise ApiError("PAPER_NOT_FOUND", f"论文不存在: {paper_id}", status_code=404)
 
@@ -154,15 +158,15 @@ async def force_reextract(
         await abort_in_flight_pipeline(paper_id)
         wipe_targets = extend_wipe_targets_after_abort(paper_id, wipe_targets)
 
-        pdf_path_str = run_async(paper_service._paper_repo.get_pdf_path(paper_id))
+        pdf_path_str = await paper_service._paper_repo.get_pdf_path(paper_id)
         pdf_path = _resolve_pdf_path(pdf_path_str, paper_id)
         # Wave 1: best-effort paper-wide purge; Wave 2 hunts late run_id ghosts.
         await _purge_vector_index(paper_id, vector_store=vector_store)
         schedule_wipe_wave2_sweep(paper_id, wipe_targets)
-        _clear_persisted_artefacts(paper_id)
+        await _clear_persisted_artefacts(paper_id)
         _clear_in_memory_state(paper_id)
 
-        run_async(paper_service._paper_repo.reset_for_reextract(paper_id))
+        await paper_service._paper_repo.reset_for_reextract(paper_id)
         snapshot = get_paper_pipeline_ops_service().reset_pipeline_for_reextract(
             paper_id,
             message=_REEXTRACT_QUEUED_MESSAGE,

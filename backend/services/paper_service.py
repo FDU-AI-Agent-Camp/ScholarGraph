@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from datetime import UTC, datetime
 from functools import lru_cache
 from pathlib import Path
@@ -31,7 +32,7 @@ from backend.services.paper_core_service import PaperCoreService
 from backend.services.paper_detail_assembler import PaperDetailAssembler
 from backend.services.paper_pipeline_ops import PaperPipelineOpsService
 from backend.services.paper_pipeline_scheduler import schedule_paper_pipeline
-from backend.services.paper_warning_service import PaperWarningService, WarningType
+from backend.services.paper_warning_service import PaperWarningService
 from backend.services.persistence_reset import reset_persistence_singletons
 from backend.services.preview_graph_facade import PreviewGraphFacade
 
@@ -128,7 +129,7 @@ class PaperService:
 
     def set_active_run_id(self, paper_id: str, run_id: str | None) -> None:
         """Atomically activate a RAG index run, or clear it (``None`` / ``""`` → NULL)."""
-        self.ensure_paper_exists(paper_id)
+        run_async(self.ensure_paper_exists(paper_id))
         run_async(self._pipeline_repo.set_active_rag_run_id(paper_id, run_id))
 
     def get_active_run_id(self, paper_id: str) -> str | None:
@@ -158,16 +159,16 @@ class PaperService:
             raise ApiError("PAPER_NOT_FOUND", f"论文不存在: {paper_id}", status_code=404)
         return await self._detail.assemble(paper, paper_id)
 
-    def ensure_paper_exists(self, paper_id: str) -> None:
-        paper = run_async(self._paper_repo.get(paper_id))
+    async def ensure_paper_exists(self, paper_id: str) -> None:
+        paper = await self._paper_repo.get(paper_id)
         if paper is None:
             raise ApiError("PAPER_NOT_FOUND", f"论文不存在: {paper_id}", status_code=404)
 
-    def require_paper_for_pipeline(self, paper_id: str) -> None:
+    async def require_paper_for_pipeline(self, paper_id: str) -> None:
         """Raise pipeline ServiceError when the paper row is missing."""
         from backend.services.errors import PIPELINE_FAILED_CODE, ServiceError
 
-        if run_async(self._paper_repo.get(paper_id)) is None:
+        if await self._paper_repo.get(paper_id) is None:
             msg = f"paper not found: {paper_id}"
             raise ServiceError(PIPELINE_FAILED_CODE, msg)
 
@@ -184,27 +185,27 @@ class PaperService:
 
         return compute_extractor_config_hash(self._settings)
 
-    def update_pipeline_classification(
+    async def update_pipeline_classification(
         self,
         paper_id: str,
         classification: ParadigmClassification,
     ) -> None:
-        self._core.update_classification(paper_id, classification)
+        await self._core.update_classification(paper_id, classification)
 
-    def update_pipeline_graph_path(self, paper_id: str, *, graph_path: str) -> None:
-        self._core.update_paths(paper_id, graph_path=graph_path)
+    async def update_pipeline_graph_path(self, paper_id: str, *, graph_path: str) -> None:
+        await self._core.update_paths(paper_id, graph_path=graph_path)
 
-    def get_pipeline_graph_version(self, paper_id: str) -> str:
-        return self._core.get_graph_version(paper_id)
+    async def get_pipeline_graph_version(self, paper_id: str) -> str:
+        return await self._core.get_graph_version(paper_id)
 
-    def update_pipeline_graph_version(
+    async def update_pipeline_graph_version(
         self,
         paper_id: str,
         *,
         graph_version: str,
         extractor_config_hash: str,
     ) -> None:
-        self._core.update_graph_version(
+        await self._core.update_graph_version(
             paper_id,
             graph_version=graph_version,
             extractor_config_hash=extractor_config_hash,
@@ -255,7 +256,7 @@ class PaperService:
             message=message,
         )
 
-    def complete_pipeline(
+    async def complete_pipeline(
         self,
         paper_id: str,
         *,
@@ -266,8 +267,8 @@ class PaperService:
         from backend.services.graph_persistence_service import get_graph_persistence_service
         from backend.services.pipeline_completion_service import complete_paper_pipeline
 
-        graph_path = get_graph_persistence_service().save(graph)
-        complete_paper_pipeline(
+        graph_path = await get_graph_persistence_service().save(graph)
+        await complete_paper_pipeline(
             self,
             paper_id,
             classification=classification,
@@ -278,7 +279,7 @@ class PaperService:
 
     async def force_reextract(self, paper_id: str, *, force: bool = False) -> PaperStatusData:
         """Escape hatch: reset and re-schedule the pipeline for ``paper_id``."""
-        self.ensure_paper_exists(paper_id)
+        await self.ensure_paper_exists(paper_id)
         from backend.services.reextract_service import force_reextract
 
         return await force_reextract(self, paper_id, force=force)
@@ -340,41 +341,23 @@ class PaperService:
     def get_refined_head(self, paper_id: str) -> IngestHead | None:
         return self._head_refine.load_head_sync(paper_id)
 
-    def record_head_refine_warnings(self, paper_id: str, warnings: list[str]) -> None:
-        self._warnings.record(paper_id, WarningType.HEAD_REFINE, warnings)
-
-    def get_head_refine_warnings(self, paper_id: str) -> list[str]:
-        return self._warnings.get(paper_id, WarningType.HEAD_REFINE)
-
-    def record_extract_warnings(self, paper_id: str, warnings: list[str]) -> None:
-        self._warnings.record(paper_id, WarningType.EXTRACT, warnings)
-
-    def clear_preview_graph(self, paper_id: str) -> None:
+    async def clear_preview_graph(self, paper_id: str) -> None:
         """Clear the temporary preview graph for a specific paper pipeline."""
-        self._preview.clear(paper_id)
+        await self._preview.clear(paper_id)
 
-    def record_classify_warnings(self, paper_id: str, warnings: list[str]) -> None:
-        self._warnings.record(paper_id, WarningType.CLASSIFY, warnings)
+    async def save_preview_graph(self, paper_id: str, graph: UnifiedPaperGraph) -> None:
+        await self.ensure_paper_exists(paper_id)
+        await self._preview.save(paper_id, graph)
 
-    def get_classify_warnings(self, paper_id: str) -> list[str]:
-        return self._warnings.get(paper_id, WarningType.CLASSIFY)
+    async def mark_preview_available(self, paper_id: str) -> None:
+        await self.ensure_paper_exists(paper_id)
+        await self._preview.mark_available(paper_id)
 
-    def get_extract_warnings(self, paper_id: str) -> list[str]:
-        return self._warnings.get(paper_id, WarningType.EXTRACT)
+    async def is_preview_available(self, paper_id: str) -> bool:
+        return await self._preview.is_available(paper_id)
 
-    def save_preview_graph(self, paper_id: str, graph: UnifiedPaperGraph) -> None:
-        self.ensure_paper_exists(paper_id)
-        self._preview.save(paper_id, graph)
-
-    def mark_preview_available(self, paper_id: str) -> None:
-        self.ensure_paper_exists(paper_id)
-        self._preview.mark_available(paper_id)
-
-    def is_preview_available(self, paper_id: str) -> bool:
-        return self._preview.is_available(paper_id)
-
-    def get_preview_graph(self, paper_id: str) -> UnifiedPaperGraph | None:
-        return self._preview.get(paper_id)
+    async def get_preview_graph(self, paper_id: str) -> UnifiedPaperGraph | None:
+        return await self._preview.get(paper_id)
 
     async def get_status(self, paper_id: str) -> PaperStatusData:
         await self.bootstrap()
@@ -404,13 +387,13 @@ class PaperService:
         if paper.status in (PaperStatus.READY, PaperStatus.READY_WITH_WARNINGS):
             from backend.graph.store import GraphStore
 
-            graph = GraphStore().load(paper_id)
+            graph = await asyncio.to_thread(GraphStore().load, paper_id)
             if graph is None:
                 raise ApiError("GRAPH_NOT_READY", "图谱数据缺失", status_code=409)
             return graph
 
-        if paper.preview_available or self.is_preview_available(paper_id):
-            preview = self.get_preview_graph(paper_id)
+        if paper.preview_available or await self.is_preview_available(paper_id):
+            preview = await self.get_preview_graph(paper_id)
             if preview is not None:
                 return preview
 

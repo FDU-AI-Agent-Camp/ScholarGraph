@@ -75,7 +75,7 @@ async def test_upload_ready_survives_service_restart(
         "backend.services.rag_index_service.RagIndexService.index_paper_for_rag_async",
         new_callable=AsyncMock,
     ):
-        completion.finalize(
+        await completion.finalize(
             paper_id,
             graph_data=graph.model_dump(mode="json"),
             classification_data=classification.model_dump(mode="json"),
@@ -171,9 +171,9 @@ async def test_mid_pipeline_ephemeral_state_survives_crash_recovery(
             updated_at=datetime.now(UTC),
         ),
     )
-    service.save_preview_graph(paper_id, preview)
+    await service.save_preview_graph(paper_id, preview)
     service.set_active_run_id(paper_id, active_run_id)
-    service.mark_preview_available(paper_id)
+    await service.mark_preview_available(paper_id)
 
     persisted_preview = await pipeline_repo.get_preview_graph(paper_id)
     assert persisted_preview is not None
@@ -185,7 +185,7 @@ async def test_mid_pipeline_ephemeral_state_survives_crash_recovery(
     restarted = await restart_paper_service()
     assert restarted.get_active_run_id(paper_id) == active_run_id
 
-    loaded_preview = restarted.get_preview_graph(paper_id)
+    loaded_preview = await restarted.get_preview_graph(paper_id)
     assert loaded_preview is not None
     assert loaded_preview.paper_id == paper_id
     assert any(node.id == "n_preview" for node in loaded_preview.nodes)

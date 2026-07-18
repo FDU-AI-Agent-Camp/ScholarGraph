@@ -88,7 +88,7 @@ async def test_apply_is_idempotent_on_retry(
     await coordinator.apply(paper_id, **payload)
     await coordinator.apply(paper_id, **payload)
 
-    assert warning_service.get(paper_id, WarningType.HEAD_REFINE) == ["grobid_unavailable"]
+    assert await warning_service.get(paper_id, WarningType.HEAD_REFINE) == ["grobid_unavailable"]
     record = HeadStore(base_dir=tmp_path).load(paper_id)
     assert record is not None
     assert record.merged.title == "Retry Title"

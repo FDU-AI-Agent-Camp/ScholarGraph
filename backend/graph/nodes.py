@@ -97,7 +97,7 @@ async def wait_head_refine_node(state: WorkflowState) -> WorkflowState:
         fallback,
     )
     if warnings:
-        get_paper_warning_service().record(paper_id, WarningType.HEAD_REFINE, warnings)
+        await get_paper_warning_service().record(paper_id, WarningType.HEAD_REFINE, warnings)
 
     _mark_progress(state, stage=PipelineStage.HEAD_REFINING, message="文档头部精炼完成")
 
@@ -118,7 +118,7 @@ async def classify_node(state: WorkflowState) -> WorkflowState:
         return _failure_patch(exc, stage=PipelineStage.CLASSIFYING)
 
     if result.warnings:
-        get_paper_warning_service().record(paper_id, WarningType.CLASSIFY, result.warnings)
+        await get_paper_warning_service().record(paper_id, WarningType.CLASSIFY, result.warnings)
 
     classification = result.classification
     return _success_patch(
@@ -150,7 +150,7 @@ async def extract_node(state: WorkflowState) -> WorkflowState:
             return _failure_patch(exc, stage=PipelineStage.EXTRACTING)
 
         if result.warnings:
-            get_paper_warning_service().record(paper_id, WarningType.EXTRACT, result.warnings)
+            await get_paper_warning_service().record(paper_id, WarningType.EXTRACT, result.warnings)
 
         return _success_patch(
             stage=PipelineStage.EXTRACTING,
@@ -170,7 +170,7 @@ async def extract_node(state: WorkflowState) -> WorkflowState:
         return _failure_patch(exc, stage=PipelineStage.EXTRACTING)
 
     if result.warnings:
-        get_paper_warning_service().record(paper_id, WarningType.EXTRACT, result.warnings)
+        await get_paper_warning_service().record(paper_id, WarningType.EXTRACT, result.warnings)
 
     return _success_patch(
         stage=PipelineStage.EXTRACTING,
@@ -183,7 +183,7 @@ async def extract_node(state: WorkflowState) -> WorkflowState:
 async def store_node(state: WorkflowState) -> WorkflowState:
     _mark_progress(state, stage=PipelineStage.STORING, message="正在写入图谱存储")
     try:
-        _ = get_pipeline_completion_service().finalize(
+        _ = await get_pipeline_completion_service().finalize(
             state["paper_id"],
             graph_data=state["graph"],
             classification_data=state["classification"],

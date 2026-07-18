@@ -21,6 +21,7 @@ from backend.repositories.pipeline_repository import PipelineRepository
 from backend.schemas.graph import GraphEdge, GraphNode, UnifiedPaperGraph
 from backend.schemas.paper import PaperStatus, PaperStatusData, PipelineStage
 from backend.schemas.paradigm import Paradigm
+from backend.services.paper_warning_service import WarningType, get_paper_warning_service
 
 from tests.helpers.persistence_testkit import restart_paper_service
 
@@ -74,7 +75,9 @@ async def test_reextract_runs_pipeline_and_reaches_ready(
     await _register_ready_paper(paper_id, sample_pdf)
     service = await restart_paper_service()
 
-    service.record_extract_warnings(paper_id, [EXTRACT_LLM_TIMEOUT_CODE, EXTRACT_HEURISTIC_FALLBACK_CODE])
+    await get_paper_warning_service().record(
+        paper_id, WarningType.EXTRACT, [EXTRACT_LLM_TIMEOUT_CODE, EXTRACT_HEURISTIC_FALLBACK_CODE]
+    )
     stale_graph = UnifiedPaperGraph(
         paper_id=paper_id,
         paradigm=Paradigm.HSS,

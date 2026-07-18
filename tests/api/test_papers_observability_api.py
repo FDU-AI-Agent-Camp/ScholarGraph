@@ -13,6 +13,7 @@ from backend.main import app
 from backend.schemas.ingest_head import IngestHead
 from backend.schemas.paper import PaperDetail, PaperStatus, PipelineStage
 from backend.services.paper_service import get_paper_service
+from backend.services.paper_warning_service import WarningType, get_paper_warning_service
 from backend.services.pipeline_status_service import get_pipeline_status_service
 from httpx import ASGITransport, AsyncClient
 from tests.api.conftest import assert_success_envelope
@@ -67,8 +68,9 @@ async def test_status_api_head_refining_stage_and_percent(api_client: AsyncClien
 @pytest.mark.asyncio
 async def test_status_api_returns_head_refine_warnings_list(api_client: AsyncClient) -> None:
     paper_id = "hss-002"
-    get_paper_service().record_head_refine_warnings(
+    await get_paper_warning_service().record(
         paper_id,
+        WarningType.HEAD_REFINE,
         ["mineru_unavailable", "head_refine_timeout"],
     )
 

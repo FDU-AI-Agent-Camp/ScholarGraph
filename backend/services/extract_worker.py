@@ -67,7 +67,7 @@ async def _run_full_extraction(
         )
 
         graph = result.graph
-        completion_service.finalize(
+        await completion_service.finalize(
             paper_id,
             graph_data=graph.model_dump(mode="json"),
             classification_data=classification.model_dump(mode="json"),
