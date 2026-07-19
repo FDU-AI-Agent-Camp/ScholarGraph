@@ -280,9 +280,9 @@ class PaperService:
     async def force_reextract(self, paper_id: str, *, force: bool = False) -> PaperStatusData:
         """Escape hatch: reset and re-schedule the pipeline for ``paper_id``."""
         await self.ensure_paper_exists(paper_id)
-        from backend.services.reextract_service import force_reextract
+        from backend.services.reextract_service import get_reextract_service
 
-        return await force_reextract(self, paper_id, force=force)
+        return await get_reextract_service().force_reextract(paper_id, force=force)
 
     async def delete_paper(
         self,
@@ -298,9 +298,9 @@ class PaperService:
         # TODO: Phase 3 multi-tenancy auth guard
         # await self._assert_ownership(paper_id, auth_context)
         _ = auth_context
-        from backend.services.paper_delete_service import delete_paper
+        from backend.services.paper_delete_service import get_paper_delete_service
 
-        await delete_paper(self, paper_id, force=force)
+        await get_paper_delete_service().delete(paper_id, force=force)
 
     def fail_pipeline(
         self,

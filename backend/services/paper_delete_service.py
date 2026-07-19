@@ -7,24 +7,26 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from functools import lru_cache
 from pathlib import Path
-from typing import TYPE_CHECKING, Protocol, cast
+from typing import Protocol, cast
 
 from backend.api.exceptions import ApiError
 from backend.config import get_settings
 from backend.db.models import PAPER_OPS_OPERATION_DELETE
 from backend.graph.head_store import HeadStore
 from backend.graph.store import GraphStore
+from backend.repositories.paper_repository import PaperRepository, get_paper_repository
 from backend.schemas.paper import PaperStatus
 from backend.services.paper_ops_claim import (
     acquire_paper_ops_claim,
     release_paper_ops_claim,
 )
-from backend.services.paper_pipeline_ops import get_paper_pipeline_ops_service
+from backend.services.paper_pipeline_ops import (
+    PaperPipelineOpsService,
+    get_paper_pipeline_ops_service,
+)
 from backend.services.pipeline_task_registry import abort_in_flight_pipeline
-
-if TYPE_CHECKING:
-    from backend.services.paper_service import PaperService
 
 logger = logging.getLogger(__name__)
 
@@ -228,82 +230,97 @@ async def _purge_vector_index_hard(
         ) from exc
 
 
-async def delete_paper(
-    paper_service: PaperService,
-    paper_id: str,
-    *,
-    force: bool = False,
-    vector_store: _VectorStoreDelete | None = None,
-) -> None:
-    """Physically remove a paper and all RAG artefacts.
+class PaperDeleteService:
+    """First-class cascading delete use case (SQL + artefacts + Chroma + PDF)."""
 
-    Order (must not reverse):
-      1) abort in-flight tasks (after 409 gate)
-      2) Chroma ``delete_by_paper`` (hard-fail on unavailable; 404-class = ok)
-      3) GRAPH_DATA_DIR Zero-Footprint unlink (graph / head / sidecars) — hard-fail on residue
-      4) uploaded PDF — hard-fail on residue
-      5) SQL paper row (``pipeline_runs`` CASCADE)
+    def __init__(
+        self,
+        paper_repo: PaperRepository | None = None,
+        pipeline_ops: PaperPipelineOpsService | None = None,
+    ) -> None:
+        # Non-owner of PaperService._paper_repo capability: inject under a distinct name.
+        self._paper_repository = paper_repo or get_paper_repository()
+        self._pipeline_ops = pipeline_ops or get_paper_pipeline_ops_service()
 
-    Default blocks ``PROCESSING`` / ``INDEXING`` with 409; ``force=true`` aborts then cascades.
+    async def delete(
+        self,
+        paper_id: str,
+        *,
+        force: bool = False,
+        vector_store: _VectorStoreDelete | None = None,
+    ) -> None:
+        """Physically remove a paper and all RAG artefacts.
 
-    Concurrent wipe ops for the same ``paper_id`` (delete ∪ reextract) are rejected
-    with 409 via durable ``paper_ops_claims`` for the critical section duration.
-    """
-    paper = await paper_service._paper_repo.get(paper_id)
-    if paper is None:
-        raise ApiError("PAPER_NOT_FOUND", f"论文不存在: {paper_id}", status_code=404)
+        Order (must not reverse):
+          1) abort in-flight tasks (after 409 gate)
+          2) Chroma ``delete_by_paper`` (hard-fail on unavailable; 404-class = ok)
+          3) GRAPH_DATA_DIR Zero-Footprint unlink (graph / head / sidecars)
+          4) uploaded PDF — hard-fail on residue
+          5) SQL paper row (``pipeline_runs`` CASCADE)
 
-    if paper.status in _ACTIVE_PIPELINE_STATUSES and not force:
-        raise ApiError(
-            "PAPER_ALREADY_PROCESSING",
-            f"论文 {paper_id} 正在处理或构建索引中，请先取消或传 force=true 强行中止并删除",
-            status_code=409,
-        )
-
-    owner_token = await acquire_paper_ops_claim(paper_id, operation=PAPER_OPS_OPERATION_DELETE)
-    try:
-        from backend.rag.wipe_vector_sweep import (
-            extend_wipe_targets_after_abort,
-            schedule_wipe_wave2_sweep,
-            snapshot_wipe_target_run_ids,
-        )
-
-        wipe_targets = snapshot_wipe_target_run_ids(paper_id)
-        # Abort cancels Tasks / indexing revoke only — does not drop this claim.
-        await abort_in_flight_pipeline(paper_id)
-        wipe_targets = extend_wipe_targets_after_abort(paper_id, wipe_targets)
-
-        pdf_path_str = await paper_service._paper_repo.get_pdf_path(paper_id)
-        # Wave 1: immediate paper-wide Chroma purge (hard-fail if Chroma is down).
-        chroma_purged = await _purge_vector_index_hard(paper_id, vector_store=vector_store)
-        # Wave 2: delayed delete_run for revoked / prior active ids (late to_thread upserts).
-        schedule_wipe_wave2_sweep(paper_id, wipe_targets)
-
-        # Prefer glob wipe (covers HeadStore + future sidecars); keep explicit deletes for clarity.
-        graph_files_removed = await asyncio.to_thread(_purge_graph_dir_artefacts, paper_id)
-        await _delete_graph_stores(paper_id)
-        await get_paper_pipeline_ops_service().clear_ephemeral_pipeline_state(paper_id)
-        # PDF unlink is filesystem I/O; keep it off the event-loop thread.
-        pdf_removed = await asyncio.to_thread(_unlink_pdf, pdf_path_str)
-
-        deleted = await paper_service._paper_repo.delete(paper_id)
-        if not deleted:
+        Default blocks ``PROCESSING`` / ``INDEXING`` with 409; ``force=true`` aborts then cascades.
+        """
+        paper = await self._paper_repository.get(paper_id)
+        if paper is None:
             raise ApiError("PAPER_NOT_FOUND", f"论文不存在: {paper_id}", status_code=404)
 
-        logger.info(
-            "Cascade delete completed for paper_id=%s",
-            paper_id,
-            extra={
-                "paper_id": paper_id,
-                "force": force,
-                "details": {
-                    "chroma": chroma_purged,
-                    "graph_files": graph_files_removed,
-                    "pdf": pdf_removed,
-                    "sql": True,
-                    "wipe_wave2_runs": sorted(wipe_targets),
+        if paper.status in _ACTIVE_PIPELINE_STATUSES and not force:
+            raise ApiError(
+                "PAPER_ALREADY_PROCESSING",
+                f"论文 {paper_id} 正在处理或构建索引中，请先取消或传 force=true 强行中止并删除",
+                status_code=409,
+            )
+
+        owner_token = await acquire_paper_ops_claim(paper_id, operation=PAPER_OPS_OPERATION_DELETE)
+        try:
+            from backend.rag.wipe_vector_sweep import (
+                extend_wipe_targets_after_abort,
+                schedule_wipe_wave2_sweep,
+                snapshot_wipe_target_run_ids,
+            )
+
+            wipe_targets = snapshot_wipe_target_run_ids(paper_id)
+            # Abort cancels Tasks / indexing revoke only — does not drop this claim.
+            await abort_in_flight_pipeline(paper_id)
+            wipe_targets = extend_wipe_targets_after_abort(paper_id, wipe_targets)
+
+            pdf_path_str = await self._paper_repository.get_pdf_path(paper_id)
+            # Wave 1: immediate paper-wide Chroma purge (hard-fail if Chroma is down).
+            chroma_purged = await _purge_vector_index_hard(paper_id, vector_store=vector_store)
+            # Wave 2: delayed delete_run for revoked / prior active ids (late to_thread upserts).
+            schedule_wipe_wave2_sweep(paper_id, wipe_targets)
+
+            # Prefer glob wipe (covers HeadStore + future sidecars); keep explicit deletes for clarity.
+            graph_files_removed = await asyncio.to_thread(_purge_graph_dir_artefacts, paper_id)
+            await _delete_graph_stores(paper_id)
+            await self._pipeline_ops.clear_ephemeral_pipeline_state(paper_id)
+            # PDF unlink is filesystem I/O; keep it off the event-loop thread.
+            pdf_removed = await asyncio.to_thread(_unlink_pdf, pdf_path_str)
+
+            deleted = await self._paper_repository.delete(paper_id)
+            if not deleted:
+                raise ApiError("PAPER_NOT_FOUND", f"论文不存在: {paper_id}", status_code=404)
+
+            logger.info(
+                "Cascade delete completed for paper_id=%s",
+                paper_id,
+                extra={
+                    "paper_id": paper_id,
+                    "force": force,
+                    "details": {
+                        "chroma": chroma_purged,
+                        "graph_files": graph_files_removed,
+                        "pdf": pdf_removed,
+                        "sql": True,
+                        "wipe_wave2_runs": sorted(wipe_targets),
+                    },
                 },
-            },
-        )
-    finally:
-        await release_paper_ops_claim(paper_id, owner_token)
+            )
+        finally:
+            await release_paper_ops_claim(paper_id, owner_token)
+
+
+@lru_cache
+def get_paper_delete_service() -> PaperDeleteService:
+    """Return the process-wide cascading delete service."""
+    return PaperDeleteService()
