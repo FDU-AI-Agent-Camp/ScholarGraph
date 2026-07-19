@@ -56,7 +56,8 @@ uv run python scripts/compare_async_hotpath_benchmarks.py \
 ```
 
 设计说明见 `docs/superpowers/specs/2026-07-19-async-hotpath-benchmark-design.md`。  
-HTTP 复测：`scripts/run_async_hotpath_benchmark_matrix.py --layers http --candidate-working-tree`。
+HTTP 复测：`scripts/run_async_hotpath_benchmark_matrix.py --layers http --candidate-working-tree`。  
+**合并前本地手工门禁**：见 [`docs/performance/async-hotpath-local-gate.md`](async-hotpath-local-gate.md)（不进默认 CI / 无 ChatOps）。
 
 ### 5. 事件循环阻塞度（diskio 层：`get_graph` + `delete_paper`）
 

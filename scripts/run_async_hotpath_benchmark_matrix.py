@@ -27,9 +27,11 @@ import tempfile
 from pathlib import Path
 
 BASELINE_COMMIT = "e847cc0"
-CANDIDATE_COMMIT = "c349175"
+# Candidate tip is overridden by CLI in CI/ChatOps; keep a documented default for local runs.
+CANDIDATE_COMMIT = "HEAD"
 RUNNER_NAME = "benchmark_async_hotpath.py"
 COMPARE_NAME = "compare_async_hotpath_benchmarks.py"
+AUDIT_NAME = "audit_async_thread_trail.py"
 
 DEFAULT_FINALIZE = {
     "concurrency": (1, 10, 25, 50, 100),
@@ -176,6 +178,21 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         action="store_true",
         help="run candidate cells from the repo working tree (includes uncommitted fixes)",
     )
+    parser.add_argument(
+        "--baseline-commit",
+        default=BASELINE_COMMIT,
+        help=f"baseline git commit / ref (default {BASELINE_COMMIT})",
+    )
+    parser.add_argument(
+        "--candidate-commit",
+        default=CANDIDATE_COMMIT,
+        help="candidate git commit / ref when not using --candidate-working-tree (default HEAD)",
+    )
+    parser.add_argument(
+        "--output-md",
+        default="",
+        help="comparison markdown path (default: docs/performance/async-hotpath-benchmark.md)",
+    )
     return parser.parse_args(argv)
 
 
@@ -184,22 +201,25 @@ def main(argv: list[str] | None = None) -> int:
     repo_root = _repo_root()
     worktree_root = Path(args.worktree_root) if args.worktree_root else Path(tempfile.gettempdir()) / "sg-hotpath-wt"
     worktree_root.mkdir(parents=True, exist_ok=True)
+
+    baseline_commit = _resolve_commit(args.baseline_commit, repo_root)
     baseline_wt = worktree_root / "bench-baseline"
-    _ensure_worktree(baseline_wt, BASELINE_COMMIT, repo_root)
+    _ensure_worktree(baseline_wt, baseline_commit, repo_root)
     baseline_runner = _install_runner(baseline_wt, repo_root)
 
     if args.candidate_working_tree:
         candidate_wt = repo_root
         candidate_runner = repo_root / "scripts" / RUNNER_NAME
         candidate_commit = subprocess.check_output(
-            ["git", "rev-parse", "--short", "HEAD"], cwd=repo_root, text=True,
+            ["git", "rev-parse", "HEAD"], cwd=repo_root, text=True,
         ).strip()
-        print(f"candidate = working tree @ {candidate_commit} ({repo_root})")
+        print(f"candidate = working tree @ {candidate_commit[:12]} ({repo_root})")
     else:
+        candidate_commit = _resolve_commit(args.candidate_commit, repo_root)
         candidate_wt = worktree_root / "bench-candidate"
-        _ensure_worktree(candidate_wt, CANDIDATE_COMMIT, repo_root)
+        _ensure_worktree(candidate_wt, candidate_commit, repo_root)
         candidate_runner = _install_runner(candidate_wt, repo_root)
-        candidate_commit = CANDIDATE_COMMIT
+        print(f"candidate = worktree @ {candidate_commit[:12]} ({candidate_wt})")
 
     python = _python_for(candidate_wt, repo_root)
 
@@ -228,7 +248,7 @@ def main(argv: list[str] | None = None) -> int:
     affinity = None if args.no_affinity else args.affinity_core
 
     revisions = (
-        ("baseline", BASELINE_COMMIT, baseline_wt, baseline_runner),
+        ("baseline", baseline_commit, baseline_wt, baseline_runner),
         ("candidate", candidate_commit, candidate_wt, candidate_runner),
     )
 
@@ -257,6 +277,13 @@ def main(argv: list[str] | None = None) -> int:
 
     if not args.skip_aggregate:
         compare = repo_root / "scripts" / COMPARE_NAME
+        output_md = (
+            Path(args.output_md)
+            if args.output_md
+            else (output_dir / "comparison.md")
+        )
+        if not output_md.is_absolute():
+            output_md = repo_root / output_md
         _run(
             [
                 str(python),
@@ -266,12 +293,21 @@ def main(argv: list[str] | None = None) -> int:
                 "--output-json",
                 str(output_dir / "comparison.json"),
                 "--output-md",
-                str(repo_root / "docs" / "performance" / "async-hotpath-benchmark.md"),
+                str(output_md),
             ],
             cwd=repo_root,
         )
     print(f"raw outputs: {raw_dir}")
     return 0
+
+
+def _resolve_commit(ref: str, repo_root: Path) -> str:
+    """Resolve a ref to a full commit hash (supports HEAD / short / tag)."""
+    return subprocess.check_output(
+        ["git", "rev-parse", ref],
+        cwd=repo_root,
+        text=True,
+    ).strip()
 
 
 if __name__ == "__main__":
