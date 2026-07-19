@@ -211,7 +211,9 @@ def main(argv: list[str] | None = None) -> int:
         candidate_wt = repo_root
         candidate_runner = repo_root / "scripts" / RUNNER_NAME
         candidate_commit = subprocess.check_output(
-            ["git", "rev-parse", "HEAD"], cwd=repo_root, text=True,
+            ["git", "rev-parse", "HEAD"],
+            cwd=repo_root,
+            text=True,
         ).strip()
         print(f"candidate = working tree @ {candidate_commit[:12]} ({repo_root})")
     else:
@@ -277,11 +279,7 @@ def main(argv: list[str] | None = None) -> int:
 
     if not args.skip_aggregate:
         compare = repo_root / "scripts" / COMPARE_NAME
-        output_md = (
-            Path(args.output_md)
-            if args.output_md
-            else (output_dir / "comparison.md")
-        )
+        output_md = Path(args.output_md) if args.output_md else (output_dir / "comparison.md")
         if not output_md.is_absolute():
             output_md = repo_root / output_md
         _run(

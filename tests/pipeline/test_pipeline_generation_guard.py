@@ -237,9 +237,7 @@ async def test_obsolete_run_id_write_blocked(gen_guard_db, monkeypatch: pytest.M
         "backend.rag.wipe_vector_sweep.schedule_wipe_wave2_sweep",
         _spy_wave2,
     )
-    snapshot = await get_reextract_service().force_reextract(
-        paper_id, force=True, vector_store=vector_store
-    )
+    snapshot = await get_reextract_service().force_reextract(paper_id, force=True, vector_store=vector_store)
     assert snapshot.status == PaperStatus.PENDING
     assert scheduled and scheduled[0][0] == paper_id
     assert vector_store.deleted == [paper_id]
