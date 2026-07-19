@@ -283,7 +283,8 @@ async def delete_paper(
         graph_files_removed = await asyncio.to_thread(_purge_graph_dir_artefacts, paper_id)
         await _delete_graph_stores(paper_id)
         await get_paper_pipeline_ops_service().clear_ephemeral_pipeline_state(paper_id)
-        pdf_removed = _unlink_pdf(pdf_path_str)
+        # PDF unlink is filesystem I/O; keep it off the event-loop thread.
+        pdf_removed = await asyncio.to_thread(_unlink_pdf, pdf_path_str)
 
         deleted = await paper_service._paper_repo.delete(paper_id)
         if not deleted:
