@@ -58,6 +58,53 @@ uv run python scripts/compare_async_hotpath_benchmarks.py \
 设计说明见 `docs/superpowers/specs/2026-07-19-async-hotpath-benchmark-design.md`。  
 HTTP 复测：`scripts/run_async_hotpath_benchmark_matrix.py --layers http --candidate-working-tree`。
 
+### 5. 事件循环阻塞度（diskio 层：`get_graph` + `delete_paper`）
+
+验证手段与设计一致：在负载期间挂载 `LoopLagProbe`（等价于用户给出的 `monitor_loop_lag`），统计唤醒延迟；可选 `--lag-warnings` 在 lag>20 ms 时向 stderr 打印「幽灵阻塞」警告。
+
+**自然负载矩阵**（未放大磁盘延迟；本机缓存命中下单次图谱 JSON 读写约 1–2 ms）：
+
+| 并发 | baseline lag>20ms | candidate lag>20ms | baseline lag_max | candidate lag_max |
+|---|---|---|---|---|
+| c=1 | **134** | **37** | 995 ms | 839 ms |
+| c=5 | 143 | 110 | 729 ms | 2136 ms† |
+| c=10 | 33 | 48 | 42 ms | 402 ms† |
+| c=25 | 44 | 43 | 89 ms | 151 ms |
+
+† 高并发下 candidate 偶发尖峰主要来自线程池/GIL/主机噪声，**不是** finalize 层那种 14 s 级 `run_async` 饿死；两侧都未再现 finalize 的整批心跳死亡。
+
+**关键结论：**
+
+1. 本机「热缓存 + 小 JSON」的同步 `GraphStore.load` **不足以稳定超过 20 ms**，因此自然负载下控制台不会「高频刷屏」——这与用户假说中「慢磁盘 I/O」场景不同。  
+2. 低并发冷启动时 baseline 的 `lag>20ms` 仍显著更多（c=1: 134 vs 37），与 delete 路径残留 `run_async` / 同步清盘一致。  
+3. 已清除 candidate 上最后一处热路径同步删盘：`_unlink_pdf` → `await asyncio.to_thread(...)`。  
+4. **受控慢磁盘对照**（`--amplify-sync-io-ms 50`，仅放大 `GraphStore.load/delete` 的同步体，两修订注入相同）：
+
+| 场景 | baseline | candidate |
+|---|---|---|
+| get_graph-only ×30 | **warn 30/30**, lag_max≈73 ms, `to_thread=False` | **warn 3/30**, lag_max≈26 ms（定时器噪声） |
+| mixed get_graph+delete ×40 | **warn 40/40** | warn 14/40（delete 路径仍含 SQL/主机抖动） |
+
+→ 当磁盘体真的变慢时：baseline 同步 I/O 跑在主循环上，控制台按 op 刷警告；candidate 把同一段 sleep/I/O 放进 `to_thread`，主循环保持敏捷。这正是用户判定标准要证明的架构差异。
+
+复现：
+
+```bash
+# 自然矩阵
+uv run python scripts/run_async_hotpath_benchmark_matrix.py \
+  --layers diskio --busy-timeout-s 5 --no-affinity --candidate-working-tree \
+  --output-dir data/benchmarks/async-hotpath-diskio
+
+# 受控慢磁盘 + 控制台警告
+uv run python scripts/benchmark_async_hotpath.py \
+  --layer diskio --concurrency 1 --operations 40 --warmup 6 \
+  --repetition 0 --label candidate --expect-commit HEAD \
+  --amplify-sync-io-ms 50 --lag-warnings --no-affinity \
+  --output data/benchmarks/async-hotpath-diskio/demo-amplified/candidate-c1.json
+```
+
+原始表见 `data/benchmarks/async-hotpath-diskio/comparison.md`。
+
 ---
 
 ## Raw cell tables

@@ -263,6 +263,9 @@ def _summarize_label(docs: list[dict[str, Any]], *, n_resamples: int, seed: int,
         "loop_lag_ms": {
             "p99": percentile(lag_pooled, 99) if lag_pooled else 0.0,
             "max": lag_pooled[-1] if lag_pooled else 0.0,
+            "over_20ms": sum(1 for sample in lag_pooled if sample > 20.0),
+            "over_100ms": sum(1 for sample in lag_pooled if sample > 100.0),
+            "sample_count": len(lag_pooled),
         },
         "drain_s": {
             "mean": statistics.fmean(doc["results"]["drain_s"] for doc in docs),
@@ -379,9 +382,10 @@ def render_markdown(comparison: dict[str, Any], documents: list[dict[str, Any]],
         lines.append(f"## {cell['layer']} @ concurrency {cell['concurrency']}")
         lines.append("")
         lines.append(
-            "| label | QPS (mean, CI95) | P50 ms | P95 ms | P99 ms (CI95) | loop lag P99/max ms | errors | locked |"
+            "| label | QPS (mean, CI95) | P50 ms | P95 ms | P99 ms (CI95) | "
+            "loop lag P99/max ms | lag>20ms | lag>100ms | errors | locked |"
         )
-        lines.append("|---|---|---|---|---|---|---|---|")
+        lines.append("|---|---|---|---|---|---|---|---|---|---|")
         for label, summary in sorted(cell["labels"].items()):
             latency = summary["latency"]
             qps = summary["qps"]
@@ -391,6 +395,7 @@ def render_markdown(comparison: dict[str, Any], documents: list[dict[str, Any]],
                 f"| {latency['p50_ms']:.1f} | {latency['p95_ms']:.1f} "
                 f"| {latency['p99_ms']:.1f} {_format_ci(latency['ci95']['p99_ms'])} "
                 f"| {lag['p99']:.1f} / {lag['max']:.1f} "
+                f"| {lag.get('over_20ms', 0)} | {lag.get('over_100ms', 0)} "
                 f"| {summary['error_count']} | {summary['database_locked_count']} |",
             )
         lines.append("")
@@ -422,6 +427,14 @@ def render_markdown(comparison: dict[str, Any], documents: list[dict[str, Any]],
                 lines.append(
                     "- note: baseline ghost-sync keeps per-op P99 flat by freezing the loop; "
                     "loop-lag is the primary success metric for this cell",
+                )
+            if cell["layer"] == "diskio":
+                base_over = base_lag.get("over_20ms", 0)
+                cand_over = cand_lag.get("over_20ms", 0)
+                lines.append(
+                    f"- diskio lag>20ms counts: baseline={base_over}, candidate={cand_over} "
+                    "(natural tiny-JSON I/O is often <20ms when OS-cached; use "
+                    "`--amplify-sync-io-ms` for a controlled slow-disk console verdict)",
                 )
             lines.append("")
     return "\n".join(lines) + "\n"

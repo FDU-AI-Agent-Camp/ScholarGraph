@@ -18,6 +18,7 @@ if str(_REPO_ROOT) not in sys.path:
 
 from scripts.benchmark_async_hotpath import (  # noqa: E402
     LoopLagProbe,
+    _build_mixed_diskio_ops,
     classify_error,
     percentile,
     run_bounded,
@@ -174,6 +175,48 @@ class TestBootstrap:
         assert high == pytest.approx(0.5, abs=0.05)
 
 
+class TestDiskioOpsBuilder:
+    def test_mixed_ops_alternate_read_and_delete(self) -> None:
+        calls: list[tuple[str, str]] = []
+
+        class _FakePaperService:
+            async def get_graph(self, paper_id: str) -> object:
+                calls.append(("get_graph", paper_id))
+
+                class _Graph:
+                    def __init__(self, pid: str) -> None:
+                        self.paper_id = pid
+
+                return _Graph(paper_id)
+
+            async def delete_paper(self, paper_id: str, *, force: bool = False) -> None:
+                assert force is True
+                calls.append(("delete_paper", paper_id))
+
+        ops = _build_mixed_diskio_ops(
+            paper_service=_FakePaperService(),
+            read_ids=["r0", "r1"],
+            delete_ids=["d0", "d1", "d2"],
+            operations=5,
+        )
+        assert len(ops) == 5
+
+        async def _run_all() -> None:
+            for op in ops:
+                await op()
+
+        asyncio.run(_run_all())
+        assert [kind for kind, _ in calls] == [
+            "get_graph",
+            "delete_paper",
+            "get_graph",
+            "delete_paper",
+            "get_graph",
+        ]
+        assert calls[1][1] == "d0"
+        assert calls[3][1] == "d1"
+
+
 class TestFingerprintGuard:
     @staticmethod
     def _doc(label: str, operations: int) -> dict:
@@ -190,6 +233,7 @@ class TestFingerprintGuard:
                 "op_timeout_s": 120.0,
                 "busy_timeout_s": 5,
                 "heartbeat_interval_s": 0.005,
+                "amplify_sync_io_ms": 0.0,
             },
             "env_fingerprint": {"python": "3.12", "platform": "test", "cpu_count": 8, "affinity": "core0"},
         }

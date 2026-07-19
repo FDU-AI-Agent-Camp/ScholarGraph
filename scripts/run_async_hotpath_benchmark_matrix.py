@@ -13,6 +13,7 @@ reduced because residual ``run_async`` + SQLite write locks saturate above ~10):
 
     finalize: concurrency 1/10/25/50/100, 500 ops, 50 warmup, 5 reps
     http:     concurrency 1/5/10,        100 ops, 10 warmup, 3 reps
+    diskio:   concurrency 1/5/10/25,     200 ops, 20 warmup, 3 reps
 """
 
 from __future__ import annotations
@@ -26,7 +27,7 @@ import tempfile
 from pathlib import Path
 
 BASELINE_COMMIT = "e847cc0"
-CANDIDATE_COMMIT = "3a8c661"
+CANDIDATE_COMMIT = "c349175"
 RUNNER_NAME = "benchmark_async_hotpath.py"
 COMPARE_NAME = "compare_async_hotpath_benchmarks.py"
 
@@ -40,6 +41,12 @@ DEFAULT_HTTP = {
     "concurrency": (1, 5, 10),
     "operations": 100,
     "warmup": 10,
+    "repetitions": 3,
+}
+DEFAULT_DISKIO = {
+    "concurrency": (1, 5, 10, 25),
+    "operations": 200,
+    "warmup": 20,
     "repetitions": 3,
 }
 
@@ -202,13 +209,22 @@ def main(argv: list[str] | None = None) -> int:
     raw_dir = output_dir / "raw"
     raw_dir.mkdir(parents=True, exist_ok=True)
 
-    finalize = dict(DEFAULT_FINALIZE)
-    http = dict(DEFAULT_HTTP)
+    matrices = {
+        "finalize": dict(DEFAULT_FINALIZE),
+        "http": dict(DEFAULT_HTTP),
+        "diskio": dict(DEFAULT_DISKIO),
+    }
     if args.quick:
-        finalize = {"concurrency": (1, 10), "operations": 30, "warmup": 5, "repetitions": 2}
-        http = {"concurrency": (1, 5), "operations": 20, "warmup": 3, "repetitions": 2}
+        matrices = {
+            "finalize": {"concurrency": (1, 10), "operations": 30, "warmup": 5, "repetitions": 2},
+            "http": {"concurrency": (1, 5), "operations": 20, "warmup": 3, "repetitions": 2},
+            "diskio": {"concurrency": (1, 5, 10), "operations": 40, "warmup": 6, "repetitions": 2},
+        }
 
     layers = [layer.strip() for layer in args.layers.split(",") if layer.strip()]
+    unknown = [layer for layer in layers if layer not in matrices]
+    if unknown:
+        raise SystemExit(f"unknown layers: {unknown}; expected one of {sorted(matrices)}")
     affinity = None if args.no_affinity else args.affinity_core
 
     revisions = (
@@ -217,7 +233,7 @@ def main(argv: list[str] | None = None) -> int:
     )
 
     for layer in layers:
-        matrix = finalize if layer == "finalize" else http
+        matrix = matrices[layer]
         for concurrency in matrix["concurrency"]:
             # Alternate revision order per repetition to reduce host-noise bias.
             for repetition in range(matrix["repetitions"]):

@@ -13,6 +13,9 @@ Layers:
   pre-seeded papers with the official RAG handler replaced by an async no-op.
 - ``http``: concurrent ``POST /api/v1/papers/{id}/reextract`` via httpx ASGI
   transport with abort / vector purge / pipeline scheduling stubbed.
+- ``diskio``: mixed ``get_graph`` (disk read) + ``delete_paper`` (disk wipe)
+  under a live ``LoopLagProbe``; vector purge / abort / wipe-sweep stubbed so
+  the measured boundary is SQL + graph/PDF filesystem I/O.
 
 Usage (from the worktree root)::
 
@@ -46,6 +49,11 @@ DEFAULT_OP_TIMEOUT_S = 120.0
 DEFAULT_AFFINITY_CORE = 0
 _MINIMAL_PDF_BYTES = b"%PDF-1.4\n1 0 obj<</Type/Catalog>>endobj\ntrailer<</Root 1 0 R>>\n%%EOF\n"
 _BENCH_FULL_TEXT = "Benchmark full text body. " * 8
+# Inflate on-disk graph JSON so sync GraphStore.load/delete is visible as loop lag.
+_DISKIO_GRAPH_NODE_COUNT = 48
+_DISKIO_SUMMARY_PAD = "Disk IO benchmark payload block. " * 256
+_LAG_WARN_THRESHOLD_MS = 20.0
+_LAG_CRITICAL_THRESHOLD_MS = 100.0
 
 # ---------------------------------------------------------------------------
 # Pure helpers (unit-tested; no backend imports at module level)
@@ -87,11 +95,21 @@ class LoopLagProbe:
     deadline the loop actually woke up. The next deadline starts from the
     actual wake-up, so a single long stall contributes one large sample
     instead of contaminating every following sample.
+
+    When ``warn_threshold_ms`` is set, stalls above that threshold emit a
+    stderr warning (the user's "幽灵阻塞" console signal).
     """
 
-    def __init__(self, interval_s: float = HEARTBEAT_INTERVAL_S) -> None:
+    def __init__(
+        self,
+        interval_s: float = HEARTBEAT_INTERVAL_S,
+        *,
+        warn_threshold_ms: float | None = None,
+    ) -> None:
         self._interval_s = interval_s
+        self._warn_threshold_ms = warn_threshold_ms
         self._samples_ms: list[float] = []
+        self._warning_count = 0
         self._task: asyncio.Task[None] | None = None
         self._stopped = False
 
@@ -99,9 +117,14 @@ class LoopLagProbe:
     def samples_ms(self) -> list[float]:
         return list(self._samples_ms)
 
+    @property
+    def warning_count(self) -> int:
+        return self._warning_count
+
     def start(self) -> None:
         self._stopped = False
         self._samples_ms = []
+        self._warning_count = 0
         self._task = asyncio.get_running_loop().create_task(self._run(), name="loop-lag-probe")
 
     async def stop(self) -> list[float]:
@@ -117,7 +140,15 @@ class LoopLagProbe:
             before = loop.time()
             await asyncio.sleep(self._interval_s)
             lag_s = (loop.time() - before) - self._interval_s
-            self._samples_ms.append(max(0.0, lag_s) * 1000.0)
+            lag_ms = max(0.0, lag_s) * 1000.0
+            self._samples_ms.append(lag_ms)
+            if self._warn_threshold_ms is not None and lag_ms > self._warn_threshold_ms:
+                self._warning_count += 1
+                print(
+                    f"WARNING: ghost-block detected — event-loop lag {lag_ms:.2f} ms",
+                    file=sys.stderr,
+                    flush=True,
+                )
 
 
 @dataclass
@@ -300,29 +331,58 @@ async def _create_schema_and_assert_wal() -> dict[str, Any]:
     }
 
 
-def _build_bench_graph(paper_id: str) -> Any:
+def _build_bench_graph(paper_id: str, *, heavy: bool = False) -> Any:
     from backend.schemas.graph import GraphEdge, GraphNode, UnifiedPaperGraph
     from backend.schemas.paradigm import Paradigm
 
+    if not heavy:
+        return UnifiedPaperGraph(
+            paper_id=paper_id,
+            title="async hot-path benchmark",
+            paradigm=Paradigm.STEM,
+            nodes=[
+                GraphNode(id="n1", label="Benchmark node A", type="Method"),
+                GraphNode(id="n2", label="Benchmark node B", type="Method"),
+            ],
+            edges=[
+                GraphEdge(
+                    id="e1",
+                    source="n1",
+                    target="n2",
+                    label="supports",
+                    type="SUPPORTS",
+                    rationale="Deterministic benchmark support edge with explicit rationale.",
+                ),
+            ],
+            summary="benchmark graph",
+        )
+
+    nodes = [
+        GraphNode(
+            id=f"n{index}",
+            label=f"DiskIO node {index} " + ("payload-" * 8),
+            type="Method",
+        )
+        for index in range(_DISKIO_GRAPH_NODE_COUNT)
+    ]
+    edges = [
+        GraphEdge(
+            id=f"e{index}",
+            source=f"n{index}",
+            target=f"n{(index + 1) % _DISKIO_GRAPH_NODE_COUNT}",
+            label="supports",
+            type="SUPPORTS",
+            rationale="Deterministic diskio edge with enough text to enlarge the JSON file.",
+        )
+        for index in range(_DISKIO_GRAPH_NODE_COUNT)
+    ]
     return UnifiedPaperGraph(
         paper_id=paper_id,
-        title="async hot-path benchmark",
+        title="async hot-path diskio benchmark",
         paradigm=Paradigm.STEM,
-        nodes=[
-            GraphNode(id="n1", label="Benchmark node A", type="Method"),
-            GraphNode(id="n2", label="Benchmark node B", type="Method"),
-        ],
-        edges=[
-            GraphEdge(
-                id="e1",
-                source="n1",
-                target="n2",
-                label="supports",
-                type="SUPPORTS",
-                rationale="Deterministic benchmark support edge with explicit rationale.",
-            ),
-        ],
-        summary="benchmark graph",
+        nodes=nodes,
+        edges=edges,
+        summary=_DISKIO_SUMMARY_PAD,
     )
 
 
@@ -426,6 +486,26 @@ def _make_matching_stub(original: Any) -> Any:
     return _sync_stub
 
 
+def _install_wipe_vector_sweep_stubs() -> list[str]:
+    """Optional wipe-sweep stubs shared by HTTP reextract and diskio delete."""
+    try:
+        import backend.rag.wipe_vector_sweep as sweep_module
+    except Exception:
+        return ["backend.rag.wipe_vector_sweep (module missing)"]
+    optional_skipped: list[str] = []
+    optional = {
+        "snapshot_wipe_target_run_ids": lambda _paper_id: [],
+        "extend_wipe_targets_after_abort": lambda _paper_id, targets: targets,
+        "schedule_wipe_wave2_sweep": lambda _paper_id, _targets: None,
+    }
+    for name, replacement in optional.items():
+        if hasattr(sweep_module, name):
+            setattr(sweep_module, name, replacement)
+        else:
+            optional_skipped.append(f"backend.rag.wipe_vector_sweep.{name}")
+    return optional_skipped
+
+
 def _install_reextract_stubs() -> list[str]:
     """Stub abort / vector purge / scheduling by name; fail loudly if absent."""
     import backend.services.reextract_service as reextract_module
@@ -439,23 +519,80 @@ def _install_reextract_stubs() -> list[str]:
                 "HTTP layer cannot be stubbed without changing the measured boundary",
             )
         setattr(reextract_module, name, _make_matching_stub(original))
+    return _install_wipe_vector_sweep_stubs()
 
-    optional_skipped: list[str] = []
-    try:
-        import backend.rag.wipe_vector_sweep as sweep_module
-    except Exception:
-        return ["backend.rag.wipe_vector_sweep (module missing)"]
-    optional = {
-        "snapshot_wipe_target_run_ids": lambda _paper_id: [],
-        "extend_wipe_targets_after_abort": lambda _paper_id, targets: targets,
-        "schedule_wipe_wave2_sweep": lambda _paper_id, _targets: None,
-    }
-    for name, replacement in optional.items():
-        if hasattr(sweep_module, name):
-            setattr(sweep_module, name, replacement)
+
+def _install_delete_stubs() -> list[str]:
+    """Stub abort / vector purge so diskio measures SQL + graph/PDF filesystem I/O."""
+    import backend.services.paper_delete_service as delete_module
+
+    required = ["abort_in_flight_pipeline", "_purge_vector_index_hard"]
+    for name in required:
+        original = getattr(delete_module, name, None)
+        if original is None:
+            raise IncompatibleRevisionError(
+                f"backend.services.paper_delete_service.{name} missing in this revision; "
+                "diskio layer cannot be stubbed without changing the measured boundary",
+            )
+        if name == "_purge_vector_index_hard":
+            if inspect.iscoroutinefunction(original):
+
+                async def _purge_stub(*_args: Any, **_kwargs: Any) -> bool:
+                    return False
+
+                setattr(delete_module, name, _purge_stub)
+            else:
+
+                def _purge_stub_sync(*_args: Any, **_kwargs: Any) -> bool:
+                    return False
+
+                setattr(delete_module, name, _purge_stub_sync)
         else:
-            optional_skipped.append(f"backend.rag.wipe_vector_sweep.{name}")
-    return optional_skipped
+            setattr(delete_module, name, _make_matching_stub(original))
+    return _install_wipe_vector_sweep_stubs()
+
+
+def _install_sync_io_amplifier(delay_ms: float) -> list[str]:
+    """Inject identical sync stalls into GraphStore load/delete for both revisions.
+
+    Tiny cached JSON reads finish in ~1–2 ms on this host and cannot trip the
+    20 ms console threshold. Amplifying the sync body makes the architectural
+    difference visible: baseline runs the stall on the event-loop thread;
+    candidate runs the same stall inside ``asyncio.to_thread``.
+    """
+    if delay_ms <= 0:
+        return []
+    from backend.graph.store import GraphStore
+
+    delay_s = delay_ms / 1000.0
+    original_load = GraphStore.load
+    original_delete = GraphStore.delete
+
+    def _amplified_load(self: Any, paper_id: str) -> Any:
+        time.sleep(delay_s)
+        return original_load(self, paper_id)
+
+    def _amplified_delete(self: Any, paper_id: str) -> Any:
+        time.sleep(delay_s)
+        return original_delete(self, paper_id)
+
+    GraphStore.load = _amplified_load  # type: ignore[method-assign]
+    GraphStore.delete = _amplified_delete  # type: ignore[method-assign]
+    return [f"GraphStore.load/delete amplified by sync sleep {delay_ms:.1f}ms"]
+
+
+async def _seed_ready_papers_with_graphs(
+    paper_ids: list[str],
+    *,
+    pdf_path: str,
+) -> None:
+    """Seed READY papers and persist heavy graph JSON files under GRAPH_DATA_DIR."""
+    from backend.graph.store import GraphStore
+
+    await _seed_papers(paper_ids, status_name="ready", pdf_path=pdf_path)
+    store = GraphStore()
+    for paper_id in paper_ids:
+        store.save(_build_bench_graph(paper_id, heavy=True))
 
 
 async def _run_finalize_layer(args: argparse.Namespace, workdir: Path) -> dict[str, Any]:
@@ -565,6 +702,115 @@ async def _run_http_layer(args: argparse.Namespace, workdir: Path) -> dict[str, 
     return _build_results_payload(results, elapsed_s, drain_s, lag_samples_ms, wal_info, stub_notes=stub_notes)
 
 
+def _build_mixed_diskio_ops(
+    *,
+    paper_service: Any,
+    read_ids: list[str],
+    delete_ids: list[str],
+    operations: int,
+) -> list[Callable[[], Awaitable[None]]]:
+    """Alternate get_graph (reusable read pool) and delete_paper (one-shot ids)."""
+    if not read_ids:
+        raise ValueError("diskio read pool must be non-empty")
+    n_delete = operations // 2
+    if len(delete_ids) < n_delete:
+        raise ValueError(f"need {n_delete} delete papers, got {len(delete_ids)}")
+
+    ops: list[Callable[[], Awaitable[None]]] = []
+    delete_index = 0
+    for index in range(operations):
+        if index % 2 == 1 and delete_index < n_delete:
+            paper_id = delete_ids[delete_index]
+            delete_index += 1
+
+            def make_delete(target_id: str = paper_id) -> Callable[[], Awaitable[None]]:
+                async def op() -> None:
+                    await paper_service.delete_paper(target_id, force=True)
+
+                return op
+
+            ops.append(make_delete())
+        else:
+            paper_id = read_ids[index % len(read_ids)]
+
+            def make_read(target_id: str = paper_id) -> Callable[[], Awaitable[None]]:
+                async def op() -> None:
+                    graph = await paper_service.get_graph(target_id)
+                    if graph is None or getattr(graph, "paper_id", None) != target_id:
+                        raise RuntimeError("get_graph returned unexpected payload")
+
+                return op
+
+            ops.append(make_read())
+    return ops
+
+
+async def _run_diskio_layer(args: argparse.Namespace, workdir: Path) -> dict[str, Any]:
+    """Mixed get_graph + delete_paper under LoopLagProbe (primary success = quiet loop)."""
+    from backend.repositories.async_bridge import register_main_event_loop
+    from backend.services.paper_service import get_paper_service
+
+    register_main_event_loop(asyncio.get_running_loop())
+    pool_info = _tune_engine_defaults(args.concurrency, args.busy_timeout_s)
+    wal_info = await _create_schema_and_assert_wal()
+    wal_info.update(pool_info)
+    stub_notes = _install_delete_stubs()
+    stub_notes.extend(_install_sync_io_amplifier(args.amplify_sync_io_ms))
+
+    upload_dir = Path(os.environ["UPLOAD_DIR"])
+    shared_pdf = upload_dir / "bench-diskio.pdf"
+    shared_pdf.write_bytes(_MINIMAL_PDF_BYTES)
+
+    prefix = f"bench-dio-c{args.concurrency}-r{args.repetition}"
+    # Reusable read pool stays alive; delete pool is one-shot (odd slots).
+    read_pool_size = max(args.concurrency * 2, 16)
+    warmup_delete_count = args.warmup // 2
+    measured_delete_count = args.operations // 2
+    read_ids = [f"{prefix}-read-{i:04d}" for i in range(read_pool_size)]
+    warmup_delete_ids = [f"{prefix}-wd-{i:04d}" for i in range(warmup_delete_count)]
+    measured_delete_ids = [f"{prefix}-md-{i:04d}" for i in range(measured_delete_count)]
+    await _seed_ready_papers_with_graphs(
+        read_ids + warmup_delete_ids + measured_delete_ids,
+        pdf_path=str(shared_pdf),
+    )
+
+    paper_service = get_paper_service()
+    warmup_ops = _build_mixed_diskio_ops(
+        paper_service=paper_service,
+        read_ids=read_ids,
+        delete_ids=warmup_delete_ids,
+        operations=args.warmup,
+    )
+    measured_ops = _build_mixed_diskio_ops(
+        paper_service=paper_service,
+        read_ids=read_ids,
+        delete_ids=measured_delete_ids,
+        operations=args.operations,
+    )
+
+    await run_bounded(warmup_ops, args.concurrency, op_timeout_s=args.op_timeout)
+
+    # Optional console verdict (design §2): warn when wake-up lag exceeds 20ms.
+    warn_ms = _LAG_WARN_THRESHOLD_MS if args.lag_warnings else None
+    probe = LoopLagProbe(warn_threshold_ms=warn_ms)
+    probe.start()
+    batch_started = time.perf_counter()
+    results = await run_bounded(measured_ops, args.concurrency, op_timeout_s=args.op_timeout)
+    elapsed_s = time.perf_counter() - batch_started
+    lag_samples_ms = await probe.stop()
+
+    payload = _build_results_payload(
+        results,
+        elapsed_s,
+        drain_s=0.0,
+        lag_samples_ms=lag_samples_ms,
+        wal_info=wal_info,
+        stub_notes=stub_notes,
+    )
+    payload["loop_lag_ms"]["warning_count"] = probe.warning_count
+    return payload
+
+
 def _build_results_payload(
     results: list[OpResult],
     elapsed_s: float,
@@ -580,6 +826,8 @@ def _build_results_payload(
         if not result.ok and result.error_type is not None:
             errors[result.error_type] = errors.get(result.error_type, 0) + 1
     sorted_lags = sorted(lag_samples_ms)
+    over_20ms = sum(1 for sample in lag_samples_ms if sample > _LAG_WARN_THRESHOLD_MS)
+    over_100ms = sum(1 for sample in lag_samples_ms if sample > _LAG_CRITICAL_THRESHOLD_MS)
     payload: dict[str, Any] = {
         "wal": wal_info,
         "stub_notes": stub_notes,
@@ -596,6 +844,10 @@ def _build_results_payload(
             "p99": percentile(sorted_lags, 99) if sorted_lags else 0.0,
             "max": sorted_lags[-1] if sorted_lags else 0.0,
             "mean": (sum(sorted_lags) / len(sorted_lags)) if sorted_lags else 0.0,
+            "over_20ms": over_20ms,
+            "over_100ms": over_100ms,
+            "warn_threshold_ms": _LAG_WARN_THRESHOLD_MS,
+            "critical_threshold_ms": _LAG_CRITICAL_THRESHOLD_MS,
         },
     }
     if successes:
@@ -628,7 +880,7 @@ async def _teardown_backend() -> None:
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--layer", choices=["finalize", "http"], required=True)
+    parser.add_argument("--layer", choices=["finalize", "http", "diskio"], required=True)
     parser.add_argument("--concurrency", type=int, required=True)
     parser.add_argument("--operations", type=int, default=500)
     parser.add_argument("--warmup", type=int, default=50)
@@ -652,6 +904,18 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         default=180.0,
         help="dump all thread stacks to stderr every N seconds (hang diagnosis); 0 disables",
     )
+    parser.add_argument(
+        "--lag-warnings",
+        action="store_true",
+        help="print stderr warnings when loop lag exceeds 20ms (diskio console verdict)",
+    )
+    parser.add_argument(
+        "--amplify-sync-io-ms",
+        type=float,
+        default=0.0,
+        help="diskio only: inject identical sync sleep into GraphStore.load/delete "
+        "(makes slow-disk stalls visible; 0 disables)",
+    )
     return parser.parse_args(argv)
 
 
@@ -671,7 +935,12 @@ def main(argv: list[str] | None = None) -> int:
         workdir = Path(tmp)
         _bootstrap_environment(workdir)
 
-        run_layer = _run_finalize_layer if args.layer == "finalize" else _run_http_layer
+        layer_runners = {
+            "finalize": _run_finalize_layer,
+            "http": _run_http_layer,
+            "diskio": _run_diskio_layer,
+        }
+        run_layer = layer_runners[args.layer]
 
         async def _run() -> dict[str, Any]:
             try:
@@ -701,6 +970,7 @@ def main(argv: list[str] | None = None) -> int:
             "op_timeout_s": args.op_timeout,
             "busy_timeout_s": args.busy_timeout_s,
             "heartbeat_interval_s": HEARTBEAT_INTERVAL_S,
+            "amplify_sync_io_ms": args.amplify_sync_io_ms,
         },
         "env_fingerprint": {
             "python": sys.version.split()[0],
@@ -717,13 +987,20 @@ def main(argv: list[str] | None = None) -> int:
     output_path.parent.mkdir(parents=True, exist_ok=True)
     output_path.write_text(json.dumps(document, ensure_ascii=False), encoding="utf-8")
     summary = results.get("latency_summary", {})
+    lag = results["loop_lag_ms"]
     print(
         f"[{args.label}/{args.layer}] c={args.concurrency} rep={args.repetition} "
         f"ok={results['success_count']} err={results['error_count']} "
         f"qps={results['qps']:.1f} p99={summary.get('p99_ms', float('nan')):.1f}ms "
-        f"lag_max={results['loop_lag_ms']['max']:.1f}ms drain={results['drain_s'] * 1000:.0f}ms",
+        f"lag_max={lag['max']:.1f}ms lag>20ms={lag.get('over_20ms', 0)} "
+        f"lag>100ms={lag.get('over_100ms', 0)} drain={results['drain_s'] * 1000:.0f}ms",
     )
-    return 0 if results["error_count"] == 0 else 2
+    exit_code = 0 if results["error_count"] == 0 else 2
+    # Non-daemon EventBus / aiosqlite / to_thread workers can keep the interpreter
+    # alive after the measured batch finishes (observed hang on Windows).
+    sys.stdout.flush()
+    sys.stderr.flush()
+    os._exit(exit_code)
 
 
 if __name__ == "__main__":
