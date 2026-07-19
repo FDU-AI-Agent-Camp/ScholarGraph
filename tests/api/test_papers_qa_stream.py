@@ -8,7 +8,7 @@ from __future__ import annotations
 import json
 from collections.abc import AsyncIterator
 from pathlib import Path
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from backend.config import get_settings
@@ -220,7 +220,9 @@ async def test_qa_stream_http_wires_hybrid_retrieval_context(
         page_start=5,
     )
     rc = RetrievalContext(scale=QuestionScale.DETAIL, chunks=[chunk])
-    hybrid_retriever = AsyncMock()
+    # compute_subgraph is sync on HybridRetriever; bare AsyncMock would leak unawaited coros.
+    hybrid_retriever = MagicMock()
+    hybrid_retriever.compute_subgraph = MagicMock(return_value={})
     hybrid_retriever.retrieve = AsyncMock(return_value=rc)
 
     captured: list[RetrievalContext | None] = []

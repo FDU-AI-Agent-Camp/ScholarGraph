@@ -46,10 +46,12 @@ async def test_stream_passes_retrieval_context_to_qa_stream(
         scale=QuestionScale.DETAIL,
         chunks=[chunk],
     )
-    hybrid_retriever = AsyncMock()
+    # compute_subgraph is sync on HybridRetriever; bare AsyncMock would leak unawaited coros.
+    hybrid_retriever = MagicMock()
+    hybrid_retriever.compute_subgraph = MagicMock(return_value={})
     hybrid_retriever.retrieve = AsyncMock(return_value=rc)
 
-    paper_service = AsyncMock()
+    paper_service = MagicMock()
     paper = MagicMock()
     paper.status = PaperStatus.READY
     paper.preview_available = False
