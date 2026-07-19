@@ -130,13 +130,14 @@ async def test_wipe_wave2_delete_run_after_short_delay(persistence_env) -> None:
 @pytest.mark.asyncio
 async def test_force_delete_schedules_wave2_after_wave1(persistence_env, tmp_path: Path) -> None:
     """Production delete_paper wires Wave-1 purge then Wave-2 schedule for snapshotted runs."""
-    from backend.services.paper_delete_service import delete_paper
+    from backend.services.paper_delete_service import get_paper_delete_service
 
     paper_id = "delete-two-wave"
     await register_test_paper(paper_id, status=PaperStatus.READY, pdf_path=str(tmp_path / f"{paper_id}.pdf"))
     (tmp_path / f"{paper_id}.pdf").write_bytes(b"%PDF-1.4")
     service = await restart_paper_service()
     service.set_active_run_id(paper_id, "run_ready")
+    delete_service = get_paper_delete_service()
 
     scheduled: list[tuple[str, set[str]]] = []
 
@@ -165,7 +166,7 @@ async def test_force_delete_schedules_wave2_after_wave1(persistence_env, tmp_pat
             side_effect=lambda _pid, targets: targets,
         ),
     ):
-        await delete_paper(service, paper_id, force=True, vector_store=vector_store)
+        await delete_service.delete(paper_id, force=True, vector_store=vector_store)
 
     vector_store.delete_by_paper.assert_awaited_once_with(paper_id)
     assert scheduled == [(paper_id, {"run_ready"})]

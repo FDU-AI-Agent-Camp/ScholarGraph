@@ -157,7 +157,7 @@ async def test_obsolete_run_id_write_blocked(gen_guard_db, monkeypatch: pytest.M
     from backend.repositories.paper_repository import get_paper_repository
     from backend.services.graph_persistence_service import GraphPersistenceService
     from backend.services.paper_service import get_paper_service
-    from backend.services.reextract_service import force_reextract, reset_reextract_inflight_gate
+    from backend.services.reextract_service import get_reextract_service, reset_reextract_inflight_gate
 
     reset_reextract_inflight_gate()
     paper_id = "paper-x-orphan-run"
@@ -237,7 +237,9 @@ async def test_obsolete_run_id_write_blocked(gen_guard_db, monkeypatch: pytest.M
         "backend.rag.wipe_vector_sweep.schedule_wipe_wave2_sweep",
         _spy_wave2,
     )
-    snapshot = await force_reextract(svc, paper_id, force=True, vector_store=vector_store)
+    snapshot = await get_reextract_service().force_reextract(
+        paper_id, force=True, vector_store=vector_store
+    )
     assert snapshot.status == PaperStatus.PENDING
     assert scheduled and scheduled[0][0] == paper_id
     assert vector_store.deleted == [paper_id]

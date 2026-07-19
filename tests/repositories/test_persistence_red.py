@@ -31,6 +31,6 @@ def test_red_postgresql_asyncpg_url_switch_not_validated_in_ci() -> None:
 @pytest.mark.asyncio
 async def test_red_reextract_bumps_graph_version_atomically(persistence_env) -> None:
     """Re-extract should increment graph_version — tracked for follow-up commit."""
-    from backend.services.reextract_service import force_reextract
+    from backend.services.reextract_service import ReextractService
 
-    assert "graph_version" in force_reextract.__doc__ or False
+    assert "graph_version" in (ReextractService.force_reextract.__doc__ or "")

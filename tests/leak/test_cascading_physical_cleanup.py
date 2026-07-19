@@ -31,7 +31,7 @@ from backend.schemas.graph import GraphEdge, GraphNode, UnifiedPaperGraph
 from backend.schemas.ingest_head import IngestHead
 from backend.schemas.paper import PaperStatus, PaperStatusData, PipelineStage
 from backend.schemas.paradigm import Paradigm
-from backend.services.paper_delete_service import delete_paper as cascade_delete_paper
+from backend.services.paper_delete_service import get_paper_delete_service
 from sqlalchemy import func, select
 from tests.helpers.persistence_testkit import restart_paper_service
 
@@ -211,8 +211,8 @@ async def test_cascading_delete_physical_verification_matrix(
     assert _chroma_id_count(store._relation_collection, victim_id) == 1
     assert await _sql_row_counts(victim_id) == (1, 1)
 
-    service = await restart_paper_service()
-    await cascade_delete_paper(service, victim_id, force=False, vector_store=store)
+    await restart_paper_service()
+    await get_paper_delete_service().delete(victim_id, force=False, vector_store=store)
 
     # --- 1. Relational DB ---
     paper_count, run_count = await _sql_row_counts(victim_id)

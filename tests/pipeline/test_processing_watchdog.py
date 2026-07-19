@@ -488,7 +488,7 @@ async def test_watchdog_kill_lock_reflux_allows_bystander_reextract(
     from backend.services.paper_ops_claim import acquire_paper_ops_claim
     from backend.services.paper_service import get_paper_service
     from backend.services.reextract_service import (
-        force_reextract,
+        get_reextract_service,
         is_reextract_inflight,
         reset_reextract_inflight_gate,
     )
@@ -568,8 +568,7 @@ async def test_watchdog_kill_lock_reflux_allows_bystander_reextract(
                 break
             await asyncio.sleep(0.01)
         t0 = time.monotonic()
-        snapshot = await force_reextract(
-            service,
+        snapshot = await get_reextract_service().force_reextract(
             paper_id,
             force=True,
             vector_store=vector_store,
