@@ -160,7 +160,7 @@ async def _apply_action(
         return service
 
     if action == _Action.CLEAR_EPHEMERAL:
-        service.clear_ephemeral_pipeline_state(paper_id)
+        await service.clear_ephemeral_pipeline_state(paper_id)
         state.preview_graph = None
         state.active_run_id = None
         return service

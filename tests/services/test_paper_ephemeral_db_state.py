@@ -60,7 +60,7 @@ async def test_clear_ephemeral_pipeline_state_removes_preview_and_run_id(persist
     service.set_active_run_id(paper_id, "run-clear-me")
     await service.save_preview_graph(paper_id, _sample_preview(paper_id))
 
-    service.clear_ephemeral_pipeline_state(paper_id)
+    await service.clear_ephemeral_pipeline_state(paper_id)
 
     assert service.get_active_run_id(paper_id) is None
     assert await service.get_preview_graph(paper_id) is None

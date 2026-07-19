@@ -68,11 +68,9 @@ class PaperPipelineOpsService:
             limit=limit,
         )
 
-    def reset_pipeline_for_reextract(self, paper_id: str, *, message: str) -> PaperStatusData:
+    async def reset_pipeline_for_reextract(self, paper_id: str, *, message: str) -> PaperStatusData:
         """Reset pipeline_runs ephemeral state before re-queueing extract."""
-        from backend.repositories import run_async
-
-        return run_async(self._pipeline_repo.reset_for_reextract(paper_id, message=message))
+        return await self._pipeline_repo.reset_for_reextract(paper_id, message=message)
 
     def get_pipeline_generation_id(self, paper_id: str) -> str | None:
         """Return the active extract-generation token, or ``None`` if unset."""
@@ -367,11 +365,9 @@ class PaperPipelineOpsService:
             message=message,
         )
 
-    def clear_ephemeral_pipeline_state(self, paper_id: str) -> None:
+    async def clear_ephemeral_pipeline_state(self, paper_id: str) -> None:
         """Clear preview graph and other ephemeral pipeline_runs fields."""
-        from backend.repositories import run_async
-
-        run_async(self._pipeline_repo.clear_ephemeral_pipeline_state(paper_id))
+        await self._pipeline_repo.clear_ephemeral_pipeline_state(paper_id)
 
 
 @lru_cache

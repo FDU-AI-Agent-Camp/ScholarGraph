@@ -87,9 +87,9 @@ async def _clear_persisted_artefacts(paper_id: str) -> None:
     await asyncio.to_thread(_delete_sync)
 
 
-def _clear_in_memory_state(paper_id: str) -> None:
+async def _clear_in_memory_state(paper_id: str) -> None:
     """Reset preview and RAG run tracking for a paper."""
-    get_paper_pipeline_ops_service().clear_ephemeral_pipeline_state(paper_id)
+    await get_paper_pipeline_ops_service().clear_ephemeral_pipeline_state(paper_id)
 
 
 async def _purge_vector_index(
@@ -164,10 +164,10 @@ async def force_reextract(
         await _purge_vector_index(paper_id, vector_store=vector_store)
         schedule_wipe_wave2_sweep(paper_id, wipe_targets)
         await _clear_persisted_artefacts(paper_id)
-        _clear_in_memory_state(paper_id)
+        await _clear_in_memory_state(paper_id)
 
         await paper_service._paper_repo.reset_for_reextract(paper_id)
-        snapshot = get_paper_pipeline_ops_service().reset_pipeline_for_reextract(
+        snapshot = await get_paper_pipeline_ops_service().reset_pipeline_for_reextract(
             paper_id,
             message=_REEXTRACT_QUEUED_MESSAGE,
         )

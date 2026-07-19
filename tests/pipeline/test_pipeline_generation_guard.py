@@ -301,7 +301,7 @@ async def test_finalize_refuses_after_reextract_mints_new_generation(gen_guard_d
     await _put_processing(paper_id)
     svc = get_paper_service()
     orphan_token = svc.begin_pipeline_generation(paper_id)
-    svc.reset_pipeline_for_reextract(paper_id, message="强制重抽")
+    await svc.reset_pipeline_for_reextract(paper_id, message="强制重抽")
     await get_pipeline_repository().save_status(
         paper_id,
         PaperStatusData(
