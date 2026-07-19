@@ -62,11 +62,18 @@ async def test_record_head_refine_warnings_merges_without_duplicates(registered_
 
 
 @pytest.mark.asyncio
-async def test_status_api_returns_head_refine_warnings(api_client: AsyncClient) -> None:
-    paper_id = "hss-002"
-    await get_paper_warning_service().record(paper_id, WarningType.HEAD_REFINE, ["grobid_unavailable"])
+async def test_status_api_returns_head_refine_warnings(
+    registered_paper: str,
+    api_client: AsyncClient,
+) -> None:
+    """HTTP status must read warnings from the same isolated DB as ``record``."""
+    await get_paper_warning_service().record(
+        registered_paper,
+        WarningType.HEAD_REFINE,
+        ["grobid_unavailable"],
+    )
 
-    response = await api_client.get(f"/api/v1/papers/{paper_id}/status")
+    response = await api_client.get(f"/api/v1/papers/{registered_paper}/status")
 
     assert response.status_code == 200
     assert response.json()["data"]["head_refine_warnings"] == ["grobid_unavailable"]
