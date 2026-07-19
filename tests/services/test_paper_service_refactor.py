@@ -98,11 +98,11 @@ async def test_pipeline_ops_composed_via_facade_delegates_generation_guard() -> 
     paper_id = "refactor-pipeline-ops-001"
     await register_test_paper(paper_id, status=PaperStatus.PROCESSING)
 
-    service.begin_pipeline_generation(paper_id)
-    token = service.get_pipeline_generation_id(paper_id)
+    await service.begin_pipeline_generation(paper_id)
+    token = await service.get_pipeline_generation_id(paper_id)
 
     assert token is not None
-    assert service._pipeline_ops.get_pipeline_generation_id(paper_id) == token
+    assert await service._pipeline_ops.get_pipeline_generation_id(paper_id) == token
 
 
 @pytest.mark.asyncio

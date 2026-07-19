@@ -30,7 +30,7 @@ def generate_pipeline_generation_id() -> str:
     return f"plog_{datetime.now(UTC).timestamp():.6f}_{uuid.uuid4().hex[:8]}"
 
 
-def assert_pipeline_generation_writable(
+async def assert_pipeline_generation_writable(
     paper_id: str,
     expected_generation_id: str | None,
 ) -> None:
@@ -41,7 +41,7 @@ def assert_pipeline_generation_writable(
     """
     from backend.services.paper_pipeline_ops import get_paper_pipeline_ops_service
 
-    current = get_paper_pipeline_ops_service().get_pipeline_generation_id(paper_id)
+    current = await get_paper_pipeline_ops_service().get_pipeline_generation_id(paper_id)
     if current is None and expected_generation_id is None:
         return
     if expected_generation_id is not None and current == expected_generation_id:

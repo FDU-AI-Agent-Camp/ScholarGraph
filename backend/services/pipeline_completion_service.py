@@ -51,7 +51,7 @@ async def complete_paper_pipeline(
     """
     from backend.services.pipeline_generation_guard import assert_pipeline_generation_writable
 
-    assert_pipeline_generation_writable(paper_id, pipeline_generation_id)
+    await assert_pipeline_generation_writable(paper_id, pipeline_generation_id)
     await paper_service.require_paper_for_pipeline(paper_id)
 
     extract_warnings = list(extract_warnings or ())
@@ -169,7 +169,7 @@ class PipelineCompletionService:
             from backend.services.pipeline_generation_guard import assert_pipeline_generation_writable
 
             # Gate BEFORE GraphStore write so orphans cannot dirty disk after kill.
-            assert_pipeline_generation_writable(paper_id, pipeline_generation_id)
+            await assert_pipeline_generation_writable(paper_id, pipeline_generation_id)
             graph = UnifiedPaperGraph.model_validate(graph_data)
             classification = ParadigmClassification.model_validate(classification_data)
             persistence = self._graph_persistence or get_graph_persistence_service()
