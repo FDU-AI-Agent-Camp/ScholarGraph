@@ -11,6 +11,7 @@ interface for a future swap without changing call sites.
 
 from __future__ import annotations
 
+import inspect
 import time
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
@@ -84,7 +85,7 @@ class InMemoryPatrolResultCache:
             return entry.ttl_seconds
 
 
-def collect_patrol_paper_fingerprint(paper_ids: Sequence[str]) -> str:
+async def collect_patrol_paper_fingerprint(paper_ids: Sequence[str]) -> str:
     """Build a cache fingerprint from each paper's graph_version + active index run.
 
     Missing DB rows use placeholders so graph-only / fixture papers still cache
@@ -97,6 +98,8 @@ def collect_patrol_paper_fingerprint(paper_ids: Sequence[str]) -> str:
     for paper_id in paper_ids:
         try:
             graph_version = paper_service.get_pipeline_graph_version(paper_id)
+            if inspect.isawaitable(graph_version):
+                graph_version = await graph_version
         except KeyError:
             graph_version = _MISSING_GRAPH_VERSION
         run_id = paper_service.get_active_run_id(paper_id) or _MISSING_INDEX_RUN

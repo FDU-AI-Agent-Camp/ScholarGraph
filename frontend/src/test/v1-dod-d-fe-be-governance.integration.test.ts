@@ -8,7 +8,7 @@
  *
  * 与 tests/integration/test_dod_d_fe_be_governance.py 成对验收。
  */
-import { execSync } from 'node:child_process'
+import { execFileSync, execSync } from 'node:child_process'
 import { readFileSync, statSync } from 'node:fs'
 import { join } from 'node:path'
 
@@ -227,10 +227,16 @@ describe('V1 DoD D-09 — sensitive paths stay out of git', () => {
     if (!gitInsideWorkTree()) return
     for (const rel of ['.env', 'progress.md', '.cursor/']) {
       expect(() => {
-        execSync(`git check-ignore -q ${rel}`, { cwd: REPO_ROOT, stdio: 'pipe' })
+        // Prefer argv form + hard timeout: shell `execSync` can stall under
+        // heavy parallel pytest/git load and trip Vitest's default 15s cap.
+        execFileSync('git', ['check-ignore', '-q', rel], {
+          cwd: REPO_ROOT,
+          stdio: 'pipe',
+          timeout: 10_000,
+        })
       }).not.toThrow()
     }
-  })
+  }, 30_000)
 })
 
 describe('V1 DoD D-10 — lockfiles align with manifests', () => {

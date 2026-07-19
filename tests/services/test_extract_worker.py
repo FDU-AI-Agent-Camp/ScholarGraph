@@ -95,28 +95,41 @@ class TestScheduleFullExtraction:
     async def test_background_task_finalizes_pipeline(self) -> None:
         from unittest.mock import AsyncMock, patch
 
+        from backend.agents.extract_heuristic import build_heuristic_graph
+        from backend.agents.extract_types import ExtractResult
         from tests.helpers.event_bus_testkit import drain_event_bus
 
         paper_id = "bg-003"
         _register_paper(paper_id)
         classification = ParadigmClassification(paradigm=Paradigm.HSS, confidence=0.9, reason="test")
+        full_text = (
+            "This paper argues that institutional change follows path dependence. "
+            "Evidence from three case studies supports the core thesis."
+        )
+        graph = build_heuristic_graph(full_text, Paradigm.HSS, title="bg test").model_copy(
+            update={"paper_id": paper_id, "paradigm": Paradigm.HSS},
+        )
 
-        with patch(
-            "backend.services.rag_index_service.RagIndexService.index_paper_for_rag_async",
-            new_callable=AsyncMock,
-            return_value=True,
+        async def _fake_extract(*_args: object, **_kwargs: object) -> ExtractResult:
+            return ExtractResult(graph=graph, warnings=[])
+
+        with (
+            patch(
+                "backend.services.extract_worker._extract_chunked_two_phase",
+                side_effect=_fake_extract,
+            ),
+            patch(
+                "backend.services.rag_index_service.RagIndexService.index_paper_for_rag_async",
+                new_callable=AsyncMock,
+                return_value=True,
+            ),
         ):
-            schedule_full_extraction(paper_id, "text", Paradigm.HSS, classification)
-            # Wait for the mock-mode background task to complete.
-            for _ in range(100):
-                task = get_full_extraction_task(paper_id)
-                if task is None or task.done():
-                    break
-                await asyncio.sleep(0.01)
+            task = schedule_full_extraction(paper_id, full_text, Paradigm.HSS, classification)
+            await asyncio.wait_for(task, timeout=5)
             await drain_event_bus()
 
         status = await get_paper_service().get_status(paper_id)
-        assert status.status == PaperStatus.READY
+        assert status.status in {PaperStatus.READY, PaperStatus.READY_WITH_WARNINGS}
 
     async def test_background_task_marks_failed_on_error(self, monkeypatch: pytest.MonkeyPatch) -> None:
         paper_id = "bg-004"

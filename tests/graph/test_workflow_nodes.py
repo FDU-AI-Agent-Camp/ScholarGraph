@@ -346,11 +346,13 @@ async def test_store_node_delegates_finalize_to_completion_service(
             ),
         ):
             out = await nodes.store_node(post_extract_state)
+            # Drain while the RAG index patch is still active — the handler runs
+            # asynchronously after publish and must see the same mock.
+            await drain_event_bus()
 
     store_cls.return_value.save.assert_called_once()
     assert out["status"] == PaperStatus.INDEXING
 
-    await drain_event_bus()
     paper = await get_paper_service().get_paper(paper_id)
     assert paper.status == PaperStatus.READY
 
@@ -373,12 +375,11 @@ async def test_store_node_triggers_rag_indexing_after_finalize(
             return_value=completion_svc,
         ):
             await nodes.store_node(post_extract_state)
-
-    await drain_event_bus()
-    mock_rag_index.assert_awaited_once()
-    call_kwargs = mock_rag_index.await_args.kwargs
-    assert call_kwargs["full_text"] == post_extract_state["full_text"]
-    assert call_kwargs["graph"].paper_id == post_extract_state["paper_id"]
+        await drain_event_bus()
+        mock_rag_index.assert_awaited_once()
+        call_kwargs = mock_rag_index.await_args.kwargs
+        assert call_kwargs["full_text"] == post_extract_state["full_text"]
+        assert call_kwargs["graph"].paper_id == post_extract_state["paper_id"]
 
 
 async def test_store_node_finalize_error_fails(
@@ -416,9 +417,8 @@ async def test_store_node_rag_index_failure_does_not_block_ready(
             return_value=completion_svc,
         ):
             out = await nodes.store_node(post_extract_state)
-
-    assert out["status"] == PaperStatus.INDEXING
-    await drain_event_bus()
+        assert out["status"] == PaperStatus.INDEXING
+        await drain_event_bus()
     status = await get_paper_service().get_status(paper_id)
     assert status.status == PaperStatus.READY_WITH_WARNINGS
 
@@ -455,8 +455,7 @@ async def test_store_node_rag_index_failure_records_extract_warning(
             return_value=completion_svc,
         ):
             await nodes.store_node(post_extract_state)
-
-    await drain_event_bus()
+        await drain_event_bus()
     paper = await get_paper_service().get_paper(paper_id)
     assert RAG_INDEX_WARNING_CODE in paper.extract_warnings
 

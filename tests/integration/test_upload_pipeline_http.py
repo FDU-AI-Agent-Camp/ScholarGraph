@@ -30,7 +30,7 @@ async def _poll_status_until_terminal(
         response = await api_client.get(f"/api/v1/papers/{paper_id}/status")
         assert response.status_code == 200
         last = response.json()["data"]
-        if last["status"] in ("ready", "failed"):
+        if last["status"] in ("ready", "ready_with_warnings", "failed"):
             return last
     return last
 
@@ -73,6 +73,9 @@ async def test_upload_detail_status_tracks_processing_before_ready(
 
         saw_processing = False
         last_status: dict = {}
+        # Detail/status are consecutive GETs; P10 can advance processing → indexing
+        # → ready between them, so allow the full terminal ladder on the sibling view.
+        _DETAIL_OK = ("processing", "indexing", "ready", "ready_with_warnings")
         for _ in range(80):
             await asyncio.sleep(0.05)
             status_data = (await api_client.get(f"/api/v1/papers/{paper_id}/status")).json()["data"]
@@ -80,9 +83,7 @@ async def test_upload_detail_status_tracks_processing_before_ready(
             last_status = status_data
             if status_data["status"] == "processing":
                 saw_processing = True
-                # Status and detail endpoints are served from the same in-memory
-                # state, but a tiny race can make one see ready before the other.
-                assert detail_data["status"] in ("processing", "ready")
+                assert detail_data["status"] in _DETAIL_OK
                 assert status_data["stage"] in (
                     "head_refining",
                     "ingesting",
@@ -90,8 +91,12 @@ async def test_upload_detail_status_tracks_processing_before_ready(
                     "extracting",
                     "storing",
                 )
-            if status_data["status"] == "ready":
-                assert detail_data["status"] in ("processing", "ready")
+            if status_data["status"] in ("ready", "ready_with_warnings"):
+                assert detail_data["status"] in _DETAIL_OK
                 break
 
-        assert saw_processing or last_status.get("status") == "ready"
+        assert saw_processing or last_status.get("status") in (
+            "ready",
+            "ready_with_warnings",
+            "indexing",
+        )

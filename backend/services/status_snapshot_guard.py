@@ -54,6 +54,20 @@ def audit_dual_table_invariant(snapshot: PaperStatusData) -> None:
                     "status_message": snapshot.message,
                 },
             )
+        return
+
+    if snapshot.status == PaperStatus.INDEXING:
+        if snapshot.stage != PipelineStage.INDEXING or snapshot.percent != STAGE_PERCENT[PipelineStage.INDEXING]:
+            logger.critical(
+                "pipeline_dual_table_invariant_violation",
+                extra={
+                    "paper_id": snapshot.paper_id,
+                    "paper_status": snapshot.status.value,
+                    "pipeline_stage": snapshot.stage.value if snapshot.stage is not None else None,
+                    "percent": snapshot.percent,
+                    "status_message": snapshot.message,
+                },
+            )
 
 
 def _to_failed_during(stage: PipelineStage | None) -> FailedDuringStage | None:
@@ -198,5 +212,16 @@ def ensure_status_contract(
                 stage=snapshot.stage,
                 percent=STAGE_PERCENT[snapshot.stage],
                 message=snapshot.message,
+            )
+        if snapshot.status == PaperStatus.INDEXING:
+            # papers.status may advance to INDEXING a tick before pipeline_runs
+            # stage/percent catch up (dual-table read); repair to the P10 contract.
+            return persist_status_snapshot(
+                paper_service,
+                paper_id,
+                status=PaperStatus.INDEXING,
+                stage=PipelineStage.INDEXING,
+                percent=STAGE_PERCENT[PipelineStage.INDEXING],
+                message=snapshot.message or "图谱已就绪，正在构建向量索引…",
             )
         raise

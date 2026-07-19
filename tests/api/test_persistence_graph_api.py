@@ -40,6 +40,7 @@ async def test_graph_ready_paper_returns_unified_graph(
     api_client: AsyncClient,
     persistence_env,
     monkeypatch: pytest.MonkeyPatch,
+    noop_event_bus_publish_sync: None,
 ) -> None:
     monkeypatch.setattr("backend.services.paper_service.schedule_paper_pipeline", lambda *_a, **_k: None)
     create = await api_client.post(

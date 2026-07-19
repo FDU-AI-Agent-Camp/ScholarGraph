@@ -5,7 +5,8 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable, Sequence
+import inspect
+from collections.abc import Awaitable, Callable, Sequence
 from functools import lru_cache
 from typing import TYPE_CHECKING
 
@@ -40,7 +41,7 @@ _PATROL_EMBEDDING_MODES = frozenset(
     }
 )
 
-PaperFingerprintFn = Callable[[Sequence[str]], str]
+PaperFingerprintFn = Callable[[Sequence[str]], str | Awaitable[str]]
 
 
 class PatrolService:
@@ -72,7 +73,13 @@ class PatrolService:
         paper_ids: list[str],
         mode: PatrolMode = PatrolMode.LENS_CLASH,
     ) -> PatrolReport:
-        fingerprint = self._paper_fingerprint_fn(paper_ids) if self._cache_enabled else ""
+        fingerprint = ""
+        if self._cache_enabled:
+            fingerprint_result = self._paper_fingerprint_fn(paper_ids)
+            if inspect.isawaitable(fingerprint_result):
+                fingerprint = await fingerprint_result
+            else:
+                fingerprint = fingerprint_result
         cache_key = build_patrol_cache_key(paper_ids, mode, paper_fingerprint=fingerprint)
         if self._cache_enabled and self._cache is not None:
             cached = self._cache.get(cache_key)

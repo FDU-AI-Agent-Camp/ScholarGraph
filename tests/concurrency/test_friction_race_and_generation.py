@@ -102,7 +102,17 @@ async def test_concurrent_reextract_only_one_wins_nine_get_409(
             asyncio.create_task(force_reextract(service, paper_id, force=False), name=f"rex-{i}") for i in range(10)
         ]
         await asyncio.wait_for(entered.wait(), timeout=1.0)
-        await asyncio.sleep(0.05)
+        # Wait until the other nine have hit the claim gate (409) while the
+        # winner still holds abort — a fixed sleep flakes under suite load.
+        deadline = asyncio.get_running_loop().time() + 2.0
+        while asyncio.get_running_loop().time() < deadline:
+            finished = [task for task in tasks if task.done()]
+            if len(finished) >= 9:
+                break
+            await asyncio.sleep(0.01)
+        else:
+            done_count = sum(1 for task in tasks if task.done())
+            raise AssertionError(f"expected 9 claim conflicts before release; only {done_count} tasks finished")
         hold.set()
         results = await asyncio.gather(*tasks, return_exceptions=True)
 

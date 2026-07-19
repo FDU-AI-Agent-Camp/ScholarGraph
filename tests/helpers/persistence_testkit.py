@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from datetime import UTC, datetime
 from pathlib import Path
 from unittest.mock import MagicMock
@@ -12,13 +13,16 @@ from unittest.mock import MagicMock
 import pytest
 from backend.config import get_settings
 from backend.db.base import get_async_engine, reset_database_caches
+from backend.db.migrations import ensure_migrated
 from backend.graph.store import GraphStore
 from backend.repositories.async_bridge import run_async
 from backend.repositories.paper_repository import get_paper_repository
 from backend.repositories.pipeline_repository import get_pipeline_repository
 from backend.schemas.graph import UnifiedPaperGraph
 from backend.schemas.paper import PaperStatus, PaperStatusData, PipelineStage
+from backend.services.paper_fixture_seed import refresh_demo_status_snapshots, seed_from_fixtures
 from backend.services.paper_service import PaperService, get_paper_service, reset_persistence_singletons
+from sqlalchemy.exc import OperationalError
 
 from tests.helpers.db_schema_testkit import create_all_tables
 
@@ -33,27 +37,39 @@ async def init_isolated_database(db_path: Path) -> None:
     ensure_migrated()
 
 
+_DEMO_CORPUS_LOCK_RETRIES = 5
+_DEMO_CORPUS_LOCK_RETRY_DELAY_S = 0.05
+
+
 async def ensure_demo_fixture_corpus() -> None:
     """Upsert OpenAPI demo papers/status/graph paths when core fixture rows are absent."""
-    from backend.db.migrations import ensure_migrated
-    from backend.services.paper_fixture_seed import refresh_demo_status_snapshots, seed_from_fixtures
-
-    await create_all_tables(get_async_engine())
-    ensure_migrated()
-    paper_repo = get_paper_repository()
-    core_demo_ids = ("stem-001", "hss-001", "hss-002", "hss-failed-001")
-    corpus_complete = True
-    for paper_id in core_demo_ids:
-        if await paper_repo.get(paper_id) is None:
-            corpus_complete = False
-            break
-    if corpus_complete:
-        await paper_repo.bump_list_rank(core_demo_ids)
-        await refresh_demo_status_snapshots(core_demo_ids)
-        return
-    await seed_from_fixtures(paper_repo, get_pipeline_repository())
-    await paper_repo.bump_list_rank(core_demo_ids)
-    await refresh_demo_status_snapshots(core_demo_ids)
+    last_error: OperationalError | None = None
+    for attempt in range(_DEMO_CORPUS_LOCK_RETRIES):
+        try:
+            await create_all_tables(get_async_engine())
+            ensure_migrated()
+            paper_repo = get_paper_repository()
+            core_demo_ids = ("stem-001", "hss-001", "hss-002", "hss-failed-001")
+            corpus_complete = True
+            for paper_id in core_demo_ids:
+                if await paper_repo.get(paper_id) is None:
+                    corpus_complete = False
+                    break
+            if not corpus_complete:
+                await seed_from_fixtures(paper_repo, get_pipeline_repository())
+            await paper_repo.bump_list_rank(core_demo_ids)
+            await refresh_demo_status_snapshots(core_demo_ids)
+            return
+        except OperationalError as exc:
+            # Autouse seeding shares the process SQLite file with leftover EventBus /
+            # bridge-loop writers; brief retries absorb transient "database is locked".
+            if "database is locked" not in str(exc).lower():
+                raise
+            last_error = exc
+            if attempt + 1 < _DEMO_CORPUS_LOCK_RETRIES:
+                await asyncio.sleep(_DEMO_CORPUS_LOCK_RETRY_DELAY_S * (attempt + 1))
+    assert last_error is not None
+    raise last_error
 
 
 def _ready_pipeline_snapshot(paper_id: str, status: PaperStatus) -> PaperStatusData:
