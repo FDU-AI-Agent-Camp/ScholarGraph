@@ -13,6 +13,7 @@ from backend.config import get_settings
 from backend.llm.client import LlmClient
 from backend.llm.embeddings import EmbeddingClient, get_embedding_client
 from backend.patrol.claim_evolution_rq_gate import align_research_question_pair
+from backend.patrol.degradation import merge_degradation_profiles
 from backend.patrol.exclusion import (
     PHASE_CLAIM_RECALL,
     PHASE_NODE_PRECHECK,
@@ -36,7 +37,6 @@ from backend.schemas.patrol import (
 
 if TYPE_CHECKING:
     from backend.llm.reranker import RerankerClient
-    from backend.rag.vector_store import VectorStore
 
 logger = logging.getLogger(__name__)
 
@@ -73,22 +73,6 @@ def _dedupe_question_nodes(nodes: list[GraphNode]) -> list[GraphNode]:
     return unique
 
 
-async def _retrieve_claim_backfill_chunks(
-    paper_id: str,
-    question: GraphNode,
-    vector_store: VectorStore,
-    top_k: int,
-) -> list[str]:
-    """Retrieve conclusion-related chunks from VectorStore when Claim nodes are missing."""
-    query = question.label
-    chunks = await vector_store.query_chunks(
-        query,
-        paper_id=paper_id,
-        top_k=top_k,
-    )
-    return [chunk.text for chunk in chunks if chunk.text.strip()]
-
-
 def _format_claim(label: str | None, chunks: list[str]) -> str | None:
     """Prefer graph node label; fall back to retrieved chunk texts."""
     if label:
@@ -102,7 +86,7 @@ async def build_claim_evolution_insight(
     graphs: Mapping[str, UnifiedPaperGraph],
     paper_ids: list[str],
     *,
-    vector_store: VectorStore | None = None,
+    rag_service: PatrolRAGService | None = None,
     llm_client: LlmClient | None = None,
     embedding_client: EmbeddingClient | None = None,
     reranker_client: RerankerClient | None = None,
@@ -112,7 +96,7 @@ async def build_claim_evolution_insight(
     Pipeline:
     1. Require ResearchQuestion or Thesis on both sides.
     2. Two-stage RQ gate: bi-encoder coarse recall → cross-encoder rerank (when enabled).
-    3. Backfill missing Claim nodes from VectorStore using the research question as query.
+    3. Backfill missing Claim nodes via ``PatrolRAGService.retrieve_backfill_chunks``.
     4. Ask LLM for structured NLI-style output (evolution_type, problem_fit_score, summary).
     """
     if len(paper_ids) != 2:
@@ -190,27 +174,29 @@ async def build_claim_evolution_insight(
         )
 
     left_question, right_question = aligned_pair
+    rag = rag_service or PatrolRAGService(None)
 
-    # Backfill missing claims from VectorStore when available.
+    # Backfill missing claims through the shared RAG safety cocoon.
     left_claim = select_primary_node(claim_nodes(left_graph), graph=left_graph)
     right_claim = select_primary_node(claim_nodes(right_graph), graph=right_graph)
 
     left_claim_chunks: list[str] = []
     right_claim_chunks: list[str] = []
-    if left_claim is None and vector_store is not None:
-        left_claim_chunks = await _retrieve_claim_backfill_chunks(
+    backfill_degradation: PatrolDegradationProfile | None = None
+    if left_claim is None:
+        left_claim_chunks, left_profile = await rag.retrieve_backfill_chunks(
             left_id,
-            left_question,
-            vector_store,
+            left_question.label,
             settings.patrol_claim_chunk_top_k,
         )
-    if right_claim is None and vector_store is not None:
-        right_claim_chunks = await _retrieve_claim_backfill_chunks(
+        backfill_degradation = merge_degradation_profiles(backfill_degradation, left_profile)
+    if right_claim is None:
+        right_claim_chunks, right_profile = await rag.retrieve_backfill_chunks(
             right_id,
-            right_question,
-            vector_store,
+            right_question.label,
             settings.patrol_claim_chunk_top_k,
         )
+        backfill_degradation = merge_degradation_profiles(backfill_degradation, right_profile)
 
     left_claim_text = _format_claim(left_claim.label if left_claim else None, left_claim_chunks)
     right_claim_text = _format_claim(right_claim.label if right_claim else None, right_claim_chunks)
@@ -236,12 +222,13 @@ async def build_claim_evolution_insight(
                 description=summary,
                 metrics={"claim_chunk_top_k": settings.patrol_claim_chunk_top_k},
             ),
+            **attach_degradation_fields(backfill_degradation),
         )
 
     context, degradation = await _build_claim_evolution_context(
         graphs,
         paper_ids,
-        vector_store=vector_store,
+        rag_service=rag,
         extra_claim_chunks={
             left_id: left_claim_chunks,
             right_id: right_claim_chunks,
@@ -251,6 +238,7 @@ async def build_claim_evolution_insight(
             right_id: right_question,
         },
     )
+    degradation = merge_degradation_profiles(backfill_degradation, degradation)
 
     llm_output = await generate_claim_evolution_summary(
         context,
@@ -317,7 +305,7 @@ async def _build_claim_evolution_context(
     graphs: Mapping[str, UnifiedPaperGraph],
     paper_ids: list[str],
     *,
-    vector_store: VectorStore | None = None,
+    rag_service: PatrolRAGService | None = None,
     extra_claim_chunks: dict[str, list[str]] | None = None,
     anchor_nodes: dict[str, GraphNode] | None = None,
 ) -> tuple[str, PatrolDegradationProfile | None]:
@@ -349,8 +337,8 @@ async def _build_claim_evolution_context(
             anchor_nodes.get(paper_id),
         )
 
-    rag_service = PatrolRAGService(vector_store)
-    rag_sections, degradation = await rag_service.enrich_context(
+    service = rag_service or PatrolRAGService(None)
+    rag_sections, degradation = await service.enrich_context(
         PatrolMode.CLAIM_EVOLUTION,
         paper_queries,
     )

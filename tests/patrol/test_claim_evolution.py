@@ -8,6 +8,7 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 from backend.patrol.claim_evolution import build_claim_evolution_insight
+from backend.patrol.rag_service import PatrolRAGService
 from backend.schemas.patrol import (
     ClaimEvolutionPoint,
     EvolutionType,
@@ -290,7 +291,7 @@ async def test_claim_evolution_backfills_missing_claims_from_vector_store() -> N
         insight = await build_claim_evolution_insight(
             graphs,
             ["stem-001", "stem-002"],
-            vector_store=vector_store,
+            rag_service=PatrolRAGService(vector_store),
             embedding_client=_FakeEmbeddingClient(),
         )
     assert insight is not None
@@ -334,7 +335,7 @@ async def test_claim_evolution_chunk_top_k_is_configurable(monkeypatch) -> None:
         insight = await build_claim_evolution_insight(
             graphs,
             ["stem-001", "stem-002"],
-            vector_store=vector_store,
+            rag_service=PatrolRAGService(vector_store),
             embedding_client=_FakeEmbeddingClient(),
         )
 
@@ -385,7 +386,7 @@ async def test_claim_evolution_uses_vector_store_context() -> None:
         insight = await build_claim_evolution_insight(
             graphs,
             ["stem-001", "stem-002"],
-            vector_store=vector_store,
+            rag_service=PatrolRAGService(vector_store),
             embedding_client=_FakeEmbeddingClient(),
         )
     assert insight is not None
@@ -428,7 +429,7 @@ async def test_claim_evolution_records_rag_degradation_when_index_missing() -> N
         insight = await build_claim_evolution_insight(
             graphs,
             ["stem-001", "stem-002"],
-            vector_store=vector_store,
+            rag_service=PatrolRAGService(vector_store),
             embedding_client=_FakeEmbeddingClient(),
         )
     assert insight is not None
@@ -504,7 +505,7 @@ async def test_claim_evolution_insufficient_when_no_claims_and_no_chunks() -> No
     insight = await build_claim_evolution_insight(
         graphs,
         ["stem-001", "stem-002"],
-        vector_store=vector_store,
+        rag_service=PatrolRAGService(vector_store),
         embedding_client=_FakeEmbeddingClient(),
     )
     assert insight is not None
@@ -737,3 +738,98 @@ async def test_claim_evolution_rq_gate_embedding_failure_returns_insufficient_da
     assert insight is not None
     assert insight.status == PatrolInsightStatus.INSUFFICIENT_DATA
     assert insight.structured_points == []
+
+
+@pytest.mark.asyncio
+async def test_claim_evolution_backfill_skips_io_when_circuit_open() -> None:
+    """OPEN breaker must zero-I/O claim backfill and stamp degraded INSUFFICIENT_DATA."""
+    from backend.patrol.circuit_breaker import CircuitState, VectorStoreCircuitBreaker
+    from backend.schemas.graph import GraphNode, NodeType, UnifiedPaperGraph
+    from backend.schemas.paradigm import Paradigm
+
+    vector_store = AsyncMock()
+    vector_store.exists.return_value = True
+    vector_store.query_chunks.return_value = [AsyncMock(text="should never be used")]
+    breaker = VectorStoreCircuitBreaker(failure_threshold=1)
+    breaker.record_failure()
+    assert breaker.state == CircuitState.OPEN
+    rag_service = PatrolRAGService(vector_store, circuit_breaker=breaker)
+
+    graphs = {
+        "stem-001": UnifiedPaperGraph(
+            paper_id="stem-001",
+            paradigm=Paradigm.STEM,
+            nodes=[GraphNode(id="n_q", label="Q1", type=NodeType.RESEARCH_QUESTION, data={})],
+            edges=[],
+        ),
+        "stem-002": UnifiedPaperGraph(
+            paper_id="stem-002",
+            paradigm=Paradigm.STEM,
+            nodes=[GraphNode(id="n_q", label="Q1", type=NodeType.RESEARCH_QUESTION, data={})],
+            edges=[],
+        ),
+    }
+    insight = await build_claim_evolution_insight(
+        graphs,
+        ["stem-001", "stem-002"],
+        rag_service=rag_service,
+        embedding_client=_FakeEmbeddingClient(),
+    )
+
+    assert insight is not None
+    assert insight.status == PatrolInsightStatus.INSUFFICIENT_DATA
+    assert insight.is_degraded is True
+    assert insight.degradation_profile is not None
+    assert insight.degradation_profile.reason_code.value == "VECTOR_STORE_UNAVAILABLE"
+    vector_store.query_chunks.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_claim_evolution_backfill_timeout_stamps_degraded_insufficient_data() -> None:
+    """Query timeout during backfill must not look like a clean no-claim outcome."""
+    from backend.schemas.graph import GraphNode, NodeType, UnifiedPaperGraph
+    from backend.schemas.paradigm import Paradigm
+    from backend.schemas.patrol import PatrolDegradationReason
+
+    vector_store = AsyncMock()
+    vector_store.exists.return_value = True
+    vector_store.query_chunks.side_effect = TimeoutError("timed out")
+    rag_service = PatrolRAGService(vector_store)
+
+    graphs = {
+        "stem-001": UnifiedPaperGraph(
+            paper_id="stem-001",
+            paradigm=Paradigm.STEM,
+            nodes=[GraphNode(id="n_q", label="Q1", type=NodeType.RESEARCH_QUESTION, data={})],
+            edges=[],
+        ),
+        "stem-002": UnifiedPaperGraph(
+            paper_id="stem-002",
+            paradigm=Paradigm.STEM,
+            nodes=[GraphNode(id="n_q", label="Q1", type=NodeType.RESEARCH_QUESTION, data={})],
+            edges=[],
+        ),
+    }
+    insight = await build_claim_evolution_insight(
+        graphs,
+        ["stem-001", "stem-002"],
+        rag_service=rag_service,
+        embedding_client=_FakeEmbeddingClient(),
+    )
+
+    assert insight is not None
+    assert insight.status == PatrolInsightStatus.INSUFFICIENT_DATA
+    assert insight.is_degraded is True
+    assert insight.degradation_profile is not None
+    assert insight.degradation_profile.reason_code == PatrolDegradationReason.QUERY_FAILED
+
+
+def test_claim_evolution_has_no_direct_vector_store_bypass() -> None:
+    """Source-level sterilization: claim evolution must not own a raw query helper."""
+    from pathlib import Path
+
+    source = Path("backend/patrol/claim_evolution.py").read_text(encoding="utf-8")
+    assert "_retrieve_claim_backfill_chunks" not in source
+    assert "query_chunks(" not in source
+    assert "from backend.rag.vector_store import VectorStore" not in source
+    assert "rag_service: PatrolRAGService" in source
