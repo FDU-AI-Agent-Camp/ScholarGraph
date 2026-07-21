@@ -171,8 +171,8 @@ async def test_ghost_vector_logical_isolation(persistence_env) -> None:
         [_chunk(paper_id, ACTIVE_MARKER, chunk_id="c_active")],
         run_id=RUN_B,
     )
-    service.set_active_run_id(paper_id, RUN_B)
-    assert service.get_active_run_id(paper_id) == RUN_B
+    await service.set_active_run_id(paper_id, RUN_B)
+    assert await service.get_active_run_id(paper_id) == RUN_B
     # Sanity: both generations physically coexist in Chroma.
     assert len(chunk_col.records) == 2
     assert any(GHOST_MARKER in str(rec["document"]) for rec in chunk_col.records.values())

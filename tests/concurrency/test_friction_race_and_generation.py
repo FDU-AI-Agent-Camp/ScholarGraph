@@ -291,8 +291,8 @@ async def test_replace_lock_released_after_cancelled_replace() -> None:
     """VectorStore per-paper replace Lock must unlock after CancelledError."""
     get_indexing_run_registry().reset()
     paper_service = MagicMock()
-    paper_service.get_active_run_id.return_value = None
-    paper_service.set_active_run_id = MagicMock()
+    paper_service.get_active_run_id = AsyncMock(return_value=None)
+    paper_service.set_active_run_id = AsyncMock()
 
     store = VectorStore(
         paper_service=paper_service,
@@ -371,8 +371,8 @@ async def test_obsolete_generation_warning_on_refuse_activate(
     caplog.set_level(logging.WARNING)
     get_indexing_run_registry().reset()
     paper_service = MagicMock()
-    paper_service.get_active_run_id.return_value = "run_b"
-    paper_service.set_active_run_id = MagicMock()
+    paper_service.get_active_run_id = AsyncMock(return_value="run_b")
+    paper_service.set_active_run_id = AsyncMock()
     store = VectorStore(
         paper_service=paper_service,
         embedding_client=FakeEmbeddingClient(),

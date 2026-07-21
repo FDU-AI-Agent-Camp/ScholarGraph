@@ -36,7 +36,7 @@ async def test_get_status_includes_head_refine_warnings_after_apply(
     get_settings.cache_clear()
 
     service = get_paper_service()
-    service.apply_head_refine(
+    await service.apply_head_refine(
         registered_paper,
         merged=IngestHead(title="Refined"),
         classifier_input="Title: Refined",
@@ -83,7 +83,7 @@ async def test_status_api_returns_head_refine_warnings(
 async def test_status_snapshot_carries_warnings_on_stage_advance(registered_paper: str) -> None:
     service = get_paper_service()
     await get_paper_warning_service().record(registered_paper, WarningType.HEAD_REFINE, ["mineru_disabled"])
-    service.set_status_snapshot(
+    await service.set_status_snapshot(
         registered_paper,
         status=PaperStatus.PROCESSING,
         stage=PipelineStage.CLASSIFYING,

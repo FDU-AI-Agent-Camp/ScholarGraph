@@ -76,7 +76,7 @@ async def test_head_refine_coordinator_shim_persists_to_disk(
         sources={"title": "mineru", "abstract": "pymupdf"},
     )
 
-    service.apply_head_refine(
+    await service.apply_head_refine(
         paper_id,
         merged=merged,
         classifier_input="Title: Refined Title",
@@ -87,7 +87,7 @@ async def test_head_refine_coordinator_shim_persists_to_disk(
     assert record is not None
     assert record.merged.title == "Refined Title"
     assert await get_paper_warning_service().get(paper_id, WarningType.HEAD_REFINE) == ["mineru_unavailable"]
-    assert service.get_refined_classifier_input(paper_id) == "Title: Refined Title"
+    assert await service.get_refined_classifier_input(paper_id) == "Title: Refined Title"
 
     get_settings.cache_clear()
 

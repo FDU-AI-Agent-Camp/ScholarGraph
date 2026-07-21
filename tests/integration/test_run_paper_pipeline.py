@@ -71,9 +71,9 @@ async def test_run_paper_pipeline_calls_start_processing_before_graph(
 
     original_start = get_pipeline_status_service().start_processing
 
-    def track_start(pid: str, **kwargs):  # noqa: ANN003
+    async def track_start(pid: str, **kwargs):  # noqa: ANN003
         events.append("start_processing")
-        return original_start(pid, **kwargs)
+        return await original_start(pid, **kwargs)
 
     compiled = get_compiled_paper_pipeline()
 

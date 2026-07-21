@@ -101,7 +101,7 @@ async def test_replace_paper_index_activates_new_run_and_queries_see_only_new_da
         entities=[],
         relations=[],
     )
-    first_run_id = paper_service.get_active_run_id(paper_id)
+    first_run_id = await paper_service.get_active_run_id(paper_id)
     assert first_run_id
 
     await store.replace_paper_index(
@@ -110,7 +110,7 @@ async def test_replace_paper_index_activates_new_run_and_queries_see_only_new_da
         entities=[],
         relations=[],
     )
-    second_run_id = paper_service.get_active_run_id(paper_id)
+    second_run_id = await paper_service.get_active_run_id(paper_id)
     assert second_run_id
     assert second_run_id != first_run_id
 
@@ -146,7 +146,7 @@ async def test_failed_replace_paper_index_keeps_old_index_queryable(
         entities=[],
         relations=[],
     )
-    old_run_id = paper_service.get_active_run_id(paper_id)
+    old_run_id = await paper_service.get_active_run_id(paper_id)
     assert old_run_id
 
     # Now attempt a re-index with a client that fails while indexing entities.
@@ -172,7 +172,7 @@ async def test_failed_replace_paper_index_keeps_old_index_queryable(
         )
 
     # Activation never happened: the active run id must still point to the old run.
-    assert paper_service.get_active_run_id(paper_id) == old_run_id
+    assert await paper_service.get_active_run_id(paper_id) == old_run_id
 
     # The old index must still be queryable through a healthy store.
     results = await healthy_store.query_chunks("evidence", paper_id=paper_id, top_k=5)
@@ -214,7 +214,7 @@ async def test_replace_paper_index_cleans_up_old_runs(
         await asyncio.wait_for(asyncio.gather(*pending), timeout=5.0)
 
     # Direct metadata inspection: only the active run should remain.
-    active_run_id = paper_service.get_active_run_id(paper_id)
+    active_run_id = await paper_service.get_active_run_id(paper_id)
     collection = store._chunk_collection
     all_ids = collection.get(include=["metadatas"])["ids"]
     assert all_ids
@@ -244,11 +244,11 @@ async def test_delete_by_paper_clears_active_run_id(
         entities=[],
         relations=[],
     )
-    assert paper_service.get_active_run_id(paper_id)
+    assert await paper_service.get_active_run_id(paper_id)
 
     await store.delete_by_paper(paper_id)
 
-    assert paper_service.get_active_run_id(paper_id) is None
+    assert await paper_service.get_active_run_id(paper_id) is None
     assert await store.exists(paper_id) is False
 
 
@@ -304,7 +304,7 @@ async def test_exists_returns_false_when_no_active_run_id_is_set(
     )
 
     # active_run_id is still unset.
-    assert paper_service.get_active_run_id(paper_id) is None
+    assert await paper_service.get_active_run_id(paper_id) is None
     assert await store.exists(paper_id) is False
 
 
@@ -328,7 +328,7 @@ async def test_exists_returns_false_when_active_run_is_incomplete(
         run_id="run_broken",
     )
     # Force activate a run that only has chunks.
-    paper_service.set_active_run_id(paper_id, "run_broken")
+    await paper_service.set_active_run_id(paper_id, "run_broken")
 
     # exists() now considers any activated run with evidence as available,
     # because partial collection states are a transient cleanup concern, not a
@@ -369,7 +369,7 @@ async def test_reindex_failed_midway_keeps_old_index_accessible(
     old_chunks = await store.query_chunks("Old Text", paper_id=paper_id, top_k=5)
     assert len(old_chunks) == 1
     assert old_chunks[0].text == "Old Text"
-    old_run_id = paper_service.get_active_run_id(paper_id)
+    old_run_id = await paper_service.get_active_run_id(paper_id)
     assert old_run_id
 
     # 2. Start a second reindex (Run B) but make entities indexing fail.
@@ -391,7 +391,7 @@ async def test_reindex_failed_midway_keeps_old_index_accessible(
             )
 
     # 3. Core assertion: the active run must still be Run A and old chunks intact.
-    assert paper_service.get_active_run_id(paper_id) == old_run_id
+    assert await paper_service.get_active_run_id(paper_id) == old_run_id
     current_chunks = await store.query_chunks("Old Text", paper_id=paper_id, top_k=5)
     assert len(current_chunks) == len(old_chunks)
     assert current_chunks[0].text == "Old Text"

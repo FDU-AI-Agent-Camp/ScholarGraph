@@ -49,7 +49,7 @@ async def test_red_api_status_classify_warnings_never_contains_user_message(
         created_at=now,
         updated_at=now,
     )
-    get_pipeline_status_service().mark_ready(paper_id)
+    await get_pipeline_status_service().mark_ready(paper_id)
     await get_paper_warning_service().record(paper_id, WarningType.CLASSIFY, [CLASSIFIER_HEURISTIC_FALLBACK_CODE])
 
     response = await api_client.get(f"/api/v1/papers/{paper_id}/status")
@@ -73,7 +73,7 @@ async def test_red_api_detail_classify_warnings_never_contains_user_message(
         created_at=now,
         updated_at=now,
     )
-    get_pipeline_status_service().mark_ready(paper_id)
+    await get_pipeline_status_service().mark_ready(paper_id)
     await get_paper_warning_service().record(paper_id, WarningType.CLASSIFY, [CLASSIFIER_HEURISTIC_FALLBACK_CODE])
 
     response = await api_client.get(f"/api/v1/papers/{paper_id}")

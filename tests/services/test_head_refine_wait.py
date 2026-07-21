@@ -47,7 +47,7 @@ async def test_wait_returns_refined_input_when_ready(persistence_env, tmp_path: 
 
     async def _apply_refined() -> None:
         await asyncio.sleep(0.05)
-        get_paper_service().apply_head_refine(
+        await get_paper_service().apply_head_refine(
             paper_id,
             merged=IngestHead(title="Refined Title"),
             classifier_input="Title: Refined Title",
@@ -100,7 +100,7 @@ async def test_wait_returns_path_b_warnings_from_paper_service(
     paper_id = "wait-warnings"
     await register_test_paper(paper_id, status=PaperStatus.PROCESSING)
 
-    get_paper_service().apply_head_refine(
+    await get_paper_service().apply_head_refine(
         paper_id,
         merged=IngestHead(title="T"),
         classifier_input="Title: T",

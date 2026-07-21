@@ -111,7 +111,7 @@ async def test_get_status_includes_extract_warnings_after_record(registered_pape
 async def test_status_snapshot_carries_extract_warnings_on_stage_advance(registered_paper: str) -> None:
     service = get_paper_service()
     await get_paper_warning_service().record(registered_paper, WarningType.EXTRACT, [EXTRACT_HEURISTIC_FALLBACK_CODE])
-    service.set_status_snapshot(
+    await service.set_status_snapshot(
         registered_paper,
         status=PaperStatus.READY,
         stage=PipelineStage.READY,

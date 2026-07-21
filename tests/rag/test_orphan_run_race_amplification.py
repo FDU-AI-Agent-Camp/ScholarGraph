@@ -144,7 +144,7 @@ async def test_orphan_thread_cannot_override_new_generation(
     }
 
     paper_service = MagicMock()
-    paper_service.get_active_run_id.side_effect = lambda _pid: paper_state["active_run_id"]
+    paper_service.get_active_run_id = AsyncMock(side_effect=lambda _pid: paper_state["active_run_id"])
 
     def _set_active(paper_id: str, run_id: str) -> None:
         paper_state["set_active_calls"].append((paper_id, run_id))
@@ -152,7 +152,7 @@ async def test_orphan_thread_cannot_override_new_generation(
         if run_id == RUN_B:
             paper_state["status"] = PaperStatus.READY
 
-    paper_service.set_active_run_id.side_effect = _set_active
+    paper_service.set_active_run_id = AsyncMock(side_effect=_set_active)
 
     chunk_collection = GatedFakeCollection(gate)
     entity_collection = FakeCollection()
@@ -297,10 +297,12 @@ async def test_cleanup_task_removes_delayed_orphan_data(
 
     paper_state: dict[str, object] = {"active_run_id": None}
     paper_service = MagicMock()
-    paper_service.get_active_run_id.side_effect = lambda _pid: paper_state["active_run_id"]
-    paper_service.set_active_run_id.side_effect = lambda _pid, rid: paper_state.__setitem__(
-        "active_run_id",
-        rid or None,
+    paper_service.get_active_run_id = AsyncMock(side_effect=lambda _pid: paper_state["active_run_id"])
+    paper_service.set_active_run_id = AsyncMock(
+        side_effect=lambda _pid, rid: paper_state.__setitem__(
+            "active_run_id",
+            rid or None,
+        ),
     )
 
     chunk_collection = GatedFakeCollection(gate)
@@ -379,8 +381,8 @@ async def test_generation_guard_log_names_current_active_run(caplog: pytest.LogC
     """Refuse-activate path must name the live successor in the Generation Guard line."""
     caplog.set_level(logging.WARNING)
     paper_service = MagicMock()
-    paper_service.get_active_run_id.return_value = RUN_B
-    paper_service.set_active_run_id = MagicMock()
+    paper_service.get_active_run_id = AsyncMock(return_value=RUN_B)
+    paper_service.set_active_run_id = AsyncMock()
     store = VectorStore(
         paper_service=paper_service,
         embedding_client=FakeEmbeddingClient(),

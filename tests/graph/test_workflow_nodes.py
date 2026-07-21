@@ -114,7 +114,7 @@ async def test_wait_head_refine_node_marks_progress_message(
     from backend.services.pipeline_status_service import get_pipeline_status_service
 
     paper_id, _ = workflow_paper
-    get_pipeline_status_service().start_processing(paper_id)
+    await get_pipeline_status_service().start_processing(paper_id)
     with (
         patch("backend.graph.nodes.ensure_head_refine_scheduled"),
         patch(

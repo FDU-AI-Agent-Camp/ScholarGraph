@@ -41,7 +41,7 @@ async def test_t10_get_status_includes_extract_warnings_field(api_client: AsyncC
         created_at=now,
         updated_at=now,
     )
-    get_pipeline_status_service().advance_stage(
+    await get_pipeline_status_service().advance_stage(
         paper_id,
         PipelineStage.EXTRACTING,
         message="正在抽取逻辑图谱",

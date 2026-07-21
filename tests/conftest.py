@@ -76,9 +76,13 @@ def benchmark_dual_route_module():
     return module
 
 
-@pytest.fixture(autouse=True)
+@pytest.fixture(scope="session", autouse=True)
 def _bind_graph_only_hybrid_retriever() -> Iterator[None]:
-    """Avoid ChromaDB init when HTTP QA routes resolve HybridRetriever without app lifespan."""
+    """Avoid ChromaDB init when HTTP QA routes resolve HybridRetriever without app lifespan.
+
+    Session-scoped: ``backend.main`` import + router wiring is expensive; app state is
+    externalized to DB/services so one bind per pytest session is sufficient.
+    """
     from backend.main import app
     from backend.rag.hybrid_retriever import HybridRetriever, bind_hybrid_retriever, reset_hybrid_retriever
 
@@ -122,13 +126,13 @@ def _attach_paper_service_compat_shims(monkeypatch: pytest.MonkeyPatch) -> Itera
     yield
 
 
-@pytest.fixture(autouse=True)
-def _ensure_demo_fixture_corpus(request: pytest.FixtureRequest) -> Iterator[None]:
-    """Replace legacy in-memory ``_papers`` corpus with idempotent DB fixture seeding."""
-    if "persistence_env" in request.fixturenames:
-        yield
-        return
+@pytest.fixture(scope="session", autouse=True)
+def _ensure_demo_fixture_corpus() -> Iterator[None]:
+    """Seed OpenAPI demo corpus once per session (idempotent upsert).
 
+    Tests that mutate paper rows must use ``persistence_env`` (isolated SQLite) instead
+    of relying on the shared demo DB.
+    """
     from backend.repositories.async_bridge import run_async
 
     from tests.helpers.persistence_testkit import ensure_demo_fixture_corpus

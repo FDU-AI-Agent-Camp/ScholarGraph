@@ -75,7 +75,7 @@ async def _setup_paper_with_preview(paper_id: str) -> None:
         created_at=now,
         updated_at=now,
     )
-    service._status[paper_id] = service.set_status_snapshot(
+    service._status[paper_id] = await service.set_status_snapshot(
         paper_id,
         status=PaperStatus.PROCESSING,
         stage=PipelineStage.EXTRACTING,
@@ -252,7 +252,7 @@ async def test_graph_endpoint_fails_when_no_preview_and_full_extraction_failed()
         created_at=now,
         updated_at=now,
     )
-    service.set_status_snapshot(
+    await service.set_status_snapshot(
         paper_id,
         status=PaperStatus.PROCESSING,
         stage=PipelineStage.EXTRACTING,

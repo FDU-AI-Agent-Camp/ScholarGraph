@@ -42,13 +42,13 @@ def _register_paper(paper_id: str, *, status: PaperStatus = PaperStatus.PROCESSI
 async def test_api_x11_ready_status_exposes_fallback_warning(api_client: AsyncClient) -> None:
     paper_id = "api-f22-ready-fallback-001"
     _register_paper(paper_id)
-    get_pipeline_status_service().advance_stage(
+    await get_pipeline_status_service().advance_stage(
         paper_id,
         PipelineStage.EXTRACTING,
         message="正在抽取逻辑图谱",
     )
     await get_paper_warning_service().record(paper_id, WarningType.EXTRACT, [EXTRACT_HEURISTIC_FALLBACK_CODE])
-    get_pipeline_status_service().mark_ready(paper_id)
+    await get_pipeline_status_service().mark_ready(paper_id)
 
     response = await api_client.get(f"/api/v1/papers/{paper_id}/status")
 
@@ -65,7 +65,7 @@ async def test_api_x11_ready_status_exposes_fallback_warning(api_client: AsyncCl
 async def test_api_x11_extracting_stage_keeps_fallback_warning_visible(api_client: AsyncClient) -> None:
     paper_id = "api-f22-extracting-warn-001"
     _register_paper(paper_id)
-    get_pipeline_status_service().advance_stage(
+    await get_pipeline_status_service().advance_stage(
         paper_id,
         PipelineStage.EXTRACTING,
         message="正在抽取逻辑图谱",
@@ -84,7 +84,7 @@ async def test_api_x11_extracting_stage_keeps_fallback_warning_visible(api_clien
 async def test_api_x11_failed_pipeline_has_no_extract_warnings(api_client: AsyncClient) -> None:
     paper_id = "api-f22-failed-no-warn-001"
     _register_paper(paper_id)
-    get_pipeline_status_service().mark_failed(
+    await get_pipeline_status_service().mark_failed(
         paper_id,
         message="图谱 LLM 抽取失败",
         error_code="PIPELINE_FAILED",

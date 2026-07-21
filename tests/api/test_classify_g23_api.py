@@ -13,6 +13,7 @@ from backend.agents.classifier_constants import (
     CLASSIFIER_HEURISTIC_FALLBACK_MESSAGE,
 )
 from backend.main import app
+from backend.repositories.async_bridge import run_async
 from backend.schemas.paper import PaperDetail, PaperStatus, PipelineStage
 from backend.services.paper_service import get_paper_service
 from backend.services.paper_warning_service import WarningType, get_paper_warning_service
@@ -39,7 +40,7 @@ def _register_ready_paper(paper_id: str) -> None:
         created_at=now,
         updated_at=now,
     )
-    get_pipeline_status_service().mark_ready(paper_id)
+    run_async(get_pipeline_status_service().mark_ready(paper_id))
 
 
 @pytest.mark.asyncio
@@ -71,13 +72,13 @@ async def test_api_g19_get_paper_without_fallback_has_empty_classify_warnings(ap
 async def test_api_g14_fallback_machine_code_on_status(api_client: AsyncClient) -> None:
     paper_id = "api-g23-status-code-001"
     _register_ready_paper(paper_id)
-    get_pipeline_status_service().advance_stage(
+    await get_pipeline_status_service().advance_stage(
         paper_id,
         PipelineStage.CLASSIFYING,
         message="正在范式分类",
     )
     await get_paper_warning_service().record(paper_id, WarningType.CLASSIFY, [CLASSIFIER_HEURISTIC_FALLBACK_CODE])
-    get_pipeline_status_service().mark_ready(paper_id)
+    await get_pipeline_status_service().mark_ready(paper_id)
 
     response = await api_client.get(f"/api/v1/papers/{paper_id}/status")
 
@@ -127,7 +128,7 @@ async def test_api_g16_classifying_stage_exposes_fallback_before_ready(api_clien
         created_at=now,
         updated_at=now,
     )
-    get_pipeline_status_service().advance_stage(
+    await get_pipeline_status_service().advance_stage(
         paper_id,
         PipelineStage.CLASSIFYING,
         message="正在范式分类",
@@ -163,7 +164,7 @@ async def test_api_g28_classification_unchanged_when_classify_warnings_present(a
         paradigm=Paradigm.HSS,
         classification=classification,
     )
-    get_pipeline_status_service().mark_ready(paper_id)
+    await get_pipeline_status_service().mark_ready(paper_id)
     await get_paper_warning_service().record(paper_id, WarningType.CLASSIFY, [CLASSIFIER_HEURISTIC_FALLBACK_CODE])
 
     response = await api_client.get(f"/api/v1/papers/{paper_id}")

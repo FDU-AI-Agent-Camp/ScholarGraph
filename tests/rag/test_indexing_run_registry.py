@@ -72,8 +72,8 @@ def test_sticky_revoke_returns_most_recent_for_paper() -> None:
 async def test_replace_paper_index_skips_activate_when_revoked() -> None:
     """After begin+revoke, upsert may finish but must not call set_active_run_id."""
     paper_service = MagicMock()
-    paper_service.get_active_run_id.return_value = None
-    set_active = MagicMock()
+    paper_service.get_active_run_id = AsyncMock(return_value=None)
+    set_active = AsyncMock()
     paper_service.set_active_run_id = set_active
 
     chunk_collection = MagicMock()
@@ -115,7 +115,7 @@ async def test_replace_paper_index_skips_activate_when_revoked() -> None:
             relations=[],
         )
 
-    set_active.assert_not_called()
+    set_active.assert_not_awaited()
     # Compensating cleanup on revoked path uses collection.delete via to_thread.
     assert chunk_collection.delete.called
     # Revoke stays sticky until orphan compensate / successful activate clear().
@@ -128,8 +128,8 @@ async def test_compensate_revoked_run_clears_active_pointer() -> None:
     from backend.rag.handlers import _compensate_revoked_index_run
 
     paper_service = MagicMock()
-    paper_service.get_active_run_id.return_value = "run_stale"
-    paper_service.set_active_run_id = MagicMock()
+    paper_service.get_active_run_id = AsyncMock(return_value="run_stale")
+    paper_service.set_active_run_id = AsyncMock()
     store = MagicMock()
     store.delete_run = AsyncMock()
 
@@ -143,7 +143,7 @@ async def test_compensate_revoked_run_clears_active_pointer() -> None:
             delays_seconds=(0.0,),
         )
 
-    paper_service.set_active_run_id.assert_called_with("paper-x", None)
+    paper_service.set_active_run_id.assert_awaited_once_with("paper-x", None)
     store.delete_run.assert_awaited_once_with("paper-x", "run_stale")
 
 

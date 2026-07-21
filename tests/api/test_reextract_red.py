@@ -76,11 +76,11 @@ async def _register_paper(
     )
     pss = get_pipeline_status_service()
     if status == PaperStatus.READY:
-        pss.mark_ready(paper_id, message="red setup")
+        await pss.mark_ready(paper_id, message="red setup")
     elif status == PaperStatus.FAILED:
-        pss.mark_failed(paper_id, message="red setup", error_code="PIPELINE_FAILED")
+        await pss.mark_failed(paper_id, message="red setup", error_code="PIPELINE_FAILED")
     else:
-        pss.start_processing(paper_id, message="red setup")
+        await pss.start_processing(paper_id, message="red setup")
     if pdf_path is not None:
         service._pdf_paths[paper_id] = pdf_path
     if warnings:

@@ -44,7 +44,7 @@ def _register_paper(paper_id: str) -> None:
 async def test_status_api_head_refining_stage_and_percent(api_client: AsyncClient) -> None:
     paper_id = "api-head-refining-001"
     _register_paper(paper_id)
-    get_pipeline_status_service().advance_stage(
+    await get_pipeline_status_service().advance_stage(
         paper_id,
         PipelineStage.HEAD_REFINING,
         message="正在精炼文档头部…",
@@ -102,7 +102,7 @@ async def test_paper_detail_api_returns_ingest_head_with_sources(
         abstract="From GROBID",
         sources={"title": "grobid", "abstract": "grobid"},
     )
-    get_paper_service().apply_head_refine(
+    await get_paper_service().apply_head_refine(
         paper_id,
         merged=merged,
         classifier_input="Title: API Head",

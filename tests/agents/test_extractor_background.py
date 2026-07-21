@@ -221,7 +221,7 @@ class TestExtractPreviewAndScheduleFull:
     ) -> None:
         paper_id = "bg-preview-003"
         _register_paper(paper_id)
-        get_paper_service().apply_head_refine(
+        await get_paper_service().apply_head_refine(
             paper_id,
             merged=IngestHead(title="T", abstract="A", intro="I"),
             classifier_input="T A I",

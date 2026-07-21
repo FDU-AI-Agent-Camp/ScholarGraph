@@ -77,7 +77,7 @@ def _preview_for(paper_id: str, *, token: str) -> UnifiedPaperGraph:
 
 async def _assert_matches_model(service: PaperService, model: _ChaosModel) -> None:
     for paper_id, expected in model.papers.items():
-        actual_run_id = service.get_active_run_id(paper_id)
+        actual_run_id = await service.get_active_run_id(paper_id)
         assert actual_run_id == expected.active_run_id, (
             f"active_run_id mismatch for {paper_id}: {actual_run_id!r} != {expected.active_run_id!r}"
         )
@@ -138,7 +138,7 @@ async def _apply_action(
     if action == _Action.SET_ACTIVE_RUN_ID:
         run_id = f"chaos-run-{model.next_run_index}"
         model.next_run_index += 1
-        service.set_active_run_id(paper_id, run_id)
+        await service.set_active_run_id(paper_id, run_id)
         state.active_run_id = run_id
         return service
 

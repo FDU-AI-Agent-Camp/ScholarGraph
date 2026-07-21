@@ -117,7 +117,7 @@ async def test_force_reextract_rejects_processing_paper(
 ) -> None:
     """Re-extract is blocked while the paper is already processing."""
     paper_id = await _upload_pdf(api_client, sample_pdf_path)
-    get_pipeline_status_service().start_processing(paper_id)
+    await get_pipeline_status_service().start_processing(paper_id)
 
     response = await api_client.post(f"/api/v1/papers/{paper_id}/reextract")
 
@@ -133,7 +133,7 @@ async def test_force_reextract_processing_with_force_query(
 ) -> None:
     """``?force=true`` aborts PROCESSING, purges vectors, and re-queues."""
     paper_id = await _upload_pdf(api_client, sample_pdf_path)
-    get_pipeline_status_service().start_processing(paper_id)
+    await get_pipeline_status_service().start_processing(paper_id)
 
     vector_store = AsyncMock()
     vector_store.delete_by_paper = AsyncMock()
@@ -164,7 +164,7 @@ async def test_force_reextract_rejects_indexing_paper(
 ) -> None:
     """Re-extract is blocked while the paper is indexing vectors."""
     paper_id = await _upload_pdf(api_client, sample_pdf_path)
-    get_pipeline_status_service().mark_indexing(paper_id)
+    await get_pipeline_status_service().mark_indexing(paper_id)
 
     response = await api_client.post(f"/api/v1/papers/{paper_id}/reextract")
 

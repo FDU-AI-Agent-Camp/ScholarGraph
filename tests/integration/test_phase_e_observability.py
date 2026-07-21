@@ -38,7 +38,7 @@ async def test_wait_head_refine_writes_head_refining_status(
     integration_paper: tuple[str, Path],
 ) -> None:
     paper_id, pdf_path = integration_paper
-    get_pipeline_status_service().start_processing(paper_id)
+    await get_pipeline_status_service().start_processing(paper_id)
 
     async def _instant(_pid: str, _path: Path, fallback: str, **_: object) -> tuple[str, list[str]]:
         return "Title: Refined", ["grobid_unavailable"]
@@ -112,7 +112,7 @@ async def test_head_refine_persists_and_survives_service_restart(
         abstract="Abstract text",
         sources={"title": "mineru", "abstract": "pymupdf"},
     )
-    get_paper_service().apply_head_refine(
+    await get_paper_service().apply_head_refine(
         paper_id,
         merged=merged,
         classifier_input="Title: Persisted Via API",
@@ -143,7 +143,7 @@ async def test_pipeline_emits_head_refining_stage_in_status_writes(
     writes: list[PaperStatusData] = []
     original_apply = PipelineStatusService._apply
 
-    def recording_apply(
+    async def recording_apply(
         self: PipelineStatusService,
         pid: str,
         *,
@@ -153,8 +153,9 @@ async def test_pipeline_emits_head_refining_stage_in_status_writes(
         message,
         error_code=None,
         failed_during=None,
+        append_extract_warnings=None,
     ) -> PaperStatusData:
-        snapshot = original_apply(
+        snapshot = await original_apply(
             self,
             pid,
             status=status,
@@ -163,6 +164,7 @@ async def test_pipeline_emits_head_refining_stage_in_status_writes(
             message=message,
             error_code=error_code,
             failed_during=failed_during,
+            append_extract_warnings=append_extract_warnings,
         )
         writes.append(snapshot)
         return snapshot

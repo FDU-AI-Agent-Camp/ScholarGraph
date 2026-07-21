@@ -100,7 +100,7 @@ async def v2_citation_client(
 
     store, _chunk_col, _entity_col, _relation_col, _embedder = _store()
     paper_service = get_paper_service()
-    paper_service.set_active_run_id(paper_id, "v2-cite-run")
+    await paper_service.set_active_run_id(paper_id, "v2-cite-run")
     await store.index_chunks(
         [
             _paper_chunk(

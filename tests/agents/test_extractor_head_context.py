@@ -13,16 +13,18 @@ from backend.schemas.ingest_head import IngestHead
 from backend.services.paper_service import get_paper_service
 
 
-def test_resolve_head_context_returns_none_when_no_head(tmp_path, monkeypatch: pytest.MonkeyPatch) -> None:
+@pytest.mark.asyncio
+async def test_resolve_head_context_returns_none_when_no_head(tmp_path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("GRAPH_DATA_DIR", str(tmp_path))
     get_settings.cache_clear()
 
-    assert _resolve_head_context("no-such-paper") is None
+    assert await _resolve_head_context("no-such-paper") is None
 
     get_settings.cache_clear()
 
 
-def test_resolve_head_context_reads_from_head_store(tmp_path, monkeypatch: pytest.MonkeyPatch) -> None:
+@pytest.mark.asyncio
+async def test_resolve_head_context_reads_from_head_store(tmp_path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("GRAPH_DATA_DIR", str(tmp_path))
     get_settings.cache_clear()
 
@@ -33,7 +35,7 @@ def test_resolve_head_context_reads_from_head_store(tmp_path, monkeypatch: pytes
         classifier_input="Title: Disk Title",
     )
 
-    context = _resolve_head_context(paper_id)
+    context = await _resolve_head_context(paper_id)
 
     assert context is not None
     assert "Disk Title" in context
@@ -63,14 +65,14 @@ async def test_resolve_head_context_uses_head_store_after_apply_refine(
         merged=IngestHead(title="Disk Title", abstract="disk"),
         classifier_input="Title: Disk Title",
     )
-    get_paper_service().apply_head_refine(
+    await get_paper_service().apply_head_refine(
         paper_id,
         merged=IngestHead(title="Refined Title", abstract="refined abstract"),
         classifier_input="Title: Refined Title",
         warnings=[],
     )
 
-    context = _resolve_head_context(paper_id)
+    context = await _resolve_head_context(paper_id)
 
     assert context is not None
     assert "Refined Title" in context

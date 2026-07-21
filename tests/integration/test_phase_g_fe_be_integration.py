@@ -65,7 +65,7 @@ async def _register_classify_fallback_paper() -> None:
         paradigm=Paradigm.STEM,
         classification=ParadigmClassification.model_validate(detail_data["classification"]),
     )
-    get_pipeline_status_service().mark_ready(CLASSIFY_FALLBACK_PAPER_ID)
+    await get_pipeline_status_service().mark_ready(CLASSIFY_FALLBACK_PAPER_ID)
     await get_paper_warning_service().record(
         CLASSIFY_FALLBACK_PAPER_ID,
         WarningType.CLASSIFY,

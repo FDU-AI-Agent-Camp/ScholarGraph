@@ -28,10 +28,10 @@ async def test_active_run_id_survives_service_restart(persistence_env) -> None:
     paper_id = "ephemeral-run-id"
     await register_test_paper(paper_id, status=PaperStatus.READY)
     service = PaperService()
-    service.set_active_run_id(paper_id, "run-persist-001")
+    await service.set_active_run_id(paper_id, "run-persist-001")
 
     restarted = await restart_paper_service()
-    assert restarted.get_active_run_id(paper_id) == "run-persist-001"
+    assert await restarted.get_active_run_id(paper_id) == "run-persist-001"
 
 
 @pytest.mark.asyncio
@@ -57,12 +57,12 @@ async def test_clear_ephemeral_pipeline_state_removes_preview_and_run_id(persist
     paper_id = "ephemeral-clear"
     await register_test_paper(paper_id, status=PaperStatus.READY)
     service = PaperService()
-    service.set_active_run_id(paper_id, "run-clear-me")
+    await service.set_active_run_id(paper_id, "run-clear-me")
     await service.save_preview_graph(paper_id, _sample_preview(paper_id))
 
     await service.clear_ephemeral_pipeline_state(paper_id)
 
-    assert service.get_active_run_id(paper_id) is None
+    assert await service.get_active_run_id(paper_id) is None
     assert await service.get_preview_graph(paper_id) is None
 
 

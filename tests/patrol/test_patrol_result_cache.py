@@ -5,7 +5,7 @@
 
 from __future__ import annotations
 
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from backend.patrol.result_cache import (
@@ -51,7 +51,7 @@ async def test_collect_fingerprint_uses_graph_version_and_run_id(
 ) -> None:
     paper_service = MagicMock()
     paper_service.get_pipeline_graph_version.side_effect = lambda pid: {"p1": "3", "p2": "3"}[pid]
-    paper_service.get_active_run_id.side_effect = lambda pid: {"p1": "run-a", "p2": None}[pid]
+    paper_service.get_active_run_id = AsyncMock(side_effect=lambda pid: {"p1": "run-a", "p2": None}[pid])
     monkeypatch.setattr(
         "backend.services.paper_service.get_paper_service",
         lambda: paper_service,
@@ -63,7 +63,7 @@ async def test_collect_fingerprint_uses_graph_version_and_run_id(
 async def test_collect_fingerprint_tolerates_missing_paper(monkeypatch: pytest.MonkeyPatch) -> None:
     paper_service = MagicMock()
     paper_service.get_pipeline_graph_version.side_effect = KeyError("paper not found")
-    paper_service.get_active_run_id.return_value = None
+    paper_service.get_active_run_id = AsyncMock(return_value=None)
     monkeypatch.setattr(
         "backend.services.paper_service.get_paper_service",
         lambda: paper_service,

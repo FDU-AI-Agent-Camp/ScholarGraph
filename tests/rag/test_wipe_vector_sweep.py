@@ -78,7 +78,7 @@ async def test_query_fail_closed_when_active_run_missing(persistence_env) -> Non
         relation_collection=FakeCollection(),
     )
     await store._index_chunks([_chunk(paper_id, "ghost body")], run_id="run_orphan")
-    assert service.get_active_run_id(paper_id) is None
+    assert await service.get_active_run_id(paper_id) is None
 
     results = await store.query_chunks("ghost", paper_id=paper_id, top_k=5)
     assert results == []
@@ -92,10 +92,10 @@ async def test_wipe_wave2_delete_run_after_short_delay(persistence_env) -> None:
     paper_id = "wipe-wave2"
     await register_test_paper(paper_id, status=PaperStatus.READY)
     service = await restart_paper_service()
-    service.set_active_run_id(paper_id, "run_old")
+    await service.set_active_run_id(paper_id, "run_old")
     get_indexing_run_registry().begin(paper_id, "run_inflight")
 
-    targets = snapshot_wipe_target_run_ids(paper_id)
+    targets = await snapshot_wipe_target_run_ids(paper_id)
     assert "run_old" in targets
     assert "run_inflight" in targets
     get_indexing_run_registry().revoke(paper_id, "run_inflight")
@@ -136,7 +136,7 @@ async def test_force_delete_schedules_wave2_after_wave1(persistence_env, tmp_pat
     await register_test_paper(paper_id, status=PaperStatus.READY, pdf_path=str(tmp_path / f"{paper_id}.pdf"))
     (tmp_path / f"{paper_id}.pdf").write_bytes(b"%PDF-1.4")
     service = await restart_paper_service()
-    service.set_active_run_id(paper_id, "run_ready")
+    await service.set_active_run_id(paper_id, "run_ready")
     delete_service = get_paper_delete_service()
 
     scheduled: list[tuple[str, set[str]]] = []
@@ -159,7 +159,7 @@ async def test_force_delete_schedules_wave2_after_wave1(persistence_env, tmp_pat
         ),
         patch(
             "backend.rag.wipe_vector_sweep.snapshot_wipe_target_run_ids",
-            return_value={"run_ready"},
+            new=AsyncMock(return_value={"run_ready"}),
         ),
         patch(
             "backend.rag.wipe_vector_sweep.extend_wipe_targets_after_abort",
@@ -176,7 +176,7 @@ async def test_force_delete_schedules_wave2_after_wave1(persistence_env, tmp_pat
 async def test_index_chunks_skips_without_run_id_on_run_aware_store() -> None:
     """Run-aware stores must not upsert Chroma rows lacking index_run_id metadata."""
     paper_service = MagicMock()
-    paper_service.get_active_run_id.return_value = None
+    paper_service.get_active_run_id = AsyncMock(return_value=None)
     chunk_col = FakeCollection()
     store = VectorStore(
         paper_service=paper_service,

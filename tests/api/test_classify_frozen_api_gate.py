@@ -55,7 +55,7 @@ async def test_api_status_returns_machine_code_not_user_message(api_client: Asyn
         created_at=now,
         updated_at=now,
     )
-    get_pipeline_status_service().mark_ready(paper_id)
+    await get_pipeline_status_service().mark_ready(paper_id)
     await get_paper_warning_service().record(paper_id, WarningType.CLASSIFY, [FROZEN_CODE])
 
     response = await api_client.get(f"/api/v1/papers/{paper_id}/status")
@@ -88,7 +88,7 @@ async def test_api_detail_returns_machine_code_with_separate_classification_reas
             reason=heuristic_reason,
         ),
     )
-    get_pipeline_status_service().mark_ready(paper_id)
+    await get_pipeline_status_service().mark_ready(paper_id)
     await get_paper_warning_service().record(paper_id, WarningType.CLASSIFY, [FROZEN_CODE])
 
     response = await api_client.get(f"/api/v1/papers/{paper_id}")
@@ -111,7 +111,7 @@ async def test_api_classifying_poll_exposes_frozen_machine_code(api_client: Asyn
         created_at=now,
         updated_at=now,
     )
-    get_pipeline_status_service().advance_stage(
+    await get_pipeline_status_service().advance_stage(
         paper_id,
         PipelineStage.CLASSIFYING,
         message="正在范式分类",

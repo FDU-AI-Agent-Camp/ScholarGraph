@@ -34,7 +34,7 @@ async def test_set_status_snapshot_writes_pipeline_row(persistence_env) -> None:
     from backend.schemas.paper import PipelineStage
     from backend.services.pipeline_status_service import PipelineStatusService
 
-    snapshot = PipelineStatusService().start_processing("snap-001")
+    snapshot = await PipelineStatusService().start_processing("snap-001")
     assert snapshot.status == PaperStatus.PROCESSING
     assert snapshot.stage == PipelineStage.INGESTING
 

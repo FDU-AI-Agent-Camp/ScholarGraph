@@ -37,10 +37,10 @@ class _InMemoryRagRunTracker:
     def __init__(self) -> None:
         self._active_run_ids: dict[str, str] = {}
 
-    def get_active_run_id(self, paper_id: str) -> str | None:
+    async def get_active_run_id(self, paper_id: str) -> str | None:
         return self._active_run_ids.get(paper_id)
 
-    def set_active_run_id(self, paper_id: str, run_id: str) -> None:
+    async def set_active_run_id(self, paper_id: str, run_id: str) -> None:
         self._active_run_ids[paper_id] = run_id
 
 

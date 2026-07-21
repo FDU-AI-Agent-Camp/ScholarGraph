@@ -56,7 +56,7 @@ async def test_status_snapshot_carries_classify_warnings_on_stage_advance(regist
     await get_paper_warning_service().record(
         registered_paper, WarningType.CLASSIFY, [CLASSIFIER_HEURISTIC_FALLBACK_CODE]
     )
-    service.set_status_snapshot(
+    await service.set_status_snapshot(
         registered_paper,
         status=PaperStatus.READY,
         stage=PipelineStage.READY,
@@ -106,7 +106,7 @@ async def test_g26_set_status_snapshot_includes_classify_warnings_same_as_extrac
     )
     await get_paper_warning_service().record(registered_paper, WarningType.EXTRACT, ["extract_heuristic_fallback"])
 
-    snapshot = service.set_status_snapshot(
+    snapshot = await service.set_status_snapshot(
         registered_paper,
         status=PaperStatus.READY,
         stage=PipelineStage.READY,

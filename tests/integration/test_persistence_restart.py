@@ -172,7 +172,7 @@ async def test_mid_pipeline_ephemeral_state_survives_crash_recovery(
         ),
     )
     await service.save_preview_graph(paper_id, preview)
-    service.set_active_run_id(paper_id, active_run_id)
+    await service.set_active_run_id(paper_id, active_run_id)
     await service.mark_preview_available(paper_id)
 
     persisted_preview = await pipeline_repo.get_preview_graph(paper_id)
@@ -183,7 +183,7 @@ async def test_mid_pipeline_ephemeral_state_survives_crash_recovery(
     simulate_service_crash()
 
     restarted = await restart_paper_service()
-    assert restarted.get_active_run_id(paper_id) == active_run_id
+    assert await restarted.get_active_run_id(paper_id) == active_run_id
 
     loaded_preview = await restarted.get_preview_graph(paper_id)
     assert loaded_preview is not None
