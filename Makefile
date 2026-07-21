@@ -26,6 +26,7 @@ ci:
 	uv run python scripts/check_rag_io_timeouts.py
 	uv run python scripts/check_pipeline_repo_lod.py
 	uv run python scripts/check_services_no_run_async.py
+	uv run python scripts/check_async_hotpath_await.py
 	uv run python scripts/check_p13_release_gate.py
 	uv run python scripts/check_process_release_gate.py
 	uv run python -m pytest -q --tb=short --cov=backend --cov-report=xml --cov-report=term-missing --cov-fail-under=30 -m "$(PR_GATE_MARKERS)"
