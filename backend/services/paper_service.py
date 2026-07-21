@@ -128,6 +128,9 @@ class PaperService:
 
     async def set_active_run_id(self, paper_id: str, run_id: str | None) -> None:
         """Atomically activate a RAG index run, or clear it (``None`` / ``""`` → NULL)."""
+        from backend.debug.async_hotpath_audit import record
+
+        record("paper_service.set_active_run_id")
         await self.ensure_paper_exists(paper_id)
         await self._pipeline_repo.set_active_rag_run_id(paper_id, run_id)
 

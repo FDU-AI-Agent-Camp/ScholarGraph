@@ -88,6 +88,9 @@ async def persist_status_snapshot(
     append_extract_warnings: list[str] | None = None,
 ) -> PaperStatusData:
     """Validate and atomically persist a pipeline status snapshot."""
+    from backend.debug.async_hotpath_audit import record
+
+    record("status_snapshot_guard.persist_status_snapshot")
     validate_status_contract(status=status, stage=stage, percent=percent)
     validate_failed_error_fields(
         status=status,
