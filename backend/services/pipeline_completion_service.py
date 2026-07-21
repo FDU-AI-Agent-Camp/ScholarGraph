@@ -93,12 +93,12 @@ async def complete_paper_pipeline(
     from backend.services.paper_pipeline_ops import get_paper_pipeline_ops_service
     from backend.services.paper_status_transitions import assert_status_transition_allowed
     from backend.services.pipeline_status_service import DEFAULT_STAGE_MESSAGES
-    from backend.services.status_snapshot_guard import apersist_status_snapshot
+    from backend.services.status_snapshot_guard import persist_status_snapshot
 
     existing = await get_paper_pipeline_ops_service().get_pipeline_snapshot(paper_id)
     if existing is not None:
         assert_status_transition_allowed(existing.status, PaperStatus.INDEXING, paper_id=paper_id)
-    await apersist_status_snapshot(
+    await persist_status_snapshot(
         paper_service,
         paper_id,
         status=PaperStatus.INDEXING,

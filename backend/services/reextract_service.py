@@ -155,7 +155,7 @@ class ReextractService:
                 snapshot_wipe_target_run_ids,
             )
 
-            wipe_targets = snapshot_wipe_target_run_ids(paper_id)
+            wipe_targets = await snapshot_wipe_target_run_ids(paper_id)
             # Abort cancels Tasks / indexing revoke only — does not drop this claim.
             await abort_in_flight_pipeline(paper_id)
             wipe_targets = extend_wipe_targets_after_abort(paper_id, wipe_targets)

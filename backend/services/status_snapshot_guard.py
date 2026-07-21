@@ -10,7 +10,6 @@ from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
 from backend.graph.state import STAGE_PERCENT
-from backend.repositories.async_bridge import run_async
 from backend.schemas.paper import FailedDuringStage, PaperStatus, PaperStatusData, PipelineStage
 from backend.services.paper_pipeline_ops import get_paper_pipeline_ops_service
 from backend.services.pipeline_status_service import (
@@ -76,7 +75,7 @@ def _to_failed_during(stage: PipelineStage | None) -> FailedDuringStage | None:
     return FailedDuringStage(stage.value)
 
 
-def persist_status_snapshot(
+async def persist_status_snapshot(
     paper_service: PaperService,
     paper_id: str,
     *,
@@ -88,35 +87,7 @@ def persist_status_snapshot(
     failed_during: PipelineStage | None = None,
     append_extract_warnings: list[str] | None = None,
 ) -> PaperStatusData:
-    """Validate and atomically persist a pipeline status snapshot (sync callers)."""
-    return run_async(
-        apersist_status_snapshot(
-            paper_service,
-            paper_id,
-            status=status,
-            stage=stage,
-            percent=percent,
-            message=message,
-            error_code=error_code,
-            failed_during=failed_during,
-            append_extract_warnings=append_extract_warnings,
-        )
-    )
-
-
-async def apersist_status_snapshot(
-    paper_service: PaperService,
-    paper_id: str,
-    *,
-    status: PaperStatus,
-    stage: PipelineStage | None,
-    percent: int,
-    message: str,
-    error_code: str | None = None,
-    failed_during: PipelineStage | None = None,
-    append_extract_warnings: list[str] | None = None,
-) -> PaperStatusData:
-    """Async twin of ``persist_status_snapshot`` for callers already on an event loop."""
+    """Validate and atomically persist a pipeline status snapshot."""
     validate_status_contract(status=status, stage=stage, percent=percent)
     validate_failed_error_fields(
         status=status,
@@ -149,7 +120,7 @@ async def apersist_status_snapshot(
     return snapshot
 
 
-def ensure_status_contract(
+async def ensure_status_contract(
     paper_service: PaperService,
     paper_id: str,
     snapshot: PaperStatusData,
@@ -171,7 +142,7 @@ def ensure_status_contract(
     except ValueError:
         if snapshot.status == PaperStatus.FAILED:
             if snapshot.stage != PipelineStage.FAILED:
-                return persist_status_snapshot(
+                return await persist_status_snapshot(
                     paper_service,
                     paper_id,
                     status=PaperStatus.FAILED,
@@ -187,7 +158,7 @@ def ensure_status_contract(
                 )
             return snapshot
         if snapshot.status == PaperStatus.READY:
-            return persist_status_snapshot(
+            return await persist_status_snapshot(
                 paper_service,
                 paper_id,
                 status=PaperStatus.READY,
@@ -196,7 +167,7 @@ def ensure_status_contract(
                 message=snapshot.message or "建图完成",
             )
         if snapshot.status == PaperStatus.READY_WITH_WARNINGS:
-            return persist_status_snapshot(
+            return await persist_status_snapshot(
                 paper_service,
                 paper_id,
                 status=PaperStatus.READY_WITH_WARNINGS,
@@ -205,7 +176,7 @@ def ensure_status_contract(
                 message=snapshot.message or "建图完成，但图谱置信度未达门控，请复核",
             )
         if snapshot.status == PaperStatus.PROCESSING and snapshot.stage is not None and snapshot.stage in STAGE_PERCENT:
-            return persist_status_snapshot(
+            return await persist_status_snapshot(
                 paper_service,
                 paper_id,
                 status=PaperStatus.PROCESSING,
@@ -216,7 +187,7 @@ def ensure_status_contract(
         if snapshot.status == PaperStatus.INDEXING:
             # papers.status may advance to INDEXING a tick before pipeline_runs
             # stage/percent catch up (dual-table read); repair to the P10 contract.
-            return persist_status_snapshot(
+            return await persist_status_snapshot(
                 paper_service,
                 paper_id,
                 status=PaperStatus.INDEXING,

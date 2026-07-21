@@ -111,15 +111,15 @@ def validate_failed_error_fields(
 class PipelineStatusService:
     """Single entry for workflow progress writes consumed by GET .../status."""
 
-    def start_processing(self, paper_id: str, *, message: str | None = None) -> PaperStatusData:
+    async def start_processing(self, paper_id: str, *, message: str | None = None) -> PaperStatusData:
         """pending → processing，进入 ingesting（percent=20）。"""
-        return self.advance_stage(
+        return await self.advance_stage(
             paper_id,
             PipelineStage.INGESTING,
             message=message or "流水线已启动，正在解析 PDF",
         )
 
-    def advance_stage(
+    async def advance_stage(
         self,
         paper_id: str,
         stage: PipelineStage,
@@ -130,7 +130,7 @@ class PipelineStatusService:
             raise ValueError(f"advance_stage 不接受终态 stage: {stage}")
         percent = STAGE_PERCENT[stage]
         msg = message or DEFAULT_STAGE_MESSAGES[stage]
-        return self._apply(
+        return await self._apply(
             paper_id,
             status=PaperStatus.PROCESSING,
             stage=stage,
@@ -138,7 +138,7 @@ class PipelineStatusService:
             message=msg,
         )
 
-    def mark_indexing(
+    async def mark_indexing(
         self,
         paper_id: str,
         *,
@@ -146,7 +146,7 @@ class PipelineStatusService:
         append_extract_warnings: list[str] | None = None,
     ) -> PaperStatusData:
         """Graph is persisted; wait for RAG VectorStore before terminal ready (P10)."""
-        return self._apply(
+        return await self._apply(
             paper_id,
             status=PaperStatus.INDEXING,
             stage=PipelineStage.INDEXING,
@@ -155,14 +155,14 @@ class PipelineStatusService:
             append_extract_warnings=append_extract_warnings,
         )
 
-    def mark_ready(
+    async def mark_ready(
         self,
         paper_id: str,
         *,
         message: str | None = None,
         append_extract_warnings: list[str] | None = None,
     ) -> PaperStatusData:
-        return self._apply(
+        return await self._apply(
             paper_id,
             status=PaperStatus.READY,
             stage=PipelineStage.READY,
@@ -171,14 +171,14 @@ class PipelineStatusService:
             append_extract_warnings=append_extract_warnings,
         )
 
-    def mark_ready_with_warnings(
+    async def mark_ready_with_warnings(
         self,
         paper_id: str,
         *,
         message: str | None = None,
         append_extract_warnings: list[str] | None = None,
     ) -> PaperStatusData:
-        return self._apply(
+        return await self._apply(
             paper_id,
             status=PaperStatus.READY_WITH_WARNINGS,
             stage=PipelineStage.READY,
@@ -187,7 +187,7 @@ class PipelineStatusService:
             append_extract_warnings=append_extract_warnings,
         )
 
-    def mark_failed(
+    async def mark_failed(
         self,
         paper_id: str,
         *,
@@ -195,7 +195,7 @@ class PipelineStatusService:
         error_code: str,
         failed_during: PipelineStage | None = None,
     ) -> PaperStatusData:
-        return self._apply(
+        return await self._apply(
             paper_id,
             status=PaperStatus.FAILED,
             stage=PipelineStage.FAILED,
@@ -205,7 +205,7 @@ class PipelineStatusService:
             failed_during=failed_during,
         )
 
-    def _apply(
+    async def _apply(
         self,
         paper_id: str,
         *,
@@ -217,7 +217,7 @@ class PipelineStatusService:
         failed_during: PipelineStage | None = None,
         append_extract_warnings: list[str] | None = None,
     ) -> PaperStatusData:
-        from backend.repositories.async_bridge import run_async
+        from backend.services.paper_pipeline_ops import get_paper_pipeline_ops_service
         from backend.services.paper_status_transitions import assert_status_transition_allowed
 
         validate_status_contract(status=status, stage=stage, percent=percent)
@@ -226,12 +226,11 @@ class PipelineStatusService:
             error_code=error_code,
             failed_during=failed_during,
         )
-        from backend.services.paper_pipeline_ops import get_paper_pipeline_ops_service
 
-        existing = run_async(get_paper_pipeline_ops_service().get_pipeline_snapshot(paper_id))
+        existing = await get_paper_pipeline_ops_service().get_pipeline_snapshot(paper_id)
         if existing is not None:
             assert_status_transition_allowed(existing.status, status, paper_id=paper_id)
-        return get_paper_service().set_status_snapshot(
+        return await get_paper_service().set_status_snapshot(
             paper_id,
             status=status,
             stage=stage,

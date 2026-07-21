@@ -93,26 +93,6 @@ class HeadRefineCoordinator:
 
         await self._core_service.update_paths(paper_id, head_path=head_path)
 
-    def apply_sync(
-        self,
-        paper_id: str,
-        *,
-        merged: IngestHead,
-        classifier_input: str,
-        warnings: list[str] | None = None,
-    ) -> None:
-        """Sync facade entry for legacy callers; prefer ``apply`` in async contexts."""
-        from backend.repositories import run_async
-
-        run_async(
-            self.apply(
-                paper_id,
-                merged=merged,
-                classifier_input=classifier_input,
-                warnings=warnings,
-            ),
-        )
-
     async def load_head(self, paper_id: str) -> IngestHead | None:
         record = await asyncio.to_thread(self._head_store().load, paper_id)
         return record.merged if record is not None else None

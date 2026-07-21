@@ -51,7 +51,7 @@ async def _run_full_extraction(
         if current.status in {PaperStatus.READY, PaperStatus.READY_WITH_WARNINGS, PaperStatus.FAILED}:
             return
         if not (current.status == PaperStatus.PROCESSING and current.stage == PipelineStage.EXTRACTING):
-            status_service.advance_stage(
+            await status_service.advance_stage(
                 paper_id,
                 stage=PipelineStage.EXTRACTING,
                 message="后台全量抽取进行中",
@@ -80,7 +80,7 @@ async def _run_full_extraction(
         )
     except ServiceError as exc:
         logger.exception("background_full_extraction_failed", extra={"paper_id": paper_id})
-        paper_service.fail_pipeline(
+        await paper_service.fail_pipeline(
             paper_id,
             message=exc.message,
             error_code=exc.code,
@@ -88,7 +88,7 @@ async def _run_full_extraction(
         )
     except Exception as exc:
         logger.exception("background_full_extraction_failed", extra={"paper_id": paper_id})
-        paper_service.fail_pipeline(
+        await paper_service.fail_pipeline(
             paper_id,
             message=f"后台全量抽取失败: {exc}",
             error_code=PIPELINE_FAILED_CODE,

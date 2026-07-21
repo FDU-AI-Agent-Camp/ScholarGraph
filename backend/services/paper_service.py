@@ -13,7 +13,6 @@ from uuid import uuid4
 
 from backend.api.exceptions import ApiError
 from backend.config import Settings, get_settings
-from backend.repositories import run_async
 from backend.repositories.paper_repository import PaperRepository, get_paper_repository
 from backend.repositories.pipeline_repository import PipelineRepository, get_pipeline_repository
 from backend.schemas.graph import UnifiedPaperGraph
@@ -127,14 +126,14 @@ class PaperService:
 
             await seed_from_fixtures(self._paper_repo, self._pipeline_repo)
 
-    def set_active_run_id(self, paper_id: str, run_id: str | None) -> None:
+    async def set_active_run_id(self, paper_id: str, run_id: str | None) -> None:
         """Atomically activate a RAG index run, or clear it (``None`` / ``""`` → NULL)."""
-        run_async(self.ensure_paper_exists(paper_id))
-        run_async(self._pipeline_repo.set_active_rag_run_id(paper_id, run_id))
+        await self.ensure_paper_exists(paper_id)
+        await self._pipeline_repo.set_active_rag_run_id(paper_id, run_id)
 
-    def get_active_run_id(self, paper_id: str) -> str | None:
+    async def get_active_run_id(self, paper_id: str) -> str | None:
         """Return the currently active RAG index run id, or None when unset/cleared."""
-        return run_async(self._pipeline_repo.get_active_rag_run_id(paper_id))
+        return await self._pipeline_repo.get_active_rag_run_id(paper_id)
 
     async def list_papers(
         self,
@@ -211,7 +210,7 @@ class PaperService:
             extractor_config_hash=extractor_config_hash,
         )
 
-    def set_status_snapshot(
+    async def set_status_snapshot(
         self,
         paper_id: str,
         *,
@@ -226,7 +225,7 @@ class PaperService:
         """Persist validated pipeline status (called by PipelineStatusService)."""
         from backend.services.status_snapshot_guard import persist_status_snapshot
 
-        return persist_status_snapshot(
+        return await persist_status_snapshot(
             self,
             paper_id,
             status=status,
@@ -238,7 +237,7 @@ class PaperService:
             append_extract_warnings=append_extract_warnings,
         )
 
-    def update_pipeline_status(
+    async def update_pipeline_status(
         self,
         paper_id: str,
         *,
@@ -248,7 +247,7 @@ class PaperService:
         message: str,
     ) -> PaperStatusData:
         """Legacy alias — validates contract then writes snapshot."""
-        return self.set_status_snapshot(
+        return await self.set_status_snapshot(
             paper_id,
             status=status,
             stage=stage,
@@ -302,7 +301,7 @@ class PaperService:
 
         await get_paper_delete_service().delete(paper_id, force=force)
 
-    def fail_pipeline(
+    async def fail_pipeline(
         self,
         paper_id: str,
         *,
@@ -312,14 +311,14 @@ class PaperService:
     ) -> None:
         from backend.services.pipeline_status_service import get_pipeline_status_service
 
-        get_pipeline_status_service().mark_failed(
+        await get_pipeline_status_service().mark_failed(
             paper_id,
             message=message,
             error_code=error_code,
             failed_during=failed_during,
         )
 
-    def apply_head_refine(
+    async def apply_head_refine(
         self,
         paper_id: str,
         *,
@@ -328,18 +327,18 @@ class PaperService:
         warnings: list[str] | None = None,
     ) -> None:
         """Persist async head merge result; never changes pipeline failure state."""
-        self._head_refine.apply_sync(
+        await self._head_refine.apply(
             paper_id,
             merged=merged,
             classifier_input=classifier_input,
             warnings=warnings,
         )
 
-    def get_refined_classifier_input(self, paper_id: str) -> str | None:
-        return self._head_refine.get_classifier_input_sync(paper_id)
+    async def get_refined_classifier_input(self, paper_id: str) -> str | None:
+        return await self._head_refine.get_classifier_input(paper_id)
 
-    def get_refined_head(self, paper_id: str) -> IngestHead | None:
-        return self._head_refine.load_head_sync(paper_id)
+    async def get_refined_head(self, paper_id: str) -> IngestHead | None:
+        return await self._head_refine.load_head(paper_id)
 
     async def clear_preview_graph(self, paper_id: str) -> None:
         """Clear the temporary preview graph for a specific paper pipeline."""
@@ -366,7 +365,7 @@ class PaperService:
         if snapshot is not None:
             from backend.services.status_snapshot_guard import ensure_status_contract
 
-            return ensure_status_contract(self, paper_id, snapshot)
+            return await ensure_status_contract(self, paper_id, snapshot)
         if paper.status == PaperStatus.PENDING:
             return PaperStatusData(
                 paper_id=paper_id,
