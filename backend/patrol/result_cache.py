@@ -11,7 +11,6 @@ interface for a future swap without changing call sites.
 
 from __future__ import annotations
 
-import inspect
 import time
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
@@ -97,9 +96,7 @@ async def collect_patrol_paper_fingerprint(paper_ids: Sequence[str]) -> str:
     segments: list[str] = []
     for paper_id in paper_ids:
         try:
-            graph_version = paper_service.get_pipeline_graph_version(paper_id)
-            if inspect.isawaitable(graph_version):
-                graph_version = await graph_version
+            graph_version = await paper_service.get_pipeline_graph_version(paper_id)
         except KeyError:
             graph_version = _MISSING_GRAPH_VERSION
         run_id = await paper_service.get_active_run_id(paper_id) or _MISSING_INDEX_RUN

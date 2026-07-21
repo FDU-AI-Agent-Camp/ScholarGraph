@@ -359,12 +359,15 @@ async def test_e2e_watchdog_promote_then_patrol_api_degrades_index_not_ready(
         async def query_chunks(self, *_a, **_k):
             return []
 
+    async def _stable_fingerprint(ids: list[str]) -> str:
+        return ";".join(f"{pid}@1.0.0/-" for pid in ids)
+
     service = PatrolService(
         store=store,
         vector_store=_MissingIndexStore(),  # type: ignore[arg-type]
         result_cache=InMemoryPatrolResultCache(),
         cache_enabled=False,
-        paper_fingerprint_fn=lambda ids: ";".join(f"{pid}@1.0.0/-" for pid in ids),
+        paper_fingerprint_fn=_stable_fingerprint,
     )
     monkeypatch.setattr(ps_module, "get_patrol_service", lambda: service)
     app.dependency_overrides[patrol_routes.get_patrol_service_dep] = lambda: service

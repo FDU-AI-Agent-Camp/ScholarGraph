@@ -90,12 +90,15 @@ def _install_patrol_service(monkeypatch, *, vector_store: Any, result_cache: Any
     from backend.main import app
     from backend.services import patrol_service as ps_module
 
+    # Stable fingerprint for fault-injection suites (no DB rows for stem graphs).
+    async def _stable_fingerprint(ids: list[str]) -> str:
+        return ";".join(f"{pid}@1.0.0/-" for pid in ids)
+
     service = PatrolService(
         vector_store=vector_store,
         result_cache=result_cache if result_cache is not None else InMemoryPatrolResultCache(),
         cache_enabled=True,
-        # Stable fingerprint for fault-injection suites (no DB rows for stem graphs).
-        paper_fingerprint_fn=lambda ids: ";".join(f"{pid}@1.0.0/-" for pid in ids),
+        paper_fingerprint_fn=_stable_fingerprint,
     )
 
     def _get_service() -> PatrolService:
