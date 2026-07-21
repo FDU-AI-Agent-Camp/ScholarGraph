@@ -70,12 +70,12 @@ def _fallback_to_heuristic(
     return ExtractResult(graph=graph, warnings=warnings)
 
 
-def _resolve_head_context(paper_id: str) -> str | None:
+async def _resolve_head_context(paper_id: str) -> str | None:
     """Build optional document-head prefix from in-memory refine or ``HeadStore`` (X6)."""
     from backend.graph.head_store import HeadStore
     from backend.services.paper_service import get_paper_service
 
-    head = get_paper_service().get_refined_head(paper_id)
+    head = await get_paper_service().get_refined_head(paper_id)
     if head is None:
         record = HeadStore().load(paper_id)
         head = record.merged if record is not None else None
@@ -226,7 +226,7 @@ async def _extract_live(
     settings: Settings,
 ) -> ExtractResult:
     title = extract_title(full_text)
-    head_context = _resolve_head_context(paper_id)
+    head_context = await _resolve_head_context(paper_id)
 
     if not settings.extract_llm_enabled:
         logger.warning(

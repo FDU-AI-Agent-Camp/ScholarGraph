@@ -62,10 +62,10 @@ _POLL_STOP: asyncio.Event | None = None
 VECTOR_CLEANUP_POLL_INTERVAL_SECONDS = 30.0
 
 
-def snapshot_wipe_target_run_ids(paper_id: str) -> set[str]:
+async def snapshot_wipe_target_run_ids(paper_id: str) -> set[str]:
     """Capture active + in-flight index run ids before abort / wipe."""
     targets: set[str] = set()
-    active = get_paper_service().get_active_run_id(paper_id)
+    active = await get_paper_service().get_active_run_id(paper_id)
     if active:
         targets.add(active)
     inflight = get_indexing_run_registry().peek_inflight(paper_id)

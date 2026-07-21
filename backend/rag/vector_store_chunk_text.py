@@ -49,7 +49,7 @@ class ChunkTextLookupMixin:
 
         run_id: str | None = None
         if self._paper_service is not None:
-            run_id = self._paper_service.get_active_run_id(paper_id)
+            run_id = await self._paper_service.get_active_run_id(paper_id)
             # Fail-closed: no active run → ghosts stay invisible for L2 preview.
             if not run_id:
                 return None

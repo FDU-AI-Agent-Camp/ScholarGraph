@@ -486,6 +486,11 @@ def _make_matching_stub(original: Any) -> Any:
     return _sync_stub
 
 
+async def _async_empty_wipe_target_run_ids(_paper_id: str) -> list[str]:
+    """Preserve the async wipe-target snapshot contract in benchmark stubs."""
+    return []
+
+
 def _install_wipe_vector_sweep_stubs() -> list[str]:
     """Optional wipe-sweep stubs shared by HTTP reextract and diskio delete."""
     try:
@@ -494,7 +499,7 @@ def _install_wipe_vector_sweep_stubs() -> list[str]:
         return ["backend.rag.wipe_vector_sweep (module missing)"]
     optional_skipped: list[str] = []
     optional = {
-        "snapshot_wipe_target_run_ids": lambda _paper_id: [],
+        "snapshot_wipe_target_run_ids": _async_empty_wipe_target_run_ids,
         "extend_wipe_targets_after_abort": lambda _paper_id, targets: targets,
         "schedule_wipe_wave2_sweep": lambda _paper_id, _targets: None,
     }

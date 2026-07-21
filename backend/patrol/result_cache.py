@@ -102,7 +102,7 @@ async def collect_patrol_paper_fingerprint(paper_ids: Sequence[str]) -> str:
                 graph_version = await graph_version
         except KeyError:
             graph_version = _MISSING_GRAPH_VERSION
-        run_id = paper_service.get_active_run_id(paper_id) or _MISSING_INDEX_RUN
+        run_id = await paper_service.get_active_run_id(paper_id) or _MISSING_INDEX_RUN
         segments.append(f"{paper_id}@{graph_version}/{run_id}")
     return ";".join(segments)
 

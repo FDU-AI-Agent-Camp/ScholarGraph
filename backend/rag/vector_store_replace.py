@@ -105,7 +105,7 @@ class ReplacePaperIndexMixin:
         previous_run_id: str | None = None
         activated = False
         async with self._replace_locks.setdefault(paper_id, asyncio.Lock()):
-            previous_run_id = self._paper_service.get_active_run_id(paper_id)
+            previous_run_id = await self._paper_service.get_active_run_id(paper_id)
             await self._await_pending_cleanups(paper_id)
 
             from backend.rag.indexing_run_registry import get_indexing_run_registry
@@ -124,20 +124,20 @@ class ReplacePaperIndexMixin:
                 is_cancelling = bool(current_task is not None and getattr(current_task, "cancelling", lambda: 0)() > 0)
                 if is_cancelling or not registry.may_activate(paper_id, run_id):
                     registry.revoke(paper_id, run_id)
-                    self._log_generation_guard_abort(paper_id, run_id)
+                    await self._log_generation_guard_abort(paper_id, run_id)
                     await self._cleanup_run_safely(paper_id, run_id)
                     # Keep revoke sticky so timeout-path compensate can still find run_id.
                     if is_cancelling:
                         raise asyncio.CancelledError()
                     return
 
-                self._paper_service.set_active_run_id(paper_id, run_id)
+                await self._paper_service.set_active_run_id(paper_id, run_id)
                 activated = True
                 registry.clear(paper_id, run_id)
                 self.clear_chunk_text_lru()
             except asyncio.CancelledError:
                 registry.revoke(paper_id, run_id)
-                self._log_generation_guard_abort(paper_id, run_id)
+                await self._log_generation_guard_abort(paper_id, run_id)
                 await self._cleanup_run_safely(paper_id, run_id)
                 # Do not clear revoke: zombie to_thread may still upsert after cancel.
                 raise
@@ -152,12 +152,12 @@ class ReplacePaperIndexMixin:
             self._pending_cleanups.setdefault(paper_id, set()).add(task)
             task.add_done_callback(lambda _: self._pending_cleanups.get(paper_id, set()).discard(task))
 
-    def _log_generation_guard_abort(self, paper_id: str, run_id: str) -> None:
+    async def _log_generation_guard_abort(self, paper_id: str, run_id: str) -> None:
         """Emit a stable ops marker when a superseded run must not activate."""
         active: str | None = None
         if self._paper_service is not None:
             try:
-                active = self._paper_service.get_active_run_id(paper_id)
+                active = await self._paper_service.get_active_run_id(paper_id)
             except Exception:
                 active = None
         current = active if active else "<none>"

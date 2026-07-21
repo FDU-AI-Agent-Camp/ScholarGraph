@@ -123,7 +123,7 @@ async def run_paper_pipeline(paper_id: str, pdf_path: Path) -> WorkflowState:
 
     paper_service = get_paper_service()
     await paper_service.ensure_paper_exists(paper_id)
-    get_pipeline_status_service().start_processing(paper_id)
+    await get_pipeline_status_service().start_processing(paper_id)
     from backend.services.paper_pipeline_ops import get_paper_pipeline_ops_service
 
     pipeline_generation_id = await get_paper_pipeline_ops_service().begin_pipeline_generation(paper_id)
@@ -177,7 +177,7 @@ async def _ensure_failed_status_persisted(paper_id: str, final_state: WorkflowSt
     if failed_stage == PipelineStage.FAILED:
         failed_stage = None
 
-    get_paper_service().fail_pipeline(
+    await get_paper_service().fail_pipeline(
         paper_id,
         message=final_state.get("error_message") or final_state.get("message") or "流水线失败",
         error_code=final_state.get("error_code", PIPELINE_FAILED_CODE),

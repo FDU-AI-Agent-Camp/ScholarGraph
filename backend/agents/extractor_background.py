@@ -67,7 +67,7 @@ async def extract_preview_and_schedule_full(
     """
     cfg = settings or get_settings()
     title = extract_title(full_text)
-    head_context = _resolve_head_context(paper_id)
+    head_context = await _resolve_head_context(paper_id)
 
     try:
         mvp_extracted = await _extract_mvp(
