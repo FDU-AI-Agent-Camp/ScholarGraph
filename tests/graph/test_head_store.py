@@ -17,6 +17,10 @@ def head_store(tmp_path: Path) -> HeadStore:
     return HeadStore(base_dir=tmp_path)
 
 
+def test_head_path_for_uses_stable_filename(head_store: HeadStore, tmp_path: Path) -> None:
+    assert head_store.head_path_for("paper-1") == tmp_path / "paper-1.head.json"
+
+
 def test_head_store_delete_removes_record(head_store: HeadStore) -> None:
     head = IngestHead(title="T", abstract="A", intro="I")
     head_store.save("paper-1", merged=head)

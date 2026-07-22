@@ -47,5 +47,5 @@ def registered_paper(persistence_env) -> str:
     reset_persistence_singletons()
     from backend.graph.head_store import HeadStore
 
-    HeadStore()._path(paper_id).unlink(missing_ok=True)
+    HeadStore().head_path_for(paper_id).unlink(missing_ok=True)
     return paper_id

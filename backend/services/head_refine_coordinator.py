@@ -73,7 +73,7 @@ class HeadRefineCoordinator:
         if merged.title.strip() and paper is not None and paper.status == PaperStatus.PENDING:
             await self._core_service.update_title(paper_id, merged.title.strip())
 
-        head_path = str(self._head_store()._path(paper_id))
+        head_path = str(self._head_store().head_path_for(paper_id))
         try:
             await asyncio.to_thread(
                 self._head_store().save,
