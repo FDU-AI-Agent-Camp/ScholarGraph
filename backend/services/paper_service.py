@@ -41,30 +41,6 @@ from backend.services.preview_graph_facade import PreviewGraphFacade
 
 MAX_UPLOAD_BYTES = 32 * 1024 * 1024
 UPLOAD_QUEUED_MESSAGE = "已接收 PDF，正在自动解构…"
-_LEGACY_PIPELINE_OPS = frozenset(
-    {
-        "get_pipeline_snapshot",
-        "save_pipeline_snapshot",
-        "touch_indexing_heartbeat",
-        "list_stuck_indexing_papers",
-        "reset_pipeline_for_reextract",
-        "get_pipeline_generation_id",
-        "begin_pipeline_generation",
-        "invalidate_pipeline_generation",
-        "promote_paper_to_terminal_status",
-        "promote_stuck_indexing_paper",
-        "promote_stuck_indexing_paper_sync",
-        "list_stuck_indexing_paper_ids_sync",
-        "list_orphan_pipeline_paper_ids",
-        "list_stuck_processing_paper_ids_sync",
-        "list_stuck_pending_paper_ids_sync",
-        "fail_orphaned_pipeline_paper_sync",
-        "touch_processing_lease_sync",
-        "fail_orphaned_pipeline_paper",
-        "clear_ephemeral_pipeline_state",
-    },
-)
-
 __all__ = [
     "MAX_UPLOAD_BYTES",
     "UPLOAD_QUEUED_MESSAGE",
@@ -75,11 +51,12 @@ __all__ = [
     "reset_persistence_singletons",
 ]
 
-class PaperService:
-    """DB-backed paper store; pipeline ephemeral state lives in ``pipeline_runs``.
 
-    External RAG / watchdog callers must use public facade methods
-    (e.g. ``promote_paper_to_terminal_status``) instead of ``_pipeline_repo``.
+class PaperService:
+    """DB-backed paper CRUD / composition root; pipeline ephemeral state lives in ``pipeline_runs``.
+
+    Pipeline promote / snapshot / watchdog ops belong on ``PaperPipelineOpsService``.
+    This facade keeps ``_pipeline_ops`` only for internal status assembly and upload seeding.
     """
 
     def __init__(
@@ -117,12 +94,6 @@ class PaperService:
             warning_service=self._warnings,
             preview_facade=self._preview,
         )
-
-    def __getattr__(self, name: str) -> object:
-        """Forward legacy pipeline APIs while new callers inject ``PaperPipelineOpsService``."""
-        if name in _LEGACY_PIPELINE_OPS:
-            return getattr(self._pipeline_ops, name)
-        raise AttributeError(name)
 
     async def bootstrap(self) -> None:
         """Optionally seed demo fixtures when ``SEED_DEMO_PAPERS=true`` and the DB is empty."""
