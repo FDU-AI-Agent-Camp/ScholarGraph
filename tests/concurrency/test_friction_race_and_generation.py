@@ -102,7 +102,7 @@ async def test_concurrent_reextract_only_one_wins_nine_get_409(
         tasks = [
             asyncio.create_task(reextract.force_reextract(paper_id, force=False), name=f"rex-{i}") for i in range(10)
         ]
-        await asyncio.wait_for(entered.wait(), timeout=1.0)
+        await asyncio.wait_for(entered.wait(), timeout=5.0)
         # Wait until the other nine have hit the claim gate (409) while the
         # winner still holds abort — a fixed sleep flakes under suite load.
         deadline = asyncio.get_running_loop().time() + 2.0
@@ -199,7 +199,7 @@ async def test_delete_and_reextract_share_cluster_mutex(persistence_env) -> None
         patch("backend.services.reextract_service.schedule_paper_pipeline"),
     ):
         rex_task = asyncio.create_task(reextract.force_reextract(paper_id, force=False))
-        await asyncio.wait_for(entered.wait(), timeout=1.0)
+        await asyncio.wait_for(entered.wait(), timeout=5.0)
         assert is_reextract_inflight(paper_id)
 
         with pytest.raises(ApiError) as exc_info:
