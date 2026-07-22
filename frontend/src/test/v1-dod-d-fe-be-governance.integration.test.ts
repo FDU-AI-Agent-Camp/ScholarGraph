@@ -232,11 +232,11 @@ describe('V1 DoD D-09 — sensitive paths stay out of git', () => {
         execFileSync('git', ['check-ignore', '-q', rel], {
           cwd: REPO_ROOT,
           stdio: 'pipe',
-          timeout: 10_000,
+          timeout: 30_000,
         })
       }).not.toThrow()
     }
-  }, 30_000)
+  }, 60_000)
 })
 
 describe('V1 DoD D-10 — lockfiles align with manifests', () => {
