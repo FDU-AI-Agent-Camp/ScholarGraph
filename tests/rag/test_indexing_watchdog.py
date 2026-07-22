@@ -266,7 +266,7 @@ async def test_handler_promote_idempotent_after_watchdog_already_terminal(
     from backend.events.handler_errors import EVENT_HANDLER_FAILED_CODE
     from backend.rag.handlers import _promote_terminal_status
     from backend.rag.indexing_watchdog import promote_stuck_indexing_paper
-    from backend.services.paper_service import get_paper_service
+    from backend.services.paper_pipeline_ops import get_paper_pipeline_ops_service
 
     paper_id = "idempotent-race-001"
     started = datetime.now(UTC) - timedelta(hours=1)
@@ -299,7 +299,7 @@ async def test_handler_promote_idempotent_after_watchdog_already_terminal(
     )
     await on_pipeline_finalized_for_rag(event)
 
-    after = await get_paper_service().get_pipeline_snapshot(paper_id)
+    after = await get_paper_pipeline_ops_service().get_pipeline_snapshot(paper_id)
     assert after is not None
     assert after.status == PaperStatus.READY_WITH_WARNINGS
     assert after.extract_warnings == warnings_before

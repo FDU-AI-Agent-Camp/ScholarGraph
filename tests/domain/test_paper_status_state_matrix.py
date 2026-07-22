@@ -14,6 +14,7 @@ import pytest
 from backend.graph.state import STAGE_PERCENT
 from backend.schemas.paper import PaperStatus, PipelineStage
 from backend.services.errors import InvalidStateTransitionError
+from backend.services.paper_pipeline_ops import get_paper_pipeline_ops_service
 from backend.services.paper_service import get_paper_service
 from backend.services.pipeline_status_service import (
     PROCESSING_STAGES,
@@ -85,7 +86,7 @@ async def test_fail_from_processing_invariant_leaves_failed_with_error_code(
 
     paper = await get_paper_service().get_paper(paper_id)
     assert paper.status == PaperStatus.FAILED
-    latest = await get_paper_service().get_pipeline_snapshot(paper_id)
+    latest = await get_paper_pipeline_ops_service().get_pipeline_snapshot(paper_id)
     assert latest is not None
     assert latest.status == PaperStatus.FAILED
     assert latest.error_code == "LLM_JSON_INVALID"
@@ -98,7 +99,7 @@ async def test_negative_ready_to_indexing_via_mark_indexing(persistence_env) -> 
     await register_test_paper(paper_id, status=PaperStatus.PENDING)
     svc = PipelineStatusService()
     await svc.mark_ready(paper_id)
-    before = await get_paper_service().get_pipeline_snapshot(paper_id)
+    before = await get_paper_pipeline_ops_service().get_pipeline_snapshot(paper_id)
     assert before is not None
     before_updated = before.updated_at
 
@@ -108,7 +109,7 @@ async def test_negative_ready_to_indexing_via_mark_indexing(persistence_env) -> 
     assert exc_info.value.from_status == PaperStatus.READY.value
     assert exc_info.value.to_status == PaperStatus.INDEXING.value
 
-    after = await get_paper_service().get_pipeline_snapshot(paper_id)
+    after = await get_paper_pipeline_ops_service().get_pipeline_snapshot(paper_id)
     assert after is not None
     assert after.status == PaperStatus.READY
     assert after.updated_at == before_updated
@@ -122,7 +123,7 @@ async def test_negative_indexing_to_processing_via_advance_stage(persistence_env
     svc = PipelineStatusService()
     await svc.start_processing(paper_id)
     await svc.mark_indexing(paper_id)
-    before = await get_paper_service().get_pipeline_snapshot(paper_id)
+    before = await get_paper_pipeline_ops_service().get_pipeline_snapshot(paper_id)
     assert before is not None
     assert before.status == PaperStatus.INDEXING
     before_updated = before.updated_at
@@ -133,7 +134,7 @@ async def test_negative_indexing_to_processing_via_advance_stage(persistence_env
     assert exc_info.value.from_status == PaperStatus.INDEXING.value
     assert exc_info.value.to_status == PaperStatus.PROCESSING.value
 
-    after = await get_paper_service().get_pipeline_snapshot(paper_id)
+    after = await get_paper_pipeline_ops_service().get_pipeline_snapshot(paper_id)
     assert after is not None
     assert after.status == PaperStatus.INDEXING
     assert after.updated_at == before_updated

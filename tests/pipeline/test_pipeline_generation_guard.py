@@ -28,6 +28,7 @@ from backend.services.errors import (
     PROCESS_TIMEOUT_MESSAGE,
     ObsoletePipelineGenerationError,
 )
+from backend.services.paper_pipeline_ops import get_paper_pipeline_ops_service
 from backend.services.paper_service import get_paper_service
 from backend.services.pipeline_completion_service import PipelineCompletionService
 from backend.services.pipeline_generation_guard import assert_pipeline_generation_writable
@@ -87,8 +88,8 @@ async def _put_processing(paper_id: str, *, stage: PipelineStage = PipelineStage
 async def test_assert_writable_allows_matching_generation(gen_guard_db) -> None:
     paper_id = "gen-ok"
     await _put_processing(paper_id)
-    svc = get_paper_service()
-    token = await svc.begin_pipeline_generation(paper_id)
+    ops = get_paper_pipeline_ops_service()
+    token = await ops.begin_pipeline_generation(paper_id)
     await assert_pipeline_generation_writable(paper_id, token)
 
 
@@ -96,15 +97,15 @@ async def test_assert_writable_allows_matching_generation(gen_guard_db) -> None:
 async def test_assert_writable_rejects_after_watchdog_invalidates(gen_guard_db) -> None:
     paper_id = "gen-zombie"
     await _put_processing(paper_id)
-    svc = get_paper_service()
-    orphan_token = await svc.begin_pipeline_generation(paper_id)
+    ops = get_paper_pipeline_ops_service()
+    orphan_token = await ops.begin_pipeline_generation(paper_id)
     flipped = fail_orphaned_pipeline_row_sync(
         paper_id,
         error_code=PROCESS_TIMEOUT_CODE,
         message=PROCESS_TIMEOUT_MESSAGE,
     )
     assert flipped
-    assert await svc.get_pipeline_generation_id(paper_id) is None
+    assert await ops.get_pipeline_generation_id(paper_id) is None
 
     with pytest.raises(ObsoletePipelineGenerationError) as exc_info:
         await assert_pipeline_generation_writable(paper_id, orphan_token)
@@ -115,8 +116,8 @@ async def test_assert_writable_rejects_after_watchdog_invalidates(gen_guard_db) 
 async def test_finalize_refuses_graph_write_when_generation_obsolete(gen_guard_db) -> None:
     paper_id = "gen-no-write"
     await _put_processing(paper_id, stage=PipelineStage.STORING)
-    svc = get_paper_service()
-    orphan_token = await svc.begin_pipeline_generation(paper_id)
+    ops = get_paper_pipeline_ops_service()
+    orphan_token = await ops.begin_pipeline_generation(paper_id)
     fail_orphaned_pipeline_row_sync(
         paper_id,
         error_code=PROCESS_TIMEOUT_CODE,
@@ -139,7 +140,7 @@ async def test_finalize_refuses_graph_write_when_generation_obsolete(gen_guard_d
         )
 
     save.assert_not_called()
-    row = await svc.get_status(paper_id)
+    row = await get_paper_service().get_status(paper_id)
     assert row.status == PaperStatus.FAILED
     assert row.error_code == PROCESS_TIMEOUT_CODE
 
@@ -156,13 +157,14 @@ async def test_obsolete_run_id_write_blocked(gen_guard_db, monkeypatch: pytest.M
     from backend.pipeline.processing_watchdog import PROCESS_TIMEOUT_CODE, PROCESS_TIMEOUT_MESSAGE
     from backend.repositories.paper_repository import get_paper_repository
     from backend.services.graph_persistence_service import GraphPersistenceService
-    from backend.services.paper_service import get_paper_service
+    from backend.services.paper_pipeline_ops import get_paper_pipeline_ops_service
     from backend.services.reextract_service import get_reextract_service, reset_reextract_inflight_gate
 
     reset_reextract_inflight_gate()
     paper_id = "paper-x-orphan-run"
     await _put_processing(paper_id, stage=PipelineStage.EXTRACTING)
     svc = get_paper_service()
+    ops = get_paper_pipeline_ops_service()
 
     settings = get_settings()
     pdf_path = Path(settings.upload_dir) / f"{paper_id}.pdf"
@@ -177,8 +179,8 @@ async def test_obsolete_run_id_write_blocked(gen_guard_db, monkeypatch: pytest.M
     graph_file = graph_dir / f"{paper_id}.json"
 
     # 1) Normal extract generation Run_A while PROCESSING.
-    run_a = await svc.begin_pipeline_generation(paper_id)
-    assert await svc.get_pipeline_generation_id(paper_id) == run_a
+    run_a = await ops.begin_pipeline_generation(paper_id)
+    assert await ops.get_pipeline_generation_id(paper_id) == run_a
     assert (await svc.get_status(paper_id)).status == PaperStatus.PROCESSING
 
     # Park Run_A at GraphStore.save entrance (before crossing write boundary).
@@ -201,7 +203,7 @@ async def test_obsolete_run_id_write_blocked(gen_guard_db, monkeypatch: pytest.M
     assert not graph_file.is_file()
 
     # 2) Control-plane death: production sync orphan fail (same SQL as Cascading Kill).
-    flipped = svc.fail_orphaned_pipeline_paper_sync(
+    flipped = ops.fail_orphaned_pipeline_paper_sync(
         paper_id,
         error_code=PROCESS_TIMEOUT_CODE,
         message=PROCESS_TIMEOUT_MESSAGE,
@@ -210,7 +212,7 @@ async def test_obsolete_run_id_write_blocked(gen_guard_db, monkeypatch: pytest.M
     dead = await svc.get_status(paper_id)
     assert dead.status == PaperStatus.FAILED
     assert dead.error_code == PROCESS_TIMEOUT_CODE
-    assert await svc.get_pipeline_generation_id(paper_id) is None
+    assert await ops.get_pipeline_generation_id(paper_id) is None
 
     # 3) Emergency reextract (?force=true) — real abort/claim/reset; stub only LLM reschedule + Wave2 delay.
     scheduled: list[tuple[str, Path]] = []
@@ -254,9 +256,9 @@ async def test_obsolete_run_id_write_blocked(gen_guard_db, monkeypatch: pytest.M
             updated_at=datetime.now(UTC),
         ),
     )
-    run_b = await svc.begin_pipeline_generation(paper_id)
+    run_b = await ops.begin_pipeline_generation(paper_id)
     assert run_b != run_a
-    assert await svc.get_pipeline_generation_id(paper_id) == run_b
+    assert await ops.get_pipeline_generation_id(paper_id) == run_b
     run_b_before = await svc.get_status(paper_id)
     assert run_b_before.status == PaperStatus.PROCESSING
     assert run_b_before.message == "Run_B ingesting"
@@ -267,7 +269,7 @@ async def test_obsolete_run_id_write_blocked(gen_guard_db, monkeypatch: pytest.M
         "message": run_b_before.message,
         "percent": run_b_before.percent,
         "error_code": run_b_before.error_code,
-        "generation_id": await svc.get_pipeline_generation_id(paper_id),
+        "generation_id": await ops.get_pipeline_generation_id(paper_id),
     }
 
     # 4) Thaw ghost Run_A: late GraphStore.save + promote-ready must hard-fail at gate.
@@ -286,11 +288,11 @@ async def test_obsolete_run_id_write_blocked(gen_guard_db, monkeypatch: pytest.M
         "message": after.message,
         "percent": after.percent,
         "error_code": after.error_code,
-        "generation_id": await svc.get_pipeline_generation_id(paper_id),
+        "generation_id": await ops.get_pipeline_generation_id(paper_id),
     } == run_b_fingerprint
     assert after.status == PaperStatus.PROCESSING
     assert after.status not in {PaperStatus.READY, PaperStatus.READY_WITH_WARNINGS, PaperStatus.INDEXING}
-    assert await svc.get_pipeline_generation_id(paper_id) == run_b
+    assert await ops.get_pipeline_generation_id(paper_id) == run_b
 
     reset_reextract_inflight_gate()
 
@@ -299,9 +301,9 @@ async def test_obsolete_run_id_write_blocked(gen_guard_db, monkeypatch: pytest.M
 async def test_finalize_refuses_after_reextract_mints_new_generation(gen_guard_db) -> None:
     paper_id = "gen-reextract"
     await _put_processing(paper_id)
-    svc = get_paper_service()
-    orphan_token = await svc.begin_pipeline_generation(paper_id)
-    await svc.reset_pipeline_for_reextract(paper_id, message="强制重抽")
+    ops = get_paper_pipeline_ops_service()
+    orphan_token = await ops.begin_pipeline_generation(paper_id)
+    await ops.reset_pipeline_for_reextract(paper_id, message="强制重抽")
     await get_pipeline_repository().save_status(
         paper_id,
         PaperStatusData(
@@ -313,7 +315,7 @@ async def test_finalize_refuses_after_reextract_mints_new_generation(gen_guard_d
             updated_at=datetime.now(UTC),
         ),
     )
-    new_token = await svc.begin_pipeline_generation(paper_id)
+    new_token = await ops.begin_pipeline_generation(paper_id)
     assert new_token != orphan_token
 
     save = MagicMock()

@@ -344,7 +344,7 @@ async def test_watchdog_kill_execution_order(processing_watchdog_db, monkeypatch
     from backend.repositories import pipeline_sync as pipeline_sync_mod
     from backend.services import pipeline_task_registry as registry
     from backend.services.paper_ops_claim import acquire_paper_ops_claim
-    from backend.services.paper_service import get_paper_service
+    from backend.services.paper_pipeline_ops import get_paper_pipeline_ops_service
     from backend.services.reextract_service import (
         is_reextract_inflight,
         reset_reextract_inflight_gate,
@@ -434,7 +434,7 @@ async def test_watchdog_kill_execution_order(processing_watchdog_db, monkeypatch
     assert paper_lock.locked()
     assert not bystander_acquired.is_set()
 
-    flipped = await _cascade_kill_true_zombie_async(paper_id, paper_service=get_paper_service())
+    flipped = await _cascade_kill_true_zombie_async(paper_id, pipeline_ops=get_paper_pipeline_ops_service())
     assert flipped is True
 
     for label in (
@@ -486,7 +486,7 @@ async def test_watchdog_kill_lock_reflux_allows_bystander_reextract(
     from backend.repositories.paper_repository import get_paper_repository
     from backend.services import pipeline_task_registry as registry
     from backend.services.paper_ops_claim import acquire_paper_ops_claim
-    from backend.services.paper_service import get_paper_service
+    from backend.services.paper_pipeline_ops import get_paper_pipeline_ops_service
     from backend.services.reextract_service import (
         get_reextract_service,
         is_reextract_inflight,
@@ -554,7 +554,6 @@ async def test_watchdog_kill_lock_reflux_allows_bystander_reextract(
     reextract_started = asyncio.Event()
     reextract_got_claim = asyncio.Event()
     acquire_elapsed_s = 0.0
-    service = get_paper_service()
 
     async def _bystander_reextract() -> None:
         nonlocal acquire_elapsed_s
@@ -582,7 +581,7 @@ async def test_watchdog_kill_lock_reflux_allows_bystander_reextract(
     assert is_reextract_inflight(paper_id)
     assert not reextract_got_claim.is_set()
 
-    flipped = await _cascade_kill_true_zombie_async(paper_id, paper_service=service)
+    flipped = await _cascade_kill_true_zombie_async(paper_id, pipeline_ops=get_paper_pipeline_ops_service())
     assert flipped is True
 
     await asyncio.wait_for(reextract_got_claim.wait(), timeout=5.0)

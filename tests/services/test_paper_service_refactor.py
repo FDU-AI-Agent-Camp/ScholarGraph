@@ -94,12 +94,15 @@ async def test_head_refine_coordinator_shim_persists_to_disk(
 
 @pytest.mark.asyncio
 async def test_pipeline_ops_composed_via_facade_delegates_generation_guard() -> None:
+    from backend.services.paper_pipeline_ops import get_paper_pipeline_ops_service
+
     service = get_paper_service()
+    ops = get_paper_pipeline_ops_service()
     paper_id = "refactor-pipeline-ops-001"
     await register_test_paper(paper_id, status=PaperStatus.PROCESSING)
 
-    await service.begin_pipeline_generation(paper_id)
-    token = await service.get_pipeline_generation_id(paper_id)
+    await ops.begin_pipeline_generation(paper_id)
+    token = await ops.get_pipeline_generation_id(paper_id)
 
     assert token is not None
     assert await service._pipeline_ops.get_pipeline_generation_id(paper_id) == token

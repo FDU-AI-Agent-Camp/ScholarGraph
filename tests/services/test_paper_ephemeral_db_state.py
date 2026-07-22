@@ -54,13 +54,15 @@ async def test_preview_graph_survives_service_restart(persistence_env) -> None:
 
 @pytest.mark.asyncio
 async def test_clear_ephemeral_pipeline_state_removes_preview_and_run_id(persistence_env) -> None:
+    from backend.services.paper_pipeline_ops import get_paper_pipeline_ops_service
+
     paper_id = "ephemeral-clear"
     await register_test_paper(paper_id, status=PaperStatus.READY)
     service = PaperService()
     await service.set_active_run_id(paper_id, "run-clear-me")
     await service.save_preview_graph(paper_id, _sample_preview(paper_id))
 
-    await service.clear_ephemeral_pipeline_state(paper_id)
+    await get_paper_pipeline_ops_service().clear_ephemeral_pipeline_state(paper_id)
 
     assert await service.get_active_run_id(paper_id) is None
     assert await service.get_preview_graph(paper_id) is None

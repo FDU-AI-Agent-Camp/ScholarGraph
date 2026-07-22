@@ -1,7 +1,7 @@
 # Copyright 2026 FDU-AI-Agent-Camp
 # SPDX-License-Identifier: Apache-2.0
 
-"""Domain facade tests: terminal promote + state-machine gating + RagIndexed fan-out."""
+"""Domain pipeline-ops tests: terminal promote + state-machine gating + RagIndexed fan-out."""
 
 from __future__ import annotations
 
@@ -13,14 +13,14 @@ from backend.events.bus import get_event_bus
 from backend.events.types import RagIndexed
 from backend.schemas.paper import PaperStatus, PaperStatusData, PipelineStage
 from backend.services.errors import InvalidStateTransitionError
-from backend.services.paper_service import get_paper_service
+from backend.services.paper_pipeline_ops import get_paper_pipeline_ops_service
 from tests.helpers.persistence_testkit import register_test_paper
 
 
 async def _seed_indexing(paper_id: str) -> None:
     await register_test_paper(paper_id, status=PaperStatus.INDEXING)
-    service = get_paper_service()
-    await service.save_pipeline_snapshot(
+    ops = get_paper_pipeline_ops_service()
+    await ops.save_pipeline_snapshot(
         paper_id,
         PaperStatusData(
             paper_id=paper_id,
@@ -46,13 +46,13 @@ async def test_promote_paper_to_terminal_status_publishes_rag_indexed(
 ) -> None:
     paper_id = "domain-promote-ok"
     await _seed_indexing(paper_id)
-    service = get_paper_service()
+    ops = get_paper_pipeline_ops_service()
     seen: list[RagIndexed] = []
     bus = get_event_bus()
 
     async def _capture(event: object) -> None:
         if isinstance(event, RagIndexed):
-            persisted = await service.get_pipeline_snapshot(paper_id)
+            persisted = await ops.get_pipeline_snapshot(paper_id)
             assert persisted is not None
             assert persisted.status == PaperStatus.READY
             seen.append(event)
@@ -60,13 +60,13 @@ async def test_promote_paper_to_terminal_status_publishes_rag_indexed(
     publish_spy = AsyncMock(side_effect=_capture)
     monkeypatch.setattr(bus, "publish", publish_spy)
 
-    snapshot = await service.promote_paper_to_terminal_status(
+    snapshot = await ops.promote_paper_to_terminal_status(
         paper_id,
         success=True,
         preferred_terminal=PaperStatus.READY,
     )
     assert snapshot.status == PaperStatus.READY
-    latest = await service.get_pipeline_snapshot(paper_id)
+    latest = await ops.get_pipeline_snapshot(paper_id)
     assert latest is not None
     assert latest.status == PaperStatus.READY
     publish_spy.assert_awaited_once()
@@ -83,13 +83,13 @@ async def test_promote_paper_to_terminal_status_failure_path_ready_with_warnings
 ) -> None:
     paper_id = "domain-promote-fail"
     await _seed_indexing(paper_id)
-    service = get_paper_service()
+    ops = get_paper_pipeline_ops_service()
     seen: list[RagIndexed] = []
     bus = get_event_bus()
 
     async def _capture(event: object) -> None:
         if isinstance(event, RagIndexed):
-            persisted = await service.get_pipeline_snapshot(paper_id)
+            persisted = await ops.get_pipeline_snapshot(paper_id)
             assert persisted is not None
             assert persisted.status == PaperStatus.READY_WITH_WARNINGS
             seen.append(event)
@@ -97,7 +97,7 @@ async def test_promote_paper_to_terminal_status_failure_path_ready_with_warnings
     publish_spy = AsyncMock(side_effect=_capture)
     monkeypatch.setattr(bus, "publish", publish_spy)
 
-    snapshot = await service.promote_paper_to_terminal_status(
+    snapshot = await ops.promote_paper_to_terminal_status(
         paper_id,
         success=False,
         warning_codes=["rag_index_timeout"],
@@ -114,20 +114,20 @@ async def test_refuse_promote_from_ready_terminal_does_not_mutate_db(persistence
     """Negative: ready → (promote again) must raise; DB snapshot must stay ready."""
     paper_id = "domain-promote-refuse"
     await _seed_indexing(paper_id)
-    service = get_paper_service()
-    await service.promote_paper_to_terminal_status(
+    ops = get_paper_pipeline_ops_service()
+    await ops.promote_paper_to_terminal_status(
         paper_id,
         success=True,
         preferred_terminal=PaperStatus.READY,
         publish_rag_indexed=False,
     )
-    before = await service.get_pipeline_snapshot(paper_id)
+    before = await ops.get_pipeline_snapshot(paper_id)
     assert before is not None
     assert before.status == PaperStatus.READY
     before_updated = before.updated_at
 
     with pytest.raises(InvalidStateTransitionError) as exc_info:
-        await service.promote_paper_to_terminal_status(
+        await ops.promote_paper_to_terminal_status(
             paper_id,
             success=True,
             preferred_terminal=PaperStatus.READY,
@@ -135,7 +135,7 @@ async def test_refuse_promote_from_ready_terminal_does_not_mutate_db(persistence
     assert exc_info.value.from_status == PaperStatus.READY.value
     assert exc_info.value.code == "INVALID_STATE_TRANSITION"
 
-    after = await service.get_pipeline_snapshot(paper_id)
+    after = await ops.get_pipeline_snapshot(paper_id)
     assert after is not None
     assert after.status == PaperStatus.READY
     assert after.updated_at == before_updated
@@ -145,8 +145,8 @@ async def test_refuse_promote_from_ready_terminal_does_not_mutate_db(persistence
 async def test_refuse_promote_when_not_indexing_pending(persistence_env) -> None:
     paper_id = "domain-promote-pending"
     await register_test_paper(paper_id, status=PaperStatus.PENDING)
-    service = get_paper_service()
-    await service.save_pipeline_snapshot(
+    ops = get_paper_pipeline_ops_service()
+    await ops.save_pipeline_snapshot(
         paper_id,
         PaperStatusData(
             paper_id=paper_id,
@@ -164,7 +164,7 @@ async def test_refuse_promote_when_not_indexing_pending(persistence_env) -> None
         ),
     )
     with pytest.raises(InvalidStateTransitionError) as exc_info:
-        await service.promote_paper_to_terminal_status(paper_id, success=True)
+        await ops.promote_paper_to_terminal_status(paper_id, success=True)
     assert exc_info.value.from_status == PaperStatus.PENDING.value
 
 
