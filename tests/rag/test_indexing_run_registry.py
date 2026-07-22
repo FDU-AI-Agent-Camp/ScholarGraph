@@ -12,7 +12,6 @@ import pytest
 from backend.rag.indexing_run_registry import IndexingRunRegistry, get_indexing_run_registry
 from backend.rag.models import PaperChunk
 from backend.rag.vector_store import VectorStore
-from backend.services.paper_service import get_paper_service
 
 
 @pytest.fixture(autouse=True)
