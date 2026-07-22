@@ -28,7 +28,7 @@ from backend.rag.vector_store import VectorStore
 from backend.rag.vector_store_wiring import get_vector_store
 from backend.schemas.graph import UnifiedPaperGraph
 from backend.services.paper_pipeline_ops import get_paper_pipeline_ops_service
-from backend.services.paper_service import get_paper_service
+from backend.services.paper_service import PaperService, get_paper_service
 
 logger = logging.getLogger(__name__)
 
@@ -146,6 +146,7 @@ async def _compensate_revoked_index_run(
     run_id: str,
     *,
     delays_seconds: tuple[float, ...] = ORPHAN_RUN_CLEANUP_DELAYS_SECONDS,
+    paper_service: PaperService | None = None,
 ) -> None:
     """Delete a revoked run_id with delayed retries (compensating transaction).
 
@@ -156,14 +157,15 @@ async def _compensate_revoked_index_run(
 
     registry = get_indexing_run_registry()
     store = get_vector_store()
+    service = paper_service or get_paper_service()
     for delay in delays_seconds:
         if delay > 0:
             await asyncio.sleep(delay)
         try:
-            active = await get_paper_service().get_active_run_id(paper_id)
+            active = await service.get_active_run_id(paper_id)
             if active == run_id:
                 # Late activate won the race — clear pointer to SQL NULL, keep graph READY.
-                await get_paper_service().set_active_run_id(paper_id, None)
+                await service.set_active_run_id(paper_id, None)
             await store.delete_run(paper_id, run_id)
             logger.info(
                 "orphan_index_run_cleanup",

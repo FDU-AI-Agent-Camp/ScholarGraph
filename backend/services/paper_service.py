@@ -7,7 +7,6 @@ from __future__ import annotations
 
 import asyncio
 from datetime import UTC, datetime
-from functools import lru_cache
 from pathlib import Path
 from uuid import uuid4
 
@@ -31,6 +30,11 @@ from backend.services.paper_core_service import PaperCoreService
 from backend.services.paper_detail_assembler import PaperDetailAssembler
 from backend.services.paper_pipeline_ops import PaperPipelineOpsService
 from backend.services.paper_pipeline_scheduler import schedule_paper_pipeline
+from backend.services.paper_service_wiring import (
+    bind_paper_service,
+    get_paper_service,
+    reset_paper_service,
+)
 from backend.services.paper_warning_service import PaperWarningService
 from backend.services.persistence_reset import reset_persistence_singletons
 from backend.services.preview_graph_facade import PreviewGraphFacade
@@ -65,10 +69,11 @@ __all__ = [
     "MAX_UPLOAD_BYTES",
     "UPLOAD_QUEUED_MESSAGE",
     "PaperService",
+    "bind_paper_service",
     "get_paper_service",
+    "reset_paper_service",
     "reset_persistence_singletons",
 ]
-
 
 class PaperService:
     """DB-backed paper store; pipeline ephemeral state lives in ``pipeline_runs``.
@@ -445,7 +450,3 @@ class PaperService:
             message=UPLOAD_QUEUED_MESSAGE,
         )
 
-
-@lru_cache
-def get_paper_service() -> PaperService:
-    return PaperService()

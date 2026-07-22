@@ -39,6 +39,7 @@ from __future__ import annotations
 import asyncio
 import logging
 from datetime import UTC, datetime, timedelta
+from typing import TYPE_CHECKING
 
 from backend.config import get_settings
 from backend.rag.indexing_run_registry import get_indexing_run_registry
@@ -47,6 +48,9 @@ from backend.repositories.vector_cleanup_queue_repository import (
     get_vector_cleanup_queue_repository,
 )
 from backend.services.paper_service import get_paper_service
+
+if TYPE_CHECKING:
+    from backend.services.paper_service import PaperService
 
 logger = logging.getLogger(__name__)
 
@@ -62,10 +66,15 @@ _POLL_STOP: asyncio.Event | None = None
 VECTOR_CLEANUP_POLL_INTERVAL_SECONDS = 30.0
 
 
-async def snapshot_wipe_target_run_ids(paper_id: str) -> set[str]:
+async def snapshot_wipe_target_run_ids(
+    paper_id: str,
+    *,
+    paper_service: PaperService | None = None,
+) -> set[str]:
     """Capture active + in-flight index run ids before abort / wipe."""
     targets: set[str] = set()
-    active = await get_paper_service().get_active_run_id(paper_id)
+    service = paper_service or get_paper_service()
+    active = await service.get_active_run_id(paper_id)
     if active:
         targets.add(active)
     inflight = get_indexing_run_registry().peek_inflight(paper_id)

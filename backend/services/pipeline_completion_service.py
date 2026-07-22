@@ -151,8 +151,21 @@ async def complete_paper_pipeline(
 class PipelineCompletionService:
     """Store step orchestration (validation + persistence + paper status)."""
 
-    def __init__(self, graph_persistence: GraphPersistenceService | None = None) -> None:
+    def __init__(
+        self,
+        graph_persistence: GraphPersistenceService | None = None,
+        *,
+        paper_service: PaperService | None = None,
+    ) -> None:
         self._graph_persistence = graph_persistence
+        self._paper_service = paper_service
+
+    def _resolve_paper_service(self) -> PaperService:
+        if self._paper_service is not None:
+            return self._paper_service
+        from backend.services.paper_service import get_paper_service
+
+        return get_paper_service()
 
     async def finalize(
         self,
@@ -174,10 +187,9 @@ class PipelineCompletionService:
             classification = ParadigmClassification.model_validate(classification_data)
             persistence = self._graph_persistence or get_graph_persistence_service()
             graph_path = await persistence.save(graph)
-            from backend.services.paper_service import get_paper_service
 
             await complete_paper_pipeline(
-                get_paper_service(),
+                self._resolve_paper_service(),
                 paper_id,
                 classification=classification,
                 graph=graph,
@@ -192,7 +204,6 @@ class PipelineCompletionService:
             raise
         except Exception as exc:
             raise ServiceError(PIPELINE_FAILED_CODE, f"建图收尾失败: {exc}") from exc
-
 
 @lru_cache
 def get_pipeline_completion_service() -> PipelineCompletionService:

@@ -28,6 +28,7 @@ from backend.config import Settings, get_settings
 from backend.schemas.extract_phase import ExtractedGraph
 from backend.schemas.graph import GraphEdge, GraphNode, NodeType, UnifiedPaperGraph
 from backend.schemas.paradigm import Paradigm
+from backend.services.paper_service import PaperService
 
 logger = logging.getLogger(__name__)
 
@@ -70,12 +71,17 @@ def _fallback_to_heuristic(
     return ExtractResult(graph=graph, warnings=warnings)
 
 
-async def _resolve_head_context(paper_id: str) -> str | None:
+async def _resolve_head_context(
+    paper_id: str,
+    *,
+    paper_service: PaperService | None = None,
+) -> str | None:
     """Build optional document-head prefix from in-memory refine or ``HeadStore`` (X6)."""
     from backend.graph.head_store import HeadStore
     from backend.services.paper_service import get_paper_service
 
-    head = await get_paper_service().get_refined_head(paper_id)
+    service = paper_service or get_paper_service()
+    head = await service.get_refined_head(paper_id)
     if head is None:
         record = HeadStore().load(paper_id)
         head = record.merged if record is not None else None
@@ -152,6 +158,7 @@ async def _save_preview_graph(
     graph: UnifiedPaperGraph,
     *,
     warnings: list[str] | None = None,
+    paper_service: PaperService | None = None,
 ) -> None:
     """Persist a graph as the current preview and surface it on status/detail.
 
@@ -161,7 +168,7 @@ async def _save_preview_graph(
     from backend.services.paper_service import get_paper_service
     from backend.services.paper_warning_service import WarningType, get_paper_warning_service
 
-    service = get_paper_service()
+    service = paper_service or get_paper_service()
     try:
         await service.ensure_paper_exists(paper_id)
     except Exception:

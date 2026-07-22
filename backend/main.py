@@ -25,7 +25,7 @@ async def lifespan(app: FastAPI):
     from backend.rag.hybrid_retriever import bind_hybrid_retriever, create_hybrid_retriever, reset_hybrid_retriever
     from backend.rag.vector_store import VectorStore
     from backend.rag.vector_store_wiring import bind_vector_store, reset_vector_store
-    from backend.services.paper_service import get_paper_service
+    from backend.services.paper_service import PaperService, bind_paper_service, reset_paper_service
     from backend.startup.profile_validation import probe_reranker_connectivity
 
     settings = get_settings()
@@ -42,7 +42,10 @@ async def lifespan(app: FastAPI):
 
     configure_asyncio_block_detector(asyncio.get_running_loop())
     # Schema must be applied out-of-band: ``uv run python scripts/init_db.py``.
-    await get_paper_service().bootstrap()
+    paper_service = PaperService()
+    bind_paper_service(paper_service)
+    app.state.paper_service = paper_service
+    await paper_service.bootstrap()
 
     from backend.pipeline.processing_watchdog import (
         reconcile_processing_on_startup,
@@ -82,7 +85,7 @@ async def lifespan(app: FastAPI):
             app.state.vector_store = attached
         logger.info("HybridRetriever reused from pre-configured app.state")
     else:
-        store = VectorStore(paper_service=get_paper_service())
+        store = VectorStore(paper_service=paper_service)
         bind_vector_store(store)
         app.state.vector_store = store
         retriever = create_hybrid_retriever(vector_store=store)
@@ -101,10 +104,13 @@ async def lifespan(app: FastAPI):
         register_main_event_loop(None)
         reset_vector_store()
         reset_hybrid_retriever()
+        reset_paper_service()
         if hasattr(app.state, "vector_store"):
             delattr(app.state, "vector_store")
         if hasattr(app.state, "hybrid_retriever"):
             delattr(app.state, "hybrid_retriever")
+        if hasattr(app.state, "paper_service"):
+            delattr(app.state, "paper_service")
 
 
 def create_app() -> FastAPI:

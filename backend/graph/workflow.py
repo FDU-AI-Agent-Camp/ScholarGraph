@@ -3,9 +3,11 @@
 
 """LangGraph StateGraph: ingest → wait_head_refine → classify → extract → store."""
 
+from __future__ import annotations
+
 from functools import lru_cache
 from pathlib import Path
-from typing import Literal, cast
+from typing import TYPE_CHECKING, Literal, cast
 
 from langgraph.graph import END, START, StateGraph
 
@@ -24,6 +26,9 @@ from backend.graph.state import (
 from backend.services.errors import PIPELINE_FAILED_CODE
 from backend.services.paper_service import get_paper_service
 from backend.services.pipeline_status_service import get_pipeline_status_service
+
+if TYPE_CHECKING:
+    from backend.services.paper_service import PaperService
 
 RouteKey = Literal["continue", "fail", "background"]
 
@@ -99,7 +104,12 @@ def pipeline_node_names() -> tuple[str, ...]:
     return PIPELINE_ORDER
 
 
-async def run_paper_pipeline(paper_id: str, pdf_path: Path) -> WorkflowState:
+async def run_paper_pipeline(
+    paper_id: str,
+    pdf_path: Path,
+    *,
+    paper_service: PaperService | None = None,
+) -> WorkflowState:
     """
     Run the full single-paper pipeline asynchronously.
 
@@ -109,6 +119,7 @@ async def run_paper_pipeline(paper_id: str, pdf_path: Path) -> WorkflowState:
     Args:
         paper_id: Existing paper identifier (must be registered in PaperService).
         pdf_path: Local path to the PDF file.
+        paper_service: Optional injected service; defaults to process singleton.
 
     Returns:
         Final LangGraph workflow state (``failed=True`` includes ``error_code``).
@@ -121,8 +132,8 @@ async def run_paper_pipeline(paper_id: str, pdf_path: Path) -> WorkflowState:
     if not pdf_path.is_file():
         raise FileNotFoundError(f"PDF not found: {pdf_path}")
 
-    paper_service = get_paper_service()
-    await paper_service.ensure_paper_exists(paper_id)
+    resolved_paper_service = paper_service or get_paper_service()
+    await resolved_paper_service.ensure_paper_exists(paper_id)
     await get_pipeline_status_service().start_processing(paper_id)
     from backend.services.paper_pipeline_ops import get_paper_pipeline_ops_service
 
@@ -139,7 +150,11 @@ async def run_paper_pipeline(paper_id: str, pdf_path: Path) -> WorkflowState:
     )
 
     if final_state.get("failed"):
-        await _ensure_failed_status_persisted(paper_id, final_state)
+        await _ensure_failed_status_persisted(
+            paper_id,
+            final_state,
+            paper_service=resolved_paper_service,
+        )
         return final_state
 
     # store_node leaves papers in ``indexing``; wait for official RAG handler to promote.
@@ -150,7 +165,7 @@ async def run_paper_pipeline(paper_id: str, pdf_path: Path) -> WorkflowState:
     from backend.schemas.paper import PaperStatus, PipelineStage
 
     await get_event_bus().drain()
-    snapshot = await paper_service.get_status(paper_id)
+    snapshot = await resolved_paper_service.get_status(paper_id)
     if snapshot.status in {PaperStatus.READY, PaperStatus.READY_WITH_WARNINGS}:
         promoted = cast(WorkflowState, dict(final_state))
         promoted["status"] = snapshot.status
@@ -162,9 +177,15 @@ async def run_paper_pipeline(paper_id: str, pdf_path: Path) -> WorkflowState:
     return final_state
 
 
-async def _ensure_failed_status_persisted(paper_id: str, final_state: WorkflowState) -> None:
+async def _ensure_failed_status_persisted(
+    paper_id: str,
+    final_state: WorkflowState,
+    *,
+    paper_service: PaperService | None = None,
+) -> None:
     """Idempotent guard: fail_node 应已写入；若缺失则补写 failed 快照。"""
-    snapshot = await get_paper_service().get_status(paper_id)
+    resolved_paper_service = paper_service or get_paper_service()
+    snapshot = await resolved_paper_service.get_status(paper_id)
     from backend.schemas.paper import PaperStatus
 
     if snapshot.status == PaperStatus.FAILED and snapshot.error_code:
@@ -177,7 +198,7 @@ async def _ensure_failed_status_persisted(paper_id: str, final_state: WorkflowSt
     if failed_stage == PipelineStage.FAILED:
         failed_stage = None
 
-    await get_paper_service().fail_pipeline(
+    await resolved_paper_service.fail_pipeline(
         paper_id,
         message=final_state.get("error_message") or final_state.get("message") or "流水线失败",
         error_code=final_state.get("error_code", PIPELINE_FAILED_CODE),

@@ -254,7 +254,9 @@ async def restart_paper_service() -> PaperService:
 
 def simulate_service_crash() -> None:
     """Drop the in-process ``PaperService`` singleton without DB cleanup (D6 crash-recovery)."""
-    get_paper_service.cache_clear()
+    from backend.services.paper_service import reset_paper_service
+
+    reset_paper_service()
 
 
 async def wipe_all_paper_rows() -> None:

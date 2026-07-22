@@ -3,11 +3,16 @@
 
 """Pipeline status/stage/percent updates aligned with api-contract §2."""
 
+from __future__ import annotations
+
 from functools import lru_cache
+from typing import TYPE_CHECKING
 
 from backend.graph.state import STAGE_PERCENT
 from backend.schemas.paper import FailedDuringStage, PaperStatus, PaperStatusData, PipelineStage
-from backend.services.paper_service import get_paper_service
+
+if TYPE_CHECKING:
+    from backend.services.paper_service import PaperService
 
 PROCESSING_STAGES: frozenset[PipelineStage] = frozenset(
     {
@@ -110,6 +115,16 @@ def validate_failed_error_fields(
 
 class PipelineStatusService:
     """Single entry for workflow progress writes consumed by GET .../status."""
+
+    def __init__(self, paper_service: PaperService | None = None) -> None:
+        self._paper_service = paper_service
+
+    def _resolve_paper_service(self) -> PaperService:
+        if self._paper_service is not None:
+            return self._paper_service
+        from backend.services.paper_service import get_paper_service
+
+        return get_paper_service()
 
     async def start_processing(self, paper_id: str, *, message: str | None = None) -> PaperStatusData:
         """pending → processing，进入 ingesting（percent=20）。"""
@@ -230,7 +245,7 @@ class PipelineStatusService:
         existing = await get_paper_pipeline_ops_service().get_pipeline_snapshot(paper_id)
         if existing is not None:
             assert_status_transition_allowed(existing.status, status, paper_id=paper_id)
-        return await get_paper_service().set_status_snapshot(
+        return await self._resolve_paper_service().set_status_snapshot(
             paper_id,
             status=status,
             stage=stage,
