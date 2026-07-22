@@ -205,6 +205,7 @@ class PipelineCompletionService:
         except Exception as exc:
             raise ServiceError(PIPELINE_FAILED_CODE, f"建图收尾失败: {exc}") from exc
 
+
 @lru_cache
 def get_pipeline_completion_service() -> PipelineCompletionService:
     return PipelineCompletionService()

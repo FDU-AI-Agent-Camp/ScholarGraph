@@ -420,4 +420,3 @@ class PaperService:
             status=PaperStatus.PENDING,
             message=UPLOAD_QUEUED_MESSAGE,
         )
-
