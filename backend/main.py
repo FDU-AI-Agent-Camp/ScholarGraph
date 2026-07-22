@@ -23,6 +23,8 @@ async def lifespan(app: FastAPI):
     """Initialize long-lived RAG clients once; routes reuse via ``app.state``."""
     from backend.events.pipeline_finalized_handlers import register_pipeline_finalized_handlers
     from backend.rag.hybrid_retriever import bind_hybrid_retriever, create_hybrid_retriever, reset_hybrid_retriever
+    from backend.rag.vector_store import VectorStore
+    from backend.rag.vector_store_wiring import bind_vector_store, reset_vector_store
     from backend.services.paper_service import get_paper_service
     from backend.startup.profile_validation import probe_reranker_connectivity
 
@@ -74,12 +76,19 @@ async def lifespan(app: FastAPI):
     preconfigured = getattr(app.state, "hybrid_retriever", None)
     if preconfigured is not None:
         bind_hybrid_retriever(preconfigured)
+        attached = getattr(preconfigured, "vector_store", None)
+        if isinstance(attached, VectorStore):
+            bind_vector_store(attached)
+            app.state.vector_store = attached
         logger.info("HybridRetriever reused from pre-configured app.state")
     else:
-        retriever = create_hybrid_retriever()
+        store = VectorStore(paper_service=get_paper_service())
+        bind_vector_store(store)
+        app.state.vector_store = store
+        retriever = create_hybrid_retriever(vector_store=store)
         app.state.hybrid_retriever = retriever
         bind_hybrid_retriever(retriever)
-        logger.info("HybridRetriever initialized and bound to app.state")
+        logger.info("VectorStore + HybridRetriever initialized and bound to app.state")
     try:
         yield
     finally:
@@ -90,7 +99,10 @@ async def lifespan(app: FastAPI):
         stop_indexing_watchdog()
         stop_event_bus_worker()
         register_main_event_loop(None)
+        reset_vector_store()
         reset_hybrid_retriever()
+        if hasattr(app.state, "vector_store"):
+            delattr(app.state, "vector_store")
         if hasattr(app.state, "hybrid_retriever"):
             delattr(app.state, "hybrid_retriever")
 

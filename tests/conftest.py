@@ -101,6 +101,7 @@ def _bind_graph_only_hybrid_retriever() -> Iterator[None]:
     ``create_hybrid_retriever()`` → real VectorStore (forbidden in tests).
     """
     from backend.rag.hybrid_retriever import bind_hybrid_retriever, reset_hybrid_retriever
+    from backend.rag.vector_store_wiring import reset_vector_store
 
     assert _SESSION_APP is not None and _SESSION_GRAPH_ONLY_RETRIEVER is not None
     app = _SESSION_APP
@@ -110,10 +111,13 @@ def _bind_graph_only_hybrid_retriever() -> Iterator[None]:
     bind_hybrid_retriever(retriever)
     yield
     reset_hybrid_retriever()
+    reset_vector_store()
     if prior is not None:
         app.state.hybrid_retriever = prior
     elif hasattr(app.state, "hybrid_retriever"):
         delattr(app.state, "hybrid_retriever")
+    if hasattr(app.state, "vector_store"):
+        delattr(app.state, "vector_store")
 
 
 @pytest.fixture(autouse=True)
@@ -366,21 +370,39 @@ async def _cleanup_event_bus_worker_after_test() -> AsyncIterator[None]:
 
 
 @pytest.fixture(autouse=True)
-def _patrol_service_global_mock_vector_store(monkeypatch) -> None:
-    """Avoid real ChromaDB in any test that calls get_patrol_service()."""
+def _patrol_service_global_mock_vector_store(monkeypatch) -> Iterator[None]:
+    """Avoid real ChromaDB for PatrolService and any ``get_vector_store()`` fallback.
+
+    Binds a process-wide mock store (exists→False) so RAG-mode patrol paths degrade
+    cleanly to graph-only analysis without opening the default chromadb directory.
+    """
+    from typing import cast
     from unittest.mock import AsyncMock
 
+    from backend.rag.vector_store import VectorStore
+    from backend.rag.vector_store_wiring import bind_vector_store, reset_vector_store
     from backend.services import patrol_service as ps_module
 
     def _mock_vector_store(*_args, **_kwargs):
         mock = AsyncMock()
-        mock.query_chunks.return_value = []
+        mock.exists = AsyncMock(return_value=False)
+        mock.query_chunks = AsyncMock(return_value=[])
+        mock.query_entities = AsyncMock(return_value=[])
+        mock.query_relations = AsyncMock(return_value=[])
+        mock.delete_by_paper = AsyncMock(return_value=None)
         return mock
 
+    store = cast(VectorStore, _mock_vector_store())
+    bind_vector_store(store)
+
     def _mock_get_patrol_service():
-        return ps_module.PatrolService(vector_store=_mock_vector_store())
+        return ps_module.PatrolService(vector_store=store)
 
     monkeypatch.setattr(ps_module, "get_patrol_service", _mock_get_patrol_service)
+    if hasattr(ps_module.get_patrol_service, "cache_clear"):
+        ps_module.get_patrol_service.cache_clear()
+    yield
+    reset_vector_store()
     if hasattr(ps_module.get_patrol_service, "cache_clear"):
         ps_module.get_patrol_service.cache_clear()
 

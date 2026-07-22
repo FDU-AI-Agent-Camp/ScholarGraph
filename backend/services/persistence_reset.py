@@ -39,3 +39,6 @@ def reset_persistence_singletons() -> None:
     get_pipeline_status_service.cache_clear()
     get_pipeline_completion_service.cache_clear()
     reset_event_bus_cache()
+    from backend.rag.vector_store_wiring import reset_vector_store
+
+    reset_vector_store()

@@ -8,7 +8,7 @@ from __future__ import annotations
 import asyncio
 import threading
 from typing import Any
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from backend.debug import async_hotpath_audit
@@ -212,8 +212,10 @@ async def test_rag_orphan_cleanup_set_active_run_id_stays_on_main_loop(
     await service.set_active_run_id(paper_id, run_id)
     async_hotpath_audit.clear()
 
-    with patch("backend.rag.handlers.VectorStore") as store_cls:
-        store_cls.return_value.delete_run = AsyncMock()
+    with patch("backend.rag.handlers.get_vector_store") as get_store:
+        store = MagicMock()
+        store.delete_run = AsyncMock()
+        get_store.return_value = store
         from backend.rag.handlers import _compensate_revoked_index_run
 
         await _compensate_revoked_index_run(paper_id, run_id, delays_seconds=(0,))

@@ -135,7 +135,7 @@ async def test_compensate_revoked_run_clears_active_pointer() -> None:
 
     with (
         patch("backend.rag.handlers.get_paper_service", return_value=paper_service),
-        patch("backend.rag.handlers.VectorStore", return_value=store),
+        patch("backend.rag.handlers.get_vector_store", return_value=store),
     ):
         await _compensate_revoked_index_run(
             "paper-x",

@@ -29,9 +29,12 @@ _LAZY_EXPORTS = frozenset(
     {
         "HybridRetriever",
         "bind_hybrid_retriever",
+        "bind_vector_store",
         "create_hybrid_retriever",
         "get_hybrid_retriever",
+        "get_vector_store",
         "reset_hybrid_retriever",
+        "reset_vector_store",
         "index_paper_for_rag",
     }
 )
@@ -46,6 +49,14 @@ def __getattr__(name: str) -> object:
         from backend.rag.handlers import index_paper_for_rag
 
         return index_paper_for_rag
+    if name in {"bind_vector_store", "get_vector_store", "reset_vector_store"}:
+        from backend.rag.vector_store_wiring import bind_vector_store, get_vector_store, reset_vector_store
+
+        return {
+            "bind_vector_store": bind_vector_store,
+            "get_vector_store": get_vector_store,
+            "reset_vector_store": reset_vector_store,
+        }[name]
     from backend.rag.hybrid_retriever import (
         HybridRetriever,
         bind_hybrid_retriever,
@@ -84,9 +95,12 @@ __all__ = [
     "VectorStore",
     "HybridRetriever",
     "bind_hybrid_retriever",
+    "bind_vector_store",
     "create_hybrid_retriever",
     "get_hybrid_retriever",
+    "get_vector_store",
     "reset_hybrid_retriever",
+    "reset_vector_store",
     "chunk_text",
     "graph_to_entities",
     "graph_to_relations",

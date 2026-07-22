@@ -59,7 +59,6 @@ class PatrolService:
         self._store = store
         self._vector_store = vector_store
         self._embedding_client = embedding_client
-        self._lazy_vector_store: VectorStore | None = None
         self._lazy_embedding_client: EmbeddingClient | None = None
         self._cache: PatrolResultCacheProtocol | None = (
             result_cache if result_cache is not None else InMemoryPatrolResultCache()
@@ -107,12 +106,9 @@ class PatrolService:
             return None
         if self._vector_store is not None:
             return self._vector_store
-        if self._lazy_vector_store is None:
-            from backend.rag.vector_store import VectorStore
-            from backend.services.paper_service import get_paper_service
+        from backend.rag.vector_store_wiring import get_vector_store
 
-            self._lazy_vector_store = VectorStore(paper_service=get_paper_service())
-        return self._lazy_vector_store
+        return get_vector_store()
 
     def _resolve_embedding_client(self, mode: PatrolMode) -> EmbeddingClient | None:
         if mode not in _PATROL_EMBEDDING_MODES:

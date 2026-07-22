@@ -25,6 +25,7 @@ from backend.events.types import EventType, PipelineFinalized
 from backend.rag.chunking import chunk_text
 from backend.rag.indexing import graph_to_entities, graph_to_relations
 from backend.rag.vector_store import VectorStore
+from backend.rag.vector_store_wiring import get_vector_store
 from backend.schemas.graph import UnifiedPaperGraph
 from backend.services.paper_pipeline_ops import get_paper_pipeline_ops_service
 from backend.services.paper_service import get_paper_service
@@ -72,7 +73,7 @@ async def index_paper_for_rag(
 
     lock = await _lock_for_paper(paper_id)
     async with lock:
-        store = vector_store or VectorStore(paper_service=get_paper_service())
+        store = vector_store or get_vector_store()
         try:
             settings = get_settings()
             chunks = chunk_text(
@@ -154,7 +155,7 @@ async def _compensate_revoked_index_run(
     from backend.rag.indexing_run_registry import get_indexing_run_registry
 
     registry = get_indexing_run_registry()
-    store = VectorStore(paper_service=get_paper_service())
+    store = get_vector_store()
     for delay in delays_seconds:
         if delay > 0:
             await asyncio.sleep(delay)

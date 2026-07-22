@@ -198,8 +198,8 @@ async def test_orphan_thread_cannot_override_new_generation(
         lambda: paper_service,
     )
     monkeypatch.setattr(
-        "backend.rag.handlers.VectorStore",
-        lambda **_kwargs: store,
+        "backend.rag.handlers.get_vector_store",
+        lambda: store,
     )
 
     with (
@@ -339,7 +339,7 @@ async def test_cleanup_task_removes_delayed_orphan_data(
 
     monkeypatch.setattr("backend.rag.handlers._schedule_orphan_run_cleanup", _schedule_cleanup)
     monkeypatch.setattr("backend.rag.handlers.get_paper_service", lambda: paper_service)
-    monkeypatch.setattr("backend.rag.handlers.VectorStore", lambda **_kwargs: store)
+    monkeypatch.setattr("backend.rag.handlers.get_vector_store", lambda: store)
 
     with (
         patch("backend.rag.vector_store_replace._generate_run_id", return_value=RUN_A),

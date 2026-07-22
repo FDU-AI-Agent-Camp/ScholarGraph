@@ -188,12 +188,9 @@ async def test_cold_boot_reconciles_processing_and_indexing_zombies(
         "backend.startup.profile_validation.probe_reranker_connectivity",
         AsyncMock(),
     )
-    monkeypatch.setattr(
-        "backend.rag.hybrid_retriever.create_hybrid_retriever",
-        lambda: object(),
-    )
-    monkeypatch.setattr("backend.rag.hybrid_retriever.bind_hybrid_retriever", lambda _r: None)
-    monkeypatch.setattr("backend.rag.hybrid_retriever.reset_hybrid_retriever", lambda: None)
+    from tests.helpers.lifespan_stubs import stub_lifespan_rag_wiring
+
+    stub_lifespan_rag_wiring(monkeypatch)
 
     from backend.main import create_app, lifespan
 

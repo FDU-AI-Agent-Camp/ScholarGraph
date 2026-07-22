@@ -56,10 +56,9 @@ def resolve_vector_store_for_delete(
             return cast(_VectorStoreDelete, store)
     except Exception:
         logger.debug("hybrid_retriever_unavailable_for_delete", exc_info=True)
-    from backend.rag.vector_store import VectorStore
-    from backend.services.paper_service import get_paper_service
+    from backend.rag.vector_store_wiring import get_vector_store
 
-    return VectorStore(paper_service=get_paper_service())
+    return get_vector_store()
 
 
 def _resolve_vector_store(vector_store: _VectorStoreDelete | None) -> _VectorStoreDelete:
