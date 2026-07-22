@@ -76,17 +76,35 @@ def benchmark_dual_route_module():
     return module
 
 
+# Cached after session warm-up so function-scoped fixtures avoid re-importing FastAPI app.
+_SESSION_APP: object | None = None
+_SESSION_GRAPH_ONLY_RETRIEVER: object | None = None
+
+
 @pytest.fixture(scope="session", autouse=True)
+def _warm_backend_main_for_tests() -> None:
+    """Import ``backend.main`` once per session (expensive router / schema wiring)."""
+    global _SESSION_APP, _SESSION_GRAPH_ONLY_RETRIEVER
+    from backend.main import app
+    from backend.rag.hybrid_retriever import HybridRetriever
+
+    _SESSION_APP = app
+    _SESSION_GRAPH_ONLY_RETRIEVER = HybridRetriever(vector_store=None)
+
+
+@pytest.fixture(autouse=True)
 def _bind_graph_only_hybrid_retriever() -> Iterator[None]:
     """Avoid ChromaDB init when HTTP QA routes resolve HybridRetriever without app lifespan.
 
-    Session-scoped: ``backend.main`` import + router wiring is expensive; app state is
-    externalized to DB/services so one bind per pytest session is sufficient.
+    Function-scoped rebind is required: some tests call ``reset_hybrid_retriever()``;
+    a session-only bind would leave later tests falling through to
+    ``create_hybrid_retriever()`` → real VectorStore (forbidden in tests).
     """
-    from backend.main import app
-    from backend.rag.hybrid_retriever import HybridRetriever, bind_hybrid_retriever, reset_hybrid_retriever
+    from backend.rag.hybrid_retriever import bind_hybrid_retriever, reset_hybrid_retriever
 
-    retriever = HybridRetriever(vector_store=None)
+    assert _SESSION_APP is not None and _SESSION_GRAPH_ONLY_RETRIEVER is not None
+    app = _SESSION_APP
+    retriever = _SESSION_GRAPH_ONLY_RETRIEVER
     prior = getattr(app.state, "hybrid_retriever", None)
     app.state.hybrid_retriever = retriever
     bind_hybrid_retriever(retriever)
@@ -126,13 +144,17 @@ def _attach_paper_service_compat_shims(monkeypatch: pytest.MonkeyPatch) -> Itera
     yield
 
 
-@pytest.fixture(scope="session", autouse=True)
-def _ensure_demo_fixture_corpus() -> Iterator[None]:
-    """Seed OpenAPI demo corpus once per session (idempotent upsert).
+@pytest.fixture(autouse=True)
+def _ensure_demo_fixture_corpus(request: pytest.FixtureRequest) -> Iterator[None]:
+    """Idempotent demo corpus seed (cheap when rows already exist).
 
-    Tests that mutate paper rows must use ``persistence_env`` (isolated SQLite) instead
-    of relying on the shared demo DB.
+    Kept function-scoped: session-only seeding via ``run_async`` can miss the
+    pytest-asyncio loop affinity, and ``persistence_env`` remaps the DB URL.
     """
+    if "persistence_env" in request.fixturenames:
+        yield
+        return
+
     from backend.repositories.async_bridge import run_async
 
     from tests.helpers.persistence_testkit import ensure_demo_fixture_corpus
