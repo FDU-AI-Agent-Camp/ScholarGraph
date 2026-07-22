@@ -111,6 +111,18 @@ async def _execute_wave2_job(
     try:
         await _compensate_revoked_index_run(paper_id, run_id, delays_seconds=delays_seconds)
         get_vector_cleanup_queue_repository().delete_by_paper_run_sync(paper_id, run_id)
+    except Exception as exc:  # noqa: BLE001 — continue sweep loop for other orphan runs
+        logger.warning(
+            "wipe_vector_run_failed",
+            extra={
+                "run_id": run_id,
+                "paper_id": paper_id,
+                "attempt": len(delays_seconds),
+                "error": str(exc),
+                "error_type": type(exc).__name__,
+            },
+            exc_info=True,
+        )
     finally:
         _end_inflight(paper_id, run_id)
 
@@ -251,8 +263,16 @@ async def _vector_cleanup_poll_loop(interval_seconds: float) -> None:
                     "vector_cleanup_queue_poll_drain",
                     extra={"spawned": spawned},
                 )
-        except Exception:
-            logger.exception("vector_cleanup_queue_poll_failed")
+        except Exception as exc:  # noqa: BLE001 — continue sweep loop for other orphan runs
+            logger.warning(
+                "vector_cleanup_queue_poll_failed",
+                extra={
+                    "interval_seconds": interval_seconds,
+                    "error": str(exc),
+                    "error_type": type(exc).__name__,
+                },
+                exc_info=True,
+            )
         try:
             await asyncio.wait_for(_POLL_STOP.wait(), timeout=interval_seconds)
             break
