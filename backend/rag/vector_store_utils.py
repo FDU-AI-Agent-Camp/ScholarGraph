@@ -31,6 +31,18 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 DEFAULT_EMBEDDING_DIMENSION = 1536
+# Chroma PersistentClient on Windows can briefly raise HNSW "Nothing found on disk"
+# right after upsert under concurrent suite pressure; a short retry is enough.
+CHROMA_HNSW_QUERY_MAX_ATTEMPTS = 3
+CHROMA_HNSW_QUERY_RETRY_BASE_SECONDS = 0.05
+CHROMA_HNSW_MISSING_SEGMENT_MARKER = "Nothing found on disk"
+
+
+def _is_transient_chroma_hnsw_error(exc: BaseException) -> bool:
+    """True for Chroma InternalError caused by a missing/racy HNSW segment."""
+    if type(exc).__name__ != "InternalError":
+        return False
+    return CHROMA_HNSW_MISSING_SEGMENT_MARKER in str(exc)
 
 
 def _query_embedding_validation_issue(
@@ -99,15 +111,31 @@ async def query_evidence_collection(
         embedding_client,
         expected_dimension=expected_embedding_dimension,
     )
-    raw_result = await asyncio.to_thread(
-        partial(
-            collection.query,
-            query_embeddings=query_embeddings,
-            n_results=top_k,
-            where=where,
-            include=["documents", "metadatas", "distances"],
-        )
+    query_call = partial(
+        collection.query,
+        query_embeddings=query_embeddings,
+        n_results=top_k,
+        where=where,
+        include=["documents", "metadatas", "distances"],
     )
+    raw_result: Any = None
+    for attempt in range(1, CHROMA_HNSW_QUERY_MAX_ATTEMPTS + 1):
+        try:
+            raw_result = await asyncio.to_thread(query_call)
+            break
+        except Exception as exc:
+            if not _is_transient_chroma_hnsw_error(exc) or attempt >= CHROMA_HNSW_QUERY_MAX_ATTEMPTS:
+                raise
+            logger.warning(
+                "chroma_hnsw_query_retry",
+                extra={
+                    "attempt": attempt,
+                    "evidence_type": evidence_type.value,
+                    "paper_id": paper_id,
+                    "error": str(exc),
+                },
+            )
+            await asyncio.sleep(CHROMA_HNSW_QUERY_RETRY_BASE_SECONDS * attempt)
     return _parse_query_results(raw_result, evidence_type=evidence_type)
 
 
