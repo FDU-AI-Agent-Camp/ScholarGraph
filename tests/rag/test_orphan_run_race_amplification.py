@@ -33,7 +33,7 @@ from backend.rag.indexing_run_registry import get_indexing_run_registry
 from backend.rag.models import PaperChunk
 from backend.rag.vector_store import GENERATION_GUARD_LOG_PREFIX, VectorStore
 from backend.schemas.paper import PaperStatus
-from backend.services.paper_service import get_paper_service
+from backend.services.paper_pipeline_ops import get_paper_pipeline_ops_service
 
 from tests.rag.test_vector_store import FakeCollection, FakeEmbeddingClient, _matches_where
 
@@ -205,7 +205,7 @@ async def test_orphan_thread_cannot_override_new_generation(
     with (
         patch("backend.rag.vector_store_replace._generate_run_id", side_effect=lambda: next(run_ids)),
         patch.object(
-            get_paper_service(),
+            get_paper_pipeline_ops_service(),
             "touch_indexing_heartbeat",
             new_callable=AsyncMock,
             return_value=True,
@@ -344,7 +344,7 @@ async def test_cleanup_task_removes_delayed_orphan_data(
     with (
         patch("backend.rag.vector_store_replace._generate_run_id", return_value=RUN_A),
         patch.object(
-            get_paper_service(),
+            get_paper_pipeline_ops_service(),
             "touch_indexing_heartbeat",
             new_callable=AsyncMock,
             return_value=True,
