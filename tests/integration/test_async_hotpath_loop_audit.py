@@ -46,8 +46,7 @@ def _assert_all_on_main_loop(*, main_thread_id: int, main_loop_id: int) -> None:
             f"{entry.site} ran on loop {entry.loop_id}, expected main loop {main_loop_id}"
         )
     assert async_hotpath_audit.bridge_crossings() == [], (
-        "async-bridge loop was used during hot-path audit: "
-        f"{async_hotpath_audit.bridge_crossings()!r}"
+        f"async-bridge loop was used during hot-path audit: {async_hotpath_audit.bridge_crossings()!r}"
     )
 
 
