@@ -38,7 +38,7 @@ class GraphPersistenceService:
         """Persist graph off the event loop and return the resolved on-disk path."""
         try:
             await asyncio.to_thread(self._store.save, graph)
-            return str(self._store._path(graph.paper_id))
+            return str(self._store.graph_path_for(graph.paper_id))
         except Exception as exc:
             raise ServiceError(PIPELINE_FAILED_CODE, f"图谱存储失败: {exc}") from exc
 

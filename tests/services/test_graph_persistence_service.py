@@ -16,7 +16,7 @@ from backend.services.graph_persistence_service import GraphPersistenceService
 @pytest.mark.asyncio
 async def test_save_delegates_to_store(sample_graph: UnifiedPaperGraph) -> None:
     store = MagicMock()
-    store._path.return_value = "/data/graphs/g1.json"
+    store.graph_path_for.return_value = "/data/graphs/g1.json"
     service = GraphPersistenceService(store=store)
     graph_path = await service.save(sample_graph)
     store.save.assert_called_once_with(sample_graph)
@@ -30,7 +30,7 @@ async def test_save_offloads_store_io_to_thread(
 ) -> None:
     """Disk write must leave the event loop via asyncio.to_thread."""
     store = MagicMock()
-    store._path.return_value = "/data/graphs/g1.json"
+    store.graph_path_for.return_value = "/data/graphs/g1.json"
     calls: list[tuple[object, tuple[object, ...], dict[str, object]]] = []
 
     async def fake_to_thread(fn: object, /, *args: object, **kwargs: object) -> object:

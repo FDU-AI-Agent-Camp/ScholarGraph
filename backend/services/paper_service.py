@@ -403,7 +403,7 @@ class PaperService:
             str(dest),
             status=PaperStatus.PENDING,
         )
-        await self._pipeline_ops.save_pipeline_snapshot(
+        await self._pipeline_ops.initialize_pipeline_snapshot(
             paper_id,
             PaperStatusData(
                 paper_id=paper_id,

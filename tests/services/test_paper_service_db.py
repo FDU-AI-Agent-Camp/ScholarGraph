@@ -18,13 +18,37 @@ async def test_create_from_upload_persists_pending_row(
     persistence_env,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    from unittest.mock import AsyncMock
+
+    from backend.services.paper_pipeline_ops import get_paper_pipeline_ops_service
+    from backend.services.paper_service import UPLOAD_QUEUED_MESSAGE
+
     monkeypatch.setattr("backend.services.paper_service.schedule_paper_pipeline", lambda *_a, **_k: None)
     service = await restart_paper_service()
+    real_initialize = service._pipeline_ops.initialize_pipeline_snapshot
+    initialize_spy = AsyncMock(side_effect=real_initialize)
+    monkeypatch.setattr(service._pipeline_ops, "initialize_pipeline_snapshot", initialize_spy)
+
     result = await service.create_from_upload(filename="svc.pdf", content=VALID_PDF)
+
     detail = await service.get_paper(result.paper_id)
     assert detail.status == PaperStatus.PENDING
     status = await service.get_status(result.paper_id)
+    assert status.status == PaperStatus.PENDING
     assert status.percent == 0
+    assert status.message == UPLOAD_QUEUED_MESSAGE
+
+    initialize_spy.assert_awaited_once()
+    init_snapshot = initialize_spy.await_args.args[1]
+    assert init_snapshot.status == PaperStatus.PENDING
+    assert init_snapshot.message == UPLOAD_QUEUED_MESSAGE
+
+    ops = get_paper_pipeline_ops_service()
+    persisted = await ops.get_pipeline_snapshot(result.paper_id)
+    assert persisted is not None
+    assert persisted.status == PaperStatus.PENDING
+    assert persisted.percent == 0
+    assert persisted.message == UPLOAD_QUEUED_MESSAGE
 
 
 @pytest.mark.asyncio

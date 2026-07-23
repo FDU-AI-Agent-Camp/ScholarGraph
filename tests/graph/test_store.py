@@ -41,6 +41,10 @@ def store(tmp_path: Path) -> GraphStore:
     return GraphStore(base_dir=tmp_path)
 
 
+def test_graph_path_for_uses_stable_filename(store: GraphStore, tmp_path: Path) -> None:
+    assert store.graph_path_for("paper-1") == tmp_path / "paper-1.json"
+
+
 # ---------------------------------------------------------------------------
 # to_g6()
 # ---------------------------------------------------------------------------

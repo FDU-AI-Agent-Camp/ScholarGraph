@@ -111,3 +111,26 @@ def reset_extract_rate_limiter() -> None:
     limiter = get_extract_rate_limiter
     if hasattr(limiter, "cache_clear"):
         limiter.cache_clear()
+
+
+@lru_cache
+def get_reranker_rate_limiter() -> AsyncTokenBucket:
+    """Return the process-wide Reranker QPS limiter.
+
+    ``RERANKER_QPS_LIMIT`` is converted to RPM for ``AsyncTokenBucket``
+    (``rpm = int(qps * 60)``). ``tpm`` is unused (pair payloads are tiny).
+    ``qps <= 0`` disables throttling.
+    """
+    from backend.config import get_settings
+
+    settings = get_settings()
+    qps = settings.reranker_qps_limit
+    rpm = int(qps * 60) if qps > 0 else 0
+    return AsyncTokenBucket(rpm=rpm, tpm=0)
+
+
+def reset_reranker_rate_limiter() -> None:
+    """Clear the cached Reranker limiter (tests / settings reload)."""
+    limiter = get_reranker_rate_limiter
+    if hasattr(limiter, "cache_clear"):
+        limiter.cache_clear()

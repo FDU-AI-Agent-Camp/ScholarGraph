@@ -46,9 +46,43 @@ class PaperPipelineOpsService:
         """Return the latest pipeline status snapshot, or None if absent."""
         return await self._pipeline_repo.get_latest(paper_id)
 
-    async def save_pipeline_snapshot(self, paper_id: str, snapshot: PaperStatusData) -> None:
-        """Persist a validated pipeline status snapshot (papers + pipeline_runs)."""
+    async def _save_pipeline_snapshot(self, paper_id: str, snapshot: PaperStatusData) -> None:
+        """Internal persist core — not part of the public Ops facade."""
         await self._pipeline_repo.save_status(paper_id, snapshot)
+
+    async def initialize_pipeline_snapshot(self, paper_id: str, snapshot: PaperStatusData) -> None:
+        """Upload / first-create write: snapshot status must be PENDING."""
+        from backend.services.errors import InvalidStateTransitionError
+
+        if snapshot.status != PaperStatus.PENDING:
+            raise InvalidStateTransitionError(
+                f"Cannot initialize pipeline snapshot for {paper_id} with non-PENDING status: {snapshot.status.value}",
+                from_status="(none)",
+                to_status=snapshot.status.value,
+                paper_id=paper_id,
+            )
+        await self._save_pipeline_snapshot(paper_id, snapshot)
+
+    async def heal_pipeline_snapshot(
+        self,
+        paper_id: str,
+        snapshot: PaperStatusData,
+        *,
+        reason: str,
+    ) -> None:
+        """Privileged contract / dual-table heal write (audited)."""
+        if not reason.strip():
+            msg = "heal_pipeline_snapshot requires a non-empty reason"
+            raise ValueError(msg)
+        logger.warning(
+            "pipeline_snapshot_heal_applied",
+            extra={
+                "paper_id": paper_id,
+                "target_status": snapshot.status.value,
+                "heal_reason": reason,
+            },
+        )
+        await self._save_pipeline_snapshot(paper_id, snapshot)
 
     async def repair_indexing_contract_if_indexing(
         self,
@@ -172,7 +206,7 @@ class PaperPipelineOpsService:
             classify_warnings=list(existing.classify_warnings),
             extract_warnings=merged_extract_warnings,
         )
-        await self.save_pipeline_snapshot(paper_id, snapshot)
+        await self._save_pipeline_snapshot(paper_id, snapshot)
         if publish_rag_indexed:
             await get_event_bus().publish(
                 RagIndexed(
@@ -224,7 +258,7 @@ class PaperPipelineOpsService:
             classify_warnings=list(existing.classify_warnings),
             extract_warnings=merged,
         )
-        await self.save_pipeline_snapshot(paper_id, snapshot)
+        await self._save_pipeline_snapshot(paper_id, snapshot)
         if publish_rag_indexed:
             # Prefer async publish on the caller's loop to avoid bridge-loop ghost sync.
             await get_event_bus().publish(

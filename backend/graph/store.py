@@ -24,26 +24,27 @@ class GraphStore:
     # core I/O
     # ------------------------------------------------------------------
 
-    def _path(self, paper_id: str) -> Path:
+    def graph_path_for(self, paper_id: str) -> Path:
+        """Return the on-disk path for this paper's persisted graph JSON."""
         return self._base_dir / f"{paper_id}.json"
 
     def save(self, graph: UnifiedPaperGraph) -> None:
         """Persist graph to disk (atomic-ish via atomic-write semantics)."""
-        self._path(graph.paper_id).write_text(
+        self.graph_path_for(graph.paper_id).write_text(
             graph.model_dump_json(indent=2),
             encoding="utf-8",
         )
 
     def load(self, paper_id: str) -> UnifiedPaperGraph | None:
         """Load graph from disk; returns *None* when paper_id is unknown."""
-        path = self._path(paper_id)
+        path = self.graph_path_for(paper_id)
         if not path.is_file():
             return None
         return UnifiedPaperGraph.model_validate_json(path.read_text(encoding="utf-8"))
 
     def delete(self, paper_id: str) -> bool:
         """Remove persisted graph if it exists; return whether a file was removed."""
-        path = self._path(paper_id)
+        path = self.graph_path_for(paper_id)
         if not path.is_file():
             return False
         path.unlink()

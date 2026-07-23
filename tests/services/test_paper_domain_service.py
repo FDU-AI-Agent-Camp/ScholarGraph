@@ -20,7 +20,7 @@ from tests.helpers.persistence_testkit import register_test_paper
 async def _seed_indexing(paper_id: str) -> None:
     await register_test_paper(paper_id, status=PaperStatus.INDEXING)
     ops = get_paper_pipeline_ops_service()
-    await ops.save_pipeline_snapshot(
+    await ops.heal_pipeline_snapshot(
         paper_id,
         PaperStatusData(
             paper_id=paper_id,
@@ -36,6 +36,7 @@ async def _seed_indexing(paper_id: str) -> None:
             classify_warnings=[],
             extract_warnings=[],
         ),
+        reason="test_seed_indexing_for_promote",
     )
 
 
@@ -146,7 +147,7 @@ async def test_refuse_promote_when_not_indexing_pending(persistence_env) -> None
     paper_id = "domain-promote-pending"
     await register_test_paper(paper_id, status=PaperStatus.PENDING)
     ops = get_paper_pipeline_ops_service()
-    await ops.save_pipeline_snapshot(
+    await ops.initialize_pipeline_snapshot(
         paper_id,
         PaperStatusData(
             paper_id=paper_id,

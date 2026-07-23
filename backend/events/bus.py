@@ -47,13 +47,34 @@ class EventBus:
     def subscribe(self, event_type: EventType, handler: EventHandler) -> None:
         self._handlers[event_type].append(handler)
 
+    def _has_subscribers(self, event: Any) -> bool:
+        """Return whether any handler is registered for ``event.event_type``.
+
+        Unknown / missing ``event_type`` returns True so the worker can still log
+        ``event_missing_type``. Empty subscriber lists (e.g. production ``RagIndexed``)
+        return False so publishers skip queue / cross-loop scheduling.
+        """
+        event_type = getattr(event, "event_type", None)
+        if not isinstance(event_type, EventType):
+            return True
+        return bool(self._handlers.get(event_type))
+
     async def publish(self, event: Any) -> None:
+        if not self._has_subscribers(event):
+            return
         await self._ensure_queue()
         assert self._queue is not None
         await self._queue.put(event)
 
     def publish_sync(self, event: Any) -> None:
-        """Enqueue from synchronous callers; handlers run asynchronously (fire-and-forget)."""
+        """Enqueue from synchronous callers; handlers run asynchronously (fire-and-forget).
+
+        No-op when the event type has zero subscribers — avoids
+        ``run_coroutine_threadsafe`` / ``run_async`` hops onto the FastAPI loop
+        (P13-R2 micro-opt for orphan ``RagIndexed`` publishes from watchdog threads).
+        """
+        if not self._has_subscribers(event):
+            return
 
         async def _publish() -> None:
             await self.publish(event)

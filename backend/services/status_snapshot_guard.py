@@ -137,7 +137,11 @@ async def persist_status_snapshot(
         classify_warnings=existing.classify_warnings if existing is not None else [],
         extract_warnings=merged_extract_warnings,
     )
-    await pipeline_ops.save_pipeline_snapshot(paper_id, snapshot)
+    await pipeline_ops.heal_pipeline_snapshot(
+        paper_id,
+        snapshot,
+        reason="contract_drift_heal",
+    )
     return snapshot
 
 

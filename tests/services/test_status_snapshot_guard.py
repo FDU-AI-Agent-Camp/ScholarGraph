@@ -231,6 +231,64 @@ async def test_ensure_status_contract_heals_ready_with_warnings_drift(persistenc
 
 
 @pytest.mark.asyncio
+async def test_persist_status_snapshot_heals_dual_table_drift_and_logs_audit(
+    persistence_env,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Dual-table drift → persist_status_snapshot recovers DB and audits heal."""
+    import logging
+
+    paper_id = "guard-persist-heal-audit"
+    await register_test_paper(paper_id, status=PaperStatus.READY)
+    service = await restart_paper_service()
+    pipeline_repo = get_pipeline_repository()
+    pipeline_ops = get_paper_pipeline_ops_service()
+
+    await pipeline_repo.save_status(
+        paper_id,
+        _snapshot(
+            paper_id,
+            status=PaperStatus.READY,
+            stage=PipelineStage.EXTRACTING,
+            percent=STAGE_PERCENT[PipelineStage.EXTRACTING],
+            message="dual-table drift",
+        ),
+    )
+    drifted = await pipeline_ops.get_pipeline_snapshot(paper_id)
+    assert drifted is not None
+    assert drifted.stage == PipelineStage.EXTRACTING
+
+    with caplog.at_level(logging.WARNING, logger="backend.services.paper_pipeline_ops"):
+        healed = await persist_status_snapshot(
+            service,
+            paper_id,
+            status=PaperStatus.READY,
+            stage=PipelineStage.READY,
+            percent=STAGE_PERCENT[PipelineStage.READY],
+            message="建图完成",
+        )
+
+    assert healed.status == PaperStatus.READY
+    assert healed.stage == PipelineStage.READY
+    assert healed.percent == STAGE_PERCENT[PipelineStage.READY]
+
+    reloaded = await pipeline_ops.get_pipeline_snapshot(paper_id)
+    assert reloaded is not None
+    assert reloaded.status == PaperStatus.READY
+    assert reloaded.stage == PipelineStage.READY
+    assert reloaded.percent == STAGE_PERCENT[PipelineStage.READY]
+    assert reloaded.message == "建图完成"
+
+    audit_records = [record for record in caplog.records if record.getMessage() == "pipeline_snapshot_heal_applied"]
+    assert len(audit_records) == 1
+    audit = audit_records[0]
+    assert audit.levelno == logging.WARNING
+    assert getattr(audit, "paper_id", None) == paper_id
+    assert getattr(audit, "heal_reason", None) == "contract_drift_heal"
+    assert getattr(audit, "target_status", None) == PaperStatus.READY.value
+
+
+@pytest.mark.asyncio
 async def test_persist_status_snapshot_merges_extract_warnings_without_overwrite(persistence_env) -> None:
     paper_id = "guard-warning-merge"
     await register_test_paper(paper_id, status=PaperStatus.PROCESSING)

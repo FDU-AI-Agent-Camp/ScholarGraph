@@ -268,10 +268,31 @@ class Settings(PatrolSettingsMixin, QaSettingsMixin, BaseSettings):
         validation_alias="RERANKER_API_KEY",
     )
     reranker_batch_size: int = Field(
-        default=32,
+        default=4,
         ge=1,
         le=256,
         validation_alias="RERANKER_BATCH_SIZE",
+    )
+    reranker_qps_limit: float = Field(
+        default=3.0,
+        ge=0.0,
+        le=60.0,
+        validation_alias="RERANKER_QPS_LIMIT",
+        description="Process-local Reranker QPS budget (0 disables). Default 3 leaves headroom under ~4 QPS MaaS caps.",
+    )
+    reranker_concurrency_limit: int = Field(
+        default=2,
+        ge=1,
+        le=64,
+        validation_alias="RERANKER_CONCURRENCY_LIMIT",
+        description="Max in-flight Reranker HTTP requests per process.",
+    )
+    reranker_max_retries: int = Field(
+        default=3,
+        ge=1,
+        le=8,
+        validation_alias="RERANKER_MAX_RETRIES",
+        description="Tenacity attempts for transient Reranker failures (429/5xx/network).",
     )
     reranker_threshold: float = Field(
         default=0.85,
