@@ -86,7 +86,7 @@ async def test_b06_processing_paper_returns_409_graph_not_ready(api_client: Asyn
 
 @pytest.mark.asyncio
 async def test_b06_ready_paper_missing_graph_file_returns_409(api_client: AsyncClient) -> None:
-    graph_path = GraphStore()._path(READY_PAPER_ID)
+    graph_path = GraphStore().graph_path_for(READY_PAPER_ID)
     backup = graph_path.read_text(encoding="utf-8") if graph_path.is_file() else None
     if graph_path.is_file():
         graph_path.unlink()

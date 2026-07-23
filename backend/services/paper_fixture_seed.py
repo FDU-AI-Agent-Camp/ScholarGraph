@@ -51,7 +51,10 @@ async def seed_from_fixtures(
             _seed_graph_fixture_if_needed(graph)
             from backend.graph.store import GraphStore
 
-            await paper_repo.update_paths(detail.paper_id, graph_path=str(GraphStore()._path(detail.paper_id)))
+            await paper_repo.update_paths(
+                detail.paper_id,
+                graph_path=str(GraphStore().graph_path_for(detail.paper_id)),
+            )
         await _seed_status_for_detail(pipeline_repo, detail)
 
 
@@ -77,9 +80,9 @@ def _seed_graph_fixture_if_needed(graph: UnifiedPaperGraph) -> None:
     from backend.graph.store import GraphStore
 
     store = GraphStore()
-    if store._base_dir.resolve() != DEFAULT_GRAPH_DATA_DIR.resolve():
+    path = store.graph_path_for(graph.paper_id)
+    if path.parent.resolve() != DEFAULT_GRAPH_DATA_DIR.resolve():
         return
-    path = store._path(graph.paper_id)
     if path.is_file():
         try:
             if store.load(graph.paper_id) is not None:
