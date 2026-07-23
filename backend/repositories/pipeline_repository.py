@@ -16,7 +16,7 @@ from backend.db.base import get_async_session_factory
 from backend.db.models import PaperRow, PipelineRunRow
 from backend.repositories.mappers import pipeline_row_to_status
 from backend.schemas.graph import UnifiedPaperGraph
-from backend.schemas.paper import PaperStatus, PaperStatusData
+from backend.schemas.paper import PaperStatus, PaperStatusData, PipelineStage
 
 
 def _merge_warning_codes(existing: list[str] | None, incoming: list[str]) -> list[str]:
@@ -99,6 +99,66 @@ class PipelineRepository:
             paper.preview_available = data.preview_available
             paper.updated_at = now
             await session.commit()
+
+    async def repair_indexing_contract_if_indexing(
+        self,
+        paper_id: str,
+        *,
+        message: str | None = None,
+    ) -> PaperStatusData | None:
+        """Fix INDEXING stage/percent drift only while ``papers.status`` remains INDEXING.
+
+        The check → mutate → ``COMMIT`` path runs in a single SQLite session under
+        ``BEGIN IMMEDIATE`` (RESERVED lock) so it serializes against concurrent
+        ``save_status`` / promote writers. Deferred ``BEGIN`` is never opened first.
+
+        Returns the repaired snapshot, or ``None`` when the write is skipped
+        (no longer INDEXING, already contract-valid, or missing rows). Callers must
+        ``get_latest`` after ``None`` and must not demote terminal statuses.
+        """
+        from backend.graph.state import STAGE_PERCENT
+        from backend.services.pipeline_status_service import DEFAULT_STAGE_MESSAGES
+
+        expected_percent = STAGE_PERCENT[PipelineStage.INDEXING]
+        async with get_async_session_factory()() as session:
+            # First statement on this handle must be IMMEDIATE — do not session.get()
+            # beforehand or SQLAlchemy may open a deferred transaction instead.
+            await self._begin_immediate(session)
+            paper = await session.get(PaperRow, paper_id)
+            run = await session.get(PipelineRunRow, paper_id)
+            if paper is None or run is None:
+                await session.rollback()
+                return None
+            if paper.status != PaperStatus.INDEXING.value:
+                await session.rollback()
+                return None
+
+            already_valid = run.stage == PipelineStage.INDEXING.value and run.percent == expected_percent
+            if already_valid:
+                await session.rollback()
+                return None
+
+            now = datetime.now(UTC)
+            run.stage = PipelineStage.INDEXING.value
+            run.percent = expected_percent
+            run.message = message or DEFAULT_STAGE_MESSAGES[PipelineStage.INDEXING]
+            run.error_code = None
+            run.failed_during = None
+            indexing_started_at, indexing_heartbeat = _resolve_indexing_timestamps(
+                existing_started_at=run.indexing_started_at,
+                existing_heartbeat=run.indexing_heartbeat,
+                status=PaperStatus.INDEXING,
+                now=now,
+            )
+            run.indexing_started_at = indexing_started_at
+            run.indexing_heartbeat = indexing_heartbeat
+            run.updated_at = now
+            paper.updated_at = now
+            # Same-session assemble before COMMIT (expire_on_commit=False keeps attrs).
+            run.paper = paper
+            repaired = pipeline_row_to_status(run)
+            await session.commit()
+            return repaired
 
     async def get_latest(self, paper_id: str) -> PaperStatusData | None:
         async with get_async_session_factory()() as session:

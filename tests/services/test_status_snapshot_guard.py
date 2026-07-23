@@ -5,12 +5,14 @@
 
 from __future__ import annotations
 
+import asyncio
 from datetime import UTC, datetime
 
 import pytest
 from backend.graph.state import STAGE_PERCENT
 from backend.repositories.pipeline_repository import get_pipeline_repository
 from backend.schemas.paper import FailedDuringStage, PaperStatus, PaperStatusData, PipelineStage
+from backend.services.paper_pipeline_ops import get_paper_pipeline_ops_service
 from backend.services.status_snapshot_guard import (
     audit_dual_table_invariant,
     ensure_status_contract,
@@ -61,14 +63,20 @@ async def test_ensure_status_contract_heals_indexing_drift(persistence_env) -> N
     paper_id = "guard-indexing-drift"
     await register_test_paper(paper_id, status=PaperStatus.INDEXING)
     service = await restart_paper_service()
+    pipeline_repo = get_pipeline_repository()
 
-    drifted = _snapshot(
+    await pipeline_repo.save_status(
         paper_id,
-        status=PaperStatus.INDEXING,
-        stage=PipelineStage.EXTRACTING,
-        percent=STAGE_PERCENT[PipelineStage.EXTRACTING],
-        message="stale pipeline row",
+        _snapshot(
+            paper_id,
+            status=PaperStatus.INDEXING,
+            stage=PipelineStage.EXTRACTING,
+            percent=STAGE_PERCENT[PipelineStage.EXTRACTING],
+            message="stale pipeline row",
+        ),
     )
+    drifted = await pipeline_repo.get_latest(paper_id)
+    assert drifted is not None
     healed = await ensure_status_contract(service, paper_id, drifted)
 
     assert healed.status == PaperStatus.INDEXING
@@ -81,20 +89,113 @@ async def test_ensure_status_contract_heals_indexing_drift(persistence_env) -> N
 
 
 @pytest.mark.asyncio
+async def test_ensure_status_contract_indexing_heal_does_not_clobber_ready_promote(
+    persistence_env,
+) -> None:
+    """Stale INDEXING heal must not overwrite a concurrent READY promote (HTTP poll race)."""
+    paper_id = "guard-indexing-vs-ready"
+    await register_test_paper(paper_id, status=PaperStatus.PROCESSING)
+    service = await restart_paper_service()
+    pipeline_ops = get_paper_pipeline_ops_service()
+
+    await persist_status_snapshot(
+        service,
+        paper_id,
+        status=PaperStatus.INDEXING,
+        stage=PipelineStage.INDEXING,
+        percent=STAGE_PERCENT[PipelineStage.INDEXING],
+        message="indexing",
+    )
+
+    # Stale dual-table assemble: status=INDEXING but stage/percent still extracting.
+    stale = _snapshot(
+        paper_id,
+        status=PaperStatus.INDEXING,
+        stage=PipelineStage.EXTRACTING,
+        percent=STAGE_PERCENT[PipelineStage.EXTRACTING],
+        message="stale",
+    )
+
+    async def _promote() -> PaperStatusData:
+        return await pipeline_ops.promote_paper_to_terminal_status(
+            paper_id,
+            success=True,
+            preferred_terminal=PaperStatus.READY,
+            publish_rag_indexed=False,
+        )
+
+    async def _heal_stale() -> PaperStatusData:
+        return await ensure_status_contract(service, paper_id, stale)
+
+    await asyncio.gather(_promote(), _heal_stale())
+
+    latest = await pipeline_ops.get_pipeline_snapshot(paper_id)
+    assert latest is not None
+    assert latest.status == PaperStatus.READY
+    assert latest.stage == PipelineStage.READY
+    assert latest.percent == 100
+
+
+@pytest.mark.asyncio
+async def test_ensure_status_contract_indexing_heal_rereads_ready_after_promote(
+    persistence_env,
+) -> None:
+    """When repair returns None because promote already won, re-read must yield READY."""
+    paper_id = "guard-indexing-reread-ready"
+    await register_test_paper(paper_id, status=PaperStatus.PROCESSING)
+    service = await restart_paper_service()
+    pipeline_ops = get_paper_pipeline_ops_service()
+
+    await persist_status_snapshot(
+        service,
+        paper_id,
+        status=PaperStatus.INDEXING,
+        stage=PipelineStage.INDEXING,
+        percent=STAGE_PERCENT[PipelineStage.INDEXING],
+        message="indexing",
+    )
+    await pipeline_ops.promote_paper_to_terminal_status(
+        paper_id,
+        success=True,
+        preferred_terminal=PaperStatus.READY,
+        publish_rag_indexed=False,
+    )
+
+    stale = _snapshot(
+        paper_id,
+        status=PaperStatus.INDEXING,
+        stage=PipelineStage.EXTRACTING,
+        percent=STAGE_PERCENT[PipelineStage.EXTRACTING],
+        message="stale after promote",
+    )
+    healed = await ensure_status_contract(service, paper_id, stale)
+    assert healed.status == PaperStatus.READY
+    assert healed.stage == PipelineStage.READY
+    assert healed.percent == 100
+
+
+@pytest.mark.asyncio
 async def test_ensure_status_contract_heals_failed_drift(persistence_env) -> None:
     paper_id = "guard-failed-drift"
     await register_test_paper(paper_id, status=PaperStatus.FAILED)
     service = await restart_paper_service()
+    pipeline_repo = get_pipeline_repository()
 
-    drifted = _snapshot(
+    await pipeline_repo.save_status(
         paper_id,
-        status=PaperStatus.FAILED,
-        stage=PipelineStage.EXTRACTING,
-        percent=STAGE_PERCENT[PipelineStage.EXTRACTING],
-        message="extract blew up",
-        error_code="EXTRACT_FAILED",
-        failed_during=FailedDuringStage.EXTRACTING,
+        _snapshot(
+            paper_id,
+            status=PaperStatus.FAILED,
+            stage=PipelineStage.EXTRACTING,
+            percent=STAGE_PERCENT[PipelineStage.EXTRACTING],
+            message="extract blew up",
+            error_code="EXTRACT_FAILED",
+            failed_during=FailedDuringStage.EXTRACTING,
+        ),
     )
+
+    drifted = await pipeline_repo.get_latest(paper_id)
+    assert drifted is not None
     healed = await ensure_status_contract(service, paper_id, drifted)
 
     assert healed.status == PaperStatus.FAILED
@@ -109,13 +210,19 @@ async def test_ensure_status_contract_heals_ready_with_warnings_drift(persistenc
     paper_id = "guard-rww-drift"
     await register_test_paper(paper_id, status=PaperStatus.READY_WITH_WARNINGS)
     service = await restart_paper_service()
+    pipeline_repo = get_pipeline_repository()
 
-    drifted = _snapshot(
+    await pipeline_repo.save_status(
         paper_id,
-        status=PaperStatus.READY_WITH_WARNINGS,
-        stage=PipelineStage.STORING,
-        percent=STAGE_PERCENT[PipelineStage.STORING],
+        _snapshot(
+            paper_id,
+            status=PaperStatus.READY_WITH_WARNINGS,
+            stage=PipelineStage.STORING,
+            percent=STAGE_PERCENT[PipelineStage.STORING],
+        ),
     )
+    drifted = await pipeline_repo.get_latest(paper_id)
+    assert drifted is not None
     healed = await ensure_status_contract(service, paper_id, drifted)
 
     assert healed.status == PaperStatus.READY_WITH_WARNINGS

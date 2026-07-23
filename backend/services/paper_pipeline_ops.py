@@ -50,6 +50,18 @@ class PaperPipelineOpsService:
         """Persist a validated pipeline status snapshot (papers + pipeline_runs)."""
         await self._pipeline_repo.save_status(paper_id, snapshot)
 
+    async def repair_indexing_contract_if_indexing(
+        self,
+        paper_id: str,
+        *,
+        message: str | None = None,
+    ) -> PaperStatusData | None:
+        """Conditionally repair INDEXING drift without demoting a concurrent terminal promote."""
+        return await self._pipeline_repo.repair_indexing_contract_if_indexing(
+            paper_id,
+            message=message,
+        )
+
     async def touch_indexing_heartbeat(self, paper_id: str, *, at: datetime | None = None) -> bool:
         """Pulse ``indexing_heartbeat`` while the paper remains INDEXING."""
         return await self._pipeline_repo.touch_indexing_heartbeat(paper_id, at=at)
