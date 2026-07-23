@@ -33,8 +33,25 @@ def test_is_transient_rerank_error_detects_http_status() -> None:
 def test_is_transient_rerank_error_detects_request_error_and_markers() -> None:
     request = httpx.Request("POST", "https://example.com/rerank")
     assert is_transient_rerank_error(httpx.ConnectError("boom", request=request))
+    assert is_transient_rerank_error(httpx.ConnectTimeout("timed out", request=request))
     assert is_transient_rerank_error(RuntimeError("ModelArts.81101 rate limit"))
     assert not is_transient_rerank_error(ValueError("invalid json schema"))
+
+
+def test_is_transient_rerank_error_rejects_401_and_400() -> None:
+    request = httpx.Request("POST", "https://example.com/rerank")
+    err_401 = httpx.HTTPStatusError(
+        "unauthorized",
+        request=request,
+        response=httpx.Response(401, request=request),
+    )
+    err_400 = httpx.HTTPStatusError(
+        "bad request",
+        request=request,
+        response=httpx.Response(400, request=request),
+    )
+    assert not is_transient_rerank_error(err_401)
+    assert not is_transient_rerank_error(err_400)
 
 
 @pytest.mark.asyncio
