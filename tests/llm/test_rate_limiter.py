@@ -105,3 +105,19 @@ class TestAsyncTokenBucket:
         await bucket.acquire(tokens=0, chars=1)
         elapsed = (datetime.now(UTC) - start).total_seconds()
         assert elapsed >= 0.3
+
+    async def test_get_reranker_rate_limiter_maps_qps_to_rpm(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        from backend.config import get_settings
+        from backend.llm.rate_limiter import get_reranker_rate_limiter, reset_reranker_rate_limiter
+
+        monkeypatch.setenv("RERANKER_QPS_LIMIT", "3.0")
+        get_settings.cache_clear()
+        reset_reranker_rate_limiter()
+        bucket = get_reranker_rate_limiter()
+        assert bucket.rpm == 180
+        assert bucket.tpm == 0
+        reset_reranker_rate_limiter()
+        get_settings.cache_clear()
