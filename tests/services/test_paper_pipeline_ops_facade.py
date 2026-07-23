@@ -14,7 +14,8 @@ def test_paper_pipeline_ops_exposes_pipeline_facade_methods() -> None:
     ops = get_paper_pipeline_ops_service()
     required = (
         "get_pipeline_snapshot",
-        "save_pipeline_snapshot",
+        "initialize_pipeline_snapshot",
+        "heal_pipeline_snapshot",
         "touch_indexing_heartbeat",
         "promote_paper_to_terminal_status",
         "promote_stuck_indexing_paper",
@@ -39,7 +40,7 @@ async def test_promote_stuck_indexing_via_pipeline_ops(persistence_env) -> None:
     await register_test_paper(paper_id, status=PaperStatus.INDEXING)
     ops = get_paper_pipeline_ops_service()
     now = datetime.now(UTC)
-    await ops.save_pipeline_snapshot(
+    await ops.heal_pipeline_snapshot(
         paper_id,
         PaperStatusData(
             paper_id=paper_id,
@@ -55,12 +56,40 @@ async def test_promote_stuck_indexing_via_pipeline_ops(persistence_env) -> None:
             classify_warnings=[],
             extract_warnings=[],
         ),
+        reason="test_seed_indexing_for_stuck_promote",
     )
     assert await promote_stuck_indexing_paper(paper_id) is True
     latest = await ops.get_pipeline_snapshot(paper_id)
     assert latest is not None
     assert latest.status == PaperStatus.READY_WITH_WARNINGS
     assert RAG_INDEXING_STUCK_WARNING in latest.extract_warnings
+
+
+@pytest.mark.asyncio
+async def test_initialize_pipeline_snapshot_rejects_non_pending(persistence_env) -> None:
+    from datetime import UTC, datetime
+
+    from backend.schemas.paper import PaperStatus, PaperStatusData
+    from backend.services.errors import InvalidStateTransitionError
+    from backend.services.paper_pipeline_ops import get_paper_pipeline_ops_service
+    from tests.helpers.persistence_testkit import register_test_paper
+
+    paper_id = "facade-init-reject"
+    await register_test_paper(paper_id, status=PaperStatus.PENDING)
+    ops = get_paper_pipeline_ops_service()
+    with pytest.raises(InvalidStateTransitionError) as exc_info:
+        await ops.initialize_pipeline_snapshot(
+            paper_id,
+            PaperStatusData(
+                paper_id=paper_id,
+                status=PaperStatus.READY,
+                percent=100,
+                stage=None,
+                message="bad",
+                updated_at=datetime.now(UTC),
+            ),
+        )
+    assert exc_info.value.to_status == PaperStatus.READY.value
 
 
 def test_paper_service_composes_pipeline_ops_service() -> None:
