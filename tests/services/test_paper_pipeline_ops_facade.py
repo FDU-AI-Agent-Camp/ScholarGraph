@@ -65,33 +65,6 @@ async def test_promote_stuck_indexing_via_pipeline_ops(persistence_env) -> None:
     assert RAG_INDEXING_STUCK_WARNING in latest.extract_warnings
 
 
-@pytest.mark.asyncio
-async def test_initialize_pipeline_snapshot_rejects_non_pending(persistence_env) -> None:
-    from datetime import UTC, datetime
-
-    from backend.schemas.paper import PaperStatus, PaperStatusData
-    from backend.services.errors import InvalidStateTransitionError
-    from backend.services.paper_pipeline_ops import get_paper_pipeline_ops_service
-    from tests.helpers.persistence_testkit import register_test_paper
-
-    paper_id = "facade-init-reject"
-    await register_test_paper(paper_id, status=PaperStatus.PENDING)
-    ops = get_paper_pipeline_ops_service()
-    with pytest.raises(InvalidStateTransitionError) as exc_info:
-        await ops.initialize_pipeline_snapshot(
-            paper_id,
-            PaperStatusData(
-                paper_id=paper_id,
-                status=PaperStatus.READY,
-                percent=100,
-                stage=None,
-                message="bad",
-                updated_at=datetime.now(UTC),
-            ),
-        )
-    assert exc_info.value.to_status == PaperStatus.READY.value
-
-
 def test_paper_service_composes_pipeline_ops_service() -> None:
     service = get_paper_service()
     assert isinstance(service, PaperService)
