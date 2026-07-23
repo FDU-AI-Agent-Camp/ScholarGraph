@@ -15,9 +15,12 @@ import time
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from threading import Lock
-from typing import Protocol
+from typing import TYPE_CHECKING, Protocol
 
 from backend.schemas.patrol import PatrolMode, PatrolReport
+
+if TYPE_CHECKING:
+    from backend.services.paper_service import PaperService
 
 # Healthy (thick-context) results may be retained longer.
 PATROL_HEALTHY_CACHE_MAX_AGE_SECONDS = 24 * 60 * 60
@@ -84,7 +87,11 @@ class InMemoryPatrolResultCache:
             return entry.ttl_seconds
 
 
-def collect_patrol_paper_fingerprint(paper_ids: Sequence[str]) -> str:
+async def collect_patrol_paper_fingerprint(
+    paper_ids: Sequence[str],
+    *,
+    paper_service: PaperService | None = None,
+) -> str:
     """Build a cache fingerprint from each paper's graph_version + active index run.
 
     Missing DB rows use placeholders so graph-only / fixture papers still cache
@@ -92,14 +99,14 @@ def collect_patrol_paper_fingerprint(paper_ids: Sequence[str]) -> str:
     """
     from backend.services.paper_service import get_paper_service
 
-    paper_service = get_paper_service()
+    service = paper_service or get_paper_service()
     segments: list[str] = []
     for paper_id in paper_ids:
         try:
-            graph_version = paper_service.get_pipeline_graph_version(paper_id)
+            graph_version = await service.get_pipeline_graph_version(paper_id)
         except KeyError:
             graph_version = _MISSING_GRAPH_VERSION
-        run_id = paper_service.get_active_run_id(paper_id) or _MISSING_INDEX_RUN
+        run_id = await service.get_active_run_id(paper_id) or _MISSING_INDEX_RUN
         segments.append(f"{paper_id}@{graph_version}/{run_id}")
     return ";".join(segments)
 

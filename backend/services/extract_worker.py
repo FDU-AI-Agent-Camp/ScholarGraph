@@ -22,7 +22,7 @@ from backend.config import Settings, get_settings
 from backend.schemas.paper import PaperStatus, PipelineStage
 from backend.schemas.paradigm import Paradigm, ParadigmClassification
 from backend.services.errors import PIPELINE_FAILED_CODE, ServiceError
-from backend.services.paper_service import get_paper_service
+from backend.services.paper_service import PaperService, get_paper_service
 from backend.services.pipeline_completion_service import get_pipeline_completion_service
 from backend.services.pipeline_status_service import get_pipeline_status_service
 
@@ -40,18 +40,19 @@ async def _run_full_extraction(
     head_context: str | None,
     settings: Settings,
     pipeline_generation_id: str | None,
+    paper_service: PaperService | None = None,
 ) -> None:
     """Run full extraction and finalize the pipeline."""
     status_service = get_pipeline_status_service()
     completion_service = get_pipeline_completion_service()
-    paper_service = get_paper_service()
+    resolved_paper_service = paper_service or get_paper_service()
 
     try:
-        current = await paper_service.get_status(paper_id)
+        current = await resolved_paper_service.get_status(paper_id)
         if current.status in {PaperStatus.READY, PaperStatus.READY_WITH_WARNINGS, PaperStatus.FAILED}:
             return
         if not (current.status == PaperStatus.PROCESSING and current.stage == PipelineStage.EXTRACTING):
-            status_service.advance_stage(
+            await status_service.advance_stage(
                 paper_id,
                 stage=PipelineStage.EXTRACTING,
                 message="后台全量抽取进行中",
@@ -67,7 +68,7 @@ async def _run_full_extraction(
         )
 
         graph = result.graph
-        completion_service.finalize(
+        await completion_service.finalize(
             paper_id,
             graph_data=graph.model_dump(mode="json"),
             classification_data=classification.model_dump(mode="json"),
@@ -80,7 +81,7 @@ async def _run_full_extraction(
         )
     except ServiceError as exc:
         logger.exception("background_full_extraction_failed", extra={"paper_id": paper_id})
-        paper_service.fail_pipeline(
+        await resolved_paper_service.fail_pipeline(
             paper_id,
             message=exc.message,
             error_code=exc.code,
@@ -88,7 +89,7 @@ async def _run_full_extraction(
         )
     except Exception as exc:
         logger.exception("background_full_extraction_failed", extra={"paper_id": paper_id})
-        paper_service.fail_pipeline(
+        await resolved_paper_service.fail_pipeline(
             paper_id,
             message=f"后台全量抽取失败: {exc}",
             error_code=PIPELINE_FAILED_CODE,

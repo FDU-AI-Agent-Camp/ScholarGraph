@@ -1,24 +1,23 @@
 # Copyright 2026 FDU-AI-Agent-Camp
 # SPDX-License-Identifier: Apache-2.0
 
-"""PaperService facade for pipeline status writes (P13 LoD harden).
+"""Paper pipeline operations service (P13 LoD harden).
 
-External RAG / watchdog / re-extract callers must use these methods instead of
-touching ``PaperService._pipeline_repo`` directly.
+External RAG / watchdog / re-extract callers must use ``PaperService`` public
+facade methods (e.g. ``promote_paper_to_terminal_status``) or inject
+``PaperPipelineOpsService`` in tests instead of touching ``_pipeline_repo``.
 """
 
 from __future__ import annotations
 
 import logging
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING
+from functools import lru_cache
 
 from backend.events.bus import get_event_bus
 from backend.events.types import RagIndexed
+from backend.repositories.pipeline_repository import PipelineRepository, get_pipeline_repository
 from backend.schemas.paper import PaperStatus, PaperStatusData, PipelineStage
-
-if TYPE_CHECKING:
-    from backend.repositories.pipeline_repository import PipelineRepository
 
 logger = logging.getLogger(__name__)
 
@@ -27,11 +26,21 @@ DEFAULT_STUCK_INDEXING_MESSAGE = "建图完成，但向量索引超时未完成�
 DEFAULT_RAG_INDEX_FAILED_MESSAGE = "建图完成，但向量索引构建失败"
 P13_WATCHDOG_HEAL_TAG = "[P13_WATCHDOG_HEAL]"
 
+__all__ = [
+    "DEFAULT_RAG_INDEX_FAILED_MESSAGE",
+    "DEFAULT_STUCK_INDEXING_MESSAGE",
+    "P13_WATCHDOG_HEAL_TAG",
+    "PaperPipelineOpsService",
+    "RAG_INDEXING_STUCK_WARNING",
+    "get_paper_pipeline_ops_service",
+]
 
-class PaperPipelineOpsMixin:
-    """Public pipeline-status operations backed by ``_pipeline_repo``."""
 
-    _pipeline_repo: PipelineRepository
+class PaperPipelineOpsService:
+    """Pipeline snapshot, generation guard, and terminal promote operations."""
+
+    def __init__(self, pipeline_repo: PipelineRepository | None = None) -> None:
+        self._pipeline_repo = pipeline_repo or get_pipeline_repository()
 
     async def get_pipeline_snapshot(self, paper_id: str) -> PaperStatusData | None:
         """Return the latest pipeline status snapshot, or None if absent."""
@@ -40,6 +49,18 @@ class PaperPipelineOpsMixin:
     async def save_pipeline_snapshot(self, paper_id: str, snapshot: PaperStatusData) -> None:
         """Persist a validated pipeline status snapshot (papers + pipeline_runs)."""
         await self._pipeline_repo.save_status(paper_id, snapshot)
+
+    async def repair_indexing_contract_if_indexing(
+        self,
+        paper_id: str,
+        *,
+        message: str | None = None,
+    ) -> PaperStatusData | None:
+        """Conditionally repair INDEXING drift without demoting a concurrent terminal promote."""
+        return await self._pipeline_repo.repair_indexing_contract_if_indexing(
+            paper_id,
+            message=message,
+        )
 
     async def touch_indexing_heartbeat(self, paper_id: str, *, at: datetime | None = None) -> bool:
         """Pulse ``indexing_heartbeat`` while the paper remains INDEXING."""
@@ -59,29 +80,21 @@ class PaperPipelineOpsMixin:
             limit=limit,
         )
 
-    def reset_pipeline_for_reextract(self, paper_id: str, *, message: str) -> PaperStatusData:
+    async def reset_pipeline_for_reextract(self, paper_id: str, *, message: str) -> PaperStatusData:
         """Reset pipeline_runs ephemeral state before re-queueing extract."""
-        from backend.repositories import run_async
+        return await self._pipeline_repo.reset_for_reextract(paper_id, message=message)
 
-        return run_async(self._pipeline_repo.reset_for_reextract(paper_id, message=message))
-
-    def get_pipeline_generation_id(self, paper_id: str) -> str | None:
+    async def get_pipeline_generation_id(self, paper_id: str) -> str | None:
         """Return the active extract-generation token, or ``None`` if unset."""
-        from backend.repositories import run_async
+        return await self._pipeline_repo.get_pipeline_generation_id(paper_id)
 
-        return run_async(self._pipeline_repo.get_pipeline_generation_id(paper_id))
-
-    def begin_pipeline_generation(self, paper_id: str) -> str:
+    async def begin_pipeline_generation(self, paper_id: str) -> str:
         """Mint and persist a new extract-generation token (terminal write guard)."""
-        from backend.repositories import run_async
+        return await self._pipeline_repo.begin_pipeline_generation(paper_id)
 
-        return run_async(self._pipeline_repo.begin_pipeline_generation(paper_id))
-
-    def invalidate_pipeline_generation(self, paper_id: str) -> None:
+    async def invalidate_pipeline_generation(self, paper_id: str) -> None:
         """Clear the extract-generation token (orphan late-write defense)."""
-        from backend.repositories import run_async
-
-        run_async(self._pipeline_repo.set_pipeline_generation_id(paper_id, None))
+        await self._pipeline_repo.set_pipeline_generation_id(paper_id, None)
 
     async def promote_paper_to_terminal_status(
         self,
@@ -161,7 +174,7 @@ class PaperPipelineOpsMixin:
         )
         await self.save_pipeline_snapshot(paper_id, snapshot)
         if publish_rag_indexed:
-            get_event_bus().publish_sync(
+            await get_event_bus().publish(
                 RagIndexed(
                     paper_id=paper_id,
                     success=success,
@@ -213,8 +226,8 @@ class PaperPipelineOpsMixin:
         )
         await self.save_pipeline_snapshot(paper_id, snapshot)
         if publish_rag_indexed:
-            # EventBus still drains on the FastAPI loop; under starvation delivery may lag.
-            get_event_bus().publish_sync(
+            # Prefer async publish on the caller's loop to avoid bridge-loop ghost sync.
+            await get_event_bus().publish(
                 RagIndexed(
                     paper_id=paper_id,
                     success=False,
@@ -357,3 +370,12 @@ class PaperPipelineOpsMixin:
             error_code=error_code,
             message=message,
         )
+
+    async def clear_ephemeral_pipeline_state(self, paper_id: str) -> None:
+        """Clear preview graph and other ephemeral pipeline_runs fields."""
+        await self._pipeline_repo.clear_ephemeral_pipeline_state(paper_id)
+
+
+@lru_cache
+def get_paper_pipeline_ops_service() -> PaperPipelineOpsService:
+    return PaperPipelineOpsService()

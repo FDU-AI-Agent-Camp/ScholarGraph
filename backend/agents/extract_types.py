@@ -6,7 +6,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any, NoReturn
+from typing import NoReturn
 
 from backend.schemas.graph import UnifiedPaperGraph
 
@@ -37,15 +37,11 @@ class DeterministicExtractionError(ExtractionError):
     """
 
 
-def classify_extraction_error(exc: BaseException) -> NoReturn:
-    """Classify an arbitrary exception into transient or deterministic.
+def _try_classify_openai_error(exc: BaseException) -> None:
+    """Classify OpenAI SDK errors when the package is installed.
 
-    This centralizes the taxonomy so the retry layer and fallback layer agree
-    on which failures are worth retrying. The function always raises an
-    ``ExtractionError`` subclass rather than returning it.
+    Returns normally when ``openai`` is unavailable or ``exc`` is not an OpenAI error.
     """
-    import httpx
-
     try:
         from openai import (
             APIStatusError,
@@ -55,7 +51,28 @@ def classify_extraction_error(exc: BaseException) -> NoReturn:
             RateLimitError,
         )
     except Exception:  # pragma: no cover - openai may not be installed in all tests
-        APIStatusError = APITimeoutError = BadRequestError = NotFoundError = RateLimitError = None  # type: ignore
+        return
+
+    if isinstance(exc, (APITimeoutError, RateLimitError)):
+        raise TransientExtractionError(f"OpenAI timeout/rate limit: {exc}") from exc
+    if isinstance(exc, (BadRequestError, NotFoundError)):
+        raise DeterministicExtractionError(f"OpenAI client error: {exc}") from exc
+    if isinstance(exc, APIStatusError):
+        status_code = getattr(exc, "status_code", 0)
+        if status_code in {429, 502, 503, 504}:
+            raise TransientExtractionError(f"OpenAI status {status_code}: {exc}") from exc
+        if status_code >= 400:
+            raise DeterministicExtractionError(f"OpenAI client error {status_code}: {exc}") from exc
+
+
+def classify_extraction_error(exc: BaseException) -> NoReturn:
+    """Classify an arbitrary exception into transient or deterministic.
+
+    This centralizes the taxonomy so the retry layer and fallback layer agree
+    on which failures are worth retrying. The function always raises an
+    ``ExtractionError`` subclass rather than returning it.
+    """
+    import httpx
 
     # Transient: network / timeout / rate limit / server errors
     if isinstance(exc, httpx.TimeoutException):
@@ -69,25 +86,7 @@ def classify_extraction_error(exc: BaseException) -> NoReturn:
         if status_code >= 400:
             raise DeterministicExtractionError(f"LLM client error {status_code}: {exc}") from exc
 
-    openai_errors: tuple[Any, ...] = (
-        APITimeoutError,
-        RateLimitError,
-        BadRequestError,
-        NotFoundError,
-        APIStatusError,
-    )
-    openai_errors = tuple(e for e in openai_errors if e is not None)
-    if openai_errors and isinstance(exc, openai_errors):
-        if isinstance(exc, (APITimeoutError, RateLimitError)):  # type: ignore
-            raise TransientExtractionError(f"OpenAI timeout/rate limit: {exc}") from exc
-        if isinstance(exc, (BadRequestError, NotFoundError)):  # type: ignore
-            raise DeterministicExtractionError(f"OpenAI client error: {exc}") from exc
-        if isinstance(exc, APIStatusError):  # type: ignore
-            status_code = getattr(exc, "status_code", 0)
-            if status_code in {429, 502, 503, 504}:
-                raise TransientExtractionError(f"OpenAI status {status_code}: {exc}") from exc
-            if status_code >= 400:
-                raise DeterministicExtractionError(f"OpenAI client error {status_code}: {exc}") from exc
+    _try_classify_openai_error(exc)
 
     # Deterministic: validation failures, JSON parse errors, context too long, unknown errors
     if isinstance(exc, ValueError):

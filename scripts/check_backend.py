@@ -86,6 +86,12 @@ def main(argv: list[str] | None = None) -> int:
         ("rag io timeouts", [sys.executable, "scripts/check_rag_io_timeouts.py"]),
         # Architecture: forbid piercing PaperService._pipeline_repo outside the facade.
         ("pipeline repo lod", [sys.executable, "scripts/check_pipeline_repo_lod.py"]),
+        # Architecture: forbid run_async / async_bridge inside backend/services (async SSOT).
+        ("services no run_async", [sys.executable, "scripts/check_services_no_run_async.py"]),
+        # Phase-3: embedded-bridge ban on services + patrol (whitelist: adapters/CLI/tests).
+        ("no embedded bridge", [sys.executable, "scripts/check_no_embedded_bridge.py"]),
+        # Phase-2: hot-path modules must await PaperService APIs (no run_async wrapper).
+        ("async hotpath await", [sys.executable, "scripts/check_async_hotpath_await.py"]),
         # P13: orphan-thread + watchdog debt matrix (generation / compensate / starve / cold-boot).
         ("p13 release gate", [sys.executable, "scripts/check_p13_release_gate.py"]),
         # Parallel: processing/pending wall-clock + cold-boot grace matrix.

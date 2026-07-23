@@ -80,6 +80,9 @@ def _ensure_bridge_loop() -> asyncio.AbstractEventLoop:
 
 
 def _run_on_bridge_loop(coro: Coroutine[object, object, T]) -> T:
+    from backend.debug.async_hotpath_audit import record_bridge_crossing
+
+    record_bridge_crossing()
     loop = _ensure_bridge_loop()
     return asyncio.run_coroutine_threadsafe(coro, loop).result()
 

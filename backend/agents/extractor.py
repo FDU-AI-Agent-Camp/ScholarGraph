@@ -28,6 +28,7 @@ from backend.config import Settings, get_settings
 from backend.schemas.extract_phase import ExtractedGraph
 from backend.schemas.graph import GraphEdge, GraphNode, NodeType, UnifiedPaperGraph
 from backend.schemas.paradigm import Paradigm
+from backend.services.paper_service import PaperService
 
 logger = logging.getLogger(__name__)
 
@@ -70,12 +71,17 @@ def _fallback_to_heuristic(
     return ExtractResult(graph=graph, warnings=warnings)
 
 
-def _resolve_head_context(paper_id: str) -> str | None:
+async def _resolve_head_context(
+    paper_id: str,
+    *,
+    paper_service: PaperService | None = None,
+) -> str | None:
     """Build optional document-head prefix from in-memory refine or ``HeadStore`` (X6)."""
     from backend.graph.head_store import HeadStore
     from backend.services.paper_service import get_paper_service
 
-    head = get_paper_service().get_refined_head(paper_id)
+    service = paper_service or get_paper_service()
+    head = await service.get_refined_head(paper_id)
     if head is None:
         record = HeadStore().load(paper_id)
         head = record.merged if record is not None else None
@@ -147,11 +153,12 @@ def _to_unified_graph(
     )
 
 
-def _save_preview_graph(
+async def _save_preview_graph(
     paper_id: str,
     graph: UnifiedPaperGraph,
     *,
     warnings: list[str] | None = None,
+    paper_service: PaperService | None = None,
 ) -> None:
     """Persist a graph as the current preview and surface it on status/detail.
 
@@ -159,20 +166,21 @@ def _save_preview_graph(
     unregistered paper_ids, in which case we simply skip the preview update.
     """
     from backend.services.paper_service import get_paper_service
+    from backend.services.paper_warning_service import WarningType, get_paper_warning_service
 
-    service = get_paper_service()
+    service = paper_service or get_paper_service()
     try:
-        service.ensure_paper_exists(paper_id)
+        await service.ensure_paper_exists(paper_id)
     except Exception:
         logger.debug(
             "skip_preview_for_unregistered_paper",
             extra={"paper_id": paper_id},
         )
         return
-    service.save_preview_graph(paper_id, graph)
-    service.mark_preview_available(paper_id)
+    await service.save_preview_graph(paper_id, graph)
+    await service.mark_preview_available(paper_id)
     if warnings:
-        service.record_extract_warnings(paper_id, warnings)
+        await get_paper_warning_service().record(paper_id, WarningType.EXTRACT, warnings)
 
 
 async def _extract_mvp(
@@ -225,7 +233,7 @@ async def _extract_live(
     settings: Settings,
 ) -> ExtractResult:
     title = extract_title(full_text)
-    head_context = _resolve_head_context(paper_id)
+    head_context = await _resolve_head_context(paper_id)
 
     if not settings.extract_llm_enabled:
         logger.warning(
@@ -304,7 +312,7 @@ async def _extract_single_phase(
         )
 
     final_graph = graph.model_copy(update={"paper_id": paper_id, "paradigm": paradigm})
-    _save_preview_graph(paper_id, final_graph, warnings=[])
+    await _save_preview_graph(paper_id, final_graph, warnings=[])
     return ExtractResult(graph=final_graph, warnings=[])
 
 
@@ -366,7 +374,7 @@ async def _extract_chunked_two_phase(
         ],
         summary=extracted_graph.summary,
     )
-    _save_preview_graph(paper_id, unified, warnings=extracted_graph.warnings)
+    await _save_preview_graph(paper_id, unified, warnings=extracted_graph.warnings)
     return ExtractResult(graph=unified, warnings=extracted_graph.warnings)
 
 
@@ -404,7 +412,7 @@ async def _extract_two_phase(
             mvp_extracted = None
 
         if mvp_extracted is not None:
-            _save_preview_graph(
+            await _save_preview_graph(
                 paper_id,
                 _to_unified_graph(mvp_extracted, paper_id=paper_id, paradigm=paradigm),
                 warnings=[MVP_SKELETON_PREVIEW_CODE],
@@ -429,7 +437,7 @@ async def _extract_two_phase(
             head_context=head_context,
         )
         final_graph = result.graph.model_copy(update={"paper_id": paper_id, "paradigm": paradigm})
-        _save_preview_graph(paper_id, final_graph, warnings=result.warnings)
+        await _save_preview_graph(paper_id, final_graph, warnings=result.warnings)
         return ExtractResult(graph=final_graph, warnings=result.warnings)
     except Exception as exc:
         return handle_extract_failure(
@@ -460,7 +468,7 @@ async def extract(
     if settings.is_llm_mock:
         graph = mock_extract(full_text, normalized_paradigm)
         graph = graph.model_copy(update={"paper_id": resolved_paper_id, "paradigm": normalized_paradigm})
-        _save_preview_graph(resolved_paper_id, graph, warnings=[])
+        await _save_preview_graph(resolved_paper_id, graph, warnings=[])
         return ExtractResult(graph=graph, warnings=[])
 
     if not full_text or not full_text.strip():

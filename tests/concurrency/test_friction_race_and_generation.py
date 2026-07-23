@@ -25,7 +25,7 @@ from backend.repositories.paper_repository import PaperRepository
 from backend.repositories.pipeline_repository import PipelineRepository
 from backend.schemas.paper import PaperStatus, PaperStatusData, PipelineStage
 from backend.services.reextract_service import (
-    force_reextract,
+    get_reextract_service,
     is_reextract_inflight,
     reset_reextract_inflight_gate,
 )
@@ -77,7 +77,8 @@ async def test_concurrent_reextract_only_one_wins_nine_get_409(
     paper_id = "reextract-race-10"
     pdf = _make_pdf(Path(persistence_env["upload_dir"]), f"{paper_id}.pdf")
     await _seed_ready(paper_id, pdf)
-    service = await restart_paper_service()
+    await restart_paper_service()
+    reextract = get_reextract_service()
 
     hold = asyncio.Event()
     entered = asyncio.Event()
@@ -99,10 +100,20 @@ async def test_concurrent_reextract_only_one_wins_nine_get_409(
         patch("backend.services.reextract_service.schedule_paper_pipeline", _schedule),
     ):
         tasks = [
-            asyncio.create_task(force_reextract(service, paper_id, force=False), name=f"rex-{i}") for i in range(10)
+            asyncio.create_task(reextract.force_reextract(paper_id, force=False), name=f"rex-{i}") for i in range(10)
         ]
-        await asyncio.wait_for(entered.wait(), timeout=1.0)
-        await asyncio.sleep(0.05)
+        await asyncio.wait_for(entered.wait(), timeout=5.0)
+        # Wait until the other nine have hit the claim gate (409) while the
+        # winner still holds abort — a fixed sleep flakes under suite load.
+        deadline = asyncio.get_running_loop().time() + 2.0
+        while asyncio.get_running_loop().time() < deadline:
+            finished = [task for task in tasks if task.done()]
+            if len(finished) >= 9:
+                break
+            await asyncio.sleep(0.01)
+        else:
+            done_count = sum(1 for task in tasks if task.done())
+            raise AssertionError(f"expected 9 claim conflicts before release; only {done_count} tasks finished")
         hold.set()
         results = await asyncio.gather(*tasks, return_exceptions=True)
 
@@ -136,7 +147,8 @@ async def test_foreign_worker_claim_blocks_reextract(persistence_env) -> None:
     paper_id = "reextract-foreign-claim"
     pdf = _make_pdf(Path(persistence_env["upload_dir"]), f"{paper_id}.pdf")
     await _seed_ready(paper_id, pdf)
-    service = await restart_paper_service()
+    await restart_paper_service()
+    reextract = get_reextract_service()
 
     await get_paper_ops_claim_repository().seed_claim_for_tests(
         paper_id,
@@ -146,7 +158,7 @@ async def test_foreign_worker_claim_blocks_reextract(persistence_env) -> None:
     assert is_reextract_inflight(paper_id)
 
     with pytest.raises(ApiError) as exc_info:
-        await force_reextract(service, paper_id, force=False)
+        await reextract.force_reextract(paper_id, force=False)
     assert exc_info.value.status_code == 409
     assert exc_info.value.code == "PAPER_ALREADY_PROCESSING"
     assert is_reextract_inflight(paper_id)
@@ -162,12 +174,14 @@ async def test_delete_and_reextract_share_cluster_mutex(persistence_env) -> None
     """Delete and reextract must not interleave wipe critical sections for one paper."""
     from backend.db.models import PAPER_OPS_OPERATION_DELETE
     from backend.repositories.paper_ops_claim_repository import get_paper_ops_claim_repository
-    from backend.services.paper_delete_service import delete_paper
+    from backend.services.paper_delete_service import get_paper_delete_service
 
     paper_id = "wipe-mutex-cross"
     pdf = _make_pdf(Path(persistence_env["upload_dir"]), f"{paper_id}.pdf")
     await _seed_ready(paper_id, pdf)
-    service = await restart_paper_service()
+    await restart_paper_service()
+    reextract = get_reextract_service()
+    delete_service = get_paper_delete_service()
 
     hold = asyncio.Event()
     entered = asyncio.Event()
@@ -184,13 +198,12 @@ async def test_delete_and_reextract_share_cluster_mutex(persistence_env) -> None
         ),
         patch("backend.services.reextract_service.schedule_paper_pipeline"),
     ):
-        rex_task = asyncio.create_task(force_reextract(service, paper_id, force=False))
-        await asyncio.wait_for(entered.wait(), timeout=1.0)
+        rex_task = asyncio.create_task(reextract.force_reextract(paper_id, force=False))
+        await asyncio.wait_for(entered.wait(), timeout=5.0)
         assert is_reextract_inflight(paper_id)
 
         with pytest.raises(ApiError) as exc_info:
-            await delete_paper(
-                service,
+            await delete_service.delete(
                 paper_id,
                 force=True,
                 vector_store=AsyncMock(delete_by_paper=AsyncMock()),
@@ -210,7 +223,7 @@ async def test_delete_and_reextract_share_cluster_mutex(persistence_env) -> None
         owner_token="delete-owner",
     )
     with pytest.raises(ApiError) as blocked:
-        await force_reextract(service, paper_id, force=False)
+        await reextract.force_reextract(paper_id, force=False)
     assert blocked.value.status_code == 409
     await get_paper_ops_claim_repository().release(paper_id, "delete-owner")
 
@@ -244,7 +257,8 @@ async def test_reextract_slot_releases_after_timeout_error(
     paper_id = "reextract-lock-release"
     pdf = _make_pdf(Path(persistence_env["upload_dir"]), f"{paper_id}.pdf")
     await _seed_ready(paper_id, pdf)
-    service = await restart_paper_service()
+    await restart_paper_service()
+    reextract = get_reextract_service()
 
     async def _boom(_paper_id: str) -> None:
         raise TimeoutError("simulated abort timeout")
@@ -258,14 +272,14 @@ async def test_reextract_slot_releases_after_timeout_error(
         patch("backend.services.reextract_service.schedule_paper_pipeline") as scheduler,
     ):
         with pytest.raises(TimeoutError):
-            await force_reextract(service, paper_id, force=False)
+            await reextract.force_reextract(paper_id, force=False)
         assert not is_reextract_inflight(paper_id)
 
         with patch(
             "backend.services.reextract_service.abort_in_flight_pipeline",
             AsyncMock(),
         ):
-            snapshot = await force_reextract(service, paper_id, force=False)
+            snapshot = await reextract.force_reextract(paper_id, force=False)
 
     assert snapshot.status == PaperStatus.PENDING
     scheduler.assert_called_once()
@@ -277,8 +291,8 @@ async def test_replace_lock_released_after_cancelled_replace() -> None:
     """VectorStore per-paper replace Lock must unlock after CancelledError."""
     get_indexing_run_registry().reset()
     paper_service = MagicMock()
-    paper_service.get_active_run_id.return_value = None
-    paper_service.set_active_run_id = MagicMock()
+    paper_service.get_active_run_id = AsyncMock(return_value=None)
+    paper_service.set_active_run_id = AsyncMock()
 
     store = VectorStore(
         paper_service=paper_service,
@@ -357,8 +371,8 @@ async def test_obsolete_generation_warning_on_refuse_activate(
     caplog.set_level(logging.WARNING)
     get_indexing_run_registry().reset()
     paper_service = MagicMock()
-    paper_service.get_active_run_id.return_value = "run_b"
-    paper_service.set_active_run_id = MagicMock()
+    paper_service.get_active_run_id = AsyncMock(return_value="run_b")
+    paper_service.set_active_run_id = AsyncMock()
     store = VectorStore(
         paper_service=paper_service,
         embedding_client=FakeEmbeddingClient(),

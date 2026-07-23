@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from functools import lru_cache
 from typing import TYPE_CHECKING
 
@@ -33,10 +34,10 @@ class GraphPersistenceService:
 
         self._store = store or GraphStore()
 
-    def save(self, graph: UnifiedPaperGraph) -> str:
-        """Persist graph and return the resolved on-disk path."""
+    async def save(self, graph: UnifiedPaperGraph) -> str:
+        """Persist graph off the event loop and return the resolved on-disk path."""
         try:
-            self._store.save(graph)
+            await asyncio.to_thread(self._store.save, graph)
             return str(self._store._path(graph.paper_id))
         except Exception as exc:
             raise ServiceError(PIPELINE_FAILED_CODE, f"图谱存储失败: {exc}") from exc

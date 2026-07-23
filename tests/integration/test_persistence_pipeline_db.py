@@ -24,7 +24,7 @@ async def test_full_pipeline_stage_progression_persists_each_step(persistence_en
     service = await restart_paper_service()
     pss = PipelineStatusService()
 
-    pss.start_processing(paper_id)
+    await pss.start_processing(paper_id)
     status = await service.get_status(paper_id)
     assert status.stage == PipelineStage.INGESTING
     assert status.percent == STAGE_PERCENT[PipelineStage.INGESTING]
@@ -35,13 +35,13 @@ async def test_full_pipeline_stage_progression_persists_each_step(persistence_en
         PipelineStage.EXTRACTING,
         PipelineStage.STORING,
     ):
-        pss.advance_stage(paper_id, stage)
+        await pss.advance_stage(paper_id, stage)
         status = await service.get_status(paper_id)
         assert status.stage == stage
         assert status.percent == STAGE_PERCENT[stage]
         assert status.status == PaperStatus.PROCESSING
 
-    pss.mark_ready(paper_id)
+    await pss.mark_ready(paper_id)
     status = await service.get_status(paper_id)
     assert status.stage == PipelineStage.READY
     assert status.percent == 100
@@ -54,8 +54,8 @@ async def test_mark_failed_persists_error_fields_across_restart(persistence_env)
     paper_id = "pipe-fail-001"
     await register_test_paper(paper_id)
     service = await restart_paper_service()
-    PipelineStatusService().advance_stage(paper_id, PipelineStage.EXTRACTING)
-    PipelineStatusService().mark_failed(
+    await PipelineStatusService().advance_stage(paper_id, PipelineStage.EXTRACTING)
+    await PipelineStatusService().mark_failed(
         paper_id,
         message="抽取失败",
         error_code="EXTRACT_FAILED",

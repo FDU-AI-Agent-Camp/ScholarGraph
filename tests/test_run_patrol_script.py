@@ -201,23 +201,19 @@ def test_cli_subprocess_runs_contradiction_mode(tmp_path: Path) -> None:
     assert payload["insights"][0]["insight_id"] == "ins-contradiction-001"
 
 
-def test_execute_patrol_prints_openapi_shape(run_patrol_module, tmp_path: Path, capsys) -> None:
-    import asyncio
-
+@pytest.mark.asyncio
+async def test_execute_patrol_prints_openapi_shape(run_patrol_module, tmp_path: Path, capsys) -> None:
     graph_dir = tmp_path / "graphs"
 
-    async def _run() -> None:
-        report = await run_patrol_module.execute_patrol(
-            ["hss-001", "hss-002"],
-            run_patrol_module.PatrolMode.LENS_CLASH,
-            graph_dir=graph_dir,
-            seed_demo_graphs=True,
-            seed_hss_demo=False,
-            seed_stem_demo=False,
-        )
-        run_patrol_module.print_report(report, compact=True)
-
-    asyncio.run(_run())
+    report = await run_patrol_module.execute_patrol(
+        ["hss-001", "hss-002"],
+        run_patrol_module.PatrolMode.LENS_CLASH,
+        graph_dir=graph_dir,
+        seed_demo_graphs=True,
+        seed_hss_demo=False,
+        seed_stem_demo=False,
+    )
+    run_patrol_module.print_report(report, compact=True)
     payload = json.loads(capsys.readouterr().out.strip())
     assert payload["mode"] == "lens_clash"
     assert len(payload["insights"]) >= 1

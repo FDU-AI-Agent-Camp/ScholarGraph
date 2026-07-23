@@ -604,7 +604,7 @@ async def test_failed_replace_cleans_up_partial_orphan_run() -> None:
     store, chunks, entities, relations, _embedding_client = _store()
 
     paper_service = MagicMock()
-    paper_service.get_active_run_id.return_value = "old-run"
+    paper_service.get_active_run_id = AsyncMock(return_value="old-run")
     store._paper_service = paper_service
 
     cleanup_calls: list[tuple[str, str]] = []

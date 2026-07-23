@@ -39,6 +39,7 @@ from __future__ import annotations
 import asyncio
 import logging
 from datetime import UTC, datetime, timedelta
+from typing import TYPE_CHECKING
 
 from backend.config import get_settings
 from backend.rag.indexing_run_registry import get_indexing_run_registry
@@ -47,6 +48,9 @@ from backend.repositories.vector_cleanup_queue_repository import (
     get_vector_cleanup_queue_repository,
 )
 from backend.services.paper_service import get_paper_service
+
+if TYPE_CHECKING:
+    from backend.services.paper_service import PaperService
 
 logger = logging.getLogger(__name__)
 
@@ -62,10 +66,15 @@ _POLL_STOP: asyncio.Event | None = None
 VECTOR_CLEANUP_POLL_INTERVAL_SECONDS = 30.0
 
 
-def snapshot_wipe_target_run_ids(paper_id: str) -> set[str]:
+async def snapshot_wipe_target_run_ids(
+    paper_id: str,
+    *,
+    paper_service: PaperService | None = None,
+) -> set[str]:
     """Capture active + in-flight index run ids before abort / wipe."""
     targets: set[str] = set()
-    active = get_paper_service().get_active_run_id(paper_id)
+    service = paper_service or get_paper_service()
+    active = await service.get_active_run_id(paper_id)
     if active:
         targets.add(active)
     inflight = get_indexing_run_registry().peek_inflight(paper_id)
@@ -111,6 +120,18 @@ async def _execute_wave2_job(
     try:
         await _compensate_revoked_index_run(paper_id, run_id, delays_seconds=delays_seconds)
         get_vector_cleanup_queue_repository().delete_by_paper_run_sync(paper_id, run_id)
+    except Exception as exc:  # noqa: BLE001 — continue sweep loop for other orphan runs
+        logger.warning(
+            "wipe_vector_run_failed",
+            extra={
+                "run_id": run_id,
+                "paper_id": paper_id,
+                "attempt": len(delays_seconds),
+                "error": str(exc),
+                "error_type": type(exc).__name__,
+            },
+            exc_info=True,
+        )
     finally:
         _end_inflight(paper_id, run_id)
 
@@ -251,8 +272,16 @@ async def _vector_cleanup_poll_loop(interval_seconds: float) -> None:
                     "vector_cleanup_queue_poll_drain",
                     extra={"spawned": spawned},
                 )
-        except Exception:
-            logger.exception("vector_cleanup_queue_poll_failed")
+        except Exception as exc:  # noqa: BLE001 — continue sweep loop for other orphan runs
+            logger.warning(
+                "vector_cleanup_queue_poll_failed",
+                extra={
+                    "interval_seconds": interval_seconds,
+                    "error": str(exc),
+                    "error_type": type(exc).__name__,
+                },
+                exc_info=True,
+            )
         try:
             await asyncio.wait_for(_POLL_STOP.wait(), timeout=interval_seconds)
             break

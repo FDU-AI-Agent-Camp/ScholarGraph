@@ -165,7 +165,7 @@ async def test_sse_chunk_event_never_leaks_empty_preview_on_cold_indexing(
     graph_store.save(graph)
 
     paper_service = get_paper_service()
-    register_processing_paper(paper_service, paper_id, preview_available=True)
+    await register_processing_paper(paper_service, paper_id, preview_available=True)
     store, *_rest = _store_with_settings(None)
     store._paper_service = paper_service  # type: ignore[attr-defined]
     retriever = HybridRetriever(vector_store=store)

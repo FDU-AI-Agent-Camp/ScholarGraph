@@ -8,6 +8,7 @@ from __future__ import annotations
 import logging
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from unittest.mock import AsyncMock
 
 import pytest
 from backend.config import get_settings
@@ -99,14 +100,16 @@ async def test_macro_zombie_scan_promotes_and_emits_rag_indexed_false(
 
     seen: list[RagIndexed] = []
     bus = get_event_bus()
-    original_publish_sync = bus.publish_sync
 
-    def _capture_publish_sync(event: object) -> None:
+    async def _capture_publish(event: object) -> None:
         if isinstance(event, RagIndexed):
+            persisted = await get_pipeline_repository().get_latest("paper-a")
+            assert persisted is not None
+            assert persisted.status == PaperStatus.READY_WITH_WARNINGS
             seen.append(event)
-        original_publish_sync(event)
 
-    monkeypatch.setattr(bus, "publish_sync", _capture_publish_sync)
+    publish_spy = AsyncMock(side_effect=_capture_publish)
+    monkeypatch.setattr(bus, "publish", publish_spy)
 
     promoted = await scan_and_promote_stuck_indexing(
         stuck_after_seconds=60.0,
@@ -118,6 +121,7 @@ async def test_macro_zombie_scan_promotes_and_emits_rag_indexed_false(
     assert latest is not None
     assert latest.status == PaperStatus.READY_WITH_WARNINGS
     assert RAG_INDEXING_STUCK_WARNING in latest.extract_warnings
+    publish_spy.assert_awaited_once()
     assert len(seen) == 1
     assert seen[0].paper_id == "paper-a"
     assert seen[0].success is False
@@ -181,12 +185,9 @@ async def test_cold_boot_reconciliation_clears_zombie_states(
         "backend.startup.profile_validation.probe_reranker_connectivity",
         _noop_probe,
     )
-    monkeypatch.setattr(
-        "backend.rag.hybrid_retriever.create_hybrid_retriever",
-        lambda: object(),
-    )
-    monkeypatch.setattr("backend.rag.hybrid_retriever.bind_hybrid_retriever", lambda _r: None)
-    monkeypatch.setattr("backend.rag.hybrid_retriever.reset_hybrid_retriever", lambda: None)
+    from tests.helpers.lifespan_stubs import stub_lifespan_rag_wiring
+
+    stub_lifespan_rag_wiring(monkeypatch)
 
     from backend.main import create_app, lifespan
 
@@ -265,7 +266,7 @@ async def test_handler_promote_idempotent_after_watchdog_already_terminal(
     from backend.events.handler_errors import EVENT_HANDLER_FAILED_CODE
     from backend.rag.handlers import _promote_terminal_status
     from backend.rag.indexing_watchdog import promote_stuck_indexing_paper
-    from backend.services.paper_service import get_paper_service
+    from backend.services.paper_pipeline_ops import get_paper_pipeline_ops_service
 
     paper_id = "idempotent-race-001"
     started = datetime.now(UTC) - timedelta(hours=1)
@@ -298,7 +299,7 @@ async def test_handler_promote_idempotent_after_watchdog_already_terminal(
     )
     await on_pipeline_finalized_for_rag(event)
 
-    after = await get_paper_service().get_pipeline_snapshot(paper_id)
+    after = await get_paper_pipeline_ops_service().get_pipeline_snapshot(paper_id)
     assert after is not None
     assert after.status == PaperStatus.READY_WITH_WARNINGS
     assert after.extract_warnings == warnings_before
@@ -355,12 +356,15 @@ async def test_e2e_watchdog_promote_then_patrol_api_degrades_index_not_ready(
         async def query_chunks(self, *_a, **_k):
             return []
 
+    async def _stable_fingerprint(ids: list[str]) -> str:
+        return ";".join(f"{pid}@1.0.0/-" for pid in ids)
+
     service = PatrolService(
         store=store,
         vector_store=_MissingIndexStore(),  # type: ignore[arg-type]
         result_cache=InMemoryPatrolResultCache(),
         cache_enabled=False,
-        paper_fingerprint_fn=lambda ids: ";".join(f"{pid}@1.0.0/-" for pid in ids),
+        paper_fingerprint_fn=_stable_fingerprint,
     )
     monkeypatch.setattr(ps_module, "get_patrol_service", lambda: service)
     app.dependency_overrides[patrol_routes.get_patrol_service_dep] = lambda: service

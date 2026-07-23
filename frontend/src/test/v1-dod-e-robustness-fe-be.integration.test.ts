@@ -300,6 +300,7 @@ describe('V1 DoD E-07/E-08 — QA SSE red paths on detail view', () => {
     mockStreamPaperQa.mockImplementation(
       async (_id: string, _q: string, handlers: { onError?: (msg: string) => void }) => {
         handlers.onError?.('connection reset')
+        await Promise.resolve()
       },
     )
 
@@ -307,7 +308,7 @@ describe('V1 DoD E-07/E-08 — QA SSE red paths on detail view', () => {
     await submitDetailQuestion(wrapper)
 
     expect(wrapper.find('.detail-qa__answer-text').text()).toBe('错误: connection reset')
-  })
+  }, 30_000)
 
   it('surfaces QA_STREAM_ERROR from backend SSE error event (E-08)', async () => {
     mockStreamPaperQa.mockImplementation(

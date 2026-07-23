@@ -21,7 +21,7 @@ def record_status_writes() -> list[PaperStatusData]:
     writes: list[PaperStatusData] = []
     original_apply = PipelineStatusService._apply
 
-    def recording_apply(
+    async def recording_apply(
         self: PipelineStatusService,
         paper_id: str,
         *,
@@ -33,7 +33,7 @@ def record_status_writes() -> list[PaperStatusData]:
         failed_during: PipelineStage | None = None,
         append_extract_warnings: list[str] | None = None,
     ) -> PaperStatusData:
-        snapshot = original_apply(
+        snapshot = await original_apply(
             self,
             paper_id,
             status=status,

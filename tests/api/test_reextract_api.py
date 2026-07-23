@@ -14,6 +14,7 @@ import pytest
 from backend.agents.extract_constants import EXTRACT_HEURISTIC_FALLBACK_CODE
 from backend.config import get_settings
 from backend.main import app
+from backend.services.paper_warning_service import WarningType, get_paper_warning_service
 from backend.services.pipeline_status_service import get_pipeline_status_service
 from httpx import ASGITransport, AsyncClient
 from tests.helpers.persistence_testkit import init_isolated_database, reset_persistence_singletons
@@ -84,8 +85,8 @@ async def test_force_reextract_resets_status_and_clears_warnings(
 
     from backend.services.paper_service import get_paper_service
 
-    service = get_paper_service()
-    service.record_extract_warnings(paper_id, [EXTRACT_HEURISTIC_FALLBACK_CODE])
+    get_paper_service()
+    await get_paper_warning_service().record(paper_id, WarningType.EXTRACT, [EXTRACT_HEURISTIC_FALLBACK_CODE])
 
     with (
         patch("backend.services.reextract_service.abort_in_flight_pipeline", AsyncMock()),
@@ -116,7 +117,7 @@ async def test_force_reextract_rejects_processing_paper(
 ) -> None:
     """Re-extract is blocked while the paper is already processing."""
     paper_id = await _upload_pdf(api_client, sample_pdf_path)
-    get_pipeline_status_service().start_processing(paper_id)
+    await get_pipeline_status_service().start_processing(paper_id)
 
     response = await api_client.post(f"/api/v1/papers/{paper_id}/reextract")
 
@@ -132,7 +133,7 @@ async def test_force_reextract_processing_with_force_query(
 ) -> None:
     """``?force=true`` aborts PROCESSING, purges vectors, and re-queues."""
     paper_id = await _upload_pdf(api_client, sample_pdf_path)
-    get_pipeline_status_service().start_processing(paper_id)
+    await get_pipeline_status_service().start_processing(paper_id)
 
     vector_store = AsyncMock()
     vector_store.delete_by_paper = AsyncMock()
@@ -163,7 +164,7 @@ async def test_force_reextract_rejects_indexing_paper(
 ) -> None:
     """Re-extract is blocked while the paper is indexing vectors."""
     paper_id = await _upload_pdf(api_client, sample_pdf_path)
-    get_pipeline_status_service().mark_indexing(paper_id)
+    await get_pipeline_status_service().mark_indexing(paper_id)
 
     response = await api_client.post(f"/api/v1/papers/{paper_id}/reextract")
 

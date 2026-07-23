@@ -39,7 +39,8 @@ def test_run_async_without_running_loop_returns_value() -> None:
     assert run_async(compute()) == "ok"
 
 
-def test_run_async_preserves_cached_engine_across_calls(persistence_env) -> None:
+@pytest.mark.asyncio
+async def test_run_async_preserves_cached_engine_across_calls(persistence_env) -> None:
     async def touch_engine() -> int:
         engine = get_async_engine()
         async with engine.connect() as conn:
@@ -108,7 +109,7 @@ def test_run_async_reuses_sqlalchemy_pool_for_burst_writes(persistence_env) -> N
     try:
         for index in range(POOL_BURST_WRITE_COUNT):
             stage = processing_stages[index % len(processing_stages)]
-            status_service.advance_stage(paper_id, stage, message=f"burst-{index}")
+            run_async(status_service.advance_stage(paper_id, stage, message=f"burst-{index}"))
     finally:
         event.remove(engine.sync_engine, "connect", _count_connect)
 
@@ -129,10 +130,12 @@ def test_run_async_concurrent_threads_pipeline_writes(persistence_env) -> None:
     def write_batch(thread_id: int) -> int:
         for offset in range(CONCURRENT_WRITES_PER_THREAD):
             stage = processing_stages[(thread_id + offset) % len(processing_stages)]
-            status_service.advance_stage(
-                paper_id,
-                stage,
-                message=f"thread-{thread_id}-write-{offset}",
+            run_async(
+                status_service.advance_stage(
+                    paper_id,
+                    stage,
+                    message=f"thread-{thread_id}-write-{offset}",
+                )
             )
         return thread_id
 

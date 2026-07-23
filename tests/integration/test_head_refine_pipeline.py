@@ -25,7 +25,7 @@ async def test_pipeline_classify_uses_refined_classifier_input(integration_paper
     refined_text = "Title: MinerU Refined\nAbstract: Better abstract"
 
     async def _instant_refined(_pid: str, _path: Path, fallback: str, **_: object) -> tuple[str, list[str]]:
-        get_paper_service().apply_head_refine(
+        await get_paper_service().apply_head_refine(
             paper_id,
             merged=IngestHead(title="MinerU Refined", abstract="Better abstract"),
             classifier_input=refined_text,

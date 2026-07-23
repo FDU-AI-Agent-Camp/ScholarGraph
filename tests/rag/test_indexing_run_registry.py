@@ -12,7 +12,6 @@ import pytest
 from backend.rag.indexing_run_registry import IndexingRunRegistry, get_indexing_run_registry
 from backend.rag.models import PaperChunk
 from backend.rag.vector_store import VectorStore
-from backend.services.paper_service import get_paper_service
 
 
 @pytest.fixture(autouse=True)
@@ -72,8 +71,8 @@ def test_sticky_revoke_returns_most_recent_for_paper() -> None:
 async def test_replace_paper_index_skips_activate_when_revoked() -> None:
     """After begin+revoke, upsert may finish but must not call set_active_run_id."""
     paper_service = MagicMock()
-    paper_service.get_active_run_id.return_value = None
-    set_active = MagicMock()
+    paper_service.get_active_run_id = AsyncMock(return_value=None)
+    set_active = AsyncMock()
     paper_service.set_active_run_id = set_active
 
     chunk_collection = MagicMock()
@@ -115,7 +114,7 @@ async def test_replace_paper_index_skips_activate_when_revoked() -> None:
             relations=[],
         )
 
-    set_active.assert_not_called()
+    set_active.assert_not_awaited()
     # Compensating cleanup on revoked path uses collection.delete via to_thread.
     assert chunk_collection.delete.called
     # Revoke stays sticky until orphan compensate / successful activate clear().
@@ -128,14 +127,14 @@ async def test_compensate_revoked_run_clears_active_pointer() -> None:
     from backend.rag.handlers import _compensate_revoked_index_run
 
     paper_service = MagicMock()
-    paper_service.get_active_run_id.return_value = "run_stale"
-    paper_service.set_active_run_id = MagicMock()
+    paper_service.get_active_run_id = AsyncMock(return_value="run_stale")
+    paper_service.set_active_run_id = AsyncMock()
     store = MagicMock()
     store.delete_run = AsyncMock()
 
     with (
         patch("backend.rag.handlers.get_paper_service", return_value=paper_service),
-        patch("backend.rag.handlers.VectorStore", return_value=store),
+        patch("backend.rag.handlers.get_vector_store", return_value=store),
     ):
         await _compensate_revoked_index_run(
             "paper-x",
@@ -143,7 +142,7 @@ async def test_compensate_revoked_run_clears_active_pointer() -> None:
             delays_seconds=(0.0,),
         )
 
-    paper_service.set_active_run_id.assert_called_with("paper-x", None)
+    paper_service.set_active_run_id.assert_awaited_once_with("paper-x", None)
     store.delete_run.assert_awaited_once_with("paper-x", "run_stale")
 
 
@@ -170,6 +169,7 @@ async def test_timeout_path_revokes_and_schedules_cleanup() -> None:
 @pytest.mark.asyncio
 async def test_wait_for_timeout_revokes_before_reraising() -> None:
     from backend.rag.handlers import _index_with_heartbeat_and_timeout
+    from backend.services.paper_pipeline_ops import get_paper_pipeline_ops_service
 
     registry = get_indexing_run_registry()
 
@@ -178,9 +178,9 @@ async def test_wait_for_timeout_revokes_before_reraising() -> None:
         await asyncio.sleep(60)
         return True
 
-    paper_service = get_paper_service()
+    pipeline_ops = get_paper_pipeline_ops_service()
     with (
-        patch.object(paper_service, "touch_indexing_heartbeat", new_callable=AsyncMock, return_value=True),
+        patch.object(pipeline_ops, "touch_indexing_heartbeat", new_callable=AsyncMock, return_value=True),
         patch("backend.rag.handlers._schedule_orphan_run_cleanup"),
     ):
         with pytest.raises(TimeoutError):

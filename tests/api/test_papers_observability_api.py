@@ -13,6 +13,7 @@ from backend.main import app
 from backend.schemas.ingest_head import IngestHead
 from backend.schemas.paper import PaperDetail, PaperStatus, PipelineStage
 from backend.services.paper_service import get_paper_service
+from backend.services.paper_warning_service import WarningType, get_paper_warning_service
 from backend.services.pipeline_status_service import get_pipeline_status_service
 from httpx import ASGITransport, AsyncClient
 from tests.api.conftest import assert_success_envelope
@@ -43,7 +44,7 @@ def _register_paper(paper_id: str) -> None:
 async def test_status_api_head_refining_stage_and_percent(api_client: AsyncClient) -> None:
     paper_id = "api-head-refining-001"
     _register_paper(paper_id)
-    get_pipeline_status_service().advance_stage(
+    await get_pipeline_status_service().advance_stage(
         paper_id,
         PipelineStage.HEAD_REFINING,
         message="正在精炼文档头部…",
@@ -67,8 +68,9 @@ async def test_status_api_head_refining_stage_and_percent(api_client: AsyncClien
 @pytest.mark.asyncio
 async def test_status_api_returns_head_refine_warnings_list(api_client: AsyncClient) -> None:
     paper_id = "hss-002"
-    get_paper_service().record_head_refine_warnings(
+    await get_paper_warning_service().record(
         paper_id,
+        WarningType.HEAD_REFINE,
         ["mineru_unavailable", "head_refine_timeout"],
     )
 
@@ -100,7 +102,7 @@ async def test_paper_detail_api_returns_ingest_head_with_sources(
         abstract="From GROBID",
         sources={"title": "grobid", "abstract": "grobid"},
     )
-    get_paper_service().apply_head_refine(
+    await get_paper_service().apply_head_refine(
         paper_id,
         merged=merged,
         classifier_input="Title: API Head",

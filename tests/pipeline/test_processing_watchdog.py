@@ -344,7 +344,7 @@ async def test_watchdog_kill_execution_order(processing_watchdog_db, monkeypatch
     from backend.repositories import pipeline_sync as pipeline_sync_mod
     from backend.services import pipeline_task_registry as registry
     from backend.services.paper_ops_claim import acquire_paper_ops_claim
-    from backend.services.paper_service import get_paper_service
+    from backend.services.paper_pipeline_ops import get_paper_pipeline_ops_service
     from backend.services.reextract_service import (
         is_reextract_inflight,
         reset_reextract_inflight_gate,
@@ -434,7 +434,7 @@ async def test_watchdog_kill_execution_order(processing_watchdog_db, monkeypatch
     assert paper_lock.locked()
     assert not bystander_acquired.is_set()
 
-    flipped = await _cascade_kill_true_zombie_async(paper_id, paper_service=get_paper_service())
+    flipped = await _cascade_kill_true_zombie_async(paper_id, pipeline_ops=get_paper_pipeline_ops_service())
     assert flipped is True
 
     for label in (
@@ -486,9 +486,9 @@ async def test_watchdog_kill_lock_reflux_allows_bystander_reextract(
     from backend.repositories.paper_repository import get_paper_repository
     from backend.services import pipeline_task_registry as registry
     from backend.services.paper_ops_claim import acquire_paper_ops_claim
-    from backend.services.paper_service import get_paper_service
+    from backend.services.paper_pipeline_ops import get_paper_pipeline_ops_service
     from backend.services.reextract_service import (
-        force_reextract,
+        get_reextract_service,
         is_reextract_inflight,
         reset_reextract_inflight_gate,
     )
@@ -554,7 +554,6 @@ async def test_watchdog_kill_lock_reflux_allows_bystander_reextract(
     reextract_started = asyncio.Event()
     reextract_got_claim = asyncio.Event()
     acquire_elapsed_s = 0.0
-    service = get_paper_service()
 
     async def _bystander_reextract() -> None:
         nonlocal acquire_elapsed_s
@@ -568,8 +567,7 @@ async def test_watchdog_kill_lock_reflux_allows_bystander_reextract(
                 break
             await asyncio.sleep(0.01)
         t0 = time.monotonic()
-        snapshot = await force_reextract(
-            service,
+        snapshot = await get_reextract_service().force_reextract(
             paper_id,
             force=True,
             vector_store=vector_store,
@@ -583,7 +581,7 @@ async def test_watchdog_kill_lock_reflux_allows_bystander_reextract(
     assert is_reextract_inflight(paper_id)
     assert not reextract_got_claim.is_set()
 
-    flipped = await _cascade_kill_true_zombie_async(paper_id, paper_service=service)
+    flipped = await _cascade_kill_true_zombie_async(paper_id, pipeline_ops=get_paper_pipeline_ops_service())
     assert flipped is True
 
     await asyncio.wait_for(reextract_got_claim.wait(), timeout=5.0)
@@ -735,12 +733,9 @@ async def test_cold_boot_lifespan_clears_processing_zombies(
         "backend.startup.profile_validation.probe_reranker_connectivity",
         _noop_probe,
     )
-    monkeypatch.setattr(
-        "backend.rag.hybrid_retriever.create_hybrid_retriever",
-        lambda: object(),
-    )
-    monkeypatch.setattr("backend.rag.hybrid_retriever.bind_hybrid_retriever", lambda _r: None)
-    monkeypatch.setattr("backend.rag.hybrid_retriever.reset_hybrid_retriever", lambda: None)
+    from tests.helpers.lifespan_stubs import stub_lifespan_rag_wiring
+
+    stub_lifespan_rag_wiring(monkeypatch)
 
     from backend.main import create_app, lifespan
 
@@ -812,7 +807,7 @@ async def test_cold_boot_drains_orphan_batches_beyond_single_limit(
 ) -> None:
     """Startup must loop past the 200-row list cap instead of leaving zombies for reboot #2."""
     from backend.pipeline import processing_watchdog as pw
-    from backend.services.paper_service import get_paper_service
+    from backend.services.paper_pipeline_ops import get_paper_pipeline_ops_service
 
     batch1 = [f"orphan-batch-a-{i}" for i in range(pw.COLD_BOOT_ORPHAN_BATCH_LIMIT)]
     batch2 = [f"orphan-batch-b-{i}" for i in range(3)]
@@ -831,7 +826,7 @@ async def test_cold_boot_drains_orphan_batches_beyond_single_limit(
         _ = paper_id
         return True
 
-    service = get_paper_service()
+    service = get_paper_pipeline_ops_service()
     monkeypatch.setattr(service, "list_orphan_pipeline_paper_ids", _paged_list)
     monkeypatch.setattr(service, "fail_orphaned_pipeline_paper", _fail)
 

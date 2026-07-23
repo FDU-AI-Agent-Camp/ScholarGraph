@@ -55,14 +55,17 @@ async def test_refine_head_async_long_pdf_uses_grobid_and_rules(tmp_path: Path) 
         patch(
             "backend.services.head_refine_service.get_head_merge_service",
         ) as mock_merge_service,
-        patch("backend.services.paper_service.get_paper_service") as mock_paper_service,
+        patch(
+            "backend.services.head_refine_coordinator.get_head_refine_coordinator",
+        ) as mock_coordinator,
     ):
         mock_merge_service.return_value.merge = AsyncMock(return_value=merged)
+        mock_coordinator.return_value.apply = AsyncMock()
         result = await refine_head_async("paper-1", pdf_path, settings=settings)
 
     assert result.route == IngestRouteKind.LONG
     assert result.classifier_input.startswith("Title: GROBID Title")
-    mock_paper_service.return_value.apply_head_refine.assert_called_once()
+    mock_coordinator.return_value.apply.assert_awaited_once()
 
 
 @pytest.mark.asyncio
@@ -88,8 +91,11 @@ async def test_refine_head_async_never_raises_on_grobid_failure(tmp_path: Path) 
             new_callable=AsyncMock,
             return_value=None,
         ),
-        patch("backend.services.paper_service.get_paper_service"),
+        patch(
+            "backend.services.head_refine_coordinator.get_head_refine_coordinator",
+        ) as mock_coordinator,
     ):
+        mock_coordinator.return_value.apply = AsyncMock()
         result = await refine_head_async("paper-2", pdf_path, settings=settings)
 
     assert "grobid_unavailable" in result.warnings

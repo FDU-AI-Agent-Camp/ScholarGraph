@@ -25,7 +25,7 @@ from backend.repositories.paper_repository import PaperRepository
 from backend.schemas.graph import GraphEdge, GraphNode, UnifiedPaperGraph
 from backend.schemas.paper import PaperStatus
 from backend.schemas.paradigm import Paradigm
-from backend.services.paper_delete_service import delete_paper
+from backend.services.paper_delete_service import get_paper_delete_service
 
 from tests.helpers.persistence_testkit import register_test_paper, restart_paper_service
 from tests.rag.test_vector_store import FakeCollection, FakeEmbeddingClient
@@ -94,7 +94,8 @@ async def test_cluster_advisory_lock(persistence_env) -> None:
         status=PaperStatus.READY,
         pdf_path=str(pdf),
     )
-    service = await restart_paper_service()
+    await restart_paper_service()
+    delete_service = get_paper_delete_service()
 
     hold = asyncio.Event()
     entered = asyncio.Event()
@@ -118,13 +119,13 @@ async def test_cluster_advisory_lock(persistence_env) -> None:
         patch("backend.rag.wipe_vector_sweep.schedule_wipe_wave2_sweep", return_value=[]),
     ):
         worker_a = asyncio.create_task(
-            delete_paper(service, paper_id, force=True),
+            delete_service.delete(paper_id, force=True),
             name="worker-a-force-delete",
         )
         # ≤1ms peer burst — both workers contend for the same durable wipe claim.
         await asyncio.sleep(0.001)
         worker_b = asyncio.create_task(
-            delete_paper(service, paper_id, force=True),
+            delete_service.delete(paper_id, force=True),
             name="worker-b-force-delete",
         )
         await asyncio.wait_for(entered.wait(), timeout=1.0)
@@ -170,8 +171,8 @@ async def test_ghost_vector_logical_isolation(persistence_env) -> None:
         [_chunk(paper_id, ACTIVE_MARKER, chunk_id="c_active")],
         run_id=RUN_B,
     )
-    service.set_active_run_id(paper_id, RUN_B)
-    assert service.get_active_run_id(paper_id) == RUN_B
+    await service.set_active_run_id(paper_id, RUN_B)
+    assert await service.get_active_run_id(paper_id) == RUN_B
     # Sanity: both generations physically coexist in Chroma.
     assert len(chunk_col.records) == 2
     assert any(GHOST_MARKER in str(rec["document"]) for rec in chunk_col.records.values())

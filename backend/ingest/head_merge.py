@@ -145,6 +145,28 @@ def _resolve_head_llm_model(settings: Settings) -> str:
     return settings.llm_model_primary
 
 
+def _log_head_merge_failed(
+    exc: Exception,
+    *,
+    paper_id: str | None,
+    phase: str,
+    model_name: str | None = None,
+    timeout: float | None = None,
+) -> None:
+    logger.warning(
+        "head_merge_failed",
+        extra={
+            "paper_id": paper_id,
+            "phase": phase,
+            "model_name": model_name,
+            "timeout_seconds": timeout,
+            "error": str(exc),
+            "error_type": type(exc).__name__,
+        },
+        exc_info=True,
+    )
+
+
 def _extract_raw_json_from_error(exc: Exception) -> str | None:
     """Pull the raw LLM output out of a Pydantic json_invalid ValidationError."""
     errors = getattr(exc, "errors", None)
@@ -157,7 +179,8 @@ def _extract_raw_json_from_error(exc: Exception) -> str | None:
         for err in error_list:
             if isinstance(err, dict) and err.get("type") == "json_invalid":
                 return err.get("input")
-    except Exception:
+    except Exception as exc:  # noqa: BLE001 — json_invalid payload extraction is best-effort only
+        _log_head_merge_failed(exc, paper_id=None, phase="json_invalid_extract")
         return None
     return None
 
@@ -168,6 +191,7 @@ async def merge_with_llm(
     *,
     is_short: bool,
     settings: Settings | None = None,
+    paper_id: str | None = None,
 ) -> IngestHead:
     """Call structured LLM merge; fall back to rules on any failure."""
     cfg = settings or get_settings()
@@ -207,16 +231,28 @@ async def merge_with_llm(
             result = _parse_model_response(raw_result, IngestHeadLlmOutput)
         else:
             result = IngestHeadLlmOutput.model_validate(raw_result)
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001 — fallback to rule-based head merge on LLM failure
         raw = _extract_raw_json_from_error(exc)
         if raw is not None:
             try:
                 result = _parse_model_response(raw, IngestHeadLlmOutput)
-            except Exception:
-                logger.exception("Head merge LLM failed (model=%s, timeout=%ss)", model_name, timeout)
+            except Exception as retry_exc:  # noqa: BLE001 — salvage parse also failed; degrade to rules
+                _log_head_merge_failed(
+                    retry_exc,
+                    paper_id=paper_id,
+                    phase="json_invalid_retry",
+                    model_name=model_name,
+                    timeout=timeout,
+                )
                 return merge_with_rules(snippets, path_b, is_short=is_short)
         else:
-            logger.exception("Head merge LLM failed (model=%s, timeout=%ss)", model_name, timeout)
+            _log_head_merge_failed(
+                exc,
+                paper_id=paper_id,
+                phase="llm_invoke",
+                model_name=model_name,
+                timeout=timeout,
+            )
             return merge_with_rules(snippets, path_b, is_short=is_short)
 
     return IngestHead(
@@ -242,11 +278,24 @@ async def merge_head_candidates(
     is_short: bool,
     mode: Literal["auto", "rules", "llm"] = "auto",
     settings: Settings | None = None,
+    paper_id: str | None = None,
 ) -> IngestHead:
     """Merge path-A and path-B candidates using LLM gate with rule fallback."""
     cfg = settings or get_settings()
     if mode == "rules" or cfg.is_llm_mock or not cfg.ingest_head_llm_enabled:
         return merge_with_rules(snippets, path_b, is_short=is_short)
     if mode == "llm":
-        return await merge_with_llm(snippets, path_b, is_short=is_short, settings=cfg)
-    return await merge_with_llm(snippets, path_b, is_short=is_short, settings=cfg)
+        return await merge_with_llm(
+            snippets,
+            path_b,
+            is_short=is_short,
+            settings=cfg,
+            paper_id=paper_id,
+        )
+    return await merge_with_llm(
+        snippets,
+        path_b,
+        is_short=is_short,
+        settings=cfg,
+        paper_id=paper_id,
+    )

@@ -25,8 +25,10 @@ from backend.events.types import EventType, PipelineFinalized
 from backend.rag.chunking import chunk_text
 from backend.rag.indexing import graph_to_entities, graph_to_relations
 from backend.rag.vector_store import VectorStore
+from backend.rag.vector_store_wiring import get_vector_store
 from backend.schemas.graph import UnifiedPaperGraph
-from backend.services.paper_service import get_paper_service
+from backend.services.paper_pipeline_ops import get_paper_pipeline_ops_service
+from backend.services.paper_service import PaperService, get_paper_service
 
 logger = logging.getLogger(__name__)
 
@@ -71,7 +73,7 @@ async def index_paper_for_rag(
 
     lock = await _lock_for_paper(paper_id)
     async with lock:
-        store = vector_store or VectorStore(paper_service=get_paper_service())
+        store = vector_store or get_vector_store()
         try:
             settings = get_settings()
             chunks = chunk_text(
@@ -105,7 +107,7 @@ async def index_paper_for_rag(
                     "exc_msg": exc_msg,
                 },
             )
-            _record_index_warning(paper_id, exc_type_name, exc_msg)
+            await _record_index_warning(paper_id, exc_type_name, exc_msg)
 
             if not suppress_errors:
                 raise
@@ -113,21 +115,24 @@ async def index_paper_for_rag(
         return True
 
 
-def _record_index_warning(paper_id: str, exc_type_name: str, exc_msg: str) -> None:
+async def _record_index_warning(paper_id: str, exc_type_name: str, exc_msg: str) -> None:
     """Persist a machine-readable RAG index warning on the paper status snapshot."""
+    from backend.services.paper_warning_service import WarningType, get_paper_warning_service
 
+    _ = exc_type_name, exc_msg
     try:
-        get_paper_service().record_extract_warnings(paper_id, [RAG_INDEX_WARNING_CODE])
+        await get_paper_warning_service().record(paper_id, WarningType.EXTRACT, [RAG_INDEX_WARNING_CODE])
     except Exception:
         logger.exception("failed_to_record_rag_index_warning", extra={"paper_id": paper_id})
 
 
 async def _heartbeat_loop(paper_id: str, stop_event: asyncio.Event, *, interval_seconds: float) -> None:
     """Keep indexing_heartbeat fresh while a long index build is still running."""
-    paper_service = get_paper_service()
+
+    pipeline_ops = get_paper_pipeline_ops_service()
     while not stop_event.is_set():
         try:
-            await paper_service.touch_indexing_heartbeat(paper_id)
+            await pipeline_ops.touch_indexing_heartbeat(paper_id)
         except Exception:
             logger.exception("indexing_heartbeat_touch_failed", extra={"paper_id": paper_id})
         try:
@@ -141,6 +146,7 @@ async def _compensate_revoked_index_run(
     run_id: str,
     *,
     delays_seconds: tuple[float, ...] = ORPHAN_RUN_CLEANUP_DELAYS_SECONDS,
+    paper_service: PaperService | None = None,
 ) -> None:
     """Delete a revoked run_id with delayed retries (compensating transaction).
 
@@ -150,15 +156,16 @@ async def _compensate_revoked_index_run(
     from backend.rag.indexing_run_registry import get_indexing_run_registry
 
     registry = get_indexing_run_registry()
-    store = VectorStore(paper_service=get_paper_service())
+    store = get_vector_store()
+    service = paper_service or get_paper_service()
     for delay in delays_seconds:
         if delay > 0:
             await asyncio.sleep(delay)
         try:
-            active = get_paper_service().get_active_run_id(paper_id)
+            active = await service.get_active_run_id(paper_id)
             if active == run_id:
                 # Late activate won the race — clear pointer to SQL NULL, keep graph READY.
-                get_paper_service().set_active_run_id(paper_id, None)
+                await service.set_active_run_id(paper_id, None)
             await store.delete_run(paper_id, run_id)
             logger.info(
                 "orphan_index_run_cleanup",
@@ -210,7 +217,7 @@ async def _index_with_heartbeat_and_timeout(
     stop_event = asyncio.Event()
     # Initial pulse so watchdog sees an alive task immediately.
     try:
-        await get_paper_service().touch_indexing_heartbeat(paper_id)
+        await get_paper_pipeline_ops_service().touch_indexing_heartbeat(paper_id)
     except Exception:
         logger.exception("indexing_heartbeat_initial_touch_failed", extra={"paper_id": paper_id})
 
@@ -257,9 +264,9 @@ async def _promote_terminal_status(
     from backend.schemas.paper import PaperStatus
     from backend.services.errors import InvalidStateTransitionError
 
-    paper_service = get_paper_service()
+    pipeline_ops = get_paper_pipeline_ops_service()
     try:
-        await paper_service.promote_paper_to_terminal_status(
+        await pipeline_ops.promote_paper_to_terminal_status(
             event.paper_id,
             success=success,
             preferred_terminal=event.terminal_status,
@@ -269,7 +276,7 @@ async def _promote_terminal_status(
             publish_rag_indexed=True,
         )
     except InvalidStateTransitionError as exc:
-        snapshot = await paper_service.get_pipeline_snapshot(event.paper_id)
+        snapshot = await pipeline_ops.get_pipeline_snapshot(event.paper_id)
         if snapshot is not None and snapshot.status in {
             PaperStatus.READY,
             PaperStatus.READY_WITH_WARNINGS,

@@ -5,15 +5,16 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
+from functools import lru_cache
 from pathlib import Path
-from typing import TYPE_CHECKING
 
 from backend.api.exceptions import ApiError
 from backend.db.models import PAPER_OPS_OPERATION_REEXTRACT
 from backend.graph.head_store import HeadStore
 from backend.graph.store import GraphStore
-from backend.repositories import run_async
+from backend.repositories.paper_repository import PaperRepository, get_paper_repository
 from backend.schemas.paper import PaperStatus, PaperStatusData
 from backend.services.paper_delete_service import (
     _VectorStoreDelete,
@@ -26,11 +27,12 @@ from backend.services.paper_ops_claim import (
     release_paper_ops_claim,
     reset_paper_ops_claims,
 )
+from backend.services.paper_pipeline_ops import (
+    PaperPipelineOpsService,
+    get_paper_pipeline_ops_service,
+)
 from backend.services.paper_pipeline_scheduler import schedule_paper_pipeline
 from backend.services.pipeline_task_registry import abort_in_flight_pipeline
-
-if TYPE_CHECKING:
-    from backend.services.paper_service import PaperService
 
 logger = logging.getLogger(__name__)
 
@@ -76,15 +78,14 @@ def _resolve_pdf_path(pdf_path_str: str | None, paper_id: str) -> Path:
     return pdf_path
 
 
-def _clear_persisted_artefacts(paper_id: str) -> None:
-    """Remove final graph and refined head from disk."""
-    GraphStore().delete(paper_id)
-    HeadStore().delete(paper_id)
+async def _clear_persisted_artefacts(paper_id: str) -> None:
+    """Remove final graph and refined head from disk (off the event loop)."""
 
+    def _delete_sync() -> None:
+        GraphStore().delete(paper_id)
+        HeadStore().delete(paper_id)
 
-def _clear_in_memory_state(paper_service: PaperService, paper_id: str) -> None:
-    """Reset preview and RAG run tracking for a paper."""
-    paper_service.clear_ephemeral_pipeline_state(paper_id)
+    await asyncio.to_thread(_delete_sync)
 
 
 async def _purge_vector_index(
@@ -107,67 +108,79 @@ async def _purge_vector_index(
         )
 
 
-async def force_reextract(
-    paper_service: PaperService,
-    paper_id: str,
-    *,
-    force: bool = False,
-    vector_store: _VectorStoreDelete | None = None,
-) -> PaperStatusData:
-    """Forcefully re-run the extraction pipeline for an existing paper.
+class ReextractService:
+    """First-class force-reextract use case (wipe artefacts + reset + reschedule)."""
 
-    Clears graph/head artefacts, purges Chroma for this paper, resets DB status
-    to pending, bumps ``graph_version``, clears pipeline warnings, and
-    re-schedules the pipeline from the stored PDF path.
+    def __init__(
+        self,
+        paper_repo: PaperRepository | None = None,
+        pipeline_ops: PaperPipelineOpsService | None = None,
+    ) -> None:
+        # Non-owner of PaperService._paper_repo capability: inject under a distinct name.
+        self._paper_repository = paper_repo or get_paper_repository()
+        self._pipeline_ops = pipeline_ops or get_paper_pipeline_ops_service()
 
-    Default blocks ``PROCESSING`` and ``INDEXING`` with 409. With ``force=true``,
-    cancels in-flight asyncio tasks (pipeline / head-refine / extract / indexing
-    run) before reset. Best-effort abort also runs for terminal/pending paths so
-    a late worker cannot resurrect stale artefacts after wipe.
+    async def force_reextract(
+        self,
+        paper_id: str,
+        *,
+        force: bool = False,
+        vector_store: _VectorStoreDelete | None = None,
+    ) -> PaperStatusData:
+        """Forcefully re-run the extraction pipeline for an existing paper.
 
-    Concurrent wipe ops for the same ``paper_id`` (reextract ∪ delete) are rejected
-    with 409 via durable ``paper_ops_claims``; the owner token is released in
-    ``finally`` (Cascading Kill may force-evict abandoned claims).
-    """
-    paper = run_async(paper_service._paper_repo.get(paper_id))
-    if paper is None:
-        raise ApiError("PAPER_NOT_FOUND", f"论文不存在: {paper_id}", status_code=404)
+        Clears graph/head artefacts, purges Chroma for this paper, resets DB status
+        to pending, bumps ``graph_version``, clears pipeline warnings, and
+        re-schedules the pipeline from the stored PDF path.
 
-    if paper.status in _ACTIVE_PIPELINE_STATUSES and not force:
-        raise ApiError(
-            "PAPER_ALREADY_PROCESSING",
-            f"论文 {paper_id} 正在处理或构建索引中，请等待当前任务完成；卡死时可传 force=true 强行中止并重抽",
-            status_code=409,
-        )
+        Default blocks ``PROCESSING`` and ``INDEXING`` with 409. With ``force=true``,
+        cancels in-flight asyncio tasks before reset.
+        """
+        paper = await self._paper_repository.get(paper_id)
+        if paper is None:
+            raise ApiError("PAPER_NOT_FOUND", f"论文不存在: {paper_id}", status_code=404)
 
-    owner_token = await acquire_paper_ops_claim(paper_id, operation=PAPER_OPS_OPERATION_REEXTRACT)
-    try:
-        from backend.rag.wipe_vector_sweep import (
-            extend_wipe_targets_after_abort,
-            schedule_wipe_wave2_sweep,
-            snapshot_wipe_target_run_ids,
-        )
+        if paper.status in _ACTIVE_PIPELINE_STATUSES and not force:
+            raise ApiError(
+                "PAPER_ALREADY_PROCESSING",
+                f"论文 {paper_id} 正在处理或构建索引中，请等待当前任务完成；卡死时可传 force=true 强行中止并重抽",
+                status_code=409,
+            )
 
-        wipe_targets = snapshot_wipe_target_run_ids(paper_id)
-        # Abort cancels Tasks / indexing revoke only — does not drop this claim.
-        await abort_in_flight_pipeline(paper_id)
-        wipe_targets = extend_wipe_targets_after_abort(paper_id, wipe_targets)
+        owner_token = await acquire_paper_ops_claim(paper_id, operation=PAPER_OPS_OPERATION_REEXTRACT)
+        try:
+            from backend.rag.wipe_vector_sweep import (
+                extend_wipe_targets_after_abort,
+                schedule_wipe_wave2_sweep,
+                snapshot_wipe_target_run_ids,
+            )
 
-        pdf_path_str = run_async(paper_service._paper_repo.get_pdf_path(paper_id))
-        pdf_path = _resolve_pdf_path(pdf_path_str, paper_id)
-        # Wave 1: best-effort paper-wide purge; Wave 2 hunts late run_id ghosts.
-        await _purge_vector_index(paper_id, vector_store=vector_store)
-        schedule_wipe_wave2_sweep(paper_id, wipe_targets)
-        _clear_persisted_artefacts(paper_id)
-        _clear_in_memory_state(paper_service, paper_id)
+            wipe_targets = await snapshot_wipe_target_run_ids(paper_id)
+            # Abort cancels Tasks / indexing revoke only — does not drop this claim.
+            await abort_in_flight_pipeline(paper_id)
+            wipe_targets = extend_wipe_targets_after_abort(paper_id, wipe_targets)
 
-        run_async(paper_service._paper_repo.reset_for_reextract(paper_id))
-        snapshot = paper_service.reset_pipeline_for_reextract(
-            paper_id,
-            message=_REEXTRACT_QUEUED_MESSAGE,
-        )
+            pdf_path_str = await self._paper_repository.get_pdf_path(paper_id)
+            pdf_path = _resolve_pdf_path(pdf_path_str, paper_id)
+            # Wave 1: best-effort paper-wide purge; Wave 2 hunts late run_id ghosts.
+            await _purge_vector_index(paper_id, vector_store=vector_store)
+            schedule_wipe_wave2_sweep(paper_id, wipe_targets)
+            await _clear_persisted_artefacts(paper_id)
+            await self._pipeline_ops.clear_ephemeral_pipeline_state(paper_id)
 
-        schedule_paper_pipeline(paper_id, pdf_path)
-        return snapshot
-    finally:
-        await release_paper_ops_claim(paper_id, owner_token)
+            await self._paper_repository.reset_for_reextract(paper_id)
+            snapshot = await self._pipeline_ops.reset_pipeline_for_reextract(
+                paper_id,
+                message=_REEXTRACT_QUEUED_MESSAGE,
+            )
+
+            schedule_paper_pipeline(paper_id, pdf_path)
+            return snapshot
+        finally:
+            await release_paper_ops_claim(paper_id, owner_token)
+
+
+@lru_cache
+def get_reextract_service() -> ReextractService:
+    """Return the process-wide force-reextract service."""
+    return ReextractService()

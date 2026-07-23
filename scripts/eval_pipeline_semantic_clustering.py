@@ -211,7 +211,7 @@ async def _run_sample(paper_id: str, pdf_path: Path, service: PaperService) -> d
     }
 
     if final_status in (PaperStatus.READY, PaperStatus.READY_WITH_WARNINGS):
-        graph = service.get_preview_graph(assigned_id) or GraphStore().load(assigned_id)
+        graph = await service.get_preview_graph(assigned_id) or GraphStore().load(assigned_id)
         if graph is not None:
             record["graph"] = {
                 "node_count": len(graph.nodes),

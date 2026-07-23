@@ -19,6 +19,7 @@ from backend.services.agent_service import AgentService
 from backend.services.errors import ServiceError
 from backend.services.graph_persistence_service import GraphPersistenceService
 from backend.services.paper_service import get_paper_service
+from backend.services.paper_warning_service import WarningType, get_paper_warning_service
 from backend.services.pipeline_completion_service import PipelineCompletionService
 
 from tests.helpers.event_bus_testkit import drain_event_bus
@@ -113,7 +114,7 @@ async def test_wait_head_refine_node_marks_progress_message(
     from backend.services.pipeline_status_service import get_pipeline_status_service
 
     paper_id, _ = workflow_paper
-    get_pipeline_status_service().start_processing(paper_id)
+    await get_pipeline_status_service().start_processing(paper_id)
     with (
         patch("backend.graph.nodes.ensure_head_refine_scheduled"),
         patch(
@@ -203,16 +204,22 @@ async def test_classify_node_records_classify_warnings(
         ),
     )
     paper_id = post_ingest_state["paper_id"]
-    paper_svc = get_paper_service()
+    warning_service = get_paper_warning_service()
     with (
         patch("backend.graph.nodes.get_agent_service", return_value=agent_svc),
         patch.object(
-            paper_svc, "record_classify_warnings", wraps=paper_svc.record_classify_warnings
+            warning_service,
+            "record",
+            wraps=warning_service.record,
         ) as record_warnings,
     ):
         out = await nodes.classify_node(post_ingest_state)
 
-    record_warnings.assert_called_once_with(paper_id, [CLASSIFIER_HEURISTIC_FALLBACK_CODE])
+    record_warnings.assert_awaited_once_with(
+        paper_id,
+        WarningType.CLASSIFY,
+        [CLASSIFIER_HEURISTIC_FALLBACK_CODE],
+    )
     assert out["classify_warnings"] == [CLASSIFIER_HEURISTIC_FALLBACK_CODE]
 
 
@@ -224,7 +231,6 @@ async def test_g23_classify_node_llm_failure_persists_warnings_without_failed(
     _ = live_classify_env
     agent = AgentService()
     paper_id = post_ingest_state["paper_id"]
-    paper_svc = get_paper_service()
 
     with (
         patch("backend.graph.nodes.get_agent_service", return_value=agent),
@@ -237,7 +243,7 @@ async def test_g23_classify_node_llm_failure_persists_warnings_without_failed(
 
     assert out.get("failed") is not True
     assert CLASSIFIER_HEURISTIC_FALLBACK_CODE in out["classify_warnings"]
-    assert paper_svc.get_classify_warnings(paper_id) == [CLASSIFIER_HEURISTIC_FALLBACK_CODE]
+    assert await get_paper_warning_service().get(paper_id, WarningType.CLASSIFY) == [CLASSIFIER_HEURISTIC_FALLBACK_CODE]
     assert out["paradigm"] in (Paradigm.STEM.value, Paradigm.HSS.value)
 
 
@@ -300,16 +306,18 @@ async def test_extract_node_records_extract_warnings(
         return_value=ExtractResult(graph=graph, warnings=[EXTRACT_HEURISTIC_FALLBACK_CODE]),
     )
     agent_svc.should_extract_in_background = MagicMock(return_value=False)
-    paper_svc = MagicMock()
+    warning_service = MagicMock()
+    warning_service.record = AsyncMock()
 
     with (
         patch("backend.graph.nodes.get_agent_service", return_value=agent_svc),
-        patch("backend.graph.nodes.get_paper_service", return_value=paper_svc),
+        patch("backend.graph.nodes.get_paper_warning_service", return_value=warning_service),
     ):
         out = await nodes.extract_node(post_classify_state)
 
-    paper_svc.record_extract_warnings.assert_called_once_with(
+    warning_service.record.assert_awaited_once_with(
         post_classify_state["paper_id"],
+        WarningType.EXTRACT,
         [EXTRACT_HEURISTIC_FALLBACK_CODE],
     )
     assert out["extract_warnings"] == [EXTRACT_HEURISTIC_FALLBACK_CODE]
@@ -338,11 +346,13 @@ async def test_store_node_delegates_finalize_to_completion_service(
             ),
         ):
             out = await nodes.store_node(post_extract_state)
+            # Drain while the RAG index patch is still active — the handler runs
+            # asynchronously after publish and must see the same mock.
+            await drain_event_bus()
 
     store_cls.return_value.save.assert_called_once()
     assert out["status"] == PaperStatus.INDEXING
 
-    await drain_event_bus()
     paper = await get_paper_service().get_paper(paper_id)
     assert paper.status == PaperStatus.READY
 
@@ -365,19 +375,18 @@ async def test_store_node_triggers_rag_indexing_after_finalize(
             return_value=completion_svc,
         ):
             await nodes.store_node(post_extract_state)
-
-    await drain_event_bus()
-    mock_rag_index.assert_awaited_once()
-    call_kwargs = mock_rag_index.await_args.kwargs
-    assert call_kwargs["full_text"] == post_extract_state["full_text"]
-    assert call_kwargs["graph"].paper_id == post_extract_state["paper_id"]
+        await drain_event_bus()
+        mock_rag_index.assert_awaited_once()
+        call_kwargs = mock_rag_index.await_args.kwargs
+        assert call_kwargs["full_text"] == post_extract_state["full_text"]
+        assert call_kwargs["graph"].paper_id == post_extract_state["paper_id"]
 
 
 async def test_store_node_finalize_error_fails(
     post_extract_state: WorkflowState,
 ) -> None:
     completion_svc = MagicMock()
-    completion_svc.finalize = MagicMock(
+    completion_svc.finalize = AsyncMock(
         side_effect=ServiceError("PIPELINE_FAILED", "建图收尾失败: bad graph"),
     )
     with patch("backend.graph.nodes.get_pipeline_completion_service", return_value=completion_svc):
@@ -408,9 +417,8 @@ async def test_store_node_rag_index_failure_does_not_block_ready(
             return_value=completion_svc,
         ):
             out = await nodes.store_node(post_extract_state)
-
-    assert out["status"] == PaperStatus.INDEXING
-    await drain_event_bus()
+        assert out["status"] == PaperStatus.INDEXING
+        await drain_event_bus()
     status = await get_paper_service().get_status(paper_id)
     assert status.status == PaperStatus.READY_WITH_WARNINGS
 
@@ -447,8 +455,7 @@ async def test_store_node_rag_index_failure_records_extract_warning(
             return_value=completion_svc,
         ):
             await nodes.store_node(post_extract_state)
-
-    await drain_event_bus()
+        await drain_event_bus()
     paper = await get_paper_service().get_paper(paper_id)
     assert RAG_INDEX_WARNING_CODE in paper.extract_warnings
 

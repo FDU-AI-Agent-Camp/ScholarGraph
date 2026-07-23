@@ -123,7 +123,7 @@ class VectorStore(ChunkTextLookupMixin, ReplacePaperIndexMixin):
     async def index_chunks(self, chunks: list[PaperChunk]) -> None:
         """Upsert paper text chunks into the chunk collection using the active run id."""
 
-        run_id = self._active_run_id_for_write(chunks[0].paper_id if chunks else "")
+        run_id = await self._active_run_id_for_write(chunks[0].paper_id if chunks else "")
         await self._index_chunks(chunks, run_id=run_id)
 
     async def _index_chunks(self, chunks: list[PaperChunk], *, run_id: str | None) -> None:
@@ -162,7 +162,7 @@ class VectorStore(ChunkTextLookupMixin, ReplacePaperIndexMixin):
     async def index_entities(self, entities: list[PaperEntity]) -> None:
         """Upsert graph entities into the entity collection using the active run id."""
 
-        run_id = self._active_run_id_for_write(entities[0].paper_id if entities else "")
+        run_id = await self._active_run_id_for_write(entities[0].paper_id if entities else "")
         await self._index_entities(entities, run_id=run_id)
 
     async def _index_entities(self, entities: list[PaperEntity], *, run_id: str | None) -> None:
@@ -197,7 +197,7 @@ class VectorStore(ChunkTextLookupMixin, ReplacePaperIndexMixin):
     async def index_relations(self, relations: list[PaperRelation]) -> None:
         """Upsert graph relations into the relation collection using the active run id."""
 
-        run_id = self._active_run_id_for_write(relations[0].paper_id if relations else "")
+        run_id = await self._active_run_id_for_write(relations[0].paper_id if relations else "")
         await self._index_relations(relations, run_id=run_id)
 
     async def _index_relations(self, relations: list[PaperRelation], *, run_id: str | None) -> None:
@@ -309,7 +309,7 @@ class VectorStore(ChunkTextLookupMixin, ReplacePaperIndexMixin):
         )
         self.clear_chunk_text_lru()
         if self._paper_service is not None:
-            self._paper_service.set_active_run_id(paper_id, None)
+            await self._paper_service.set_active_run_id(paper_id, None)
 
     async def exists(self, paper_id: str) -> bool:
         """Return true when a complete active index run exists for the paper.
@@ -322,7 +322,7 @@ class VectorStore(ChunkTextLookupMixin, ReplacePaperIndexMixin):
         """
 
         if self._paper_service is not None:
-            active_run_id = self._paper_service.get_active_run_id(paper_id)
+            active_run_id = await self._paper_service.get_active_run_id(paper_id)
             if not active_run_id:
                 return False
             where = self._build_where(paper_id, run_id=active_run_id)
@@ -346,12 +346,12 @@ class VectorStore(ChunkTextLookupMixin, ReplacePaperIndexMixin):
         )
         return any(_result_has_ids(result) for result in results)
 
-    def _active_run_id_for_write(self, paper_id: str) -> str | None:
+    async def _active_run_id_for_write(self, paper_id: str) -> str | None:
         """Return the active run id for incremental writes, or None when unmanaged."""
 
         if self._paper_service is None or not paper_id:
             return None
-        return self._paper_service.get_active_run_id(paper_id)
+        return await self._paper_service.get_active_run_id(paper_id)
 
     def _with_run_id(self, metadata: RawMetadata, *, run_id: str | None) -> RawMetadata:
         """Attach index_run_id to metadata when run-aware indexing is enabled."""
@@ -459,7 +459,7 @@ class VectorStore(ChunkTextLookupMixin, ReplacePaperIndexMixin):
         resolved_top_k = top_k if top_k is not None else self._default_top_k(evidence_type)
         # Soft isolation: without an active run, late orphan upserts must not surface.
         if self._paper_service is not None:
-            active_run_id = self._paper_service.get_active_run_id(paper_id)
+            active_run_id = await self._paper_service.get_active_run_id(paper_id)
             if not active_run_id:
                 return []
             where: ChromaWhere = self._build_where(paper_id, run_id=active_run_id)

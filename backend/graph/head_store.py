@@ -20,7 +20,8 @@ class HeadStore:
         self._base_dir = base_dir or Path(settings.graph_data_dir)
         self._base_dir.mkdir(parents=True, exist_ok=True)
 
-    def _path(self, paper_id: str) -> Path:
+    def head_path_for(self, paper_id: str) -> Path:
+        """Return the on-disk path for this paper's persisted head record."""
         return self._base_dir / f"{paper_id}.head.json"
 
     def save(
@@ -37,20 +38,20 @@ class HeadStore:
             classifier_input=classifier_input.strip(),
             warnings=list(warnings or ()),
         )
-        self._path(paper_id).write_text(
+        self.head_path_for(paper_id).write_text(
             record.model_dump_json(indent=2),
             encoding="utf-8",
         )
 
     def load(self, paper_id: str) -> PersistedHeadRefine | None:
-        path = self._path(paper_id)
+        path = self.head_path_for(paper_id)
         if not path.is_file():
             return None
         return PersistedHeadRefine.model_validate_json(path.read_text(encoding="utf-8"))
 
     def delete(self, paper_id: str) -> bool:
         """Remove persisted head refine record if it exists."""
-        path = self._path(paper_id)
+        path = self.head_path_for(paper_id)
         if not path.is_file():
             return False
         path.unlink()

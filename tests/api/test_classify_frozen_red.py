@@ -20,6 +20,7 @@ from backend.agents.classifier_constants import (
 from backend.main import app
 from backend.schemas.paper import PaperDetail, PaperStatus
 from backend.services.paper_service import get_paper_service
+from backend.services.paper_warning_service import WarningType, get_paper_warning_service
 from backend.services.pipeline_status_service import get_pipeline_status_service
 from httpx import ASGITransport, AsyncClient
 
@@ -48,8 +49,8 @@ async def test_red_api_status_classify_warnings_never_contains_user_message(
         created_at=now,
         updated_at=now,
     )
-    get_pipeline_status_service().mark_ready(paper_id)
-    get_paper_service().record_classify_warnings(paper_id, [CLASSIFIER_HEURISTIC_FALLBACK_CODE])
+    await get_pipeline_status_service().mark_ready(paper_id)
+    await get_paper_warning_service().record(paper_id, WarningType.CLASSIFY, [CLASSIFIER_HEURISTIC_FALLBACK_CODE])
 
     response = await api_client.get(f"/api/v1/papers/{paper_id}/status")
     payload = json.dumps(response.json()["data"], ensure_ascii=False)
@@ -72,8 +73,8 @@ async def test_red_api_detail_classify_warnings_never_contains_user_message(
         created_at=now,
         updated_at=now,
     )
-    get_pipeline_status_service().mark_ready(paper_id)
-    get_paper_service().record_classify_warnings(paper_id, [CLASSIFIER_HEURISTIC_FALLBACK_CODE])
+    await get_pipeline_status_service().mark_ready(paper_id)
+    await get_paper_warning_service().record(paper_id, WarningType.CLASSIFY, [CLASSIFIER_HEURISTIC_FALLBACK_CODE])
 
     response = await api_client.get(f"/api/v1/papers/{paper_id}")
     data = response.json()["data"]

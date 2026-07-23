@@ -37,8 +37,8 @@ async def test_rag_index_run_id_contract_survives_hard_restart_mock_consumer(
 
     # Pipeline commit point: activate a new RAG index run (mirrors VectorStore.replace tail).
     committed_run_id = "run-contract-pre-crash"
-    service.set_active_run_id(paper_id, committed_run_id)
-    ssot_run_id = service.get_active_run_id(paper_id)
+    await service.set_active_run_id(paper_id, committed_run_id)
+    ssot_run_id = await service.get_active_run_id(paper_id)
     assert ssot_run_id == committed_run_id
 
     # 组员 A branch: index with metadata.index_run_id sourced from PaperService SSOT.
@@ -52,7 +52,7 @@ async def test_rag_index_run_id_contract_survives_hard_restart_mock_consumer(
     simulate_service_crash()
     restarted = await restart_paper_service()
 
-    recovered_run_id = restarted.get_active_run_id(paper_id)
+    recovered_run_id = await restarted.get_active_run_id(paper_id)
     assert recovered_run_id == committed_run_id
 
     hits = downstream_store.filter_by_index_run_id(
@@ -101,12 +101,12 @@ async def test_vector_store_index_run_id_filter_survives_hard_restart(
         entities=[],
         relations=[],
     )
-    pre_crash_run_id = service.get_active_run_id(paper_id)
+    pre_crash_run_id = await service.get_active_run_id(paper_id)
     assert pre_crash_run_id
 
     simulate_service_crash()
     restarted = await restart_paper_service()
-    post_restart_run_id = restarted.get_active_run_id(paper_id)
+    post_restart_run_id = await restarted.get_active_run_id(paper_id)
     assert post_restart_run_id == pre_crash_run_id
 
     restarted_store = VectorStore(

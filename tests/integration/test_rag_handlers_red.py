@@ -14,7 +14,7 @@ from __future__ import annotations
 import logging
 from pathlib import Path
 from typing import Any
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from backend.rag.handlers import RAG_INDEX_WARNING_CODE, index_paper_for_rag
@@ -58,17 +58,20 @@ def sample_graph() -> UnifiedPaperGraph:
 
 
 @pytest.fixture
-def mock_paper_service(monkeypatch: Any) -> MagicMock:
-    service = MagicMock()
-    service.record_extract_warnings = MagicMock()
-    monkeypatch.setattr("backend.rag.handlers.get_paper_service", lambda: service)
-    return service
+def mock_warning_service(monkeypatch: Any) -> MagicMock:
+    warning_service = MagicMock()
+    warning_service.record = AsyncMock()
+    monkeypatch.setattr(
+        "backend.services.paper_warning_service.get_paper_warning_service",
+        lambda: warning_service,
+    )
+    return warning_service
 
 
 @pytest.mark.asyncio
 async def test_embedding_failure_is_suppressed_and_recorded(
     sample_graph: UnifiedPaperGraph,
-    mock_paper_service: MagicMock,
+    mock_warning_service: MagicMock,
     tmp_chroma_path: str,
     caplog: Any,
 ) -> None:
@@ -84,8 +87,8 @@ async def test_embedding_failure_is_suppressed_and_recorded(
         )
 
     assert result is False
-    mock_paper_service.record_extract_warnings.assert_called_once()
-    assert mock_paper_service.record_extract_warnings.call_args.args[1] == [RAG_INDEX_WARNING_CODE]
+    mock_warning_service.record.assert_called_once()
+    assert mock_warning_service.record.call_args.args[2] == [RAG_INDEX_WARNING_CODE]
 
     error_record = next(record for record in caplog.records if RAG_INDEX_WARNING_CODE in record.message)
     assert error_record.exc_type == "RuntimeError"
@@ -95,7 +98,7 @@ async def test_embedding_failure_is_suppressed_and_recorded(
 @pytest.mark.asyncio
 async def test_vector_store_failure_is_suppressed_and_recorded(
     sample_graph: UnifiedPaperGraph,
-    mock_paper_service: MagicMock,
+    mock_warning_service: MagicMock,
     tmp_chroma_path: str,
     caplog: Any,
 ) -> None:
@@ -111,7 +114,7 @@ async def test_vector_store_failure_is_suppressed_and_recorded(
         )
 
     assert result is False
-    assert mock_paper_service.record_extract_warnings.call_args.args[1] == [RAG_INDEX_WARNING_CODE]
+    assert mock_warning_service.record.call_args.args[2] == [RAG_INDEX_WARNING_CODE]
 
     error_record = next(record for record in caplog.records if RAG_INDEX_WARNING_CODE in record.message)
     assert error_record.exc_type == "ConnectionError"
@@ -121,7 +124,7 @@ async def test_vector_store_failure_is_suppressed_and_recorded(
 @pytest.mark.asyncio
 async def test_suppress_false_re_raises_with_full_stack(
     sample_graph: UnifiedPaperGraph,
-    mock_paper_service: MagicMock,
+    mock_warning_service: MagicMock,
     tmp_chroma_path: str,
 ) -> None:
     store = VectorStore(embedding_client=FailingEmbeddingClient(), chroma_path=tmp_chroma_path)
@@ -136,13 +139,13 @@ async def test_suppress_false_re_raises_with_full_stack(
         )
 
     # Warning should still be recorded before re-raising.
-    mock_paper_service.record_extract_warnings.assert_called_once()
+    mock_warning_service.record.assert_called_once()
 
 
 @pytest.mark.asyncio
 async def test_empty_full_text_is_allowed_and_indexes_empty_chunks(
     sample_graph: UnifiedPaperGraph,
-    mock_paper_service: MagicMock,
+    mock_warning_service: MagicMock,
     tmp_chroma_path: str,
     caplog: Any,
 ) -> None:
@@ -161,17 +164,17 @@ async def test_empty_full_text_is_allowed_and_indexes_empty_chunks(
     )
 
     assert result is True
-    mock_paper_service.record_extract_warnings.assert_not_called()
+    mock_warning_service.record.assert_not_called()
 
 
 @pytest.mark.asyncio
 async def test_warning_write_failure_does_not_hide_original_error(
     sample_graph: UnifiedPaperGraph,
-    mock_paper_service: MagicMock,
+    mock_warning_service: MagicMock,
     tmp_chroma_path: str,
     caplog: Any,
 ) -> None:
-    mock_paper_service.record_extract_warnings.side_effect = OSError("DB down")
+    mock_warning_service.record.side_effect = OSError("DB down")
     store = VectorStore(embedding_client=FailingEmbeddingClient(), chroma_path=tmp_chroma_path)
 
     with caplog.at_level(logging.ERROR, logger="backend.rag.handlers"):
@@ -190,7 +193,7 @@ async def test_warning_write_failure_does_not_hide_original_error(
 @pytest.mark.asyncio
 async def test_exception_message_is_truncated_in_log_not_warning(
     sample_graph: UnifiedPaperGraph,
-    mock_paper_service: MagicMock,
+    mock_warning_service: MagicMock,
     tmp_chroma_path: str,
     caplog: Any,
 ) -> None:
@@ -213,7 +216,7 @@ async def test_exception_message_is_truncated_in_log_not_warning(
         )
 
     # The warning exposed to clients remains a fixed-size machine code.
-    assert mock_paper_service.record_extract_warnings.call_args.args[1] == [RAG_INDEX_WARNING_CODE]
+    assert mock_warning_service.record.call_args.args[2] == [RAG_INDEX_WARNING_CODE]
 
     # Long messages are retained in the structured log for operators.
     error_record = next(record for record in caplog.records if RAG_INDEX_WARNING_CODE in record.message)

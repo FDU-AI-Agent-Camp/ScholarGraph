@@ -12,6 +12,7 @@ from backend.agents.extract_constants import EXTRACT_HEURISTIC_FALLBACK_CODE
 from backend.main import app
 from backend.schemas.paper import PaperDetail, PaperStatus, PipelineStage
 from backend.services.paper_service import get_paper_service
+from backend.services.paper_warning_service import WarningType, get_paper_warning_service
 from backend.services.pipeline_status_service import get_pipeline_status_service
 from httpx import ASGITransport, AsyncClient
 from tests.api.conftest import assert_success_envelope
@@ -39,12 +40,12 @@ def _register_paper(paper_id: str) -> None:
 async def test_status_api_extracting_stage_exposes_extract_warnings_field(api_client: AsyncClient) -> None:
     paper_id = "api-extract-warn-001"
     _register_paper(paper_id)
-    get_pipeline_status_service().advance_stage(
+    await get_pipeline_status_service().advance_stage(
         paper_id,
         PipelineStage.EXTRACTING,
         message="正在抽取逻辑图谱",
     )
-    get_paper_service().record_extract_warnings(paper_id, [EXTRACT_HEURISTIC_FALLBACK_CODE])
+    await get_paper_warning_service().record(paper_id, WarningType.EXTRACT, [EXTRACT_HEURISTIC_FALLBACK_CODE])
 
     response = await api_client.get(f"/api/v1/papers/{paper_id}/status")
 
@@ -61,7 +62,7 @@ async def test_status_api_extracting_stage_exposes_extract_warnings_field(api_cl
 async def test_ready_fixture_status_includes_extract_warnings_field(api_client: AsyncClient) -> None:
     paper_id = "api-extract-warn-clean-001"
     _register_paper(paper_id)
-    get_pipeline_status_service().mark_ready(paper_id)
+    await get_pipeline_status_service().mark_ready(paper_id)
 
     response = await api_client.get(f"/api/v1/papers/{paper_id}/status")
 
@@ -76,13 +77,14 @@ async def test_ready_fixture_status_includes_extract_warnings_field(api_client: 
 async def test_status_api_extract_warnings_is_list_of_strings(api_client: AsyncClient) -> None:
     paper_id = "api-extract-warn-002"
     _register_paper(paper_id)
-    get_pipeline_status_service().advance_stage(
+    await get_pipeline_status_service().advance_stage(
         paper_id,
         PipelineStage.EXTRACTING,
         message="正在抽取逻辑图谱",
     )
-    get_paper_service().record_extract_warnings(
+    await get_paper_warning_service().record(
         paper_id,
+        WarningType.EXTRACT,
         [EXTRACT_HEURISTIC_FALLBACK_CODE],
     )
 

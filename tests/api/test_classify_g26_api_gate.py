@@ -13,6 +13,7 @@ from backend.agents.classifier_constants import CLASSIFIER_HEURISTIC_FALLBACK_CO
 from backend.main import app
 from backend.schemas.paper import PaperDetail, PaperStatus, PipelineStage
 from backend.services.paper_service import get_paper_service
+from backend.services.paper_warning_service import WarningType, get_paper_warning_service
 from backend.services.pipeline_status_service import get_pipeline_status_service
 from httpx import ASGITransport, AsyncClient
 from tests.api.conftest import assert_success_envelope
@@ -40,12 +41,12 @@ async def test_g27_get_status_includes_classify_warnings_field(api_client: Async
         created_at=now,
         updated_at=now,
     )
-    get_pipeline_status_service().advance_stage(
+    await get_pipeline_status_service().advance_stage(
         paper_id,
         PipelineStage.CLASSIFYING,
         message="正在范式分类",
     )
-    get_paper_service().record_classify_warnings(paper_id, [CLASSIFIER_HEURISTIC_FALLBACK_CODE])
+    await get_paper_warning_service().record(paper_id, WarningType.CLASSIFY, [CLASSIFIER_HEURISTIC_FALLBACK_CODE])
 
     response = await api_client.get(f"/api/v1/papers/{paper_id}/status")
 
@@ -66,9 +67,10 @@ async def test_g26_status_api_classify_warnings_is_list_of_strings(api_client: A
         created_at=now,
         updated_at=now,
     )
-    get_pipeline_status_service().mark_ready(paper_id)
-    get_paper_service().record_classify_warnings(
+    await get_pipeline_status_service().mark_ready(paper_id)
+    await get_paper_warning_service().record(
         paper_id,
+        WarningType.CLASSIFY,
         [CLASSIFIER_HEURISTIC_FALLBACK_CODE, "future_code"],
     )
 
@@ -90,7 +92,7 @@ async def test_g25_api_failed_pipeline_has_no_classify_warnings(api_client: Asyn
         created_at=now,
         updated_at=now,
     )
-    get_pipeline_status_service().mark_failed(
+    await get_pipeline_status_service().mark_failed(
         paper_id,
         message="范式 LLM 分类失败",
         error_code="PIPELINE_FAILED",
@@ -124,12 +126,12 @@ async def test_g27_status_polling_simulation_while_classifying(api_client: Async
         created_at=now,
         updated_at=now,
     )
-    get_pipeline_status_service().advance_stage(
+    await get_pipeline_status_service().advance_stage(
         paper_id,
         PipelineStage.CLASSIFYING,
         message="正在范式分类",
     )
-    get_paper_service().record_classify_warnings(paper_id, [CLASSIFIER_HEURISTIC_FALLBACK_CODE])
+    await get_paper_warning_service().record(paper_id, WarningType.CLASSIFY, [CLASSIFIER_HEURISTIC_FALLBACK_CODE])
 
     for _ in range(3):
         response = await api_client.get(f"/api/v1/papers/{paper_id}/status")
@@ -151,8 +153,8 @@ async def test_g27_status_polling_after_ready_still_exposes_warnings(api_client:
         created_at=now,
         updated_at=now,
     )
-    get_pipeline_status_service().mark_ready(paper_id)
-    get_paper_service().record_classify_warnings(paper_id, [CLASSIFIER_HEURISTIC_FALLBACK_CODE])
+    await get_pipeline_status_service().mark_ready(paper_id)
+    await get_paper_warning_service().record(paper_id, WarningType.CLASSIFY, [CLASSIFIER_HEURISTIC_FALLBACK_CODE])
 
     for _ in range(3):
         response = await api_client.get(f"/api/v1/papers/{paper_id}/status")

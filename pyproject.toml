@@ -91,7 +91,7 @@ markers = [
     "three_branch: FE + platform + ingest 三分支联调（语料缺失时 skip）",
     "smoke: 快速冒烟（import / 路由 / 契约字段）",
 ]
-addopts = "-m 'not red and not live_patrol_logic and not live_qa_logic and not demo_profile_check and not live_mineru and not live_grobid and not live_benchmark and not live_e10 and not live_judge'"
+addopts = "-p no:langsmith_plugin -m 'not red and not live_patrol_logic and not live_qa_logic and not demo_profile_check and not live_mineru and not live_grobid and not live_benchmark and not live_e10 and not live_judge'"
 
 [tool.ruff]
 line-length = 120

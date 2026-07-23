@@ -20,6 +20,7 @@ from backend.llm.client import reset_llm_client_cache
 from backend.schemas.paper import PaperDetail, PaperStatus, PaperStatusData
 from backend.services.errors import ServiceError
 from backend.services.paper_service import get_paper_service
+from backend.services.paper_warning_service import WarningType, get_paper_warning_service
 
 pytestmark = pytest.mark.red
 
@@ -58,8 +59,10 @@ def live_classify_env(monkeypatch: pytest.MonkeyPatch) -> None:
 @pytest.mark.asyncio
 async def test_red_record_classify_warnings_empty_list_is_noop(registered_paper: str) -> None:
     service = get_paper_service()
-    service.record_classify_warnings(registered_paper, [CLASSIFIER_HEURISTIC_FALLBACK_CODE])
-    service.record_classify_warnings(registered_paper, [])
+    await get_paper_warning_service().record(
+        registered_paper, WarningType.CLASSIFY, [CLASSIFIER_HEURISTIC_FALLBACK_CODE]
+    )
+    await get_paper_warning_service().record(registered_paper, WarningType.CLASSIFY, [])
 
     status = await service.get_status(registered_paper)
     assert status.classify_warnings == [CLASSIFIER_HEURISTIC_FALLBACK_CODE]
@@ -68,7 +71,7 @@ async def test_red_record_classify_warnings_empty_list_is_noop(registered_paper:
 @pytest.mark.asyncio
 async def test_red_unknown_classify_warning_code_stored_and_returned(registered_paper: str) -> None:
     service = get_paper_service()
-    service.record_classify_warnings(registered_paper, ["unknown_future_code"])
+    await get_paper_warning_service().record(registered_paper, WarningType.CLASSIFY, ["unknown_future_code"])
 
     status = await service.get_status(registered_paper)
     paper = await service.get_paper(registered_paper)
@@ -121,8 +124,10 @@ async def test_red_classify_and_extract_warnings_are_independent(registered_pape
     from backend.agents.extract_constants import EXTRACT_HEURISTIC_FALLBACK_CODE
 
     service = get_paper_service()
-    service.record_classify_warnings(registered_paper, [CLASSIFIER_HEURISTIC_FALLBACK_CODE])
-    service.record_extract_warnings(registered_paper, [EXTRACT_HEURISTIC_FALLBACK_CODE])
+    await get_paper_warning_service().record(
+        registered_paper, WarningType.CLASSIFY, [CLASSIFIER_HEURISTIC_FALLBACK_CODE]
+    )
+    await get_paper_warning_service().record(registered_paper, WarningType.EXTRACT, [EXTRACT_HEURISTIC_FALLBACK_CODE])
 
     status = await service.get_status(registered_paper)
 
@@ -133,8 +138,10 @@ async def test_red_classify_and_extract_warnings_are_independent(registered_pape
 @pytest.mark.asyncio
 async def test_red_head_refine_and_classify_warnings_are_independent(registered_paper: str) -> None:
     service = get_paper_service()
-    service.record_head_refine_warnings(registered_paper, ["mineru_unavailable"])
-    service.record_classify_warnings(registered_paper, [CLASSIFIER_HEURISTIC_FALLBACK_CODE])
+    await get_paper_warning_service().record(registered_paper, WarningType.HEAD_REFINE, ["mineru_unavailable"])
+    await get_paper_warning_service().record(
+        registered_paper, WarningType.CLASSIFY, [CLASSIFIER_HEURISTIC_FALLBACK_CODE]
+    )
 
     status = await service.get_status(registered_paper)
 
@@ -345,7 +352,9 @@ async def test_red_recorded_warnings_never_store_user_message(registered_paper: 
     from backend.agents.classifier_constants import CLASSIFIER_HEURISTIC_FALLBACK_MESSAGE
 
     service = get_paper_service()
-    service.record_classify_warnings(registered_paper, [CLASSIFIER_HEURISTIC_FALLBACK_CODE])
+    await get_paper_warning_service().record(
+        registered_paper, WarningType.CLASSIFY, [CLASSIFIER_HEURISTIC_FALLBACK_CODE]
+    )
 
     status = await service.get_status(registered_paper)
     paper = await service.get_paper(registered_paper)

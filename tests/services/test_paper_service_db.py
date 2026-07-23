@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import pytest
 from backend.schemas.paper import PaperStatus
+from backend.services.paper_warning_service import WarningType, get_paper_warning_service
 from tests.helpers.persistence_testkit import register_test_paper, restart_paper_service
 
 VALID_PDF = b"%PDF-1.4\n% service db test"
@@ -33,7 +34,7 @@ async def test_set_status_snapshot_writes_pipeline_row(persistence_env) -> None:
     from backend.schemas.paper import PipelineStage
     from backend.services.pipeline_status_service import PipelineStatusService
 
-    snapshot = PipelineStatusService().start_processing("snap-001")
+    snapshot = await PipelineStatusService().start_processing("snap-001")
     assert snapshot.status == PaperStatus.PROCESSING
     assert snapshot.stage == PipelineStage.INGESTING
 
@@ -45,6 +46,6 @@ async def test_set_status_snapshot_writes_pipeline_row(persistence_env) -> None:
 async def test_record_warnings_visible_on_status(persistence_env) -> None:
     await register_test_paper("warn-svc")
     service = await restart_paper_service()
-    service.record_classify_warnings("warn-svc", ["classifier_heuristic_fallback"])
+    await get_paper_warning_service().record("warn-svc", WarningType.CLASSIFY, ["classifier_heuristic_fallback"])
     detail = await service.get_paper("warn-svc")
     assert detail.classify_warnings == ["classifier_heuristic_fallback"]

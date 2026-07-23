@@ -15,6 +15,7 @@ from backend.schemas.graph import GraphEdge, GraphNode, UnifiedPaperGraph
 from backend.schemas.paper import PaperStatus
 from backend.schemas.paradigm import Paradigm
 from backend.services.paper_service import PaperService, get_paper_service
+from backend.services.paper_warning_service import WarningType, get_paper_warning_service
 from tests.helpers.persistence_testkit import (
     register_test_paper,
     restart_paper_service,
@@ -74,13 +75,13 @@ def _preview_for(paper_id: str, *, token: str) -> UnifiedPaperGraph:
     )
 
 
-def _assert_matches_model(service: PaperService, model: _ChaosModel) -> None:
+async def _assert_matches_model(service: PaperService, model: _ChaosModel) -> None:
     for paper_id, expected in model.papers.items():
-        actual_run_id = service.get_active_run_id(paper_id)
+        actual_run_id = await service.get_active_run_id(paper_id)
         assert actual_run_id == expected.active_run_id, (
             f"active_run_id mismatch for {paper_id}: {actual_run_id!r} != {expected.active_run_id!r}"
         )
-        actual_preview = service.get_preview_graph(paper_id)
+        actual_preview = await service.get_preview_graph(paper_id)
         if expected.preview_graph is None:
             assert actual_preview is None, f"preview_graph should be cleared for {paper_id}"
         else:
@@ -129,26 +130,26 @@ async def _apply_action(
         token = f"{model.next_run_index}-{rng.randint(0, 999)}"
         model.next_run_index += 1
         preview = _preview_for(paper_id, token=token)
-        service.save_preview_graph(paper_id, preview)
-        service.mark_preview_available(paper_id)
+        await service.save_preview_graph(paper_id, preview)
+        await service.mark_preview_available(paper_id)
         state.preview_graph = preview
         return service
 
     if action == _Action.SET_ACTIVE_RUN_ID:
         run_id = f"chaos-run-{model.next_run_index}"
         model.next_run_index += 1
-        service.set_active_run_id(paper_id, run_id)
+        await service.set_active_run_id(paper_id, run_id)
         state.active_run_id = run_id
         return service
 
     if action == _Action.RECORD_WARNING:
-        service.record_extract_warnings(paper_id, [f"chaos_warning_{rng.randint(0, 99)}"])
+        await get_paper_warning_service().record(paper_id, WarningType.EXTRACT, [f"chaos_warning_{rng.randint(0, 99)}"])
         return service
 
     if action == _Action.CRASH_RESTART:
         simulate_service_crash()
         restarted = await restart_paper_service()
-        _assert_matches_model(restarted, model)
+        await _assert_matches_model(restarted, model)
         return restarted
 
     if action == _Action.CLEAR_PREVIEW:
@@ -159,13 +160,15 @@ async def _apply_action(
         return service
 
     if action == _Action.CLEAR_EPHEMERAL:
-        service.clear_ephemeral_pipeline_state(paper_id)
+        from backend.services.paper_pipeline_ops import get_paper_pipeline_ops_service
+
+        await get_paper_pipeline_ops_service().clear_ephemeral_pipeline_state(paper_id)
         state.preview_graph = None
         state.active_run_id = None
         return service
 
     if action == _Action.VERIFY:
-        _assert_matches_model(service, model)
+        await _assert_matches_model(service, model)
         return service
 
     msg = f"Unhandled chaos action: {action}"
@@ -196,8 +199,8 @@ async def test_ephemeral_state_chaos_lifecycle_invariants(persistence_env) -> No
     for _step in range(CHAOS_ACTION_COUNT):
         action = rng.choice(weighted_actions)
         service = await _apply_action(action, service=service, model=model, rng=rng)
-        _assert_matches_model(service, model)
+        await _assert_matches_model(service, model)
 
     simulate_service_crash()
     final_service = await restart_paper_service()
-    _assert_matches_model(final_service, model)
+    await _assert_matches_model(final_service, model)

@@ -5,7 +5,7 @@
 
 from __future__ import annotations
 
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from backend.patrol.result_cache import (
@@ -45,26 +45,32 @@ def test_cache_set_always_uses_healthy_ttl() -> None:
     assert cache.inspect_ttl("k") == PATROL_HEALTHY_CACHE_MAX_AGE_SECONDS
 
 
-def test_collect_fingerprint_uses_graph_version_and_run_id(monkeypatch: pytest.MonkeyPatch) -> None:
+@pytest.mark.asyncio
+async def test_collect_fingerprint_uses_graph_version_and_run_id(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     paper_service = MagicMock()
-    paper_service.get_pipeline_graph_version.side_effect = lambda pid: {"p1": "3", "p2": "3"}[pid]
-    paper_service.get_active_run_id.side_effect = lambda pid: {"p1": "run-a", "p2": None}[pid]
+    paper_service.get_pipeline_graph_version = AsyncMock(
+        side_effect=lambda pid: {"p1": "3", "p2": "3"}[pid],
+    )
+    paper_service.get_active_run_id = AsyncMock(side_effect=lambda pid: {"p1": "run-a", "p2": None}[pid])
     monkeypatch.setattr(
         "backend.services.paper_service.get_paper_service",
         lambda: paper_service,
     )
-    assert collect_patrol_paper_fingerprint(["p1", "p2"]) == "p1@3/run-a;p2@3/-"
+    assert await collect_patrol_paper_fingerprint(["p1", "p2"]) == "p1@3/run-a;p2@3/-"
 
 
-def test_collect_fingerprint_tolerates_missing_paper(monkeypatch: pytest.MonkeyPatch) -> None:
+@pytest.mark.asyncio
+async def test_collect_fingerprint_tolerates_missing_paper(monkeypatch: pytest.MonkeyPatch) -> None:
     paper_service = MagicMock()
-    paper_service.get_pipeline_graph_version.side_effect = KeyError("paper not found")
-    paper_service.get_active_run_id.return_value = None
+    paper_service.get_pipeline_graph_version = AsyncMock(side_effect=KeyError("paper not found"))
+    paper_service.get_active_run_id = AsyncMock(return_value=None)
     monkeypatch.setattr(
         "backend.services.paper_service.get_paper_service",
         lambda: paper_service,
     )
-    assert collect_patrol_paper_fingerprint(["ghost"]) == "ghost@missing/-"
+    assert await collect_patrol_paper_fingerprint(["ghost"]) == "ghost@missing/-"
 
 
 @pytest.mark.asyncio
@@ -95,10 +101,14 @@ async def test_reextract_fingerprint_change_bypasses_stale_cache(monkeypatch: py
         )
 
     monkeypatch.setattr("backend.services.patrol_service.patrol_run", _fake_run)
+
+    async def _fingerprint(_ids: list[str]) -> str:
+        return fingerprint["value"]
+
     service = PatrolService(
         result_cache=InMemoryPatrolResultCache(),
         cache_enabled=True,
-        paper_fingerprint_fn=lambda _ids: fingerprint["value"],
+        paper_fingerprint_fn=_fingerprint,
     )
 
     first = await service.run_patrol(["a", "b"], PatrolMode.LENS_CLASH)

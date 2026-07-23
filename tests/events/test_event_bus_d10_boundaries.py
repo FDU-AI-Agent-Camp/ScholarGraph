@@ -78,7 +78,7 @@ async def test_complete_paper_pipeline_latency_isolated_from_slow_rag_handler(
 
     try:
         started = time.perf_counter()
-        complete_paper_pipeline(
+        await complete_paper_pipeline(
             paper_service,
             paper_id,
             classification=_sample_classification(),

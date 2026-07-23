@@ -20,7 +20,11 @@ def get_settings_dep() -> Settings:
     return get_settings()
 
 
-def get_paper_service_dep() -> PaperService:
+def get_paper_service_dep(request: Request) -> PaperService:
+    """Prefer the lifespan-bound instance; fall back to the process singleton."""
+    state_service = getattr(request.app.state, "paper_service", None)
+    if isinstance(state_service, PaperService):
+        return state_service
     return get_paper_service()
 
 

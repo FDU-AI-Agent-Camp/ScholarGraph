@@ -80,8 +80,8 @@ class TestPreviewGraphApi:
             nodes=[GraphNode(id="n1", label="Thesis", type="Thesis")],
             edges=[],
         )
-        service.save_preview_graph(paper_id, preview)
-        service.mark_preview_available(paper_id)
+        await service.save_preview_graph(paper_id, preview)
+        await service.mark_preview_available(paper_id)
 
         response = await api_client.get(f"/api/v1/papers/{paper_id}/graph")
 
@@ -114,7 +114,7 @@ class TestPreviewGraphApi:
         service = _get_service()
         service._papers[paper_id] = _make_preview_paper(paper_id)
         service._status[paper_id] = _make_status(paper_id)
-        service.mark_preview_available(paper_id)
+        await service.mark_preview_available(paper_id)
 
         response = await api_client.get(f"/api/v1/papers/{paper_id}/status")
 
@@ -127,7 +127,7 @@ class TestPreviewGraphApi:
         paper_id = "preview-api-004"
         service = _get_service()
         service._papers[paper_id] = _make_preview_paper(paper_id)
-        service.mark_preview_available(paper_id)
+        await service.mark_preview_available(paper_id)
 
         response = await api_client.get(f"/api/v1/papers/{paper_id}")
 
@@ -153,8 +153,8 @@ class TestPreviewQaStreamApi:
             nodes=[GraphNode(id="n1", label="Thesis", type="Thesis")],
             edges=[],
         )
-        service.save_preview_graph(paper_id, preview)
-        service.mark_preview_available(paper_id)
+        await service.save_preview_graph(paper_id, preview)
+        await service.mark_preview_available(paper_id)
 
         engine = _GraphQaEngine(paper_service=service, llm=_fake_llm("宏观答案"))
         from tests.helpers.qa_stream_mock import qa_stream_from_engine

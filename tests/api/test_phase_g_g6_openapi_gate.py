@@ -15,6 +15,7 @@ from backend.agents.classifier_constants import CLASSIFIER_HEURISTIC_FALLBACK_CO
 from backend.main import app
 from backend.schemas.paper import PaperDetail, PaperStatus, PaperStatusData
 from backend.services.paper_service import get_paper_service
+from backend.services.paper_warning_service import WarningType, get_paper_warning_service
 from backend.services.pipeline_status_service import get_pipeline_status_service
 from httpx import ASGITransport, AsyncClient
 
@@ -76,8 +77,8 @@ async def test_g6_api_status_fixture_envelope_matches_http(api_client: AsyncClie
         created_at=now,
         updated_at=now,
     )
-    get_pipeline_status_service().mark_ready(paper_id)
-    get_paper_service().record_classify_warnings(paper_id, expected["classify_warnings"])
+    await get_pipeline_status_service().mark_ready(paper_id)
+    await get_paper_warning_service().record(paper_id, WarningType.CLASSIFY, expected["classify_warnings"])
 
     response = await api_client.get(f"/api/v1/papers/{paper_id}/status")
 
@@ -97,8 +98,8 @@ async def test_g6_api_detail_fixture_envelope_matches_http(api_client: AsyncClie
             "updated_at": now.isoformat(),
         },
     )
-    get_pipeline_status_service().mark_ready(paper_id)
-    get_paper_service().record_classify_warnings(paper_id, expected["classify_warnings"])
+    await get_pipeline_status_service().mark_ready(paper_id)
+    await get_paper_warning_service().record(paper_id, WarningType.CLASSIFY, expected["classify_warnings"])
 
     response = await api_client.get(f"/api/v1/papers/{paper_id}")
 

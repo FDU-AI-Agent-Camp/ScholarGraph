@@ -5,7 +5,7 @@
 
 The macro loop runs on a **dedicated daemon thread** and performs **sync** DB
 scans (not ``run_async`` onto the FastAPI loop). Promote semantics live on
-``PaperService`` (``promote_stuck_indexing_paper[_sync]``); this module only
+``PaperPipelineOpsService`` (``promote_stuck_indexing_paper[_sync]``); this module only
 schedules and orchestrates.
 """
 
@@ -62,10 +62,10 @@ async def promote_stuck_indexing_paper(
     warning_code: str = RAG_INDEXING_STUCK_WARNING,
     message: str | None = None,
 ) -> bool:
-    """Force-promote one indexing paper via PaperService facade."""
-    from backend.services.paper_service import get_paper_service
+    """Force-promote one indexing paper via pipeline ops service."""
+    from backend.services.paper_pipeline_ops import get_paper_pipeline_ops_service
 
-    return await get_paper_service().promote_stuck_indexing_paper(
+    return await get_paper_pipeline_ops_service().promote_stuck_indexing_paper(
         paper_id,
         warning_code=warning_code,
         message=message,
@@ -83,7 +83,7 @@ async def scan_and_promote_stuck_indexing(
 
     When ``force_all`` (cold-boot), drain in 200-row rounds so large piles need one boot.
     """
-    from backend.services.paper_service import get_paper_service
+    from backend.services.paper_pipeline_ops import get_paper_pipeline_ops_service
 
     settings = get_settings()
     if not settings.rag_indexing_watchdog_enabled and not force_all:
@@ -95,11 +95,11 @@ async def scan_and_promote_stuck_indexing(
         heartbeat_stale_seconds=heartbeat_stale_seconds,
         force_all=force_all,
     )
-    paper_service = get_paper_service()
+    pipeline_ops = get_paper_pipeline_ops_service()
     promoted: list[str] = []
     max_rounds = COLD_BOOT_INDEXING_MAX_ROUNDS if force_all else 1
     for round_idx in range(max_rounds):
-        candidates = await paper_service.list_stuck_indexing_papers(
+        candidates = await pipeline_ops.list_stuck_indexing_papers(
             older_than=older_than,
             heartbeat_stale_before=heartbeat_stale_before,
             limit=COLD_BOOT_INDEXING_BATCH_LIMIT,
@@ -108,7 +108,7 @@ async def scan_and_promote_stuck_indexing(
             break
         for paper_id, _started, _heartbeat in candidates:
             try:
-                if await paper_service.promote_stuck_indexing_paper(paper_id):
+                if await pipeline_ops.promote_stuck_indexing_paper(paper_id):
                     promoted.append(paper_id)
             except Exception:
                 logger.exception("indexing_watchdog_promote_failed", extra={"paper_id": paper_id})
@@ -153,9 +153,9 @@ def promote_stuck_indexing_paper_sync(
     message: str | None = None,
 ) -> bool:
     """Sync promote for the dedicated watchdog thread (main-loop starvation safe)."""
-    from backend.services.paper_service import get_paper_service
+    from backend.services.paper_pipeline_ops import get_paper_pipeline_ops_service
 
-    return get_paper_service().promote_stuck_indexing_paper_sync(
+    return get_paper_pipeline_ops_service().promote_stuck_indexing_paper_sync(
         paper_id,
         warning_code=warning_code,
         message=message,
@@ -174,7 +174,7 @@ def scan_and_promote_stuck_indexing_sync(
     Must not call ``run_async`` / the FastAPI loop — main-loop starvation must not
     block ticks or heals.
     """
-    from backend.services.paper_service import get_paper_service
+    from backend.services.paper_pipeline_ops import get_paper_pipeline_ops_service
 
     settings = get_settings()
     if not settings.rag_indexing_watchdog_enabled and not force_all:
@@ -186,15 +186,15 @@ def scan_and_promote_stuck_indexing_sync(
         heartbeat_stale_seconds=heartbeat_stale_seconds,
         force_all=force_all,
     )
-    paper_service = get_paper_service()
-    candidate_ids = paper_service.list_stuck_indexing_paper_ids_sync(
+    pipeline_ops = get_paper_pipeline_ops_service()
+    candidate_ids = pipeline_ops.list_stuck_indexing_paper_ids_sync(
         older_than=older_than,
         heartbeat_stale_before=heartbeat_stale_before,
     )
     promoted: list[str] = []
     for paper_id in candidate_ids:
         try:
-            if paper_service.promote_stuck_indexing_paper_sync(paper_id):
+            if pipeline_ops.promote_stuck_indexing_paper_sync(paper_id):
                 promoted.append(paper_id)
         except Exception:
             logger.exception("indexing_watchdog_promote_failed", extra={"paper_id": paper_id})

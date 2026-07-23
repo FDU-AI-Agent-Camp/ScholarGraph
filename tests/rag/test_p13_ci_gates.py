@@ -35,7 +35,8 @@ def test_static_rag_io_timeout_audit_passes() -> None:
     assert errors == [], "RAG I/O timeout audit regressions:\n" + "\n".join(errors)
 
 
-def test_watchdog_heal_log_contains_ops_alert_tag(
+@pytest.mark.asyncio
+async def test_watchdog_heal_log_contains_ops_alert_tag(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     caplog: pytest.LogCaptureFixture,

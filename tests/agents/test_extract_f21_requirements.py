@@ -232,7 +232,7 @@ async def test_x6_extractor_resolves_head_from_head_store(live_extract_env, tmp_
         classifier_input="Title: Disk Head",
     )
 
-    context = _resolve_head_context(paper_id)
+    context = await _resolve_head_context(paper_id)
 
     assert context is not None
     assert "Disk Head" in context

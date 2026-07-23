@@ -15,6 +15,7 @@ import pytest
 from backend.agents.extract_constants import EXTRACT_HEURISTIC_FALLBACK_CODE
 from backend.schemas.paper import PaperDetail, PaperStatus, PaperStatusData
 from backend.services.paper_service import get_paper_service
+from backend.services.paper_warning_service import WarningType, get_paper_warning_service
 
 pytestmark = pytest.mark.red
 
@@ -38,8 +39,8 @@ def registered_paper() -> str:
 @pytest.mark.asyncio
 async def test_red_record_extract_warnings_empty_list_is_noop(registered_paper: str) -> None:
     service = get_paper_service()
-    service.record_extract_warnings(registered_paper, [EXTRACT_HEURISTIC_FALLBACK_CODE])
-    service.record_extract_warnings(registered_paper, [])
+    await get_paper_warning_service().record(registered_paper, WarningType.EXTRACT, [EXTRACT_HEURISTIC_FALLBACK_CODE])
+    await get_paper_warning_service().record(registered_paper, WarningType.EXTRACT, [])
 
     status = await service.get_status(registered_paper)
     assert status.extract_warnings == [EXTRACT_HEURISTIC_FALLBACK_CODE]
@@ -48,7 +49,7 @@ async def test_red_record_extract_warnings_empty_list_is_noop(registered_paper: 
 @pytest.mark.asyncio
 async def test_red_unknown_extract_warning_code_stored_and_returned(registered_paper: str) -> None:
     service = get_paper_service()
-    service.record_extract_warnings(registered_paper, ["unknown_future_code"])
+    await get_paper_warning_service().record(registered_paper, WarningType.EXTRACT, ["unknown_future_code"])
 
     status = await service.get_status(registered_paper)
     paper = await service.get_paper(registered_paper)
@@ -97,8 +98,8 @@ def test_red_paper_status_data_rejects_non_list_extract_warnings() -> None:
 @pytest.mark.asyncio
 async def test_red_head_refine_and_extract_warnings_are_independent(registered_paper: str) -> None:
     service = get_paper_service()
-    service.record_head_refine_warnings(registered_paper, ["mineru_unavailable"])
-    service.record_extract_warnings(registered_paper, [EXTRACT_HEURISTIC_FALLBACK_CODE])
+    await get_paper_warning_service().record(registered_paper, WarningType.HEAD_REFINE, ["mineru_unavailable"])
+    await get_paper_warning_service().record(registered_paper, WarningType.EXTRACT, [EXTRACT_HEURISTIC_FALLBACK_CODE])
 
     status = await service.get_status(registered_paper)
 

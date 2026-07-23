@@ -181,9 +181,9 @@ async def _load_graph_for_retrieval(
         return None
 
     graph_store = store or GraphStore()
-    graph = graph_store.load(paper_id)
+    graph = await asyncio.to_thread(graph_store.load, paper_id)
     if graph is None:
-        graph = paper_service.get_preview_graph(paper_id)
+        graph = await paper_service.get_preview_graph(paper_id)
     if graph is None:
         return None
 

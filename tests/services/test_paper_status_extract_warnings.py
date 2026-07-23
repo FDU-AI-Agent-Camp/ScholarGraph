@@ -15,6 +15,7 @@ from backend.rag.handlers import RAG_INDEX_WARNING_CODE, index_paper_for_rag
 from backend.schemas.graph import UnifiedPaperGraph
 from backend.schemas.paper import PaperStatus, PipelineStage
 from backend.services.paper_service import get_paper_service
+from backend.services.paper_warning_service import WarningType, get_paper_warning_service
 from httpx import ASGITransport, AsyncClient
 
 
@@ -84,9 +85,10 @@ async def test_rag_index_failure_writes_exact_machine_code_to_status(
 @pytest.mark.asyncio
 async def test_record_extract_warnings_merges_without_duplicates(registered_paper: str) -> None:
     service = get_paper_service()
-    service.record_extract_warnings(registered_paper, [EXTRACT_HEURISTIC_FALLBACK_CODE])
-    service.record_extract_warnings(
+    await get_paper_warning_service().record(registered_paper, WarningType.EXTRACT, [EXTRACT_HEURISTIC_FALLBACK_CODE])
+    await get_paper_warning_service().record(
         registered_paper,
+        WarningType.EXTRACT,
         [EXTRACT_HEURISTIC_FALLBACK_CODE, "other_code"],
     )
 
@@ -98,7 +100,7 @@ async def test_record_extract_warnings_merges_without_duplicates(registered_pape
 @pytest.mark.asyncio
 async def test_get_status_includes_extract_warnings_after_record(registered_paper: str) -> None:
     service = get_paper_service()
-    service.record_extract_warnings(registered_paper, [EXTRACT_HEURISTIC_FALLBACK_CODE])
+    await get_paper_warning_service().record(registered_paper, WarningType.EXTRACT, [EXTRACT_HEURISTIC_FALLBACK_CODE])
 
     status = await service.get_status(registered_paper)
 
@@ -108,8 +110,8 @@ async def test_get_status_includes_extract_warnings_after_record(registered_pape
 @pytest.mark.asyncio
 async def test_status_snapshot_carries_extract_warnings_on_stage_advance(registered_paper: str) -> None:
     service = get_paper_service()
-    service.record_extract_warnings(registered_paper, [EXTRACT_HEURISTIC_FALLBACK_CODE])
-    service.set_status_snapshot(
+    await get_paper_warning_service().record(registered_paper, WarningType.EXTRACT, [EXTRACT_HEURISTIC_FALLBACK_CODE])
+    await service.set_status_snapshot(
         registered_paper,
         status=PaperStatus.READY,
         stage=PipelineStage.READY,
@@ -129,7 +131,7 @@ async def test_status_api_returns_extract_warnings(
     registered_paper: str,
 ) -> None:
     paper_id = registered_paper
-    get_paper_service().record_extract_warnings(paper_id, [EXTRACT_HEURISTIC_FALLBACK_CODE])
+    await get_paper_warning_service().record(paper_id, WarningType.EXTRACT, [EXTRACT_HEURISTIC_FALLBACK_CODE])
 
     response = await api_client.get(f"/api/v1/papers/{paper_id}/status")
 
@@ -140,7 +142,7 @@ async def test_status_api_returns_extract_warnings(
 @pytest.mark.asyncio
 async def test_get_paper_includes_extract_warnings_on_detail(registered_paper: str) -> None:
     service = get_paper_service()
-    service.record_extract_warnings(registered_paper, [EXTRACT_HEURISTIC_FALLBACK_CODE])
+    await get_paper_warning_service().record(registered_paper, WarningType.EXTRACT, [EXTRACT_HEURISTIC_FALLBACK_CODE])
 
     paper = await service.get_paper(registered_paper)
 

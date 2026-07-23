@@ -40,6 +40,7 @@ async def test_graph_ready_paper_returns_unified_graph(
     api_client: AsyncClient,
     persistence_env,
     monkeypatch: pytest.MonkeyPatch,
+    noop_event_bus_publish_sync: None,
 ) -> None:
     monkeypatch.setattr("backend.services.paper_service.schedule_paper_pipeline", lambda *_a, **_k: None)
     create = await api_client.post(
@@ -56,7 +57,7 @@ async def test_graph_ready_paper_returns_unified_graph(
         edges=[GraphEdge(id="e1", source="n1", target="n1", label="REF", type="REF")],
     )
     persistence = GraphPersistenceService(store=GraphStore(base_dir=persistence_env["graph_dir"]))
-    PipelineCompletionService(graph_persistence=persistence).finalize(
+    await PipelineCompletionService(graph_persistence=persistence).finalize(
         paper_id,
         graph_data=graph.model_dump(mode="json"),
         classification_data=classification.model_dump(mode="json"),

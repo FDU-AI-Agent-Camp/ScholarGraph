@@ -59,8 +59,8 @@ class AsyncTokenBucket:
         if self._rpm <= 0 and self._tpm <= 0:
             return
 
-        async with self._lock:
-            while True:
+        while True:
+            async with self._lock:
                 now = time.monotonic()
                 self._replenish(now)
 
@@ -87,7 +87,7 @@ class AsyncTokenBucket:
                 # Release the lock while sleeping so other waiters can be served
                 # when tokens become available; re-acquire before re-checking.
                 self._last_update = now
-                await asyncio.sleep(wait)
+            await asyncio.sleep(wait)
 
 
 @lru_cache

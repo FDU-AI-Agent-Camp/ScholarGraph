@@ -205,10 +205,9 @@ class HybridRetriever:
 def create_hybrid_retriever(vector_store: VectorStoreProtocol | None = None) -> HybridRetriever:
     """Construct a HybridRetriever; default wiring uses the shared VectorStore."""
     if vector_store is None:
-        from backend.rag.vector_store import VectorStore
-        from backend.services.paper_service import get_paper_service
+        from backend.rag.vector_store_wiring import get_vector_store
 
-        vector_store = VectorStore(paper_service=get_paper_service())
+        vector_store = get_vector_store()
     return HybridRetriever(vector_store=vector_store)
 
 

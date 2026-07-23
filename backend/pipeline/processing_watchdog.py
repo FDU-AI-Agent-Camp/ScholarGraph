@@ -21,6 +21,7 @@ import threading
 import time
 from collections import deque
 from datetime import UTC, datetime, timedelta
+from typing import TYPE_CHECKING
 
 from backend.config import get_settings
 from backend.repositories.async_bridge import get_registered_main_event_loop
@@ -33,6 +34,9 @@ from backend.services.errors import (
     QUEUE_TIMEOUT_CODE,
     QUEUE_TIMEOUT_MESSAGE,
 )
+
+if TYPE_CHECKING:
+    from backend.services.paper_pipeline_ops import PaperPipelineOpsService
 
 logger = logging.getLogger(__name__)
 
@@ -110,17 +114,17 @@ async def scan_and_fail_orphaned_processing(
     Drains in batches of ``COLD_BOOT_ORPHAN_BATCH_LIMIT`` so large zombie piles do not
     require multiple process restarts.
     """
-    from backend.services.paper_service import get_paper_service
+    from backend.services.paper_pipeline_ops import get_paper_pipeline_ops_service
 
     settings = get_settings()
     if not settings.process_watchdog_enabled:
         return []
 
     older_than = _cold_boot_older_than(now=now)
-    paper_service = get_paper_service()
+    pipeline_ops = get_paper_pipeline_ops_service()
     failed: list[str] = []
     for round_idx in range(COLD_BOOT_ORPHAN_MAX_ROUNDS):
-        candidate_ids = await paper_service.list_orphan_pipeline_paper_ids(
+        candidate_ids = await pipeline_ops.list_orphan_pipeline_paper_ids(
             older_than=older_than,
             limit=COLD_BOOT_ORPHAN_BATCH_LIMIT,
         )
@@ -128,7 +132,7 @@ async def scan_and_fail_orphaned_processing(
             break
         for paper_id in candidate_ids:
             try:
-                if await paper_service.fail_orphaned_pipeline_paper(
+                if await pipeline_ops.fail_orphaned_pipeline_paper(
                     paper_id,
                     error_code=PROCESS_ORPHANED_CODE,
                     message=PROCESS_ORPHANED_MESSAGE,
@@ -149,7 +153,7 @@ async def scan_and_fail_orphaned_processing(
     return failed
 
 
-def _cascade_kill_true_zombie_sync(paper_id: str, *, paper_service: object) -> bool:
+def _cascade_kill_true_zombie_sync(paper_id: str, *, pipeline_ops: PaperPipelineOpsService) -> bool:
     """Cascading Kill Channel for True Zombie (sync / dedicated-thread safe).
 
     1. Force Cancel Task (inject CancelledError via registry)
@@ -184,7 +188,7 @@ def _cascade_kill_true_zombie_sync(paper_id: str, *, paper_service: object) -> b
                 )
 
     return bool(
-        paper_service.fail_orphaned_pipeline_paper_sync(  # type: ignore[attr-defined]
+        pipeline_ops.fail_orphaned_pipeline_paper_sync(
             paper_id,
             error_code=PROCESS_TIMEOUT_CODE,
             message=PROCESS_TIMEOUT_MESSAGE,
@@ -192,7 +196,7 @@ def _cascade_kill_true_zombie_sync(paper_id: str, *, paper_service: object) -> b
     )
 
 
-async def _cascade_kill_true_zombie_async(paper_id: str, *, paper_service: object) -> bool:
+async def _cascade_kill_true_zombie_async(paper_id: str, *, pipeline_ops: PaperPipelineOpsService) -> bool:
     """Cascading Kill Channel with full await of abort before SQL flip (async path)."""
     from backend.services.pipeline_task_registry import abort_in_flight_pipeline, force_cancel_paper_work_sync
 
@@ -200,7 +204,7 @@ async def _cascade_kill_true_zombie_async(paper_id: str, *, paper_service: objec
     force_cancel_paper_work_sync(paper_id)
     await abort_in_flight_pipeline(paper_id)
     return bool(
-        paper_service.fail_orphaned_pipeline_paper_sync(  # type: ignore[attr-defined]
+        pipeline_ops.fail_orphaned_pipeline_paper_sync(
             paper_id,
             error_code=PROCESS_TIMEOUT_CODE,
             message=PROCESS_TIMEOUT_MESSAGE,
@@ -211,13 +215,13 @@ async def _cascade_kill_true_zombie_async(paper_id: str, *, paper_service: objec
 def _dispose_or_renew_stuck_processing(
     paper_id: str,
     *,
-    paper_service: object,
+    pipeline_ops: PaperPipelineOpsService,
 ) -> bool:
     """Dual-check one PROCESSING candidate (sync). Returns True if tombstoned."""
     from backend.services.pipeline_task_registry import is_paper_work_alive
 
     if is_paper_work_alive(paper_id):
-        renewed = paper_service.touch_processing_lease_sync(paper_id)  # type: ignore[attr-defined]
+        renewed = pipeline_ops.touch_processing_lease_sync(paper_id)
         logger.info(
             PROCESSING_WATCHDOG_LEASE_LOG,
             extra={
@@ -229,19 +233,19 @@ def _dispose_or_renew_stuck_processing(
         )
         return False
 
-    return _cascade_kill_true_zombie_sync(paper_id, paper_service=paper_service)
+    return _cascade_kill_true_zombie_sync(paper_id, pipeline_ops=pipeline_ops)
 
 
 async def _dispose_or_renew_stuck_processing_async(
     paper_id: str,
     *,
-    paper_service: object,
+    pipeline_ops: PaperPipelineOpsService,
 ) -> bool:
     """Dual-check one PROCESSING candidate (async, full abort drain)."""
     from backend.services.pipeline_task_registry import is_paper_work_alive
 
     if is_paper_work_alive(paper_id):
-        renewed = paper_service.touch_processing_lease_sync(paper_id)  # type: ignore[attr-defined]
+        renewed = pipeline_ops.touch_processing_lease_sync(paper_id)
         logger.info(
             PROCESSING_WATCHDOG_LEASE_LOG,
             extra={
@@ -253,7 +257,7 @@ async def _dispose_or_renew_stuck_processing_async(
         )
         return False
 
-    return await _cascade_kill_true_zombie_async(paper_id, paper_service=paper_service)
+    return await _cascade_kill_true_zombie_async(paper_id, pipeline_ops=pipeline_ops)
 
 
 async def scan_and_fail_stuck_processing(
@@ -262,19 +266,19 @@ async def scan_and_fail_stuck_processing(
     stuck_after_seconds: float | None = None,
 ) -> list[str]:
     """Fail PROCESSING papers with stale ``updated_at`` after vitality dual-check + cascade kill."""
-    from backend.services.paper_service import get_paper_service
+    from backend.services.paper_pipeline_ops import get_paper_pipeline_ops_service
 
     settings = get_settings()
     if not settings.process_watchdog_enabled:
         return []
 
     older_than = _process_stuck_older_than(now=now, stuck_after_seconds=stuck_after_seconds)
-    paper_service = get_paper_service()
-    candidate_ids = paper_service.list_stuck_processing_paper_ids_sync(older_than=older_than)
+    pipeline_ops = get_paper_pipeline_ops_service()
+    candidate_ids = pipeline_ops.list_stuck_processing_paper_ids_sync(older_than=older_than)
     failed: list[str] = []
     for paper_id in candidate_ids:
         try:
-            if await _dispose_or_renew_stuck_processing_async(paper_id, paper_service=paper_service):
+            if await _dispose_or_renew_stuck_processing_async(paper_id, pipeline_ops=pipeline_ops):
                 failed.append(paper_id)
         except Exception:
             logger.exception("processing_watchdog_fail_failed", extra={"paper_id": paper_id})
@@ -287,19 +291,19 @@ async def scan_and_fail_stuck_pending(
     stuck_after_seconds: float | None = None,
 ) -> list[str]:
     """Fail PENDING papers past queue wall-clock (async path) → ``QUEUE_TIMEOUT``."""
-    from backend.services.paper_service import get_paper_service
+    from backend.services.paper_pipeline_ops import get_paper_pipeline_ops_service
 
     settings = get_settings()
     if not settings.process_watchdog_enabled:
         return []
 
     older_than = _pending_stuck_older_than(now=now, stuck_after_seconds=stuck_after_seconds)
-    paper_service = get_paper_service()
-    candidate_ids = paper_service.list_stuck_pending_paper_ids_sync(older_than=older_than)
+    pipeline_ops = get_paper_pipeline_ops_service()
+    candidate_ids = pipeline_ops.list_stuck_pending_paper_ids_sync(older_than=older_than)
     failed: list[str] = []
     for paper_id in candidate_ids:
         try:
-            if await paper_service.fail_orphaned_pipeline_paper(
+            if await pipeline_ops.fail_orphaned_pipeline_paper(
                 paper_id,
                 error_code=QUEUE_TIMEOUT_CODE,
                 message=QUEUE_TIMEOUT_MESSAGE,
@@ -344,27 +348,27 @@ def scan_and_fail_stuck_processing_sync(
     (``QUEUE_TIMEOUT``). Returns the union of failed paper_ids (processing first,
     then pending).
     """
-    from backend.services.paper_service import get_paper_service
+    from backend.services.paper_pipeline_ops import get_paper_pipeline_ops_service
 
     settings = get_settings()
     if not settings.process_watchdog_enabled:
         return []
 
-    paper_service = get_paper_service()
+    pipeline_ops = get_paper_pipeline_ops_service()
     failed: list[str] = []
 
     processing_cutoff = _process_stuck_older_than(now=now, stuck_after_seconds=stuck_after_seconds)
-    for paper_id in paper_service.list_stuck_processing_paper_ids_sync(older_than=processing_cutoff):
+    for paper_id in pipeline_ops.list_stuck_processing_paper_ids_sync(older_than=processing_cutoff):
         try:
-            if _dispose_or_renew_stuck_processing(paper_id, paper_service=paper_service):
+            if _dispose_or_renew_stuck_processing(paper_id, pipeline_ops=pipeline_ops):
                 failed.append(paper_id)
         except Exception:
             logger.exception("processing_watchdog_fail_failed", extra={"paper_id": paper_id})
 
     pending_cutoff = _pending_stuck_older_than(now=now, stuck_after_seconds=pending_stuck_after_seconds)
-    for paper_id in paper_service.list_stuck_pending_paper_ids_sync(older_than=pending_cutoff):
+    for paper_id in pipeline_ops.list_stuck_pending_paper_ids_sync(older_than=pending_cutoff):
         try:
-            if paper_service.fail_orphaned_pipeline_paper_sync(
+            if pipeline_ops.fail_orphaned_pipeline_paper_sync(
                 paper_id,
                 error_code=QUEUE_TIMEOUT_CODE,
                 message=QUEUE_TIMEOUT_MESSAGE,

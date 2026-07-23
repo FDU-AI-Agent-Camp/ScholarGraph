@@ -29,7 +29,7 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-def complete_paper_pipeline(
+async def complete_paper_pipeline(
     paper_service: PaperService,
     paper_id: str,
     *,
@@ -51,8 +51,8 @@ def complete_paper_pipeline(
     """
     from backend.services.pipeline_generation_guard import assert_pipeline_generation_writable
 
-    assert_pipeline_generation_writable(paper_id, pipeline_generation_id)
-    paper_service.require_paper_for_pipeline(paper_id)
+    await assert_pipeline_generation_writable(paper_id, pipeline_generation_id)
+    await paper_service.require_paper_for_pipeline(paper_id)
 
     extract_warnings = list(extract_warnings or ())
     is_fallback = EXTRACT_HEURISTIC_FALLBACK_CODE in extract_warnings
@@ -73,24 +73,38 @@ def complete_paper_pipeline(
     if not passed:
         warnings.append(LOW_CONFIDENCE_GRAPH_CODE)
 
-    paper_service.update_pipeline_classification(paper_id, classification)
-    from backend.services.pipeline_status_service import get_pipeline_status_service
+    await paper_service.update_pipeline_classification(paper_id, classification)
 
     config_hash = paper_service.compute_extractor_config_hash()
-    paper_service.update_pipeline_graph_path(paper_id, graph_path=graph_path)
-    graph_version = paper_service.get_pipeline_graph_version(paper_id)
-    paper_service.update_pipeline_graph_version(
+    await paper_service.update_pipeline_graph_path(paper_id, graph_path=graph_path)
+    graph_version = await paper_service.get_pipeline_graph_version(paper_id)
+    await paper_service.update_pipeline_graph_version(
         paper_id,
         graph_version=graph_version,
         extractor_config_hash=config_hash,
     )
-    status_service = get_pipeline_status_service()
     merged_extract_warnings = list(extract_warnings or ())
     if warnings:
         merged_extract_warnings = list(dict.fromkeys([*merged_extract_warnings, *warnings]))
     # P10 state gate: do not advertise READY until RAG index completes.
-    status_service.mark_indexing(
+    # Use async persist — sync mark_indexing → run_async deadlocks the EventBus worker.
+    from backend.graph.state import STAGE_PERCENT
+    from backend.schemas.paper import PipelineStage
+    from backend.services.paper_pipeline_ops import get_paper_pipeline_ops_service
+    from backend.services.paper_status_transitions import assert_status_transition_allowed
+    from backend.services.pipeline_status_service import DEFAULT_STAGE_MESSAGES
+    from backend.services.status_snapshot_guard import persist_status_snapshot
+
+    existing = await get_paper_pipeline_ops_service().get_pipeline_snapshot(paper_id)
+    if existing is not None:
+        assert_status_transition_allowed(existing.status, PaperStatus.INDEXING, paper_id=paper_id)
+    await persist_status_snapshot(
+        paper_service,
         paper_id,
+        status=PaperStatus.INDEXING,
+        stage=PipelineStage.INDEXING,
+        percent=STAGE_PERCENT[PipelineStage.INDEXING],
+        message=DEFAULT_STAGE_MESSAGES[PipelineStage.INDEXING],
         append_extract_warnings=merged_extract_warnings or None,
     )
 
@@ -130,17 +144,30 @@ def complete_paper_pipeline(
             "graph_edge_count": len(graph.edges),
         },
     )
-    get_event_bus().publish_sync(finalized_event)
-    paper_service.clear_preview_graph(paper_id)
+    await get_event_bus().publish(finalized_event)
+    await paper_service.clear_preview_graph(paper_id)
 
 
 class PipelineCompletionService:
     """Store step orchestration (validation + persistence + paper status)."""
 
-    def __init__(self, graph_persistence: GraphPersistenceService | None = None) -> None:
+    def __init__(
+        self,
+        graph_persistence: GraphPersistenceService | None = None,
+        *,
+        paper_service: PaperService | None = None,
+    ) -> None:
         self._graph_persistence = graph_persistence
+        self._paper_service = paper_service
 
-    def finalize(
+    def _resolve_paper_service(self) -> PaperService:
+        if self._paper_service is not None:
+            return self._paper_service
+        from backend.services.paper_service import get_paper_service
+
+        return get_paper_service()
+
+    async def finalize(
         self,
         paper_id: str,
         *,
@@ -155,15 +182,14 @@ class PipelineCompletionService:
             from backend.services.pipeline_generation_guard import assert_pipeline_generation_writable
 
             # Gate BEFORE GraphStore write so orphans cannot dirty disk after kill.
-            assert_pipeline_generation_writable(paper_id, pipeline_generation_id)
+            await assert_pipeline_generation_writable(paper_id, pipeline_generation_id)
             graph = UnifiedPaperGraph.model_validate(graph_data)
             classification = ParadigmClassification.model_validate(classification_data)
             persistence = self._graph_persistence or get_graph_persistence_service()
-            graph_path = persistence.save(graph)
-            from backend.services.paper_service import get_paper_service
+            graph_path = await persistence.save(graph)
 
-            complete_paper_pipeline(
-                get_paper_service(),
+            await complete_paper_pipeline(
+                self._resolve_paper_service(),
                 paper_id,
                 classification=classification,
                 graph=graph,

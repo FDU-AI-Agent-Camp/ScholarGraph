@@ -32,7 +32,7 @@ from backend.repositories.pipeline_repository import PipelineRepository, get_pip
 from backend.schemas.graph import GraphEdge, GraphNode, UnifiedPaperGraph
 from backend.schemas.paper import PaperStatus, PaperStatusData, PipelineStage
 from backend.schemas.paradigm import Paradigm
-from backend.services.paper_delete_service import delete_paper as cascade_delete_paper
+from backend.services.paper_delete_service import get_paper_delete_service
 from backend.services.paper_service import get_paper_service
 from httpx import ASGITransport, AsyncClient
 from tests.helpers.persistence_testkit import (
@@ -159,12 +159,9 @@ async def test_boot_reconciliation_processing(
         "backend.startup.profile_validation.probe_reranker_connectivity",
         AsyncMock(),
     )
-    monkeypatch.setattr(
-        "backend.rag.hybrid_retriever.create_hybrid_retriever",
-        lambda: object(),
-    )
-    monkeypatch.setattr("backend.rag.hybrid_retriever.bind_hybrid_retriever", lambda _r: None)
-    monkeypatch.setattr("backend.rag.hybrid_retriever.reset_hybrid_retriever", lambda: None)
+    from tests.helpers.lifespan_stubs import stub_lifespan_rag_wiring
+
+    stub_lifespan_rag_wiring(monkeypatch)
 
     from backend.main import create_app, lifespan
 
@@ -243,7 +240,7 @@ async def test_cascading_delete_removes_all_traces(
         ),
     )
 
-    service = await restart_paper_service()
+    await restart_paper_service()
     graph = UnifiedPaperGraph(
         paper_id=paper_id,
         paradigm=Paradigm.HSS,
@@ -286,7 +283,7 @@ async def test_cascading_delete_removes_all_traces(
     before = store._chunk_collection.get(where={"paper_id": paper_id}, include=[])
     assert len(before.get("ids") or []) == 2
 
-    await cascade_delete_paper(service, paper_id, force=False, vector_store=store)
+    await get_paper_delete_service().delete(paper_id, force=False, vector_store=store)
 
     assert await PaperRepository().get(paper_id) is None
     assert await PipelineRepository().get_latest(paper_id) is None

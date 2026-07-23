@@ -5,7 +5,6 @@
 
 from __future__ import annotations
 
-import asyncio
 import logging
 from unittest.mock import AsyncMock, patch
 
@@ -19,7 +18,6 @@ from backend.events.types import PipelineFinalized
 from backend.schemas.graph import GraphEdge, GraphNode, UnifiedPaperGraph
 from backend.schemas.paradigm import Paradigm, ParadigmClassification
 from backend.services.pipeline_completion_service import PipelineCompletionService
-from tests.helpers.event_bus_testkit import drain_event_bus_sync
 from tests.helpers.persistence_testkit import mock_graph_persistence, register_test_paper
 
 
@@ -136,13 +134,13 @@ async def test_finalize_publish_and_consume_share_correlation_id(
             new_callable=AsyncMock,
         ):
             persistence = mock_graph_persistence(paper_id)
-            PipelineCompletionService(graph_persistence=persistence).finalize(
+            await PipelineCompletionService(graph_persistence=persistence).finalize(
                 paper_id,
                 graph_data=graph.model_dump(mode="json"),
                 classification_data=classification.model_dump(mode="json"),
                 full_text="observable full text",
             )
-            await asyncio.to_thread(bus.drain_sync)
+            await bus.drain()
     finally:
         bus_module.get_event_bus = original_get
 
@@ -166,12 +164,11 @@ async def test_finalize_publish_and_consume_share_correlation_id(
     assert commit_idx < publish_idx < consume_idx < fetch_idx
 
 
-def test_handler_immediate_db_read_never_dirty_reads(
+@pytest.mark.asyncio
+async def test_handler_immediate_db_read_never_dirty_reads(
     persistence_env,
 ) -> None:
     """Subscriber fetches DB metadata immediately; must never see pre-commit ghost rows."""
-    import asyncio
-
     from backend.events import bus as bus_module
     from backend.events import pipeline_finalized_handlers as handler_module
     from backend.events.bus import EventBus
@@ -190,19 +187,19 @@ def test_handler_immediate_db_read_never_dirty_reads(
     try:
         for index in range(3):
             paper_id = f"contract-isolation-{index}"
-            asyncio.run(register_test_paper(paper_id, title=f"isolation {index}"))
+            await register_test_paper(paper_id, title=f"isolation {index}")
             graph = _valid_graph(paper_id)
             persistence = mock_graph_persistence(paper_id)
             with patch(
                 "backend.services.rag_index_service.RagIndexService.index_paper_for_rag_async",
                 new_callable=AsyncMock,
             ):
-                PipelineCompletionService(graph_persistence=persistence).finalize(
+                await PipelineCompletionService(graph_persistence=persistence).finalize(
                     paper_id,
                     graph_data=graph.model_dump(mode="json"),
                     classification_data=classification.model_dump(mode="json"),
                     full_text=f"isolation body {index}",
                 )
-        drain_event_bus_sync()
+        await bus.drain()
     finally:
         bus_module.get_event_bus = original_get

@@ -87,10 +87,12 @@ async def run_patrol(
             )
         insights = [insight]
     elif mode == PatrolMode.CLAIM_EVOLUTION:
+        from backend.patrol.rag_service import PatrolRAGService
+
         insight = await build_claim_evolution_insight(
             graphs,
             paper_ids,
-            vector_store=vector_store,
+            rag_service=PatrolRAGService(vector_store),
             embedding_client=embedding_client,
             llm_client=llm_client,
         )

@@ -53,19 +53,21 @@ def test_validate_status_contract_rejects_invalid_triples(
         validate_status_contract(status=status, stage=stage, percent=percent)
 
 
-def test_start_processing_sets_ingesting_percent(registered_paper: str) -> None:
+@pytest.mark.asyncio
+async def test_start_processing_sets_ingesting_percent(registered_paper: str) -> None:
     svc = PipelineStatusService()
-    snapshot = svc.start_processing(registered_paper)
+    snapshot = await svc.start_processing(registered_paper)
     assert snapshot.status == PaperStatus.PROCESSING
     assert snapshot.stage == PipelineStage.INGESTING
     assert snapshot.percent == STAGE_PERCENT[PipelineStage.INGESTING]
     assert_snapshot_matches_contract(snapshot)
 
 
-def test_advance_head_refining_stage_visible_in_status(registered_paper: str) -> None:
+@pytest.mark.asyncio
+async def test_advance_head_refining_stage_visible_in_status(registered_paper: str) -> None:
     svc = PipelineStatusService()
-    svc.start_processing(registered_paper)
-    snapshot = svc.advance_stage(registered_paper, PipelineStage.HEAD_REFINING)
+    await svc.start_processing(registered_paper)
+    snapshot = await svc.advance_stage(registered_paper, PipelineStage.HEAD_REFINING)
 
     assert snapshot.stage == PipelineStage.HEAD_REFINING
     assert snapshot.percent == STAGE_PERCENT[PipelineStage.HEAD_REFINING]
@@ -73,16 +75,17 @@ def test_advance_head_refining_stage_visible_in_status(registered_paper: str) ->
     assert_snapshot_matches_contract(snapshot)
 
 
-def test_advance_stage_updates_snapshot(registered_paper: str) -> None:
+@pytest.mark.asyncio
+async def test_advance_stage_updates_snapshot(registered_paper: str) -> None:
     svc = PipelineStatusService()
-    svc.start_processing(registered_paper)
-    snapshot = svc.advance_stage(registered_paper, PipelineStage.EXTRACTING)
+    await svc.start_processing(registered_paper)
+    snapshot = await svc.advance_stage(registered_paper, PipelineStage.EXTRACTING)
     assert snapshot.stage == PipelineStage.EXTRACTING
     assert snapshot.percent == 80
 
 
 async def test_mark_ready_visible_via_get_status(registered_paper: str) -> None:
-    PipelineStatusService().mark_ready(registered_paper)
+    await PipelineStatusService().mark_ready(registered_paper)
     status = await get_paper_service().get_status(registered_paper)
     assert status.status == PaperStatus.READY
     assert status.stage == PipelineStage.READY
@@ -90,7 +93,7 @@ async def test_mark_ready_visible_via_get_status(registered_paper: str) -> None:
 
 
 async def test_mark_failed_visible_via_get_status(registered_paper: str) -> None:
-    PipelineStatusService().mark_failed(
+    await PipelineStatusService().mark_failed(
         registered_paper,
         message="测试失败",
         error_code="INGEST_FAILED",

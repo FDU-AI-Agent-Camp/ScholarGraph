@@ -67,7 +67,7 @@ async def extract_preview_and_schedule_full(
     """
     cfg = settings or get_settings()
     title = extract_title(full_text)
-    head_context = _resolve_head_context(paper_id)
+    head_context = await _resolve_head_context(paper_id)
 
     try:
         mvp_extracted = await _extract_mvp(
@@ -79,7 +79,7 @@ async def extract_preview_and_schedule_full(
             settings=cfg,
         )
         preview_graph = _to_unified_graph(mvp_extracted, paper_id=paper_id, paradigm=paradigm)
-        _save_preview_graph(paper_id, preview_graph, warnings=[MVP_SKELETON_PREVIEW_CODE])
+        await _save_preview_graph(paper_id, preview_graph, warnings=[MVP_SKELETON_PREVIEW_CODE])
     except Exception as exc:
         logger.warning("mvp_extraction_failed", extra={"paper_id": paper_id, "reason": str(exc)})
         preview_graph = None

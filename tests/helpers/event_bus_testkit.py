@@ -5,15 +5,14 @@
 
 from __future__ import annotations
 
-import asyncio
-
 from backend.events.bus import get_event_bus
 
 
 async def drain_event_bus() -> None:
     """Wait until all queued events on the process-wide bus are processed."""
-    await asyncio.sleep(0)
-    await asyncio.to_thread(get_event_bus().drain_sync)
+    # Drain on the caller's loop — publish_sync/bridge hops leave the queue on a
+    # different loop and make to_thread(drain_sync) a no-op or deadlock.
+    await get_event_bus().drain()
 
 
 def drain_event_bus_sync() -> None:

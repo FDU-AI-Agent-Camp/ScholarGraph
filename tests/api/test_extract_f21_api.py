@@ -12,6 +12,7 @@ from backend.agents.extract_constants import EXTRACT_HEURISTIC_FALLBACK_CODE
 from backend.main import app
 from backend.schemas.paper import PaperDetail, PaperStatus, PipelineStage
 from backend.services.paper_service import get_paper_service
+from backend.services.paper_warning_service import WarningType, get_paper_warning_service
 from backend.services.pipeline_status_service import get_pipeline_status_service
 from httpx import ASGITransport, AsyncClient
 from tests.api.conftest import assert_success_envelope
@@ -41,13 +42,13 @@ def _register_processing_paper(paper_id: str) -> None:
 async def test_api_status_after_extract_fallback_shows_warning_code(api_client: AsyncClient) -> None:
     paper_id = "api-f21-fallback-001"
     _register_processing_paper(paper_id)
-    get_pipeline_status_service().advance_stage(
+    await get_pipeline_status_service().advance_stage(
         paper_id,
         PipelineStage.EXTRACTING,
         message="正在抽取逻辑图谱",
     )
-    get_paper_service().record_extract_warnings(paper_id, [EXTRACT_HEURISTIC_FALLBACK_CODE])
-    get_pipeline_status_service().mark_ready(paper_id)
+    await get_paper_warning_service().record(paper_id, WarningType.EXTRACT, [EXTRACT_HEURISTIC_FALLBACK_CODE])
+    await get_pipeline_status_service().mark_ready(paper_id)
 
     response = await api_client.get(f"/api/v1/papers/{paper_id}/status")
 
@@ -63,7 +64,7 @@ async def test_api_status_after_extract_fallback_shows_warning_code(api_client: 
 async def test_api_status_after_llm_success_has_empty_extract_warnings(api_client: AsyncClient) -> None:
     paper_id = "api-f21-llm-ok-001"
     _register_processing_paper(paper_id)
-    get_pipeline_status_service().mark_ready(paper_id)
+    await get_pipeline_status_service().mark_ready(paper_id)
 
     response = await api_client.get(f"/api/v1/papers/{paper_id}/status")
 

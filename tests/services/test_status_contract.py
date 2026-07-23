@@ -5,6 +5,7 @@
 
 import pytest
 from backend.graph.state import STAGE_PERCENT
+from backend.repositories.async_bridge import run_async
 from backend.schemas.paper import PaperStatus, PipelineStage
 from backend.services.paper_service import get_paper_service
 from backend.services.pipeline_status_service import (
@@ -131,23 +132,27 @@ def test_failed_rejects_wrong_stage() -> None:
 
 def test_update_pipeline_status_rejects_invalid_contract(registered_paper: str) -> None:
     with pytest.raises(ValueError):
-        get_paper_service().update_pipeline_status(
-            registered_paper,
-            status=PaperStatus.PROCESSING,
-            stage=PipelineStage.CLASSIFYING,
-            percent=20,
-            message="percent 与 stage 不一致",
+        run_async(
+            get_paper_service().update_pipeline_status(
+                registered_paper,
+                status=PaperStatus.PROCESSING,
+                stage=PipelineStage.CLASSIFYING,
+                percent=20,
+                message="percent 与 stage 不一致",
+            )
         )
 
 
 def test_set_status_snapshot_rejects_invalid_contract(registered_paper: str) -> None:
     with pytest.raises(ValueError):
-        get_paper_service().set_status_snapshot(
-            registered_paper,
-            status=PaperStatus.READY,
-            stage=PipelineStage.READY,
-            percent=50,
-            message="非法 ready 快照",
+        run_async(
+            get_paper_service().set_status_snapshot(
+                registered_paper,
+                status=PaperStatus.READY,
+                stage=PipelineStage.READY,
+                percent=50,
+                message="非法 ready 快照",
+            )
         )
 
 
@@ -181,11 +186,13 @@ def test_non_failed_rejects_error_fields() -> None:
 def test_mark_failed_persists_error_code_and_failed_during(registered_paper: str) -> None:
     from backend.services.pipeline_status_service import PipelineStatusService
 
-    snapshot = PipelineStatusService().mark_failed(
-        registered_paper,
-        message="范式分类失败",
-        error_code="LLM_JSON_INVALID",
-        failed_during=PipelineStage.CLASSIFYING,
+    snapshot = run_async(
+        PipelineStatusService().mark_failed(
+            registered_paper,
+            message="范式分类失败",
+            error_code="LLM_JSON_INVALID",
+            failed_during=PipelineStage.CLASSIFYING,
+        )
     )
     assert snapshot.error_code == "LLM_JSON_INVALID"
     assert snapshot.failed_during == PipelineStage.CLASSIFYING
@@ -197,12 +204,14 @@ def test_mark_failed_persists_error_code_and_failed_during(registered_paper: str
 
 
 def test_update_pipeline_status_accepts_valid_processing_triple(registered_paper: str) -> None:
-    snapshot = get_paper_service().update_pipeline_status(
-        registered_paper,
-        status=PaperStatus.PROCESSING,
-        stage=PipelineStage.STORING,
-        percent=STAGE_PERCENT[PipelineStage.STORING],
-        message="写入存储",
+    snapshot = run_async(
+        get_paper_service().update_pipeline_status(
+            registered_paper,
+            status=PaperStatus.PROCESSING,
+            stage=PipelineStage.STORING,
+            percent=STAGE_PERCENT[PipelineStage.STORING],
+            message="写入存储",
+        )
     )
     assert snapshot.stage == PipelineStage.STORING
     assert snapshot.percent == 95

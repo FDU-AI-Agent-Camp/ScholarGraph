@@ -25,12 +25,14 @@ class HeadMergeService:
         path_b: HeadCandidate | None,
         *,
         is_short: bool,
+        paper_id: str | None = None,
     ) -> IngestHead:
         return await merge_head_candidates(
             snippets,
             path_b,
             is_short=is_short,
             settings=self._settings,
+            paper_id=paper_id,
         )
 
 

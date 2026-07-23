@@ -17,6 +17,7 @@ from backend.schemas.graph import GraphEdge, GraphNode, UnifiedPaperGraph
 from backend.schemas.paper import PaperDetail, PaperStatus
 from backend.schemas.paradigm import Paradigm
 from backend.services.paper_service import get_paper_service
+from backend.services.paper_warning_service import WarningType, get_paper_warning_service
 from backend.services.pipeline_status_service import get_pipeline_status_service
 from httpx import ASGITransport, AsyncClient
 
@@ -57,7 +58,7 @@ def sample_pdf(tmp_path: Path) -> Path:
     return pdf_path
 
 
-def _register_paper(
+async def _register_paper(
     paper_id: str,
     *,
     status: PaperStatus,
@@ -75,15 +76,15 @@ def _register_paper(
     )
     pss = get_pipeline_status_service()
     if status == PaperStatus.READY:
-        pss.mark_ready(paper_id, message="red setup")
+        await pss.mark_ready(paper_id, message="red setup")
     elif status == PaperStatus.FAILED:
-        pss.mark_failed(paper_id, message="red setup", error_code="PIPELINE_FAILED")
+        await pss.mark_failed(paper_id, message="red setup", error_code="PIPELINE_FAILED")
     else:
-        pss.start_processing(paper_id, message="red setup")
+        await pss.start_processing(paper_id, message="red setup")
     if pdf_path is not None:
         service._pdf_paths[paper_id] = pdf_path
     if warnings:
-        service.record_extract_warnings(paper_id, warnings)
+        await get_paper_warning_service().record(paper_id, WarningType.EXTRACT, warnings)
 
 
 @pytest.mark.asyncio

@@ -33,7 +33,7 @@ from backend.rag.indexing_run_registry import get_indexing_run_registry
 from backend.rag.models import PaperChunk
 from backend.rag.vector_store import GENERATION_GUARD_LOG_PREFIX, VectorStore
 from backend.schemas.paper import PaperStatus
-from backend.services.paper_service import get_paper_service
+from backend.services.paper_pipeline_ops import get_paper_pipeline_ops_service
 
 from tests.rag.test_vector_store import FakeCollection, FakeEmbeddingClient, _matches_where
 
@@ -144,7 +144,7 @@ async def test_orphan_thread_cannot_override_new_generation(
     }
 
     paper_service = MagicMock()
-    paper_service.get_active_run_id.side_effect = lambda _pid: paper_state["active_run_id"]
+    paper_service.get_active_run_id = AsyncMock(side_effect=lambda _pid: paper_state["active_run_id"])
 
     def _set_active(paper_id: str, run_id: str) -> None:
         paper_state["set_active_calls"].append((paper_id, run_id))
@@ -152,7 +152,7 @@ async def test_orphan_thread_cannot_override_new_generation(
         if run_id == RUN_B:
             paper_state["status"] = PaperStatus.READY
 
-    paper_service.set_active_run_id.side_effect = _set_active
+    paper_service.set_active_run_id = AsyncMock(side_effect=_set_active)
 
     chunk_collection = GatedFakeCollection(gate)
     entity_collection = FakeCollection()
@@ -198,14 +198,14 @@ async def test_orphan_thread_cannot_override_new_generation(
         lambda: paper_service,
     )
     monkeypatch.setattr(
-        "backend.rag.handlers.VectorStore",
-        lambda **_kwargs: store,
+        "backend.rag.handlers.get_vector_store",
+        lambda: store,
     )
 
     with (
         patch("backend.rag.vector_store_replace._generate_run_id", side_effect=lambda: next(run_ids)),
         patch.object(
-            get_paper_service(),
+            get_paper_pipeline_ops_service(),
             "touch_indexing_heartbeat",
             new_callable=AsyncMock,
             return_value=True,
@@ -297,10 +297,12 @@ async def test_cleanup_task_removes_delayed_orphan_data(
 
     paper_state: dict[str, object] = {"active_run_id": None}
     paper_service = MagicMock()
-    paper_service.get_active_run_id.side_effect = lambda _pid: paper_state["active_run_id"]
-    paper_service.set_active_run_id.side_effect = lambda _pid, rid: paper_state.__setitem__(
-        "active_run_id",
-        rid or None,
+    paper_service.get_active_run_id = AsyncMock(side_effect=lambda _pid: paper_state["active_run_id"])
+    paper_service.set_active_run_id = AsyncMock(
+        side_effect=lambda _pid, rid: paper_state.__setitem__(
+            "active_run_id",
+            rid or None,
+        ),
     )
 
     chunk_collection = GatedFakeCollection(gate)
@@ -337,12 +339,12 @@ async def test_cleanup_task_removes_delayed_orphan_data(
 
     monkeypatch.setattr("backend.rag.handlers._schedule_orphan_run_cleanup", _schedule_cleanup)
     monkeypatch.setattr("backend.rag.handlers.get_paper_service", lambda: paper_service)
-    monkeypatch.setattr("backend.rag.handlers.VectorStore", lambda **_kwargs: store)
+    monkeypatch.setattr("backend.rag.handlers.get_vector_store", lambda: store)
 
     with (
         patch("backend.rag.vector_store_replace._generate_run_id", return_value=RUN_A),
         patch.object(
-            get_paper_service(),
+            get_paper_pipeline_ops_service(),
             "touch_indexing_heartbeat",
             new_callable=AsyncMock,
             return_value=True,
@@ -379,8 +381,8 @@ async def test_generation_guard_log_names_current_active_run(caplog: pytest.LogC
     """Refuse-activate path must name the live successor in the Generation Guard line."""
     caplog.set_level(logging.WARNING)
     paper_service = MagicMock()
-    paper_service.get_active_run_id.return_value = RUN_B
-    paper_service.set_active_run_id = MagicMock()
+    paper_service.get_active_run_id = AsyncMock(return_value=RUN_B)
+    paper_service.set_active_run_id = AsyncMock()
     store = VectorStore(
         paper_service=paper_service,
         embedding_client=FakeEmbeddingClient(),

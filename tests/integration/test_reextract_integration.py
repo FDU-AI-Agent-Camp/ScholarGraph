@@ -21,6 +21,7 @@ from backend.repositories.pipeline_repository import PipelineRepository
 from backend.schemas.graph import GraphEdge, GraphNode, UnifiedPaperGraph
 from backend.schemas.paper import PaperStatus, PaperStatusData, PipelineStage
 from backend.schemas.paradigm import Paradigm
+from backend.services.paper_warning_service import WarningType, get_paper_warning_service
 
 from tests.helpers.persistence_testkit import restart_paper_service
 
@@ -64,23 +65,19 @@ async def test_reextract_runs_pipeline_and_reaches_ready(
     """After a fallback run, force_reextract reruns the pipeline to READY."""
     graph_path = persistence_env["graph_dir"]
     paper_id = "reextract-integration-001"
-    scheduled_tasks: list[asyncio.Task[None]] = []
+    scheduled_runs: list[tuple[str, Path]] = []
 
     def _schedule_and_capture(pid: str, pdf_path: Path) -> asyncio.Task[None]:
-        from tests.conftest import mock_pipeline_node_services
-
-        async def _run() -> None:
-            with mock_pipeline_node_services(pid):
-                await run_paper_pipeline(pid, pdf_path)
-
-        task = asyncio.create_task(_run())
-        scheduled_tasks.append(task)
-        return task
+        scheduled_runs.append((pid, pdf_path))
+        loop = asyncio.get_running_loop()
+        return loop.create_task(asyncio.sleep(0))
 
     await _register_ready_paper(paper_id, sample_pdf)
     service = await restart_paper_service()
 
-    service.record_extract_warnings(paper_id, [EXTRACT_LLM_TIMEOUT_CODE, EXTRACT_HEURISTIC_FALLBACK_CODE])
+    await get_paper_warning_service().record(
+        paper_id, WarningType.EXTRACT, [EXTRACT_LLM_TIMEOUT_CODE, EXTRACT_HEURISTIC_FALLBACK_CODE]
+    )
     stale_graph = UnifiedPaperGraph(
         paper_id=paper_id,
         paradigm=Paradigm.HSS,
@@ -89,9 +86,17 @@ async def test_reextract_runs_pipeline_and_reaches_ready(
     )
     GraphStore(base_dir=graph_path).save(stale_graph)
 
-    with patch("backend.services.reextract_service.schedule_paper_pipeline", side_effect=_schedule_and_capture):
+    with (
+        patch("backend.services.reextract_service.schedule_paper_pipeline", side_effect=_schedule_and_capture),
+        patch("backend.rag.wipe_vector_sweep.schedule_wipe_wave2_sweep", return_value=[]),
+    ):
         await service.force_reextract(paper_id)
-        await asyncio.gather(*scheduled_tasks)
+
+    from tests.conftest import mock_pipeline_node_services
+
+    for pid, pdf_path in scheduled_runs:
+        with mock_pipeline_node_services(pid):
+            await run_paper_pipeline(pid, pdf_path)
 
     status = await service.get_status(paper_id)
     assert status.status == PaperStatus.READY

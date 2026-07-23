@@ -151,7 +151,7 @@ async def collect_qa_events(
     return events
 
 
-def register_processing_paper(
+async def register_processing_paper(
     service: PaperService,
     paper_id: str,
     *,
@@ -171,5 +171,5 @@ def register_processing_paper(
     )
     service._papers[paper_id] = paper
     if preview_available:
-        service.mark_preview_available(paper_id)
+        await service.mark_preview_available(paper_id)
     return paper

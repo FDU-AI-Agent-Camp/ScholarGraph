@@ -61,7 +61,7 @@ async def test_apply_head_refine_persists_to_disk(
         abstract="Saved abstract",
         sources={"title": "mineru", "abstract": "pymupdf"},
     )
-    get_paper_service().apply_head_refine(
+    await get_paper_service().apply_head_refine(
         registered_paper,
         merged=merged,
         classifier_input="Title: Saved Title",
@@ -110,7 +110,7 @@ async def test_paper_service_hydrates_refined_head_after_restart(
     assert detail.ingest_head is not None
     assert detail.ingest_head.title == "Persisted Title"
     assert detail.ingest_head.sources["title"] == "grobid"
-    assert fresh_service.get_refined_classifier_input(paper_id) == "Title: Persisted Title"
+    assert await fresh_service.get_refined_classifier_input(paper_id) == "Title: Persisted Title"
     status = await fresh_service.get_status(paper_id)
     assert status.head_refine_warnings == ["grobid_unavailable"]
 

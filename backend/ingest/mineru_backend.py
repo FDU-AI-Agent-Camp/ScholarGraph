@@ -95,7 +95,17 @@ def resolve_mineru_lang(pdf_path: Path, *, settings: Settings | None = None) -> 
         from backend.ingest.pdf import extract_pdf_text
 
         sample = extract_pdf_text(pdf_path, max_pages=2)
-    except Exception:
+    except Exception as exc:  # noqa: BLE001 — fallback to default language 'en' to avoid blocking path B
+        logger.warning(
+            "mineru_lang_detection_failed",
+            extra={
+                "pdf_path": str(pdf_path),
+                "default_lang": "en",
+                "error": str(exc),
+                "error_type": type(exc).__name__,
+            },
+            exc_info=True,
+        )
         return "en"
     cjk_count = len(_CJK_RE.findall(sample))
     alpha_count = len(re.findall(r"[A-Za-z]", sample))

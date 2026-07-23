@@ -185,20 +185,20 @@ async def test_preview_graph_extreme_topology_survives_restart(persistence_env) 
     stress_graph = _build_stress_topology(paper_id)
 
     service = PaperService()
-    service.save_preview_graph(paper_id, stress_graph)
-    service.set_active_run_id(paper_id, "run-stress-topology")
+    await service.save_preview_graph(paper_id, stress_graph)
+    await service.set_active_run_id(paper_id, "run-stress-topology")
 
     simulate_service_crash()
     restarted = await restart_paper_service()
 
-    loaded = restarted.get_preview_graph(paper_id)
+    loaded = await restarted.get_preview_graph(paper_id)
     assert loaded is not None
     assert len(loaded.nodes) == STRESS_NODE_COUNT
     assert len(loaded.edges) == STRESS_NODE_COUNT
     assert loaded.nodes[0].label.startswith(_SPECIAL_LABEL_FRAGMENT)
     assert len(loaded.nodes[0].data["blob"]) == _LONG_DATA_CHARS
     assert loaded.nodes[STRESS_NODE_COUNT - 1].id == f"n{STRESS_NODE_COUNT - 1}"
-    assert restarted.get_active_run_id(paper_id) == "run-stress-topology"
+    assert await restarted.get_active_run_id(paper_id) == "run-stress-topology"
 
 
 @pytest.mark.asyncio
@@ -209,15 +209,15 @@ async def test_active_run_id_visibility_follows_committed_writes(persistence_env
     repo = PipelineRepository()
     service = get_paper_service()
 
-    service.set_active_run_id(paper_id, "run-v1")
-    assert service.get_active_run_id(paper_id) == "run-v1"
+    await service.set_active_run_id(paper_id, "run-v1")
+    assert await service.get_active_run_id(paper_id) == "run-v1"
     assert await repo.get_active_rag_run_id(paper_id) == "run-v1"
 
-    service.set_active_run_id(paper_id, "run-v2")
-    assert service.get_active_run_id(paper_id) == "run-v2"
+    await service.set_active_run_id(paper_id, "run-v2")
+    assert await service.get_active_run_id(paper_id) == "run-v2"
 
-    service.set_active_run_id(paper_id, None)
-    assert service.get_active_run_id(paper_id) is None
+    await service.set_active_run_id(paper_id, None)
+    assert await service.get_active_run_id(paper_id) is None
 
 
 def test_active_run_id_reads_nonblocking_under_concurrent_pipeline_writes(
@@ -265,7 +265,7 @@ def test_active_run_id_reads_nonblocking_under_concurrent_pipeline_writes(
     def _reader_loop() -> None:
         while not stop.is_set():
             try:
-                observed_run_ids.append(service.get_active_run_id(paper_id))
+                observed_run_ids.append(run_async(service.get_active_run_id(paper_id)))
             except Exception as exc:  # noqa: BLE001 — collect concurrency faults
                 reader_errors.append(str(exc))
 
@@ -322,7 +322,7 @@ def test_active_run_id_concurrent_read_write_threads_complete(persistence_env) -
                     ),
                 )
             else:
-                service.get_active_run_id(paper_id)
+                run_async(service.get_active_run_id(paper_id))
             return "ok"
         except Exception as exc:  # noqa: BLE001 — surface lock/contention issues
             errors.append(str(exc))

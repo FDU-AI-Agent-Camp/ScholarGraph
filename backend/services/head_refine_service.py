@@ -60,6 +60,7 @@ async def _fetch_path_b_candidate(
     route: IngestRouteKind,
     *,
     settings: Settings,
+    paper_id: str | None = None,
 ) -> tuple[HeadCandidate | None, list[str]]:
     warnings: list[str] = []
     if route == IngestRouteKind.SHORT:
@@ -71,7 +72,7 @@ async def _fetch_path_b_candidate(
             warnings.append("mineru_unavailable")
         return candidate, warnings
 
-    tei = await fetch_grobid_tei(pdf_path, settings=settings)
+    tei = await fetch_grobid_tei(pdf_path, settings=settings, paper_id=paper_id)
     if not tei:
         warnings.append("grobid_unavailable")
         return None, warnings
@@ -109,7 +110,12 @@ async def refine_head_async(
 
     path_b: HeadCandidate | None = None
     if route is not None:
-        path_b, path_warnings = await _fetch_path_b_candidate(resolved, route, settings=cfg)
+        path_b, path_warnings = await _fetch_path_b_candidate(
+            resolved,
+            route,
+            settings=cfg,
+            paper_id=paper_id,
+        )
         warnings.extend(path_warnings)
     else:
         warnings.append("route_pymupdf_only")
@@ -118,6 +124,7 @@ async def refine_head_async(
         snippets,
         path_b,
         is_short=is_short_pdf(page_count, settings=cfg),
+        paper_id=paper_id,
     )
 
     # Enrich merged head with meta-information and conclusion extracted from full text.
@@ -136,9 +143,9 @@ async def refine_head_async(
     if not classifier_input.strip():
         classifier_input = snippets.title or ""
 
-    from backend.services.paper_service import get_paper_service
+    from backend.services.head_refine_coordinator import get_head_refine_coordinator
 
-    get_paper_service().apply_head_refine(
+    await get_head_refine_coordinator().apply(
         paper_id,
         merged=merged,
         classifier_input=classifier_input,

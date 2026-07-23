@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import xml.etree.ElementTree as ET
 from pathlib import Path
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from backend.config import Settings
@@ -16,6 +16,16 @@ from backend.ingest.head_merge import merge_with_rules
 from backend.ingest.router import IngestRouteKind
 from backend.ingest.tei_parser import parse_tei_to_head_candidate
 from backend.services.head_refine_service import refine_head_async
+
+
+@pytest.fixture(autouse=True)
+def _stub_head_refine_persistence(monkeypatch: pytest.MonkeyPatch) -> None:
+    coordinator = MagicMock()
+    coordinator.apply = AsyncMock()
+    monkeypatch.setattr(
+        "backend.services.head_refine_coordinator.get_head_refine_coordinator",
+        lambda: coordinator,
+    )
 
 
 def test_merge_with_rules_empty_candidates_produces_empty_head() -> None:

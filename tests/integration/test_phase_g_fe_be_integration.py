@@ -23,6 +23,7 @@ from backend.main import app
 from backend.schemas.paper import PaperDetail, PaperStatus, PaperStatusData
 from backend.schemas.paradigm import Paradigm, ParadigmClassification
 from backend.services.paper_service import get_paper_service
+from backend.services.paper_warning_service import WarningType, get_paper_warning_service
 from backend.services.pipeline_status_service import get_pipeline_status_service
 from httpx import ASGITransport, AsyncClient
 
@@ -48,7 +49,7 @@ async def api_client() -> AsyncClient:
         yield client
 
 
-def _register_classify_fallback_paper() -> None:
+async def _register_classify_fallback_paper() -> None:
     detail_payload = json.loads((FIXTURES_DIR / "paper-detail-classify-fallback.json").read_text(encoding="utf-8"))
     status_payload = json.loads((FIXTURES_DIR / "paper-status-classify-fallback.json").read_text(encoding="utf-8"))
     detail_data = detail_payload["data"]
@@ -64,9 +65,10 @@ def _register_classify_fallback_paper() -> None:
         paradigm=Paradigm.STEM,
         classification=ParadigmClassification.model_validate(detail_data["classification"]),
     )
-    get_pipeline_status_service().mark_ready(CLASSIFY_FALLBACK_PAPER_ID)
-    get_paper_service().record_classify_warnings(
+    await get_pipeline_status_service().mark_ready(CLASSIFY_FALLBACK_PAPER_ID)
+    await get_paper_warning_service().record(
         CLASSIFY_FALLBACK_PAPER_ID,
+        WarningType.CLASSIFY,
         status_data["classify_warnings"],
     )
 
@@ -87,7 +89,7 @@ def test_g5_openapi_fixtures_use_machine_code_not_user_copy() -> None:
 @pytest.mark.asyncio
 async def test_g5_be_api_status_matches_fixture_for_fe_polling(api_client: AsyncClient) -> None:
     expected = json.loads((FIXTURES_DIR / "paper-status-classify-fallback.json").read_text(encoding="utf-8"))["data"]
-    _register_classify_fallback_paper()
+    await _register_classify_fallback_paper()
 
     response = await api_client.get(f"/api/v1/papers/{CLASSIFY_FALLBACK_PAPER_ID}/status")
 
@@ -101,7 +103,7 @@ async def test_g5_be_api_status_matches_fixture_for_fe_polling(api_client: Async
 @pytest.mark.asyncio
 async def test_g5_be_api_detail_matches_fixture_for_fe_detail_alert(api_client: AsyncClient) -> None:
     expected = json.loads((FIXTURES_DIR / "paper-detail-classify-fallback.json").read_text(encoding="utf-8"))["data"]
-    _register_classify_fallback_paper()
+    await _register_classify_fallback_paper()
 
     response = await api_client.get(f"/api/v1/papers/{CLASSIFY_FALLBACK_PAPER_ID}")
 
@@ -115,7 +117,7 @@ async def test_g5_be_api_detail_matches_fixture_for_fe_detail_alert(api_client: 
 
 @pytest.mark.asyncio
 async def test_g5_be_status_and_detail_classify_warnings_consistent_for_fe(api_client: AsyncClient) -> None:
-    _register_classify_fallback_paper()
+    await _register_classify_fallback_paper()
 
     status_resp = await api_client.get(f"/api/v1/papers/{CLASSIFY_FALLBACK_PAPER_ID}/status")
     detail_resp = await api_client.get(f"/api/v1/papers/{CLASSIFY_FALLBACK_PAPER_ID}")

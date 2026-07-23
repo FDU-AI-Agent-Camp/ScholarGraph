@@ -30,8 +30,16 @@ async def check_grobid_isalive(*, settings: Settings | None = None) -> bool:
         if response.status_code != 200:
             return False
         return "true" in response.text.lower()
-    except Exception:
-        logger.debug("GROBID isalive probe failed for %s", url, exc_info=True)
+    except Exception as exc:  # noqa: BLE001 — health probe must not break callers; treat as unavailable
+        logger.warning(
+            "grobid_health_check_failed",
+            extra={
+                "url": url,
+                "error": str(exc),
+                "error_type": type(exc).__name__,
+            },
+            exc_info=True,
+        )
         return False
 
 
@@ -39,6 +47,7 @@ async def fetch_grobid_tei(
     pdf_path: Path,
     *,
     settings: Settings | None = None,
+    paper_id: str | None = None,
 ) -> str | None:
     """
     POST PDF to GROBID and return TEI XML text.
@@ -67,6 +76,15 @@ async def fetch_grobid_tei(
                 logger.warning("GROBID returned empty TEI for %s", resolved.name)
                 return None
             return tei
-    except Exception:
-        logger.exception("GROBID request failed for %s", resolved.name)
+    except Exception as exc:  # noqa: BLE001 — fallback to snippet/rules parser on GROBID sidecar failure
+        logger.warning(
+            "grobid_tei_extraction_failed",
+            extra={
+                "pdf_path": str(resolved),
+                "paper_id": paper_id,
+                "error": str(exc),
+                "error_type": type(exc).__name__,
+            },
+            exc_info=True,
+        )
         return None

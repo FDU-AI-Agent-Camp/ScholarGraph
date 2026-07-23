@@ -157,6 +157,69 @@ class PatrolRAGService:
             self._circuit.record_success()
         return sections, degradation
 
+    async def retrieve_backfill_chunks(
+        self,
+        paper_id: str,
+        node_label: str,
+        top_k: int,
+    ) -> tuple[list[str], PatrolDegradationProfile | None]:
+        """Retrieve claim-candidate chunk texts under the shared safety cocoon.
+
+        Returns plain texts (not formatted sections) plus an optional typed
+        degradation profile. Callers must treat degraded empty results as
+        infrastructure failure, not as genuine "no claim exists".
+        """
+        if self._vector_store is None:
+            return [], make_degradation_profile(
+                PatrolDegradationReason.VECTOR_STORE_UNAVAILABLE,
+                [paper_id],
+            )
+
+        if not self._circuit.allow_request():
+            logger.warning(
+                "patrol_rag_circuit_open",
+                extra={"paper_ids": [paper_id], "state": self._circuit.state.value},
+            )
+            return [], make_degradation_profile(
+                PatrolDegradationReason.VECTOR_STORE_UNAVAILABLE,
+                [paper_id],
+            )
+
+        degradation, ready_ids = await self._probe_index_readiness([paper_id])
+        if degradation is not None and degradation.reason_code == PatrolDegradationReason.VECTOR_STORE_UNAVAILABLE:
+            self._circuit.record_failure()
+            return [], degradation
+        if paper_id not in ready_ids:
+            return [], degradation
+
+        if top_k <= 0:
+            if degradation is None:
+                self._circuit.record_success()
+            return [], degradation
+
+        try:
+            chunks = await self._vector_store.query_chunks(
+                node_label,
+                paper_id=paper_id,
+                top_k=top_k,
+            )
+        except Exception as exc:  # noqa: BLE001 — bubble typed degradation, keep funnel alive
+            logger.warning("patrol_rag_query_failed", extra={"paper_id": paper_id, "error": str(exc)})
+            if is_vector_store_connectivity_error(exc):
+                self._circuit.record_failure()
+                reason = PatrolDegradationReason.VECTOR_STORE_UNAVAILABLE
+            else:
+                reason = PatrolDegradationReason.QUERY_FAILED
+            return [], merge_degradation_profiles(
+                degradation,
+                make_degradation_profile(reason, [paper_id]),
+            )
+
+        texts = [chunk.text.strip() for chunk in chunks if getattr(chunk, "text", "").strip()]
+        if degradation is None:
+            self._circuit.record_success()
+        return texts, degradation
+
     async def _probe_index_readiness(
         self,
         paper_ids: list[str],

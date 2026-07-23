@@ -50,23 +50,21 @@ def noop_event_bus_publish_sync(monkeypatch: pytest.MonkeyPatch) -> None:
     indexing gate papers must not remain stuck in ``indexing`` when the bus is cut.
     """
 
-    def _publish_sync(_self: object, event: object) -> None:
+    async def _publish(_self: object, event: object) -> None:
         from backend.events.types import PipelineFinalized
-        from backend.schemas.paper import PaperStatus
-        from backend.services.pipeline_status_service import get_pipeline_status_service
+        from backend.services.paper_pipeline_ops import get_paper_pipeline_ops_service
 
         if not isinstance(event, PipelineFinalized):
             return
-        status_service = get_pipeline_status_service()
-        if event.terminal_status == PaperStatus.READY_WITH_WARNINGS:
-            status_service.mark_ready_with_warnings(
-                event.paper_id,
-                message=event.warning_message,
-            )
-        else:
-            status_service.mark_ready(event.paper_id)
+        await get_paper_pipeline_ops_service().promote_paper_to_terminal_status(
+            event.paper_id,
+            success=True,
+            preferred_terminal=event.terminal_status,
+            warning_message=event.warning_message,
+            publish_rag_indexed=False,
+        )
 
-    monkeypatch.setattr("backend.events.bus.EventBus.publish_sync", _publish_sync)
+    monkeypatch.setattr("backend.events.bus.EventBus.publish", _publish)
 
 
 @pytest.fixture
