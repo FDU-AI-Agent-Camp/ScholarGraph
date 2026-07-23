@@ -19,7 +19,6 @@ from backend.llm.reranker import RerankerClient, reset_reranker_http_state
 from backend.llm.reranker_retry import RERANK_RETRY_WAIT, is_transient_rerank_error
 from tenacity import wait_exponential
 
-
 _RERANK_URL = "https://api.example.com/v1/rerank"
 
 
