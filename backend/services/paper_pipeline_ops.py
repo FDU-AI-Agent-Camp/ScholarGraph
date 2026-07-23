@@ -56,8 +56,7 @@ class PaperPipelineOpsService:
 
         if snapshot.status != PaperStatus.PENDING:
             raise InvalidStateTransitionError(
-                f"Cannot initialize pipeline snapshot for {paper_id} with "
-                f"non-PENDING status: {snapshot.status.value}",
+                f"Cannot initialize pipeline snapshot for {paper_id} with non-PENDING status: {snapshot.status.value}",
                 from_status="(none)",
                 to_status=snapshot.status.value,
                 paper_id=paper_id,

@@ -279,11 +279,7 @@ async def test_persist_status_snapshot_heals_dual_table_drift_and_logs_audit(
     assert reloaded.percent == STAGE_PERCENT[PipelineStage.READY]
     assert reloaded.message == "建图完成"
 
-    audit_records = [
-        record
-        for record in caplog.records
-        if record.getMessage() == "pipeline_snapshot_heal_applied"
-    ]
+    audit_records = [record for record in caplog.records if record.getMessage() == "pipeline_snapshot_heal_applied"]
     assert len(audit_records) == 1
     audit = audit_records[0]
     assert audit.levelno == logging.WARNING

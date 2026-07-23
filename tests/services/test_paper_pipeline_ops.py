@@ -114,11 +114,7 @@ async def test_heal_snapshot_logs_audit_warning(
     assert latest.status == PaperStatus.INDEXING
     assert latest.message == "contract heal"
 
-    audit_records = [
-        record
-        for record in caplog.records
-        if record.getMessage() == "pipeline_snapshot_heal_applied"
-    ]
+    audit_records = [record for record in caplog.records if record.getMessage() == "pipeline_snapshot_heal_applied"]
     assert len(audit_records) == 1
     audit = audit_records[0]
     assert audit.levelno == logging.WARNING
@@ -132,5 +128,6 @@ def test_save_snapshot_is_private() -> None:
     assert isinstance(ops, PaperPipelineOpsService)
     assert callable(getattr(ops, "_save_pipeline_snapshot", None))
     assert not hasattr(ops, "save_pipeline_snapshot")
+    legacy_name = "save_pipeline_snapshot"
     with pytest.raises(AttributeError):
-        ops.save_pipeline_snapshot  # type: ignore[attr-defined]
+        getattr(ops, legacy_name)
